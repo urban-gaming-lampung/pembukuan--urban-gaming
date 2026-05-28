@@ -1,0 +1,98 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.font-pixel {
+  font-family: 'Press Start 2P', monospace, sans-serif;
+}
+
+/* biar browser auto adapt light / dark */
+:root {
+  color-scheme: light dark;
+
+  /* ===== Income Colors (Light) ===== */
+  --income-low: 0 84% 60%;      /* merah */
+  --income-cukup: 45 93% 47%;   /* kuning */
+  --income-bagus: 210 90% 56%;  /* biru */
+  --income-sangat: 220 85% 45%; /* biru tua */
+  --income-mantap: 142 71% 45%; /* hijau */
+}
+
+/* Dark mode */
+.dark {
+  --income-low: 0 84% 63%;
+  --income-cukup: 45 93% 55%;
+  --income-bagus: 210 95% 64%;
+  --income-sangat: 220 90% 60%;
+  --income-mantap: 142 76% 50%;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* ===== Safari Input Fixes ===== */
+/* Fix: Safari blocks click on time/date inputs with appearance-none */
+input[type="time"],
+input[type="date"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  position: relative;
+  z-index: 1;
+  cursor: pointer;
+  min-height: 44px; /* Apple HIG minimum touch target */
+  -webkit-tap-highlight-color: transparent;
+  /* Ensure the native picker trigger area is clickable */
+  display: block;
+  width: 100%;
+}
+
+/* Safari: Make the calendar/clock picker icon clickable */
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
+  opacity: 0.6;
+  padding: 4px;
+  margin: 0;
+  -webkit-appearance: none;
+  background: none;
+  /* Enlarge the hit area for touch */
+  min-width: 24px;
+  min-height: 24px;
+}
+
+/* Dark mode: invert the date picker icon */
+.dark input[type="time"]::-webkit-calendar-picker-indicator,
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
+
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Avatar styling */
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  aspect-ratio: 1 / 1;
+}
+
+.avatar-container {
+  border-radius: 9999px;
+  overflow: hidden;
+  background: var(--profile-color, #8E8E93);
+}
+

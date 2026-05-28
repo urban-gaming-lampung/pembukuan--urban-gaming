@@ -1,0 +1,14 @@
+node_modules
+dist
+BACKUP
+bk
+docs
+*.log
+*.txt
+*.bat
+*.mjs
+fix.js
+.env*
+.git
+.vscode
+.idea

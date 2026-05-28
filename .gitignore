@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Production
+dist/
+# docs/ <--- Jangan masukkan docs ke sini agar bisa di-deploy ke GitHub Pages
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor folders
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+.vercel
+.env
+.env.local
+.env.*.local
+
+# Backups
+BACKUP/
+*.rar
+*.zip
+*.tar.gz
+
+

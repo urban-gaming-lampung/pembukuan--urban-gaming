@@ -1,0 +1,116 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ==========================================
+    // Aturan Profil Pegawai (users & logs)
+    // ==========================================
+    match /pegawai_logs/{email} {
+      allow read: if request.auth != null;
+      allow write: if request.auth.token.email.lower() == email.lower() || request.auth.token.email == "owner@gmail.com";
+    }
+
+    match /users/{email} {
+      allow read: if request.auth != null;
+      allow write: if request.auth.token.email.lower() == email.lower() || request.auth.token.email == "owner@gmail.com";
+    }
+    
+    // ==========================================
+    // Aturan Database Gaji (Krusial: Anti-Manipulasi Karyawan)
+    // ==========================================
+    match /gaji_pegawai/{email} {
+      allow read: if request.auth != null;
+      
+      // Karyawan hanya bisa CREATE / UPDATE dokumennya Murni untuk menyuntik data telat.
+      // Mereka DILARANG KERAS mendelete (menghapus blok array history mereka sendiri)
+      allow create, update: if request.auth.token.email.lower() == email.lower();
+      allow delete: if request.auth.token.email == "owner@gmail.com";
+      
+      // Owner Bebas Edit
+      allow write: if request.auth.token.email == "owner@gmail.com";
+    }
+
+    // ==========================================
+    // Aturan Rekam Jejak Absensi (log_absensi)
+    // ==========================================
+    match /log_absensi/{docId} {
+      allow read: if request.auth != null;
+      // Karyawan hanya bisa CREATE laporan absensinya.
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth.token.email == "owner@gmail.com";
+    }
+
+    // ==========================================
+    // Aturan Database Pembukuan Sehari-hari
+    // ==========================================
+    match /history_pembukuan/{docId} {
+      // Pembukuan wajib bisa ditulis dan di-update oleh semua staff
+      allow read, write: if request.auth != null;
+    }
+    
+    // ==========================================
+    // Aturan Folder Data Umum (Stok, Draft Form, Pengaturan)
+    // ==========================================
+    match /data/{docId} {
+      // Kasir butuh baca & nulis data Stok Jajanan/Rental, draft, dan setting bahasa
+      allow read, write: if request.auth != null;
+    }
+
+    // ==========================================
+    // Aturan Sistem Presensi Realtime (Titik Radar)
+    // ==========================================
+    match /presence/{uid} {
+      // Kasir butuh melacak teman-kasir lain yang sedang aktif
+      allow read, write: if request.auth != null;
+    }
+    
+    // ==========================================
+    // Aturan Eksekutif Owner (Buku Pengeluaran Pribadi, Asisten AI)
+    // ==========================================
+    match /owner_expenses/{docId} {
+      allow read, write: if request.auth != null && request.auth.token.email == "owner@gmail.com";
+    }
+    
+    match /owner_assistants/{docId} {
+      allow read, write: if request.auth != null && request.auth.token.email == "owner@gmail.com";
+    }
+
+    // ==========================================
+    // Aturan Fitur Game (Challenge & Leaderboard)
+    // ==========================================
+    
+    // Game config: semua user auth bisa baca, hanya owner yang tulis
+    match /data/game_config {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.token.email == "owner@gmail.com";
+    }
+
+    // Leaderboard: semua user auth bisa baca, hanya owner yang bisa tulis/reset dari client
+    match /game_leaderboard/{docId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.token.email == "owner@gmail.com";
+    }
+
+    // Winners: semua user auth bisa baca, tidak ada yang tulis langsung dari client
+    match /game_winners/{monthKey} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Audit attempts: user hanya bisa baca miliknya sendiri, tidak bisa tulis langsung dari client
+    match /game_attempts/{attemptId} {
+      allow read: if request.auth != null 
+                  && resource.data.email.lower() == request.auth.token.email.lower();
+      allow write: if false;
+    }
+
+    // ==========================================
+    // Aturan Sisa / Fallback (Menutup semua yang tidak terdaftar)
+    // ==========================================
+    match /{document=**} {
+      // Data apa pun yang belum dideklarasikan di atas hanya bisa diakses oleh Owner
+      allow read, write: if request.auth != null && request.auth.token.email == "owner@gmail.com";
+    }
+    
+  }
+}

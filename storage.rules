@@ -1,0 +1,23 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Aturan Folder Foto Absensi Karyawan
+    match /absensi/{email}/{fileName} {
+      // 1. Karyawan HANYA diizinkan Upload (CREATE) ke folder emailnya sendiri.
+      allow create: if request.auth != null && request.auth.token.email.lower() == email.lower();
+      
+      // 2. Karyawan diizinkan melihat data fotonya sendiri (READ)
+      allow read: if request.auth != null && request.auth.token.email.lower() == email.lower();
+      
+      // 3. Karyawan DILARANG update / delete fotonya (Untuk menghindari Kecurangan)
+      allow update, delete: if false; 
+    }
+    
+    // Akses Super Administrator (Owner)
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.token.email == "owner@gmail.com";
+    }
+
+  }
+}
