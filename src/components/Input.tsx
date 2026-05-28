@@ -55,6 +55,18 @@ function getHariIndonesia(yyyyMmDd: string) {
   return hari.charAt(0).toUpperCase() + hari.slice(1);
 }
 
+const convertToYmd = (dateStr: string) => {
+  if (!dateStr) return "";
+  const clean = dateStr.replace(/\//g, "-");
+  const parts = clean.split("-");
+  if (parts.length === 3) {
+    if (parts[0].length === 2 && parts[2].length === 4) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+  }
+  return clean;
+};
+
 const Input: React.FC<InputProps> = ({
   tanggal,
   setTanggal,
@@ -149,7 +161,7 @@ const Input: React.FC<InputProps> = ({
     try {
       setIsProcessingAbsen(true);
       // 1. Upload photo to Firebase Storage
-      const dateStr = new Date().toISOString().split("T")[0];
+      const dateStr = new Date().toLocaleString("en-CA", { timeZone: "Asia/Jakarta" }).slice(0, 10);
       const safeTimeStr = waktuAbsen.replace(/[^a-zA-Z0-9]/g, "_");
       const imageRef = ref(storage, `absensi/${currentUserEmail}/${dateStr}_${jenisAbsen}_${safeTimeStr}.jpg`);
       await uploadString(imageRef, fotoBase64, 'data_url');
@@ -578,13 +590,18 @@ const Input: React.FC<InputProps> = ({
               return adjustedHour * 60 + m;
            };
 
+           const convertToYmd = (dStr: string) => {
+             const [d, m, y] = dStr.split("-");
+             return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+           };
+
            if (currentMode === "Masuk") {
               setAbsenPagi(waktu);
               // Auto-fill Ruko Buka: selalu isi saat Masuk (ambil yang paling awal)
               const timeOnly = waktu.split(" - ")[0];
               const dateOnly = waktu.split(" - ")[1]?.replace(/\//g, "-");
               if (!rukoBuka || toMinutes(timeOnly) < toMinutes(rukoBuka)) {
-                 setRukoBuka(timeOnly, dateOnly);
+                 setRukoBuka(timeOnly, convertToYmd(dateOnly));
               }
            } else if (currentMode === "Pulang") {
               setAbsenSiang(waktu);
@@ -592,7 +609,7 @@ const Input: React.FC<InputProps> = ({
               const timeOnly = waktu.split(" - ")[0];
               const dateOnly = waktu.split(" - ")[1]?.replace(/\//g, "-");
               if (!rukoTutup || toMinutes(timeOnly) > toMinutes(rukoTutup)) {
-                 setRukoTutup(timeOnly, dateOnly);
+                 setRukoTutup(timeOnly, convertToYmd(dateOnly));
               }
            }
            if (currentMode) {

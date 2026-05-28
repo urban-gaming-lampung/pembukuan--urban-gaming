@@ -354,38 +354,69 @@ export default function App() {
   const [rukoBukaDate, _setRukoBukaDate] = useState("");
   const [rukoTutup, _setRukoTutup] = useState("");
   const [rukoTutupDate, _setRukoTutupDate] = useState("");
+  const [rukoStatusDbTanggal, _setRukoStatusDbTanggal] = useState("");
   const [catatan, setCatatan] = useState("");
 
   const setRukoBuka = useCallback((val: string, dateStr?: string) => {
     _setRukoBuka(val);
-    const dStr = dateStr || new Date().toLocaleDateString("id-ID", { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, "-");
+    const dStr = dateStr || new Date().toLocaleString("en-CA", { timeZone: "Asia/Jakarta" }).slice(0, 10);
     if (val) _setRukoBukaDate(dStr);
     if (!editingId && val) {
-      setDoc(doc(db, "data", "ruko_status"), { rukoBuka: val, rukoBukaDate: dStr, tanggal }, { merge: true }).catch(console.error);
+      const isNewDay = rukoStatusDbTanggal !== tanggal;
+      const updateData: any = {
+        rukoBuka: val,
+        rukoBukaDate: dStr,
+        tanggal
+      };
+      if (isNewDay) {
+        updateData.rukoTutup = "";
+        updateData.rukoTutupDate = "";
+      }
+      setDoc(doc(db, "data", "ruko_status"), updateData, { merge: true }).catch(console.error);
     }
-  }, [editingId, tanggal]);
+  }, [editingId, tanggal, rukoStatusDbTanggal]);
 
   const setRukoTutup = useCallback((val: string, dateStr?: string) => {
     _setRukoTutup(val);
-    const dStr = dateStr || new Date().toLocaleDateString("id-ID", { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, "-");
+    const dStr = dateStr || new Date().toLocaleString("en-CA", { timeZone: "Asia/Jakarta" }).slice(0, 10);
     if (val) _setRukoTutupDate(dStr);
     if (!editingId && val) {
-      setDoc(doc(db, "data", "ruko_status"), { rukoTutup: val, rukoTutupDate: dStr, tanggal }, { merge: true }).catch(console.error);
+      const isNewDay = rukoStatusDbTanggal !== tanggal;
+      const updateData: any = {
+        rukoTutup: val,
+        rukoTutupDate: dStr,
+        tanggal
+      };
+      if (isNewDay) {
+        updateData.rukoBuka = "";
+        updateData.rukoBukaDate = "";
+      }
+      setDoc(doc(db, "data", "ruko_status"), updateData, { merge: true }).catch(console.error);
     }
-  }, [editingId, tanggal]);
+  }, [editingId, tanggal, rukoStatusDbTanggal]);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "data", "ruko_status"), (snap) => {
       if (snap.exists() && !editingId) {
         const data = snap.data();
+        _setRukoStatusDbTanggal(data.tanggal || "");
         if (data.tanggal === tanggal) {
-           if (data.rukoBuka) _setRukoBuka(data.rukoBuka.split(" - ")[0]);
-           if (data.rukoBukaDate) _setRukoBukaDate(data.rukoBukaDate);
-           if (data.rukoTutup) _setRukoTutup(data.rukoTutup.split(" - ")[0]);
-           if (data.rukoTutupDate) _setRukoTutupDate(data.rukoTutupDate);
+           _setRukoBuka(data.rukoBuka ? data.rukoBuka.split(" - ")[0] : "");
+           _setRukoBukaDate(data.rukoBukaDate || "");
+           _setRukoTutup(data.rukoTutup ? data.rukoTutup.split(" - ")[0] : "");
+           _setRukoTutupDate(data.rukoTutupDate || "");
         } else {
-           // Jangan reset otomatis jika tidak sama, biar user yang reset atau biarkan sistem membersihkan di hari baru.
+           _setRukoBuka("");
+           _setRukoBukaDate("");
+           _setRukoTutup("");
+           _setRukoTutupDate("");
         }
+      } else if (!snap.exists() && !editingId) {
+        _setRukoStatusDbTanggal("");
+        _setRukoBuka("");
+        _setRukoBukaDate("");
+        _setRukoTutup("");
+        _setRukoTutupDate("");
       }
     });
     return () => unsub();
