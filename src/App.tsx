@@ -1382,6 +1382,9 @@ export default function App() {
     // Clear Firestore draft agar tidak di-rehydrate dengan data basi
     setDoc(doc(db, "data", "draft"), {}).catch(console.error);
 
+    // Clear Firestore ruko_status agar data ruko buka/tutup tidak stuck (SSOT cleanup)
+    setDoc(doc(db, "data", "ruko_status"), { rukoBuka: "", rukoBukaDate: "", rukoTutup: "", rukoTutupDate: "", tanggal: "" }, { merge: false }).catch(console.error);
+
     setSuccessMessage("Data berhasil disimpan secara real-time!");
     setShowSuccessAlert(true);
   };
@@ -1956,13 +1959,15 @@ export default function App() {
                 onReset={async () => { 
                   setAbsenPagi(""); setAbsenSiang(""); setShiftPegawai(""); setRukoBuka(""); _setRukoBukaDate(""); setRukoTutup(""); _setRukoTutupDate(""); setCatatan(""); 
                   try {
+                    // Clear ruko_status dari Firebase (SSOT cleanup)
+                    await setDoc(doc(db, "data", "ruko_status"), { rukoBuka: "", rukoBukaDate: "", rukoTutup: "", rukoTutupDate: "", tanggal: "" }, { merge: false });
                     const q = query(collection(db, "log_absensi"), where("tanggal", "==", tanggal));
                     const snapshot = await getDocs(q);
                     snapshot.forEach((docSnap) => {
                       deleteDoc(docSnap.ref).catch(console.error);
                     });
                   } catch (e) {
-                    console.error("Gagal menghapus log_absensi:", e);
+                    console.error("Gagal menghapus log_absensi/ruko_status:", e);
                   }
                 }}
                 isAbsenBlocked={(() => {

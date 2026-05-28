@@ -186,36 +186,10 @@ const Input: React.FC<InputProps> = ({
         console.error("Gagal menyimpan log_absensi", e);
       }
 
-      // --- AUTO RUKO BUKA / TUTUP LOGIC ---
-      try {
-         const parseTime = (timeStr: string) => {
-             if (!timeStr || typeof timeStr !== 'string') return 0;
-             const parts = timeStr.split(":");
-             if (parts.length < 2) return 0;
-             const h = parseInt(parts[0], 10);
-             const m = parseInt(parts[1], 10);
-             let hours = h;
-             if (hours < 6) hours += 24; 
-             return hours * 60 + m;
-         };
-         
-         const tVal = parseTime(waktuAbsen);
-         const timeOnly = waktuAbsen.split(" - ")[0];
-         
-         if (jenisAbsen === "Masuk") {
-             if (!rukoBuka || tVal < parseTime(rukoBuka)) {
-                 setRukoBuka(timeOnly, dateStr);
-             }
-         } else if (jenisAbsen === "Pulang") {
-             if (tVal <= 1620) {
-                 if (!rukoTutup || tVal > parseTime(rukoTutup)) {
-                     setRukoTutup(timeOnly, dateStr);
-                 }
-             }
-         }
-      } catch (e) {
-         console.error("Gagal update otomatis Ruko Buka/Tutup", e);
-      }
+       // AUTO RUKO BUKA / TUTUP dihapus dari sini (SSOT).
+       // Logika auto-fill sekarang hanya ada di onSubmit callback AbsenPopup
+       // untuk menghindari race condition dan inkonsistensi tanggal saat absen
+       // melewati tengah malam.
 
       // 2. Kalkulasi Denda Keterlambatan Absen Masuk
       if (jenisAbsen === "Masuk") {
