@@ -145,12 +145,19 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
      });
 
      // Step 2: Transform ke Bulan -> Week[] -> Days
-     const finalData: Array<[string, WeekData[], number]> = [];
+     const finalData: Array<[
+        string,
+        WeekData[],
+        number,
+        Map<string, { email: string; pagi: number; sore: number; libur: number }>
+     ]> = [];
 
      for (const [bulan, hariMap] of rawMap.entries()) {
         const [mmStr, yyStr] = bulan.split("/");
         const fullYear = 2000 + parseInt(yyStr);
         const monthNum = parseInt(mmStr);
+
+        const monthlySummary = new Map<string, { email: string; pagi: number; sore: number; libur: number }>();
 
         // Group hari ke dalam weeks
         const weekMap = new Map<number, { days: Map<string, any[]>, summary: Map<string, { email: string; pagi: number; sore: number; libur: number }> }>();
@@ -199,6 +206,15 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
               if (pData.isLibur || cls === 'libur') s.libur++;
               else if (cls === 'sore') s.sore++;
               else s.pagi++;
+
+              // Monthly summary calculation
+              if (!monthlySummary.has(em)) {
+                 monthlySummary.set(em, { email: em, pagi: 0, sore: 0, libur: 0 });
+              }
+              const ms = monthlySummary.get(em)!;
+              if (pData.isLibur || cls === 'libur') ms.libur++;
+              else if (cls === 'sore') ms.sore++;
+              else ms.pagi++;
            });
         }
 
@@ -228,7 +244,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
            });
         }
 
-        finalData.push([bulan, weeks, totalDays]);
+        finalData.push([bulan, weeks, totalDays, monthlySummary]);
      }
 
      // Sort bulan desc
@@ -702,7 +718,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                    </div>
                )}
             
-               {groupedLogAbsensi.map(([bulan, weeks, totalDays]) => {
+               {groupedLogAbsensi.map(([bulan, weeks, totalDays, monthlySummary]) => {
                  const isBulanExpanded = expandedLogBulan.includes(bulan);
 
                  return (
@@ -729,11 +745,53 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                        {/* LIST WEEK */}
                        {isBulanExpanded && (
                           <div className="flex flex-col gap-3 p-5 pt-0 bg-zinc-50/50 dark:bg-black/10 border-t border-zinc-200 dark:border-white/5 animate-in fade-in slide-in-from-top-2 duration-300">
+                             
+                             {/* MONTHLY SUMMARY TABLE */}
+                             {monthlySummary && monthlySummary.size > 0 && (
+                                <div className="mt-4 mb-2 bg-gradient-to-br from-indigo-50/80 to-blue-50/50 dark:from-indigo-500/10 dark:to-blue-500/5 rounded-2xl border border-indigo-100/80 dark:border-indigo-500/20 overflow-hidden shadow-sm">
+                                   <div className="px-4 py-3 border-b border-indigo-100/60 dark:border-indigo-500/10 flex items-center gap-2">
+                                      <Activity size={14} className="text-indigo-500" />
+                                      <span className="text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Ringkasan Shift Bulan {bulan}</span>
+                                   </div>
+                                   <div className="overflow-x-auto bg-white/20 dark:bg-black/20">
+                                      <table className="w-full text-xs">
+                                         <thead>
+                                            <tr className="border-b border-indigo-100/40 dark:border-indigo-500/10 bg-indigo-50/30 dark:bg-white/2">
+                                               <th className="text-left px-4 py-2.5 font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Pegawai</th>
+                                               <th className="text-center px-3 py-2.5 font-bold text-blue-500 uppercase tracking-wider">Pagi</th>
+                                               <th className="text-center px-3 py-2.5 font-bold text-orange-500 uppercase tracking-wider">Sore</th>
+                                               <th className="text-center px-3 py-2.5 font-bold text-amber-500 uppercase tracking-wider">Libur</th>
+                                               <th className="text-center px-3 py-2.5 font-bold text-zinc-400 uppercase tracking-wider">Total</th>
+                                            </tr>
+                                         </thead>
+                                         <tbody>
+                                            {Array.from(monthlySummary.values()).map((s: any) => (
+                                               <tr key={s.email} className="border-b border-indigo-50/60 dark:border-indigo-500/5 last:border-0 hover:bg-indigo-50/20 dark:hover:bg-white/1">
+                                                  <td className="px-4 py-2.5 font-bold text-zinc-800 dark:text-zinc-200 capitalize">{s.email.split("@")[0]}</td>
+                                                  <td className="text-center px-3 py-2.5">
+                                                     <span className={`inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-md font-black ${s.pagi > 0 ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400' : 'text-zinc-300 dark:text-zinc-600'}`}>{s.pagi}</span>
+                                                  </td>
+                                                  <td className="text-center px-3 py-2.5">
+                                                     <span className={`inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-md font-black ${s.sore > 0 ? 'bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400' : 'text-zinc-300 dark:text-zinc-600'}`}>{s.sore}</span>
+                                                  </td>
+                                                  <td className="text-center px-3 py-2.5">
+                                                     <span className={`inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-md font-black ${s.libur > 0 ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'text-zinc-300 dark:text-zinc-600'}`}>{s.libur}</span>
+                                                  </td>
+                                                  <td className="text-center px-3 py-2.5">
+                                                     <span className="inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-md font-black bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">{s.pagi + s.sore + s.libur}</span>
+                                                  </td>
+                                               </tr>
+                                            ))}
+                                         </tbody>
+                                      </table>
+                                   </div>
+                                </div>
+                             )}
+
                              {weeks.map((week) => {
                                 const keyMinggu = `${bulan}_w${week.weekNum}`;
                                 const isMingguExpanded = expandedLogMinggu.includes(keyMinggu);
                                 const jumlahHariMinggu = week.days.size;
-                                const summaryArr = Array.from(week.summary.values());
 
                                 return (
                                    <div key={keyMinggu} className="bg-white dark:bg-[#202022] rounded-2xl border border-zinc-200/60 dark:border-white/5 overflow-hidden shadow-sm hover:border-zinc-300 dark:hover:border-white/10 transition-all">
@@ -766,50 +824,8 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                                       {isMingguExpanded && (
                                          <div className="border-t border-zinc-100 dark:border-white/5 animate-in fade-in slide-in-from-top-2 duration-300">
                                             
-                                            {/* SUMMARY TABLE */}
-                                            {summaryArr.length > 0 && (
-                                               <div className="mx-4 mt-4 mb-3 bg-gradient-to-br from-indigo-50/80 to-blue-50/50 dark:from-indigo-500/10 dark:to-blue-500/5 rounded-xl border border-indigo-100/80 dark:border-indigo-500/20 overflow-hidden">
-                                                  <div className="px-3 py-2 border-b border-indigo-100/60 dark:border-indigo-500/10 flex items-center gap-2">
-                                                     <Activity size={12} className="text-indigo-500" />
-                                                     <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Ringkasan Shift {week.weekLabel}</span>
-                                                  </div>
-                                                  <div className="overflow-x-auto">
-                                                     <table className="w-full text-[11px]">
-                                                        <thead>
-                                                           <tr className="border-b border-indigo-100/40 dark:border-indigo-500/10">
-                                                              <th className="text-left px-3 py-2 font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Pegawai</th>
-                                                              <th className="text-center px-2 py-2 font-bold text-blue-500 uppercase tracking-wider">Pagi</th>
-                                                              <th className="text-center px-2 py-2 font-bold text-orange-500 uppercase tracking-wider">Sore</th>
-                                                              <th className="text-center px-2 py-2 font-bold text-amber-500 uppercase tracking-wider">Libur</th>
-                                                              <th className="text-center px-2 py-2 font-bold text-zinc-400 uppercase tracking-wider">Total</th>
-                                                           </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                           {summaryArr.map((s) => (
-                                                              <tr key={s.email} className="border-b border-indigo-50/60 dark:border-indigo-500/5 last:border-0">
-                                                                 <td className="px-3 py-2 font-bold text-zinc-800 dark:text-zinc-200 capitalize">{s.email.split("@")[0]}</td>
-                                                                 <td className="text-center px-2 py-2">
-                                                                    <span className={`inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded-md font-black ${s.pagi > 0 ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400' : 'text-zinc-300 dark:text-zinc-600'}`}>{s.pagi}</span>
-                                                                 </td>
-                                                                 <td className="text-center px-2 py-2">
-                                                                    <span className={`inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded-md font-black ${s.sore > 0 ? 'bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400' : 'text-zinc-300 dark:text-zinc-600'}`}>{s.sore}</span>
-                                                                 </td>
-                                                                 <td className="text-center px-2 py-2">
-                                                                    <span className={`inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded-md font-black ${s.libur > 0 ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'text-zinc-300 dark:text-zinc-600'}`}>{s.libur}</span>
-                                                                 </td>
-                                                                 <td className="text-center px-2 py-2">
-                                                                    <span className="inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded-md font-black bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">{s.pagi + s.sore + s.libur}</span>
-                                                                 </td>
-                                                              </tr>
-                                                           ))}
-                                                        </tbody>
-                                                     </table>
-                                                  </div>
-                                               </div>
-                                            )}
-
                                             {/* LIST HARI DALAM WEEK */}
-                                            <div className="flex flex-col gap-2.5 p-4 pt-1">
+                                            <div className="flex flex-col gap-2.5 p-4">
                                                {Array.from(week.days.entries()).map(([hari, listPegawai]) => {
                                                   const keyHari = `${keyMinggu}_${hari}`;
                                                   const isHariExpanded = expandedLogHari.includes(keyHari);
