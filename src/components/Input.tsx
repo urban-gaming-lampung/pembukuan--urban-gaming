@@ -578,14 +578,29 @@ const Input: React.FC<InputProps> = ({
                  setRukoBuka(timeOnly, convertToYmd(dateOnly));
               }
            } else if (currentMode === "Pulang") {
-              setAbsenSiang(waktu);
-              // Auto-fill Ruko Tutup: selalu isi saat Pulang (ambil yang paling akhir)
-              const timeOnly = waktu.split(" - ")[0];
-              const dateOnly = waktu.split(" - ")[1]?.replace(/\//g, "-");
-              if (!rukoTutup || toMinutes(timeOnly) > toMinutes(rukoTutup)) {
-                 setRukoTutup(timeOnly, convertToYmd(dateOnly));
-              }
-           }
+               setAbsenSiang(waktu);
+               // Auto-fill Ruko Tutup: ambil yang paling akhir (date-aware)
+               // SSOT: bandingkan tanggal aktual + waktu, bukan hanya waktu saja.
+               // Ini mencegah waktu 00:00 (tanggal beda) menimpa 20:25 (tanggal pembukuan).
+               const timeOnly = waktu.split(" - ")[0];
+               const dateOnly = waktu.split(" - ")[1]?.replace(/\//g, "-");
+               const newDateYmd = dateOnly ? convertToYmd(dateOnly) : "";
+               
+               // Bandingkan dengan tanggal+waktu existing
+               const existingDateYmd = rukoTutupDate || tanggal; // fallback ke tanggal pembukuan
+               
+               if (!rukoTutup) {
+                  // Belum ada ruko tutup → langsung set
+                  setRukoTutup(timeOnly, newDateYmd);
+               } else if (newDateYmd > existingDateYmd) {
+                  // Tanggal aktual lebih baru → pasti lebih larut (cross-midnight)
+                  setRukoTutup(timeOnly, newDateYmd);
+               } else if (newDateYmd === existingDateYmd && toMinutes(timeOnly) > toMinutes(rukoTutup)) {
+                  // Tanggal sama → bandingkan waktu (ambil yang lebih malam)
+                  setRukoTutup(timeOnly, newDateYmd);
+               }
+               // else: waktu baru lebih awal dari yang existing → abaikan
+            }
            if (currentMode) {
               await handlePotongGaji(waktu, fotoBase64, currentMode);
            }
