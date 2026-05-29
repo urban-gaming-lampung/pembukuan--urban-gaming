@@ -311,6 +311,29 @@ const Pengaturan: React.FC<Props> = ({
   const [mobileView, setMobileView] = useState<"menu" | "content">("menu");
   const [sopExpanded, setSopExpanded] = useState<number | null>(null);
 
+  // Local states for range sliders to avoid Firestore lagging while dragging
+  const [localPegawaiPersen, setLocalPegawaiPersen] = useState<number>(70);
+  const [localNominalDenda, setLocalNominalDenda] = useState<number>(1500);
+  const [localWaktuToleransi, setLocalWaktuToleransi] = useState<number>(15);
+  const [localDurasiWaktuPotongan, setLocalDurasiWaktuPotongan] = useState<number>(15);
+  const [localDendaTidakAbsenPulang, setLocalDendaTidakAbsenPulang] = useState<number>(40000);
+
+  // Sync props to local states
+  useEffect(() => {
+    if (ongkirConfig) {
+      setLocalPegawaiPersen(ongkirConfig.pegawaiPersen ?? 70);
+    }
+  }, [ongkirConfig]);
+
+  useEffect(() => {
+    if (absenConfig) {
+      setLocalNominalDenda(absenConfig.nominalDenda ?? 1500);
+      setLocalWaktuToleransi(absenConfig.waktuToleransi ?? 15);
+      setLocalDurasiWaktuPotongan(absenConfig.durasiWaktuPotongan ?? 15);
+      setLocalDendaTidakAbsenPulang(absenConfig.dendaTidakAbsenPulang ?? 40000);
+    }
+  }, [absenConfig]);
+
   const isOwner = userEmail?.toLowerCase().trim() === "owner@gmail.com";
 
   const ADMIN_PASSWORD = "707426";
@@ -879,16 +902,18 @@ const Pengaturan: React.FC<Props> = ({
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <div className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">Bagi Hasil Pegawai</div>
-                    <div className="text-xs text-zinc-500">Porsi ongkir untuk pegawai (Owner: {100 - (ongkirConfig?.pegawaiPersen || 0)}%)</div>
+                    <div className="text-xs text-zinc-500">Porsi ongkir untuk pegawai (Owner: {100 - localPegawaiPersen}%)</div>
                   </div>
-                  <div className="text-xl font-bold text-blue-500 bg-blue-50 dark:bg-blue-500/10 px-3 py-1 rounded-lg">{ongkirConfig?.pegawaiPersen ?? 70}%</div>
+                  <div className="text-xl font-bold text-blue-500 bg-blue-50 dark:bg-blue-500/10 px-3 py-1 rounded-lg">{localPegawaiPersen}%</div>
                 </div>
                 <div className="relative pt-2 pb-1 touch-pan-y">
                   <input 
                     type="range" 
                     min="0" max="100" step="5" 
-                    value={ongkirConfig?.pegawaiPersen ?? 70} 
-                    onChange={(e) => runOrAlert(() => setOngkirConfig && setOngkirConfig({ ...ongkirConfig, pegawaiPersen: Number(e.target.value) }))}
+                    value={localPegawaiPersen} 
+                    onChange={(e) => setLocalPegawaiPersen(Number(e.target.value))}
+                    onMouseUp={() => runOrAlert(() => setOngkirConfig && setOngkirConfig({ ...ongkirConfig, pegawaiPersen: localPegawaiPersen }))}
+                    onTouchEnd={() => runOrAlert(() => setOngkirConfig && setOngkirConfig({ ...ongkirConfig, pegawaiPersen: localPegawaiPersen }))}
                     className="w-full h-2 bg-zinc-200 rounded-lg appearance-none cursor-pointer dark:bg-zinc-700 accent-blue-500"
                   />
                 </div>
@@ -913,13 +938,15 @@ const Pengaturan: React.FC<Props> = ({
                     <div className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">Nominal Denda (Rp)</div>
                     <div className="text-xs text-zinc-500">Jumlah denda per blok waktu</div>
                   </div>
-                  <div className="text-[15px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-3 py-1 rounded-lg">Rp {absenConfig?.nominalDenda?.toLocaleString("id-ID") ?? 1500}</div>
+                  <div className="text-[15px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-3 py-1 rounded-lg">Rp {localNominalDenda.toLocaleString("id-ID")}</div>
                 </div>
                 <div className="relative pt-2 pb-1 touch-pan-y">
                   <input 
                     type="range" min="0" max="10000" step="500" 
-                    value={absenConfig?.nominalDenda ?? 1500} 
-                    onChange={(e) => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, nominalDenda: Number(e.target.value) }))}
+                    value={localNominalDenda} 
+                    onChange={(e) => setLocalNominalDenda(Number(e.target.value))}
+                    onMouseUp={() => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, nominalDenda: localNominalDenda }))}
+                    onTouchEnd={() => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, nominalDenda: localNominalDenda }))}
                     className="w-full h-2 bg-zinc-200 rounded-lg appearance-none cursor-pointer dark:bg-zinc-700 accent-red-500"
                   />
                 </div>
@@ -930,13 +957,15 @@ const Pengaturan: React.FC<Props> = ({
                     <div className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">Waktu Toleransi (Menit)</div>
                     <div className="text-xs text-zinc-500">Toleransi awal sebelum mulai didenda</div>
                   </div>
-                  <div className="text-[15px] font-bold text-amber-500 bg-amber-50 dark:bg-amber-500/10 px-3 py-1 rounded-lg">{absenConfig?.waktuToleransi ?? 15} mnt</div>
+                  <div className="text-[15px] font-bold text-amber-500 bg-amber-50 dark:bg-amber-500/10 px-3 py-1 rounded-lg">{localWaktuToleransi} mnt</div>
                 </div>
                 <div className="relative pt-2 pb-1 touch-pan-y">
                   <input 
                     type="range" min="0" max="60" step="5" 
-                    value={absenConfig?.waktuToleransi ?? 15} 
-                    onChange={(e) => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, waktuToleransi: Number(e.target.value) }))}
+                    value={localWaktuToleransi} 
+                    onChange={(e) => setLocalWaktuToleransi(Number(e.target.value))}
+                    onMouseUp={() => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, waktuToleransi: localWaktuToleransi }))}
+                    onTouchEnd={() => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, waktuToleransi: localWaktuToleransi }))}
                     className="w-full h-2 bg-zinc-200 rounded-lg appearance-none cursor-pointer dark:bg-zinc-700 accent-amber-500"
                   />
                 </div>
@@ -947,13 +976,15 @@ const Pengaturan: React.FC<Props> = ({
                     <div className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">Durasi Blok Potongan (Menit)</div>
                     <div className="text-xs text-zinc-500">Denda dikalikan setiap kelipatan durasi ini</div>
                   </div>
-                  <div className="text-[15px] font-bold text-blue-500 bg-blue-50 dark:bg-blue-500/10 px-3 py-1 rounded-lg">{absenConfig?.durasiWaktuPotongan ?? 15} mnt</div>
+                  <div className="text-[15px] font-bold text-blue-500 bg-blue-50 dark:bg-blue-500/10 px-3 py-1 rounded-lg">{localDurasiWaktuPotongan} mnt</div>
                 </div>
                 <div className="relative pt-2 pb-1 touch-pan-y">
                   <input 
                     type="range" min="5" max="60" step="5" 
-                    value={absenConfig?.durasiWaktuPotongan ?? 15} 
-                    onChange={(e) => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, durasiWaktuPotongan: Number(e.target.value) }))}
+                    value={localDurasiWaktuPotongan} 
+                    onChange={(e) => setLocalDurasiWaktuPotongan(Number(e.target.value))}
+                    onMouseUp={() => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, durasiWaktuPotongan: localDurasiWaktuPotongan }))}
+                    onTouchEnd={() => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, durasiWaktuPotongan: localDurasiWaktuPotongan }))}
                     className="w-full h-2 bg-zinc-200 rounded-lg appearance-none cursor-pointer dark:bg-zinc-700 accent-blue-500"
                   />
                 </div>
@@ -964,13 +995,15 @@ const Pengaturan: React.FC<Props> = ({
                     <span className="text-[14px] font-semibold text-zinc-900 dark:text-white">Denda Tidak Full Absen (Bolos/Lupa)</span>
                     <span className="text-[12px] text-zinc-500 dark:text-zinc-400">Potongan gaji jika tidak absen masuk/pulang sampai tutup buku</span>
                   </div>
-                  <div className="text-[15px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-500/10 px-3 py-1 rounded-lg">Rp {absenConfig?.dendaTidakAbsenPulang?.toLocaleString("id-ID") ?? "40.000"}</div>
+                  <div className="text-[15px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-500/10 px-3 py-1 rounded-lg">Rp {localDendaTidakAbsenPulang.toLocaleString("id-ID")}</div>
                 </div>
                 <div className="relative pt-2 pb-6 touch-pan-y">
                   <input 
                     type="range" min="0" max="100000" step="5000"
-                    value={absenConfig?.dendaTidakAbsenPulang ?? 40000}
-                    onChange={(e) => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, dendaTidakAbsenPulang: Number(e.target.value) }))}
+                    value={localDendaTidakAbsenPulang}
+                    onChange={(e) => setLocalDendaTidakAbsenPulang(Number(e.target.value))}
+                    onMouseUp={() => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, dendaTidakAbsenPulang: localDendaTidakAbsenPulang }))}
+                    onTouchEnd={() => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, dendaTidakAbsenPulang: localDendaTidakAbsenPulang }))}
                     className="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-rose-500"
                   />
                   <div className="flex justify-between mt-2 text-[10px] font-medium text-zinc-400">
