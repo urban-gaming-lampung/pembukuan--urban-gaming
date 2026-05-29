@@ -85,9 +85,44 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
      }
   };
 
-  // Set-up grouping log_absensi by Bulan -> Hari
+  // === HELPER: Hitung week number dari tanggal (SSOT) ===
+  const getWeekNum = (dayOfMonth: number) => {
+    if (dayOfMonth <= 7) return 1;
+    if (dayOfMonth <= 14) return 2;
+    if (dayOfMonth <= 21) return 3;
+    return 4;
+  };
+
+  const getWeekRange = (weekNum: number, year: number, month: number) => {
+    const starts = [1, 8, 15, 22];
+    const lastDay = new Date(year, month, 0).getDate(); // hari terakhir bulan
+    const ends = [7, 14, 21, lastDay];
+    return { start: starts[weekNum - 1], end: ends[weekNum - 1] };
+  };
+
+  const BULAN_NAMES = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+
+  // === Classify shift dari string shift field (SSOT) ===
+  const classifyShift = (shiftStr: string): 'pagi' | 'sore' | 'libur' => {
+    if (!shiftStr) return 'pagi';
+    const lower = shiftStr.toLowerCase();
+    if (lower.includes('libur')) return 'libur';
+    if (lower.includes('sore')) return 'sore';
+    return 'pagi';
+  };
+
+  // Set-up grouping log_absensi by Bulan -> Minggu -> Hari (SSOT)
+  type WeekData = {
+    weekNum: number;
+    weekLabel: string;
+    dateRange: string;
+    summary: Map<string, { email: string; pagi: number; sore: number; libur: number }>;
+    days: Map<string, any[]>;
+  };
+
   const groupedLogAbsensi = useMemo(() => {
-     const map = new Map<string, Map<string, any[]>>();
+     // Step 1: Group semua log ke bulan -> hari -> logs
+     const rawMap = new Map<string, Map<string, any[]>>();
      
      logAbsensi.forEach(log => {
         if (!log.tanggal) return;
@@ -103,58 +138,115 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         
         const tglStr = `${hariIndo} - ${log.tanggal}`;
 
-        if (!map.has(bulanTahun)) map.set(bulanTahun, new Map());
-        if (!map.get(bulanTahun)!.has(tglStr)) map.get(bulanTahun)!.set(tglStr, []);
+        if (!rawMap.has(bulanTahun)) rawMap.set(bulanTahun, new Map());
+        if (!rawMap.get(bulanTahun)!.has(tglStr)) rawMap.get(bulanTahun)!.set(tglStr, []);
         
-        map.get(bulanTahun)!.get(tglStr)!.push(log);
+        rawMap.get(bulanTahun)!.get(tglStr)!.push(log);
      });
 
-     const finalData = new Map<string, Map<string, any[]>>();
-     for (const [bulan, hariMap] of map.entries()) {
-        const sortedDaysMap = new Map(
-           Array.from(hariMap.entries()).sort((a,b) => {
-               const dateA = new Date(a[0].split(' - ')[1] || a[0]).getTime();
-               const dateB = new Date(b[0].split(' - ')[1] || b[0]).getTime();
-               return dateB - dateA;
-           })
-        );
-        
-        const finalHariMap = new Map<string, any[]>();
-        for (const [hari, logs] of sortedDaysMap.entries()) {
-            const emailMap = new Map<string, any>();
-            logs.forEach(l => {
-                const em = l.email.toLowerCase();
-                if (em === "owner@gmail.com") return; // Jangan tampilkan owner di monitoring absen
-                if (!emailMap.has(em)) {
-                   emailMap.set(em, { email: em, waktuMasuk: "-", photoMasuk: null, waktuPulang: "-", photoPulang: null, isLibur: false });
-                }
-                if (l.jenisAbsen === "Masuk") {
-                   emailMap.get(em).waktuMasuk = l.waktu;
-                   emailMap.get(em).photoMasuk = l.photoUrl;
-                   emailMap.get(em).shift = l.shift || "";
-                } else if (l.jenisAbsen === "Pulang") {
-                   emailMap.get(em).waktuPulang = l.waktu;
-                   emailMap.get(em).photoPulang = l.photoUrl;
-                } else if (l.jenisAbsen === "Libur") {
-                   emailMap.get(em).isLibur = true;
-                   emailMap.get(em).shift = "Libur";
-                }
-            });
-            finalHariMap.set(hari, Array.from(emailMap.values()));
+     // Step 2: Transform ke Bulan -> Week[] -> Days
+     const finalData: Array<[string, WeekData[], number]> = [];
+
+     for (const [bulan, hariMap] of rawMap.entries()) {
+        const [mmStr, yyStr] = bulan.split("/");
+        const fullYear = 2000 + parseInt(yyStr);
+        const monthNum = parseInt(mmStr);
+
+        // Group hari ke dalam weeks
+        const weekMap = new Map<number, { days: Map<string, any[]>, summary: Map<string, { email: string; pagi: number; sore: number; libur: number }> }>();
+
+        for (const [hari, logs] of hariMap.entries()) {
+           // Parse tanggal dari label hari: "Senin - 2026-05-28"
+           const datePart = hari.split(' - ')[1] || hari;
+           const dateObj = new Date(datePart);
+           const dayOfMonth = dateObj.getDate();
+           const wn = getWeekNum(dayOfMonth);
+
+           if (!weekMap.has(wn)) {
+              weekMap.set(wn, { days: new Map(), summary: new Map() });
+           }
+           const weekEntry = weekMap.get(wn)!;
+
+           // Aggregate pegawai per hari
+           const emailMap = new Map<string, any>();
+           logs.forEach((l: any) => {
+               const em = l.email.toLowerCase();
+               if (em === "owner@gmail.com") return;
+               if (!emailMap.has(em)) {
+                  emailMap.set(em, { email: em, waktuMasuk: "-", photoMasuk: null, waktuPulang: "-", photoPulang: null, isLibur: false });
+               }
+               if (l.jenisAbsen === "Masuk") {
+                  emailMap.get(em).waktuMasuk = l.waktu;
+                  emailMap.get(em).photoMasuk = l.photoUrl;
+                  emailMap.get(em).shift = l.shift || "";
+               } else if (l.jenisAbsen === "Pulang") {
+                  emailMap.get(em).waktuPulang = l.waktu;
+                  emailMap.get(em).photoPulang = l.photoUrl;
+               } else if (l.jenisAbsen === "Libur") {
+                  emailMap.get(em).isLibur = true;
+                  emailMap.get(em).shift = "Libur";
+               }
+           });
+           weekEntry.days.set(hari, Array.from(emailMap.values()));
+
+           // Hitung summary shift per pegawai per hari (SSOT: dari emailMap)
+           emailMap.forEach((pData, em) => {
+              if (!weekEntry.summary.has(em)) {
+                 weekEntry.summary.set(em, { email: em, pagi: 0, sore: 0, libur: 0 });
+              }
+              const s = weekEntry.summary.get(em)!;
+              const cls = classifyShift(pData.shift || "");
+              if (pData.isLibur || cls === 'libur') s.libur++;
+              else if (cls === 'sore') s.sore++;
+              else s.pagi++;
+           });
         }
-        finalData.set(bulan, finalHariMap);
+
+        // Build WeekData array, sort days within each week
+        const weeks: WeekData[] = [];
+        const weekNums = Array.from(weekMap.keys()).sort((a, b) => a - b);
+        let totalDays = 0;
+        for (const wn of weekNums) {
+           const { start, end } = getWeekRange(wn, fullYear, monthNum);
+           const bulanName = BULAN_NAMES[monthNum - 1] || '';
+           const entry = weekMap.get(wn)!;
+           // Sort days desc within week
+           const sortedDays = new Map(
+              Array.from(entry.days.entries()).sort((a, b) => {
+                 const dateA = new Date(a[0].split(' - ')[1] || a[0]).getTime();
+                 const dateB = new Date(b[0].split(' - ')[1] || b[0]).getTime();
+                 return dateB - dateA;
+              })
+           );
+           totalDays += sortedDays.size;
+           weeks.push({
+              weekNum: wn,
+              weekLabel: `Week ${wn}`,
+              dateRange: `${start} - ${end} ${bulanName}`,
+              summary: entry.summary,
+              days: sortedDays
+           });
+        }
+
+        finalData.push([bulan, weeks, totalDays]);
      }
 
-     return Array.from(finalData.entries()).sort((a,b) => {
-         const [ma, ya] = a[0].split("/");
-         const [mb, yb] = b[0].split("/");
-         return new Date(2000 + parseInt(yb), parseInt(mb)-1).getTime() - new Date(2000 + parseInt(ya), parseInt(ma)-1).getTime();
+     // Sort bulan desc
+     finalData.sort((a, b) => {
+        const [ma, ya] = a[0].split("/");
+        const [mb, yb] = b[0].split("/");
+        return new Date(2000 + parseInt(yb), parseInt(mb)-1).getTime() - new Date(2000 + parseInt(ya), parseInt(ma)-1).getTime();
      });
+
+     return finalData;
   }, [logAbsensi]);
 
   const [expandedLogBulan, setExpandedLogBulan] = useState<string[]>([]);
   const toggleLogBulan = (b: string) => setExpandedLogBulan(p => p.includes(b) ? p.filter(x => x !== b) : [...p, b]);
   
+  const [expandedLogMinggu, setExpandedLogMinggu] = useState<string[]>([]);
+  const toggleLogMinggu = (k: string) => setExpandedLogMinggu(p => p.includes(k) ? p.filter(x => x !== k) : [...p, k]);
+
   const [expandedLogHari, setExpandedLogHari] = useState<string[]>([]);
   const toggleLogHari = (k: string) => setExpandedLogHari(p => p.includes(k) ? p.filter(x => x !== k) : [...p, k]);
 
@@ -610,136 +702,220 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                    </div>
                )}
             
-            {groupedLogAbsensi.map(([bulan, hariMap]) => {
-                const isBulanExpanded = expandedLogBulan.includes(bulan);
-                const jumlahHari = Array.from(hariMap.keys()).length;
+               {groupedLogAbsensi.map(([bulan, weeks, totalDays]) => {
+                 const isBulanExpanded = expandedLogBulan.includes(bulan);
 
-                return (
-                   <div key={bulan} className="bg-white dark:bg-[#1C1C1E] rounded-3xl border border-zinc-200 dark:border-white/10 overflow-hidden shadow-sm transition-all duration-300">
-                      
-                      {/* HEADER BULAN */}
-                      <div 
-                         onClick={() => toggleLogBulan(bulan)}
-                         className="flex items-center justify-between p-5 cursor-pointer active:bg-zinc-50 dark:active:bg-white/5 transition-colors"
-                      >
-                         <div className="flex items-center gap-4">
-                            <div className={`p-2.5 rounded-[14px] border transition-colors ${isBulanExpanded ? 'bg-blue-100 border-blue-200 text-blue-600 dark:bg-blue-500/20 dark:border-blue-500/30 dark:text-blue-400' : 'bg-zinc-100 border-zinc-200 text-zinc-500 dark:bg-white/5 dark:border-white/5 dark:text-zinc-400'}`}>
-                               <svg className={`w-5 h-5 transition-transform duration-300 ${isBulanExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                               </svg>
-                            </div>
-                            <div>
-                               <h3 className="text-sm font-black uppercase tracking-wider text-zinc-900 dark:text-white">Bulan <span className="text-blue-500">{bulan}</span></h3>
-                               <p className="text-[11px] font-bold text-zinc-400 mt-0.5">{jumlahHari} Hari Absen Tercatat</p>
-                            </div>
-                         </div>
-                      </div>
+                 return (
+                    <div key={bulan} className="bg-white dark:bg-[#1C1C1E] rounded-3xl border border-zinc-200 dark:border-white/10 overflow-hidden shadow-sm transition-all duration-300">
+                       
+                       {/* HEADER BULAN */}
+                       <div 
+                          onClick={() => toggleLogBulan(bulan)}
+                          className="flex items-center justify-between p-5 cursor-pointer active:bg-zinc-50 dark:active:bg-white/5 transition-colors"
+                       >
+                          <div className="flex items-center gap-4">
+                             <div className={`p-2.5 rounded-[14px] border transition-colors ${isBulanExpanded ? 'bg-blue-100 border-blue-200 text-blue-600 dark:bg-blue-500/20 dark:border-blue-500/30 dark:text-blue-400' : 'bg-zinc-100 border-zinc-200 text-zinc-500 dark:bg-white/5 dark:border-white/5 dark:text-zinc-400'}`}>
+                                <svg className={`w-5 h-5 transition-transform duration-300 ${isBulanExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                </svg>
+                             </div>
+                             <div>
+                                <h3 className="text-sm font-black uppercase tracking-wider text-zinc-900 dark:text-white">Bulan <span className="text-blue-500">{bulan}</span></h3>
+                                <p className="text-[11px] font-bold text-zinc-400 mt-0.5">{totalDays} Hari · {weeks.length} Minggu</p>
+                             </div>
+                          </div>
+                       </div>
 
-                      {/* LIST HARI */}
-                      {isBulanExpanded && (
-                         <div className="flex flex-col gap-3 p-5 pt-0 bg-zinc-50/50 dark:bg-black/10 border-t border-zinc-200 dark:border-white/5 animate-in fade-in slide-in-from-top-2 duration-300">
-                            {Array.from(hariMap.entries()).map(([hari, listPegawai]) => {
-                               const keyHari = `${bulan}_${hari}`;
-                               const isHariExpanded = expandedLogHari.includes(keyHari);
+                       {/* LIST WEEK */}
+                       {isBulanExpanded && (
+                          <div className="flex flex-col gap-3 p-5 pt-0 bg-zinc-50/50 dark:bg-black/10 border-t border-zinc-200 dark:border-white/5 animate-in fade-in slide-in-from-top-2 duration-300">
+                             {weeks.map((week) => {
+                                const keyMinggu = `${bulan}_w${week.weekNum}`;
+                                const isMingguExpanded = expandedLogMinggu.includes(keyMinggu);
+                                const jumlahHariMinggu = week.days.size;
+                                const summaryArr = Array.from(week.summary.values());
 
-                               return (
-                                  <div key={keyHari} className="bg-white dark:bg-[#202022] rounded-2xl border border-zinc-200/60 dark:border-white/5 overflow-hidden shadow-sm hover:border-zinc-300 dark:hover:border-white/10 transition-all">
-                                     <div 
-                                        onClick={() => toggleLogHari(keyHari)}
-                                        className="flex items-center justify-between p-4 cursor-pointer active:bg-zinc-50 dark:active:bg-white/5 transition-colors"
-                                     >
-                                        <div className="flex items-center gap-3">
-                                           <div className="text-[13px] font-bold text-zinc-800 dark:text-zinc-200">{hari}</div>
-                                           <div className="px-2 py-0.5 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-bold rounded-lg uppercase">{listPegawai.length} Pegawai</div>
-                                        </div>
-                                        <div>
-                                           <ChevronDown size={18} className={`text-zinc-400 transition-transform duration-300 ${isHariExpanded ? 'rotate-180 text-blue-500' : ''}`} />
-                                        </div>
-                                     </div>
+                                return (
+                                   <div key={keyMinggu} className="bg-white dark:bg-[#202022] rounded-2xl border border-zinc-200/60 dark:border-white/5 overflow-hidden shadow-sm hover:border-zinc-300 dark:hover:border-white/10 transition-all">
+                                      {/* HEADER WEEK */}
+                                      <div 
+                                         onClick={() => toggleLogMinggu(keyMinggu)}
+                                         className="flex items-center justify-between p-4 cursor-pointer active:bg-zinc-50 dark:active:bg-white/5 transition-colors"
+                                      >
+                                         <div className="flex items-center gap-3">
+                                            <div className={`p-2 rounded-xl border transition-colors ${
+                                              isMingguExpanded 
+                                                ? 'bg-indigo-100 border-indigo-200 text-indigo-600 dark:bg-indigo-500/20 dark:border-indigo-500/30 dark:text-indigo-400' 
+                                                : 'bg-zinc-100 border-zinc-200 text-zinc-400 dark:bg-white/5 dark:border-white/5 dark:text-zinc-500'
+                                            }`}>
+                                               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                                                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>
+                                               </svg>
+                                            </div>
+                                            <div>
+                                               <div className="text-[13px] font-black text-zinc-800 dark:text-zinc-200">
+                                                  {week.weekLabel} <span className="font-bold text-indigo-500 dark:text-indigo-400">({week.dateRange})</span>
+                                               </div>
+                                               <div className="text-[10px] font-bold text-zinc-400 mt-0.5">{jumlahHariMinggu} Hari Tercatat</div>
+                                            </div>
+                                         </div>
+                                         <ChevronDown size={18} className={`text-zinc-400 transition-transform duration-300 ${isMingguExpanded ? 'rotate-180 text-indigo-500' : ''}`} />
+                                      </div>
 
-                                     {/* LIST ORANG DALAM HARI TERSEBUT */}
-                                     {isHariExpanded && (
-                                        <div className="flex flex-col gap-3 p-4 pt-1 border-t border-zinc-100 dark:border-white/5 bg-zinc-50/30 dark:bg-black/20">
-                                           {listPegawai.map((pData, idx) => (
-                                              <div key={`pegawai-${idx}`} className="flex flex-col sm:flex-row items-center gap-4 bg-white dark:bg-[#1C1C1E] border border-zinc-200/50 dark:border-white/5 p-4 rounded-xl shadow-sm">
-                                                 {/* Nama Admin */}
-                                                 <div className="flex items-center gap-3 w-full sm:w-[220px] shrink-0">
-                                                    <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold font-mono text-sm border-2 border-white dark:border-[#2C2C2E] shadow-sm uppercase shrink-0">
-                                                       {pData.email.charAt(0)}
-                                                    </div>
-                                                    <div className="flex flex-col min-w-0">
-                                                       <span className="text-sm font-black text-zinc-900 dark:text-zinc-100 capitalize truncate">{pData.email.split("@")[0]}</span>
-                                                       <span className={`text-[10px] font-bold uppercase tracking-wider ${pData.shift?.includes('Sore') ? 'text-orange-500' : pData.shift?.includes('Pagi') ? 'text-blue-500' : 'text-zinc-500 dark:text-zinc-400'}`}>{pData.shift || 'Shift belum tercatat'}</span>
-                                                    </div>
-                                                 </div>
+                                      {/* WEEK CONTENT: Summary + Days */}
+                                      {isMingguExpanded && (
+                                         <div className="border-t border-zinc-100 dark:border-white/5 animate-in fade-in slide-in-from-top-2 duration-300">
+                                            
+                                            {/* SUMMARY TABLE */}
+                                            {summaryArr.length > 0 && (
+                                               <div className="mx-4 mt-4 mb-3 bg-gradient-to-br from-indigo-50/80 to-blue-50/50 dark:from-indigo-500/10 dark:to-blue-500/5 rounded-xl border border-indigo-100/80 dark:border-indigo-500/20 overflow-hidden">
+                                                  <div className="px-3 py-2 border-b border-indigo-100/60 dark:border-indigo-500/10 flex items-center gap-2">
+                                                     <Activity size={12} className="text-indigo-500" />
+                                                     <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Ringkasan Shift {week.weekLabel}</span>
+                                                  </div>
+                                                  <div className="overflow-x-auto">
+                                                     <table className="w-full text-[11px]">
+                                                        <thead>
+                                                           <tr className="border-b border-indigo-100/40 dark:border-indigo-500/10">
+                                                              <th className="text-left px-3 py-2 font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Pegawai</th>
+                                                              <th className="text-center px-2 py-2 font-bold text-blue-500 uppercase tracking-wider">Pagi</th>
+                                                              <th className="text-center px-2 py-2 font-bold text-orange-500 uppercase tracking-wider">Sore</th>
+                                                              <th className="text-center px-2 py-2 font-bold text-amber-500 uppercase tracking-wider">Libur</th>
+                                                              <th className="text-center px-2 py-2 font-bold text-zinc-400 uppercase tracking-wider">Total</th>
+                                                           </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                           {summaryArr.map((s) => (
+                                                              <tr key={s.email} className="border-b border-indigo-50/60 dark:border-indigo-500/5 last:border-0">
+                                                                 <td className="px-3 py-2 font-bold text-zinc-800 dark:text-zinc-200 capitalize">{s.email.split("@")[0]}</td>
+                                                                 <td className="text-center px-2 py-2">
+                                                                    <span className={`inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded-md font-black ${s.pagi > 0 ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400' : 'text-zinc-300 dark:text-zinc-600'}`}>{s.pagi}</span>
+                                                                 </td>
+                                                                 <td className="text-center px-2 py-2">
+                                                                    <span className={`inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded-md font-black ${s.sore > 0 ? 'bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400' : 'text-zinc-300 dark:text-zinc-600'}`}>{s.sore}</span>
+                                                                 </td>
+                                                                 <td className="text-center px-2 py-2">
+                                                                    <span className={`inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded-md font-black ${s.libur > 0 ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'text-zinc-300 dark:text-zinc-600'}`}>{s.libur}</span>
+                                                                 </td>
+                                                                 <td className="text-center px-2 py-2">
+                                                                    <span className="inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded-md font-black bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">{s.pagi + s.sore + s.libur}</span>
+                                                                 </td>
+                                                              </tr>
+                                                           ))}
+                                                        </tbody>
+                                                     </table>
+                                                  </div>
+                                               </div>
+                                            )}
 
-                                                 {/* Status Absen */}
-                                                 <div className="flex w-full items-center gap-3 bg-zinc-50 dark:bg-[#252528] rounded-xl border border-zinc-200/50 dark:border-white/5 p-1.5 flex-1 overflow-x-auto min-w-0">
-                                                     
-                                                     {pData.isLibur ? (
-                                                        <div className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg w-full bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-[13px] italic">
-                                                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 11-1 9"></path><path d="m19 11-4-7"></path><path d="M2 11h20"></path><path d="m3 11 1.67-5.38a2 2 0 0 1 1.9-1.39h7.18a2 2 0 0 1 1.8 1.11L19 11"></path><path d="m9 11 1 9"></path></svg>
-                                                            Pegawai Sedang Libur
+                                            {/* LIST HARI DALAM WEEK */}
+                                            <div className="flex flex-col gap-2.5 p-4 pt-1">
+                                               {Array.from(week.days.entries()).map(([hari, listPegawai]) => {
+                                                  const keyHari = `${keyMinggu}_${hari}`;
+                                                  const isHariExpanded = expandedLogHari.includes(keyHari);
+
+                                                  return (
+                                                     <div key={keyHari} className="bg-zinc-50 dark:bg-[#1C1C1E] rounded-xl border border-zinc-200/50 dark:border-white/5 overflow-hidden shadow-sm hover:border-zinc-300 dark:hover:border-white/10 transition-all">
+                                                        <div 
+                                                           onClick={() => toggleLogHari(keyHari)}
+                                                           className="flex items-center justify-between p-3.5 cursor-pointer active:bg-zinc-100 dark:active:bg-white/5 transition-colors"
+                                                        >
+                                                           <div className="flex items-center gap-3">
+                                                              <div className="text-[12px] font-bold text-zinc-700 dark:text-zinc-300">{hari}</div>
+                                                              <div className="px-2 py-0.5 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-bold rounded-lg">{listPegawai.length} Pegawai</div>
+                                                           </div>
+                                                           <ChevronDown size={16} className={`text-zinc-400 transition-transform duration-300 ${isHariExpanded ? 'rotate-180 text-blue-500' : ''}`} />
                                                         </div>
-                                                     ) : (
-                                                       <>
-                                                         {/* Masuk */}
-                                                         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg w-1/2 min-w-[130px] border-r border-zinc-200/50 dark:border-white/5">
-                                                             <div className="w-6 h-6 rounded-md bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                                                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                                             </div>
-                                                             <div className="flex flex-col">
-                                                                <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Jam Masuk</span>
-                                                                <div className="flex items-center gap-1.5 mt-0.5">
-                                                                    <span className={`text-[13px] font-black tabular-nums ${pData.waktuMasuk === '-' ? 'text-zinc-400' : 'text-emerald-500 dark:text-emerald-400'}`}>{pData.waktuMasuk}</span>
-                                                                    {pData.photoMasuk && (
-                                                                        <button onClick={() => setPhotoPopup(pData.photoMasuk)} className="group flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors cursor-pointer" title="Lihat Foto Bukti">
-                                                                           <Camera className="w-3 h-3 group-active:scale-95 transition-transform" />
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                             </div>
-                                                         </div>
 
-                                                         {/* Pulang */}
-                                                         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg w-1/2 min-w-[130px]">
-                                                             <div className={`w-6 h-6 rounded-md ${pData.waktuPulang !== '-' ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'} flex items-center justify-center shrink-0`}>
-                                                                {pData.waktuPulang !== '-' ? (
-                                                                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                                                                ) : (
-                                                                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                                                                )}
-                                                             </div>
-                                                             <div className="flex flex-col">
-                                                                <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Jam Pulang</span>
-                                                                <div className="flex items-center gap-1.5 mt-0.5">
-                                                                    <span className={`text-[13px] font-black tabular-nums ${pData.waktuPulang === '-' ? 'text-orange-500 dark:text-orange-400 italic font-medium opacity-80' : 'text-indigo-500 dark:text-indigo-400'}`}>
-                                                                        {pData.waktuPulang === '-' ? 'Belum' : pData.waktuPulang}
-                                                                    </span>
-                                                                    {pData.photoPulang && (
-                                                                        <button onClick={() => setPhotoPopup(pData.photoPulang)} className="group flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 transition-colors cursor-pointer" title="Lihat Foto Bukti">
-                                                                           <Camera className="w-3 h-3 group-active:scale-95 transition-transform" />
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                             </div>
-                                                         </div>
-                                                       </>
-                                                     )}
+                                                        {/* LIST ORANG DALAM HARI TERSEBUT */}
+                                                        {isHariExpanded && (
+                                                           <div className="flex flex-col gap-3 p-3.5 pt-1 border-t border-zinc-100 dark:border-white/5 bg-white/50 dark:bg-black/20">
+                                                              {listPegawai.map((pData: any, idx: number) => (
+                                                                 <div key={`pegawai-${idx}`} className="flex flex-col sm:flex-row items-center gap-4 bg-white dark:bg-[#1C1C1E] border border-zinc-200/50 dark:border-white/5 p-4 rounded-xl shadow-sm">
+                                                                    {/* Nama Admin */}
+                                                                    <div className="flex items-center gap-3 w-full sm:w-[220px] shrink-0">
+                                                                       <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold font-mono text-sm border-2 border-white dark:border-[#2C2C2E] shadow-sm uppercase shrink-0">
+                                                                          {pData.email.charAt(0)}
+                                                                       </div>
+                                                                       <div className="flex flex-col min-w-0">
+                                                                          <span className="text-sm font-black text-zinc-900 dark:text-zinc-100 capitalize truncate">{pData.email.split("@")[0]}</span>
+                                                                          <span className={`text-[10px] font-bold uppercase tracking-wider ${pData.shift?.includes('Sore') ? 'text-orange-500' : pData.shift?.includes('Pagi') ? 'text-blue-500' : 'text-zinc-500 dark:text-zinc-400'}`}>{pData.shift || 'Shift belum tercatat'}</span>
+                                                                       </div>
+                                                                    </div>
 
-                                                 </div>
-                                              </div>
-                                           ))}
-                                        </div>
-                                     )}
-                                  </div>
-                               );
-                            })}
-                         </div>
-                      )}
-                   </div>
-                );
-            })}
+                                                                    {/* Status Absen */}
+                                                                    <div className="flex w-full items-center gap-3 bg-zinc-50 dark:bg-[#252528] rounded-xl border border-zinc-200/50 dark:border-white/5 p-1.5 flex-1 overflow-x-auto min-w-0">
+                                                                        
+                                                                        {pData.isLibur ? (
+                                                                           <div className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg w-full bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-[13px] italic">
+                                                                               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 11-1 9"></path><path d="m19 11-4-7"></path><path d="M2 11h20"></path><path d="m3 11 1.67-5.38a2 2 0 0 1 1.9-1.39h7.18a2 2 0 0 1 1.8 1.11L19 11"></path><path d="m9 11 1 9"></path></svg>
+                                                                               Pegawai Sedang Libur
+                                                                           </div>
+                                                                        ) : (
+                                                                          <>
+                                                                            {/* Masuk */}
+                                                                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg w-1/2 min-w-[130px] border-r border-zinc-200/50 dark:border-white/5">
+                                                                                <div className="w-6 h-6 rounded-md bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                                                                                   <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                                                                </div>
+                                                                                <div className="flex flex-col">
+                                                                                   <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Jam Masuk</span>
+                                                                                   <div className="flex items-center gap-1.5 mt-0.5">
+                                                                                       <span className={`text-[13px] font-black tabular-nums ${pData.waktuMasuk === '-' ? 'text-zinc-400' : 'text-emerald-500 dark:text-emerald-400'}`}>{pData.waktuMasuk}</span>
+                                                                                       {pData.photoMasuk && (
+                                                                                           <button onClick={() => setPhotoPopup(pData.photoMasuk)} className="group flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors cursor-pointer" title="Lihat Foto Bukti">
+                                                                                              <Camera className="w-3 h-3 group-active:scale-95 transition-transform" />
+                                                                                           </button>
+                                                                                       )}
+                                                                                   </div>
+                                                                                </div>
+                                                                            </div>
+
+                                                                            {/* Pulang */}
+                                                                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg w-1/2 min-w-[130px]">
+                                                                                <div className={`w-6 h-6 rounded-md ${pData.waktuPulang !== '-' ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400'} flex items-center justify-center shrink-0`}>
+                                                                                   {pData.waktuPulang !== '-' ? (
+                                                                                       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                                                                   ) : (
+                                                                                       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                                                                   )}
+                                                                                </div>
+                                                                                <div className="flex flex-col">
+                                                                                   <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Jam Pulang</span>
+                                                                                   <div className="flex items-center gap-1.5 mt-0.5">
+                                                                                       <span className={`text-[13px] font-black tabular-nums ${pData.waktuPulang === '-' ? 'text-orange-500 dark:text-orange-400 italic font-medium opacity-80' : 'text-indigo-500 dark:text-indigo-400'}`}>
+                                                                                           {pData.waktuPulang === '-' ? 'Belum' : pData.waktuPulang}
+                                                                                       </span>
+                                                                                       {pData.photoPulang && (
+                                                                                           <button onClick={() => setPhotoPopup(pData.photoPulang)} className="group flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 transition-colors cursor-pointer" title="Lihat Foto Bukti">
+                                                                                              <Camera className="w-3 h-3 group-active:scale-95 transition-transform" />
+                                                                                           </button>
+                                                                                       )}
+                                                                                   </div>
+                                                                                </div>
+                                                                            </div>
+                                                                          </>
+                                                                        )}
+
+                                                                    </div>
+                                                                 </div>
+                                                              ))}
+                                                           </div>
+                                                        )}
+                                                     </div>
+                                                  );
+                                               })}
+                                            </div>
+                                         </div>
+                                      )}
+                                   </div>
+                                );
+                             })}
+                          </div>
+                       )}
+                    </div>
+                 );
+             })}
          </div>
          )}
       </Section>
