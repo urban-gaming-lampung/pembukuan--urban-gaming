@@ -136,7 +136,14 @@ const RincianSewa: React.FC<{
     };
 
     const unsub1 = onSnapshot(collection(db, "users"), (snap) => {
-      snap.docs.forEach(d => emailSet.add(d.id));
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if (data && data.role === "super admin") {
+          emailSet.delete(d.id);
+        } else {
+          emailSet.add(d.id);
+        }
+      });
       rebuild();
     });
     const unsub2 = onSnapshot(collection(db, "pegawai_logs"), (snap) => {

@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { collection, doc, onSnapshot, setDoc, getDocs, getDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc, getDocs, getDoc, serverTimestamp } from "firebase/firestore";
+import { db, firebaseConfig } from "../lib/firebase";
+import { initializeApp, getApp, getApps } from "firebase/app";
+import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie
 } from "recharts";
-import { Users, Activity, Banknote, Save, Plus, ChevronDown, ChevronUp, Trash2, X, Camera } from "lucide-react";
+import { Users, Activity, Banknote, Save, Plus, ChevronDown, ChevronUp, Trash2, X, Camera, UserPlus, Shield, UserCheck, AlertTriangle } from "lucide-react";
 import Section from "./common/Section";
 
 // === KONSTANTA ABSENSI ===
@@ -23,6 +25,14 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   const [gaji, setGaji] = useState<any[]>([]);
   const [usersProfile, setUsersProfile] = useState<any[]>([]);
   const [isGajiLoaded, setIsGajiLoaded] = useState(false);
+
+  // Helper to check if email is Super Admin or Owner
+  const isSuperAdminOrOwnerEmail = (email: string) => {
+    const emailLower = email.toLowerCase().trim();
+    if (emailLower === "owner@gmail.com") return true;
+    const u = usersProfile.find(up => up.id.toLowerCase().trim() === emailLower);
+    return u?.role === "super admin";
+  };
 
   // 1. Fetch data logs (login)
   useEffect(() => {
@@ -69,6 +79,92 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   const [logAbsensi, setLogAbsensi] = useState<any[]>([]);
   const [isLogAbsensiLoaded, setIsLogAbsensiLoaded] = useState(false);
   const [loadingLogAbsensi, setLoadingLogAbsensi] = useState(false);
+
+  // States for Manage Account widget
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newRole, setNewRole] = useState<"admin" | "super admin">("admin");
+  const [creatingAccount, setCreatingAccount] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [createSuccess, setCreateSuccess] = useState("");
+  const [isDeletingEmail, setIsDeletingEmail] = useState<string | null>(null);
+
+  const handleCreateAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateError("");
+    setCreateSuccess("");
+    const emailTrimmed = newEmail.toLowerCase().trim();
+    if (!emailTrimmed || !newPassword) {
+      setCreateError("Email dan password wajib diisi.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setCreateError("Password minimal 6 karakter.");
+      return;
+    }
+    if (usersProfile.some(u => u.id.toLowerCase().trim() === emailTrimmed)) {
+      setCreateError("Akun dengan email ini sudah terdaftar.");
+      return;
+    }
+
+    setCreatingAccount(true);
+    try {
+      const apps = getApps();
+      const secondaryApp = apps.find(a => a.name === "secondaryApp") || initializeApp(firebaseConfig, "secondaryApp");
+      const secondaryAuth = getAuth(secondaryApp);
+
+      await createUserWithEmailAndPassword(secondaryAuth, emailTrimmed, newPassword);
+
+      await setDoc(doc(db, "users", emailTrimmed), {
+        role: newRole,
+        createdAt: serverTimestamp(),
+        profileColor: "#3b82f6",
+        photoUrl: null
+      });
+
+      await secondaryAuth.signOut();
+
+      setCreateSuccess(`Akun ${emailTrimmed} berhasil dibuat!`);
+      setNewEmail("");
+      setNewPassword("");
+      setNewRole("admin");
+    } catch (err: any) {
+      console.error(err);
+      if (err.code === "auth/email-already-in-use") {
+        setCreateError("Email sudah digunakan di Firebase.");
+      } else {
+        setCreateError(err.message || "Gagal membuat akun.");
+      }
+    } finally {
+      setCreatingAccount(false);
+    }
+  };
+
+  const handleDeleteAccount = async (email: string) => {
+    if (email.toLowerCase().trim() === "owner@gmail.com") return;
+    if (!confirm(`Apakah Anda yakin ingin menghapus akun ${email}? Pegawai ini tidak akan bisa login lagi.`)) return;
+    
+    setIsDeletingEmail(email);
+    try {
+      await deleteDoc(doc(db, "users", email));
+      alert(`Akun ${email} berhasil dihapus.`);
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Gagal menghapus akun.");
+    } finally {
+      setIsDeletingEmail(null);
+    }
+  };
+
+  const handleChangeRole = async (email: string, role: string) => {
+    if (email.toLowerCase().trim() === "owner@gmail.com") return;
+    try {
+      await setDoc(doc(db, "users", email), { role }, { merge: true });
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Gagal mengubah role.");
+    }
+  };
 
   const loadDataAbsensi = async () => {
      setLoadingLogAbsensi(true);
@@ -178,7 +274,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
            const emailMap = new Map<string, any>();
            logs.forEach((l: any) => {
                const em = l.email.toLowerCase();
-               if (em === "owner@gmail.com") return;
+               if (isSuperAdminOrOwnerEmail(em)) return;
                if (!emailMap.has(em)) {
                   emailMap.set(em, { email: em, waktuMasuk: "-", photoMasuk: null, waktuPulang: "-", photoPulang: null, isLibur: false });
                }
@@ -274,13 +370,13 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
     
     // Inisialisasi dari profil
     usersProfile.forEach(u => {
-      if (u.id.toLowerCase() !== "owner@gmail.com") {
+      if (!isSuperAdminOrOwnerEmail(u.id)) {
          mergedMap.set(u.id, { email: u.id, photoUrl: u.photoUrl, profileColor: u.profileColor, loginsCount: 0, records: [] });
       }
     });
 
     logs.forEach(l => {
-      if (l.id.toLowerCase() !== "owner@gmail.com") {
+      if (!isSuperAdminOrOwnerEmail(l.id)) {
         const p = mergedMap.get(l.id) || { email: l.id, photoUrl: null, loginsCount: 0, records: [] };
         p.loginsCount = Array.isArray(l.logins) ? l.logins.length : 0;
         mergedMap.set(l.id, p);
@@ -406,7 +502,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
       if (mergedMap.has(g.id)) {
         mergedMap.get(g.id).records = records;
-      } else if (g.id.toLowerCase() !== "owner@gmail.com") {
+      } else if (!isSuperAdminOrOwnerEmail(g.id)) {
         mergedMap.set(g.id, { email: g.id, photoUrl: null, loginsCount: 0, records });
       }
     });
@@ -695,6 +791,183 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
             )}
          </div>
       </Section>
+
+      {/* WIDGET: KELOLA AKUN PEGAWAI */}
+      {isOwner && (
+        <Section title="Kelola Akun Pegawai (Owner & Super Admin)">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+            {/* PANEL DAFTAR AKUN */}
+            <div className="bg-white dark:bg-[#1C1C1E] border border-zinc-200 dark:border-white/10 rounded-2xl p-5 shadow-sm flex flex-col">
+              <h3 className="text-sm font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <Users className="w-4 h-4 text-blue-500" />
+                <span>Akun Terdaftar ({usersProfile.length})</span>
+              </h3>
+              
+              <div className="flex flex-col gap-3 max-h-[360px] overflow-y-auto pr-1">
+                {usersProfile.map((u) => {
+                  const isOwnerAccount = u.id.toLowerCase().trim() === "owner@gmail.com";
+                  const roleLabel = u.role === "super admin" ? "Super Admin" : "Admin";
+                  const initialName = u.id.split("@")[0].substring(0, 2).toUpperCase();
+                  
+                  return (
+                    <div key={u.id} className="flex items-center justify-between p-3.5 bg-zinc-50 dark:bg-black/30 border border-zinc-100 dark:border-white/5 rounded-xl shadow-sm hover:scale-[1.01] transition-transform">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {u.photoUrl ? (
+                          <img src={u.photoUrl} alt={u.id} className="w-9 h-9 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" />
+                        ) : (
+                          <div 
+                            className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs text-white"
+                            style={{ backgroundColor: u.profileColor || "#3b82f6" }}
+                          >
+                            {initialName}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex flex-col">
+                          <span className="font-bold text-sm text-zinc-800 dark:text-zinc-200 truncate">{u.id}</span>
+                          <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">Role: {roleLabel}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* ROLE PICKER */}
+                        {isOwnerAccount ? (
+                          <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/30 px-2 py-1 rounded-md">
+                            Root Owner
+                          </span>
+                        ) : (
+                          <select
+                            value={u.role || "admin"}
+                            onChange={(e) => handleChangeRole(u.id, e.target.value)}
+                            className="text-[11px] font-bold bg-white dark:bg-[#2C2C2E] border border-zinc-200 dark:border-white/10 text-zinc-700 dark:text-zinc-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                          >
+                            <option value="admin">Admin</option>
+                            <option value="super admin">Super Admin</option>
+                          </select>
+                        )}
+
+                        {/* DELETE BUTTON */}
+                        {!isOwnerAccount && (
+                          <button
+                            onClick={() => handleDeleteAccount(u.id)}
+                            disabled={isDeletingEmail === u.id}
+                            className="p-1.5 bg-red-50 dark:bg-red-950/20 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg transition-colors disabled:opacity-50"
+                            title="Hapus Akun"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* PANEL TAMBAH AKUN BARU */}
+            <div className="bg-white dark:bg-[#1C1C1E] border border-zinc-200 dark:border-white/10 rounded-2xl p-5 shadow-sm flex flex-col justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <UserPlus className="w-4 h-4 text-green-500" />
+                  <span>Daftarkan Akun Baru</span>
+                </h3>
+                
+                <form onSubmit={handleCreateAccount} className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1 ml-0.5">Email Akun</label>
+                    <input
+                      type="email"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      placeholder="pegawai@gmail.com"
+                      required
+                      className="w-full bg-zinc-50 dark:bg-black/40 border border-zinc-200 dark:border-white/5 text-zinc-900 dark:text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-sans"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1 ml-0.5">Password</label>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Min. 6 karakter"
+                      required
+                      className="w-full bg-zinc-50 dark:bg-black/40 border border-zinc-200 dark:border-white/5 text-zinc-900 dark:text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-sans"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1 ml-0.5">Role / Hak Akses</label>
+                    <div className="flex bg-zinc-100 dark:bg-black/50 p-1 rounded-xl gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setNewRole("admin")}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                          newRole === "admin"
+                            ? "bg-white dark:bg-[#2C2C2E] text-blue-600 dark:text-blue-400 shadow-sm"
+                            : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                        }`}
+                      >
+                        Admin
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewRole("super admin")}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                          newRole === "super admin"
+                            ? "bg-white dark:bg-[#2C2C2E] text-purple-600 dark:text-purple-400 shadow-sm"
+                            : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                        }`}
+                      >
+                        Super Admin
+                      </button>
+                    </div>
+                  </div>
+
+                  {createError && (
+                    <div className="bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-2 animate-in fade-in">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <p className="font-semibold leading-none">{createError}</p>
+                    </div>
+                  )}
+
+                  {createSuccess && (
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-2 animate-in fade-in">
+                      <UserCheck className="w-4 h-4 shrink-0" />
+                      <p className="font-semibold leading-none">{createSuccess}</p>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={creatingAccount}
+                    className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 text-white font-bold py-2.5 px-4 rounded-xl transition-all shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 text-sm mt-2"
+                  >
+                    {creatingAccount ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Mendaftarkan...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" />
+                        <span>Daftarkan Akun</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
+              <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-4 leading-normal flex items-start gap-1">
+                <Shield className="w-3.5 h-3.5 shrink-0 text-blue-500 mt-0.5" />
+                <span>Super Admin memiliki hak penuh untuk mengakses Page Owner & Pengaturan. Akun Root Owner (owner@gmail.com) diproteksi dan tidak dapat dihapus.</span>
+              </div>
+            </div>
+          </div>
+        </Section>
+      )}
 
       {/* NEW WIDGET: MONITORING ABSEN */}
       <Section title="Monitoring Absen Pegawai">

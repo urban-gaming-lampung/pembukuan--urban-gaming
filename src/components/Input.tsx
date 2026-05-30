@@ -35,6 +35,7 @@ interface InputProps {
   onAbsenSubmit?: () => void;
   isAbsenBlocked?: boolean;
   absenConfig?: { durasiWaktuPotongan: number; waktuToleransi: number; nominalDenda: number };
+  isOwner?: boolean;
 }
 
 // --- ICONS (SF Symbols Style) ---
@@ -93,7 +94,8 @@ const Input: React.FC<InputProps> = ({
   onResetAbsenSiang,
   onAbsenSubmit,
   isAbsenBlocked = false,
-  absenConfig = { durasiWaktuPotongan: 15, waktuToleransi: 15, nominalDenda: 1500 }
+  absenConfig = { durasiWaktuPotongan: 15, waktuToleransi: 15, nominalDenda: 1500 },
+  isOwner = false
 }) => {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [popupAbsen, setPopupAbsen] = useState<"Masuk" | "Pulang" | null>(null);
@@ -342,7 +344,7 @@ const Input: React.FC<InputProps> = ({
         <div className="grid grid-cols-2 gap-1">
           {/* Absen Masuk */}
           <div className={`${tileBase} ${focusRing} overflow-hidden relative`}>
-            {onResetAbsenPagi && auth.currentUser?.email?.toLowerCase().trim() === 'owner@gmail.com' && absenPagi && (
+            {onResetAbsenPagi && isOwner && absenPagi && (
               <button 
                 onClick={onResetAbsenPagi}
                 className="absolute top-2 right-2 p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-colors z-10"
@@ -385,7 +387,7 @@ const Input: React.FC<InputProps> = ({
 
           {/* Absen Pulang */}
           <div className={`${tileBase} ${focusRing} overflow-hidden relative`}>
-            {onResetAbsenSiang && auth.currentUser?.email?.toLowerCase().trim() === 'owner@gmail.com' && absenSiang && (
+            {onResetAbsenSiang && isOwner && absenSiang && (
               <button 
                 onClick={onResetAbsenSiang}
                 className="absolute top-2 right-2 p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-colors z-10"
@@ -430,7 +432,7 @@ const Input: React.FC<InputProps> = ({
 
           {/* Ruko Buka */}
           <div className={`${tileBase} ${focusRing} relative`}>
-            {onResetRukoBuka && auth.currentUser?.email?.toLowerCase().trim() === 'owner@gmail.com' && rukoBuka && (
+            {onResetRukoBuka && isOwner && rukoBuka && (
               <button 
                 onClick={onResetRukoBuka}
                 className="absolute top-2 right-2 p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-colors z-10"
@@ -449,8 +451,8 @@ const Input: React.FC<InputProps> = ({
                 type="time"
                 value={rukoBuka}
                 onChange={(e) => setRukoBuka(e.target.value)}
-                readOnly={auth.currentUser?.email?.toLowerCase().trim() !== 'owner@gmail.com'}
-                className={`${inputStyle} ${auth.currentUser?.email?.toLowerCase().trim() !== 'owner@gmail.com' ? 'opacity-70 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
+                readOnly={!isOwner}
+                className={`${inputStyle} ${!isOwner ? 'opacity-70 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
               />
               {rukoBukaDate && rukoBuka && (
                 <span className="text-[11px] font-medium text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-md shrink-0">
@@ -462,7 +464,7 @@ const Input: React.FC<InputProps> = ({
 
           {/* Ruko Tutup */}
           <div className={`${tileBase} ${focusRing} relative`}>
-            {onResetRukoTutup && auth.currentUser?.email?.toLowerCase().trim() === 'owner@gmail.com' && rukoTutup && (
+            {onResetRukoTutup && isOwner && rukoTutup && (
               <button 
                 onClick={onResetRukoTutup}
                 className="absolute top-2 right-2 p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-colors z-10"
@@ -481,8 +483,8 @@ const Input: React.FC<InputProps> = ({
                 type="time"
                 value={rukoTutup}
                 onChange={(e) => setRukoTutup(e.target.value)}
-                readOnly={auth.currentUser?.email?.toLowerCase().trim() !== 'owner@gmail.com'}
-                className={`${inputStyle} ${auth.currentUser?.email?.toLowerCase().trim() !== 'owner@gmail.com' ? 'opacity-70 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
+                readOnly={!isOwner}
+                className={`${inputStyle} ${!isOwner ? 'opacity-70 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
               />
               {rukoTutupDate && rukoTutup && (
                 <span className="text-[11px] font-medium text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-md shrink-0">
@@ -512,7 +514,7 @@ const Input: React.FC<InputProps> = ({
       </div>
 
       {/* --- FOOTER: Reset Button --- */}
-      {onReset && auth.currentUser?.email?.toLowerCase().trim() === 'owner@gmail.com' && (
+      {onReset && isOwner && (
         <div className="flex items-center justify-start px-1 pt-2">
           <button
             onClick={() => setShowResetConfirm(true)}

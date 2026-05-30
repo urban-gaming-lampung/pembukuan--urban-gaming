@@ -16,6 +16,7 @@ type ImageQuality = "Tinggi" | "Hemat";
 interface Props {
   open: boolean;
   onClose: () => void;
+  isOwner?: boolean;
 
   hargaHarian: Price[];
   hargaJajanan: Price[];
@@ -306,6 +307,7 @@ const Pengaturan: React.FC<Props> = ({
   userProfileColor,
   onProfileColorChange,
   history = [],
+  isOwner: isOwnerProp,
 }) => {
   const [tab, setTab] = useState<TabKey>("general");
   const [mobileView, setMobileView] = useState<"menu" | "content">("menu");
@@ -334,7 +336,7 @@ const Pengaturan: React.FC<Props> = ({
     }
   }, [absenConfig]);
 
-  const isOwner = userEmail?.toLowerCase().trim() === "owner@gmail.com";
+  const isOwner = isOwnerProp ?? (userEmail?.toLowerCase().trim() === "owner@gmail.com");
 
   const ADMIN_PASSWORD = "707426";
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);

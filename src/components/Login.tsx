@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../lib/firebase";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "../lib/firebase";
 import { Package } from "lucide-react";
 
 export default function Login() {
@@ -14,7 +15,17 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCred = await signInWithEmailAndPassword(auth, email, password);
+      const userEmail = userCred.user?.email;
+      if (userEmail && userEmail.toLowerCase().trim() !== "owner@gmail.com") {
+        const userDoc = await getDoc(doc(db, "users", userEmail.toLowerCase().trim()));
+        if (!userDoc.exists()) {
+          await signOut(auth);
+          setError("Akun Anda telah dinonaktifkan atau dihapus.");
+          setLoading(false);
+          return;
+        }
+      }
     } catch (err: any) {
       setError("Email atau Password salah. Pastikan akun admin sudah dibuat di Firebase Console.");
       setLoading(false);

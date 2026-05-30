@@ -76,6 +76,8 @@ export default function App() {
   // ===== AUTH STATE =====
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string>("admin");
+  const isSuperAdminOrOwner = user?.email?.toLowerCase().trim() === "owner@gmail.com" || userRole === "super admin";
 
   // ===== PROFILE & BG STATE =====
   const [userProfilePic, setUserProfilePic] = useState<string | null>(null);
@@ -88,7 +90,7 @@ export default function App() {
   const [triggeredAssistants, setTriggeredAssistants] = useState<any[]>([]);
 
   useEffect(() => {
-    if (user?.email?.toLowerCase().trim() === "owner@gmail.com") {
+    if (user?.email && isSuperAdminOrOwner) {
       const q = query(collection(db, "owner_assistants"), where("status", "==", "aktif"));
       getDocs(q).then(snap => {
         const triggers = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((a: any) => {
@@ -103,7 +105,7 @@ export default function App() {
         setTriggeredAssistants(triggers);
       }).catch(console.error);
     }
-  }, [user]);
+  }, [user, isSuperAdminOrOwner]);
 
   const handleRunAssistant = async (a: any) => {
     try {
@@ -162,35 +164,51 @@ export default function App() {
 
   useEffect(() => {
     if (user?.email) {
-      const profileRef = doc(db, "users", user.email);
+      const email = user.email.toLowerCase().trim();
+      const profileRef = doc(db, "users", email);
       const unsub = onSnapshot(profileRef, (snap) => {
           if (snap.exists()) {
-            const data = snap.data();
-            setUserProfilePic(data.photoUrl || null);
-            if (data.customBgDark !== undefined) {
-               setCustomBgDark(data.customBgDark || null);
-               try { 
-                 if (data.customBgDark) localStorage.setItem('custom_bg_dark', data.customBgDark);
-                 else localStorage.removeItem('custom_bg_dark');
-               } catch(e) {}
-            }
-            if (typeof data.themeMode === "string") {
-               setThemeMode(data.themeMode as any);
-            } else if (typeof data.dark === "boolean") {
-               setThemeMode(data.dark ? "dark" : "light");
-               setDark(data.dark);
-            }
-            if (data.profileColor) setUserProfileColor(data.profileColor);
-            
-            if (data.kualitasGambar) setKualitasGambar(data.kualitasGambar as ImageQuality);
-            if (data.tableMode) setTableMode(data.tableMode as "Lama" | "Baru");
-         } else {
-            setUserProfilePic(null);
-         }
+             const data = snap.data();
+             setUserProfilePic(data.photoUrl || null);
+             if (data.role) {
+                setUserRole(data.role);
+                if (data.role === "super admin") {
+                   setActiveTab((prev) => prev === "MONITORING" ? "PAGE OWNER" : prev);
+                }
+             } else {
+                setUserRole("admin");
+             }
+             if (data.customBgDark !== undefined) {
+                setCustomBgDark(data.customBgDark || null);
+                try { 
+                  if (data.customBgDark) localStorage.setItem('custom_bg_dark', data.customBgDark);
+                  else localStorage.removeItem('custom_bg_dark');
+                } catch(e) {}
+             }
+             if (typeof data.themeMode === "string") {
+                setThemeMode(data.themeMode as any);
+             } else if (typeof data.dark === "boolean") {
+                setThemeMode(data.dark ? "dark" : "light");
+                setDark(data.dark);
+             }
+             if (data.profileColor) setUserProfileColor(data.profileColor);
+             
+             if (data.kualitasGambar) setKualitasGambar(data.kualitasGambar as ImageQuality);
+             if (data.tableMode) setTableMode(data.tableMode as "Lama" | "Baru");
+          } else {
+             setUserProfilePic(null);
+             setUserRole("admin");
+             if (email !== "owner@gmail.com") {
+                signOut(auth).then(() => {
+                   alert("Akun Anda telah dinonaktifkan atau dihapus.");
+                }).catch(console.error);
+             }
+          }
       });
       return () => unsub();
     } else {
       setUserProfilePic(null);
+      setUserRole("admin");
     }
   }, [user?.email]);
 
@@ -264,7 +282,7 @@ export default function App() {
   // ===== TAB STATE =====
   const [activeTab, setActiveTab] = useState<"USAHA RENTAL" | "UPDATE STOK" | "PAGE OWNER" | "MONITORING">("USAHA RENTAL");
 
-  const { activeUsers, setFocusedField } = usePresence(user, activeTab, userProfileColor);
+  const { activeUsers, setFocusedField } = usePresence(user, activeTab, userProfileColor, isSuperAdminOrOwner);
 
   useEffect(() => {
     const handleFocus = (e: FocusEvent) => {
@@ -1806,7 +1824,7 @@ export default function App() {
           <main className="mx-auto max-w-6xl px-4 md:px-8 pb-24 space-y-6" style={{ paddingTop: 'calc(var(--app-header-height, 200px) + 16px)' }}>
             {/* TABS PENGATURAN HALAMAN */}
             <div className="flex w-full mb-8 bg-zinc-100/80 dark:bg-[#1C1C1E]/80 p-1 rounded-[14px] ring-1 ring-zinc-200/50 dark:ring-white/5 backdrop-blur-sm relative z-30 gap-1">
-              {user?.email?.toLowerCase().trim() !== "owner@gmail.com" && (
+              {!isSuperAdminOrOwner && (
                 <button
                   onClick={() => setActiveTab("MONITORING")}
                   className={`flex-1 py-2.5 text-[13px] sm:text-sm font-bold tracking-wide rounded-[10px] transition-all duration-300 flex justify-center items-center ${
@@ -1819,7 +1837,7 @@ export default function App() {
                   MONITORING
                 </button>
               )}
-              {user?.email?.toLowerCase().trim() === "owner@gmail.com" && (
+              {isSuperAdminOrOwner && (
                 <button
                   onClick={() => setActiveTab("PAGE OWNER")}
                   className={`flex-1 py-2.5 text-[13px] sm:text-sm font-bold tracking-wide rounded-[10px] transition-all duration-300 flex justify-center items-center ${
@@ -1856,7 +1874,7 @@ export default function App() {
               </button>
             </div>
 
-            {activeTab === "PAGE OWNER" && user?.email?.toLowerCase().trim() === "owner@gmail.com" ? (
+            {activeTab === "PAGE OWNER" && isSuperAdminOrOwner ? (
               <PageOwner
                 totalHarian={totalHarian} totalJajanan={totalJajanan}
                 totalJasaAks={totalJasaAks} totalSewa={totalSewa}
@@ -1881,7 +1899,7 @@ export default function App() {
                 isVerifyingPayment={!!paymentVerifyPrompt}
                 stokState={appStokData.stokState}
               />
-            ) : activeTab === "MONITORING" && user?.email?.toLowerCase().trim() !== "owner@gmail.com" ? (
+            ) : activeTab === "MONITORING" && !isSuperAdminOrOwner ? (
               <WidgetMonitoringStatus 
                 history={history || []} 
                 rowsSewa={rowsSewa} 
@@ -1894,7 +1912,7 @@ export default function App() {
             ) : activeTab === "UPDATE STOK" ? (
               <UpdateStok
                 adminName={user?.email}
-                isOwner={user?.email?.toLowerCase().trim() === "owner@gmail.com"}
+                isOwner={isSuperAdminOrOwner}
                 stokState={appStokData.stokState}
                 updateStok={appStokData.updateStok}
                 masterCategories={appStokData.masterCategories}
@@ -1910,6 +1928,7 @@ export default function App() {
                 rukoBuka={rukoBuka} rukoTutup={rukoTutup}
                 catatan={catatan} setCatatan={setCatatan}
                 absenConfig={absenConfig}
+                isOwner={isSuperAdminOrOwner}
                 setRukoBuka={(v, d) => setRukoBuka(v, d)}
                 rukoBukaDate={rukoBukaDate}
                 setRukoTutup={(v, d) => setRukoTutup(v, d)}
@@ -1988,7 +2007,7 @@ export default function App() {
             
             <div id="section-rincian" className="space-y-6">
               <ChallengeButton
-                isAbsenDone={absenPagi !== "" || user?.email?.toLowerCase().trim() === "owner@gmail.com"}
+                isAbsenDone={absenPagi !== "" || isSuperAdminOrOwner}
                 activeGameName={gameConfig ? (GAME_NAMES_ID[gameConfig.activeGame] || gameConfig.activeGame) : ""}
                 onClick={() => setShowChallenge(true)}
               />
@@ -2005,6 +2024,7 @@ export default function App() {
                     currentDate={tanggal} currentDay={hari}
                     isMobileTable={isMobileTable}
                     userEmail={user?.email}
+                    isOwner={isSuperAdminOrOwner}
                  />
               </div>
               <div id="section-setoran">
@@ -2028,7 +2048,7 @@ export default function App() {
             </div>
             
             {/* FILTER WIDGET (OWNER ONLY) */}
-            {user?.email?.toLowerCase().trim() === "owner@gmail.com" && (
+            {isSuperAdminOrOwner && (
               <FilterComp
                 mode={filter} setMode={setFilter} month={filterMonth} setMonth={setFilterMonth}
                 rangeStart={rangeStart} setRangeStart={setRangeStart} rangeEnd={rangeEnd} setRangeEnd={setRangeEnd}
@@ -2040,7 +2060,7 @@ export default function App() {
                 items={filteredHistory}
                 onClear={() => { if (history.length > 0 && confirm("Bersihkan SEMUA history pembukuan?")) setHistory([]); }}
                 onEdit={editHistoryItem} onDelete={deleteHistoryItem}
-                isOwner={user?.email === "owner@gmail.com"}
+                isOwner={isSuperAdminOrOwner}
               />
             </div>
             
@@ -2066,6 +2086,7 @@ export default function App() {
           
           <Pengaturan
             open={openSettings} onClose={() => setOpenSettings(false)}
+            isOwner={isSuperAdminOrOwner}
             hargaHarian={hargaHarian} hargaJajanan={hargaJajanan} hargaJasaAks={hargaJasaAks} hargaSewa={hargaSewa}
             ongkirConfig={ongkirConfig} setOngkirConfig={(cfg) => {
                setOngkirConfig(cfg);

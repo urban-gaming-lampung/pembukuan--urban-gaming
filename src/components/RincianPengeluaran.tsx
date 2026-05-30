@@ -15,6 +15,7 @@ interface Props {
   currentDay?: string;
   isMobileTable?: boolean;
   userEmail?: string;
+  isOwner?: boolean;
 }
 
 export default function RincianPengeluaran({
@@ -24,6 +25,7 @@ export default function RincianPengeluaran({
   currentDay,
   isMobileTable,
   userEmail,
+  isOwner: isOwnerProp,
 }: Props) {
   const minRows = 1;
   const blank = { ket: "", harga: "", bayar: "" };
@@ -74,7 +76,7 @@ export default function RincianPengeluaran({
   };
 
   const manualCount = rows.filter((r) => !isAutoRow(r)).length;
-  const isOwner = userEmail?.toLowerCase() === "owner@gmail.com";
+  const isOwner = isOwnerProp ?? (userEmail?.toLowerCase() === "owner@gmail.com");
 
   return (
     <div

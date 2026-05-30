@@ -11,14 +11,14 @@ export type PresenceData = {
   profileColor?: string | null;
 };
 
-export function usePresence(user: { uid: string; email: string } | null, currentTab: string, profileColor?: string | null) {
+export function usePresence(user: { uid: string; email: string } | null, currentTab: string, profileColor?: string | null, isOwnerOrSuperAdmin: boolean = false) {
   const [activeUsers, setActiveUsers] = useState<PresenceData[]>([]);
   const focusedFieldRef = useRef<string | null>(null);
 
   // 1. Tulis status presence saya sendiri ke Firestore
   useEffect(() => {
     if (!user) return;
-    const isOwner = user.email?.toLowerCase().trim() === "owner@gmail.com";
+    const isOwner = isOwnerOrSuperAdmin;
     if (isOwner) return; // STEALTH MODE: Owner tidak melakukan broadcast ke database
 
     const presenceRef = doc(db, "presence", user.uid);
@@ -30,7 +30,8 @@ export function usePresence(user: { uid: string; email: string } | null, current
         tab: currentTab,
         lastActive: Date.now(),
         focusedField: focusedFieldRef.current,
-        profileColor: profileColor || null
+        profileColor: profileColor || null,
+        role: isOwnerOrSuperAdmin ? "super admin" : "admin"
       }).catch(console.error);
     };
     
@@ -53,12 +54,12 @@ export function usePresence(user: { uid: string; email: string } | null, current
       window.removeEventListener("beforeunload", handleUnload);
       handleUnload(); // Hapus status jika komponen App unmount
     };
-  }, [user, currentTab, profileColor]);
+  }, [user, currentTab, profileColor, isOwnerOrSuperAdmin]);
 
   const setFocusedField = (fieldId: string | null) => {
     focusedFieldRef.current = fieldId;
     if (user) {
-      const isOwner = user.email?.toLowerCase().trim() === "owner@gmail.com";
+      const isOwner = isOwnerOrSuperAdmin;
       if (isOwner) return; // STEALTH MODE
 
       const presenceRef = doc(db, "presence", user.uid);
@@ -68,7 +69,8 @@ export function usePresence(user: { uid: string; email: string } | null, current
         tab: currentTab,
         lastActive: Date.now(),
         focusedField: fieldId,
-        profileColor: profileColor || null
+        profileColor: profileColor || null,
+        role: isOwnerOrSuperAdmin ? "super admin" : "admin"
       }, { merge: true }).catch(console.error);
     }
   };
@@ -84,11 +86,11 @@ export function usePresence(user: { uid: string; email: string } | null, current
     const unsubscribe = onSnapshot(presenceCollection, (snapshot) => {
       const now = Date.now();
       const users: PresenceData[] = [];
-      const amIOwner = user?.email?.toLowerCase().trim() === "owner@gmail.com";
+      const amIOwner = isOwnerOrSuperAdmin;
 
       snapshot.forEach(doc => {
-        const data = doc.data() as PresenceData;
-        const isOwnerData = data.email?.toLowerCase().trim() === "owner@gmail.com";
+        const data = doc.data() as PresenceData & { role?: string };
+        const isOwnerData = data.email?.toLowerCase().trim() === "owner@gmail.com" || data.role === "super admin";
 
         // Admin biasa tidak boleh merender atau melihat data owner
         if (isOwnerData && !amIOwner) return;
@@ -115,7 +117,7 @@ export function usePresence(user: { uid: string; email: string } | null, current
     });
 
     return () => unsubscribe();
-  }, [user, currentTab]);
+  }, [user, currentTab, isOwnerOrSuperAdmin]);
 
   return { activeUsers, setFocusedField };
 }
