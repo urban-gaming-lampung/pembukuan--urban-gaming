@@ -467,20 +467,49 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
   const handleDownloadSticker = async () => {
     if (!stickerPreviewRef.current) return;
     try {
-      // temporarily scale up the container for clear rendering resolution
-      const originalStyle = stickerPreviewRef.current.style.transform;
-      stickerPreviewRef.current.style.transform = "none";
+      // Create a temporary container for rendering off-screen
+      const tempContainer = document.createElement("div");
+      tempContainer.style.position = "absolute";
+      tempContainer.style.top = "-9999px";
+      tempContainer.style.left = "-9999px";
+      tempContainer.style.opacity = "1";
+      tempContainer.style.visibility = "visible";
+      
+      // Copy the HTML content of the sticker
+      tempContainer.innerHTML = stickerPreviewRef.current.outerHTML;
+      document.body.appendChild(tempContainer);
+      
+      const clonedSticker = tempContainer.firstChild as HTMLDivElement;
+      clonedSticker.style.transform = "none";
+      clonedSticker.style.margin = "0";
+      clonedSticker.style.position = "relative";
+      clonedSticker.style.boxShadow = "none"; // Remove shadow for clean stickers
+      
+      // Wait for any images (like the QR code) inside the clone to load
+      const images = clonedSticker.getElementsByTagName("img");
+      if (images.length > 0) {
+        const qrImg = images[0];
+        if (!qrImg.complete) {
+          await new Promise((resolve) => {
+            qrImg.onload = resolve;
+            qrImg.onerror = resolve; // Continue anyway if it fails
+          });
+        }
+      }
 
-      const canvas = await html2canvas(stickerPreviewRef.current, {
+      const canvas = await html2canvas(clonedSticker, {
         scale: 4, // 4x scale for high resolution print quality
         useCORS: true,
-        backgroundColor: null
+        backgroundColor: null,
+        logging: false,
+        width: 380,
+        height: 228
       });
 
-      stickerPreviewRef.current.style.transform = originalStyle;
+      document.body.removeChild(tempContainer);
 
       const link = document.createElement("a");
-      link.download = `sticker_${editingStickerId || "device"}.png`;
+      link.download = `sticker_${editingStickerId || `${genType}_${String(genNumber === "" ? 1 : genNumber).padStart(2, "0")}`}.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
     } catch (e) {
