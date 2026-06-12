@@ -1884,33 +1884,6 @@ const MetricCard = ({ title, value, icon, isHighlight = false, subtitle = "", va
 
 const UnitStatusWidget = ({ rowsSewa, history, activeDate, onVerifyActiveRental, hargaItems, isVerifyingPayment }: { rowsSewa: RowSewa[], history?: HistoryItem[], activeDate?: string, onVerifyActiveRental?: (idx: number) => void, hargaItems?: any[], isVerifyingPayment?: boolean }) => {
   const [activeSlide, setActiveSlide] = useState<"status" | "device">("status");
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
-
-  // Minimum distance for swipe
-  const minSwipeDistance = 50;
-
-  const onTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
-  };
-
-  const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-  };
-
-  const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
-    
-    if (isLeftSwipe) {
-      setActiveSlide("device");
-    } else if (isRightSwipe) {
-      setActiveSlide("status");
-    }
-  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -1940,13 +1913,8 @@ const UnitStatusWidget = ({ rowsSewa, history, activeDate, onVerifyActiveRental,
         </div>
       </div>
 
-      {/* Swipeable Carousel Container */}
-      <div 
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-        className="w-full overflow-hidden relative"
-      >
+      {/* Carousel Container */}
+      <div className="w-full overflow-hidden relative">
         <div 
           className="flex transition-transform duration-500 ease-out"
           style={{ transform: activeSlide === "status" ? "translateX(0%)" : "translateX(-100%)" }}
