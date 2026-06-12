@@ -49,31 +49,7 @@ const PRESET_COLORS = [
   { name: "Gaming Purple", bg: "#6d28d9", text: "#ffffff" },
 ];
 
-const getBadgeStyle = (stikType: "OP" | "OM" | "", bg: string, text: string) => {
-  const isOm = stikType === "OM";
-  
-  // OM: Bright Crimson Red (khas gaming), OP: Bright Neon Blue (khas gaming)
-  let badgeBg = isOm ? "#dc2626" : "#2563eb";
-  let badgeText = "#ffffff";
 
-  // Normalize inputs to lower case for comparison
-  const normBg = bg.toLowerCase().trim();
-
-  // If the sticker background color is the same as the badge background, shift it to yellow/black or green/white
-  if (isOm) {
-    if (normBg === "#dc2626" || normBg === "#b91c1c" || normBg === "#000000" || normBg === "#7f1d1d") {
-      badgeBg = "#facc15"; // Neon Yellow
-      badgeText = "#000000";
-    }
-  } else {
-    if (normBg === "#1d4ed8" || normBg === "#2563eb" || normBg === "#000000" || normBg === "#1e1b4b") {
-      badgeBg = "#15803d"; // Acid Green
-      badgeText = "#ffffff";
-    }
-  }
-
-  return { backgroundColor: badgeBg, color: badgeText };
-};
 
 const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner = false }) => {
   // Navigation sub-tabs for owner
@@ -412,7 +388,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
         id: deviceId,
         type: genType,
         number: numValue,
-        stikType: genType.startsWith("stik") ? genStikType : "",
+        stikType: "",
         status: existingData?.status || "baik",
         keterangan: existingData?.keterangan || "",
         stickerColor: genBgColor,
@@ -833,23 +809,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                       />
                     </div>
 
-                    {/* Controller OP/OM Type */}
-                    {genType.startsWith("stik") && (
-                      <div className="flex flex-col gap-1.5 text-left">
-                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Tipe Controller</label>
-                        <select
-                          value={genStikType}
-                          onChange={(e) => {
-                            setGenStikType(e.target.value as "OP" | "OM" | "");
-                            setEditingStickerId(null);
-                          }}
-                          className="bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-zinc-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
-                        >
-                          <option value="OM">Original Mesin (OM)</option>
-                          <option value="OP">Original Pabrik (OP)</option>
-                        </select>
-                      </div>
-                    )}
+
                   </div>
 
                   {/* Preset Colors */}
@@ -975,20 +935,24 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                         <div className="flex flex-col items-start">
                           <h2 className="text-[13px] font-black tracking-[0.25em] leading-tight select-none uppercase">URBAN GAMING</h2>
                           <p className="text-[8px] font-black tracking-widest opacity-85 mt-1 uppercase select-none">
-                            {genType.startsWith("stik") && genStikType ? `CONTROLLER ${genStikType}` : DEVICE_LABELS[genType]}
-                          </p>
-                        </div>
-                        
-                        <div className="flex flex-col items-start gap-1.5 mt-2">
-                          {/* Controller OP/OM high-contrast badge */}
-                          {genType.startsWith("stik") && genStikType && (
-                             <span 
-                               className="px-3.5 py-1 rounded-full text-[10px] font-black shadow-md tracking-wider leading-none"
-                               style={getBadgeStyle(genStikType, genBgColor, genTextColor)}
-                             >
-                               {genStikType === "OM" ? "ORIGINAL MESIN" : "ORIGINAL PABRIK"}
+                          {genType.startsWith("stik") ? "CONTROLLER" : DEVICE_LABELS[genType]}
+                        </p>
+                      </div>
+                      
+                      <div className="flex flex-col items-start gap-1.5 mt-2">
+                        {/* Controller OP/OM side-by-side badges for crossing out */}
+                        {genType.startsWith("stik") && (
+                           <div className="flex items-center gap-1.5 select-none my-0.5">
+                             {/* OM Badge: Black bg, white text */}
+                             <span className="px-2.5 py-0.5 rounded border border-black bg-black text-white text-[9px] font-black tracking-wider leading-none shadow-sm">
+                               OM
                              </span>
-                           )}
+                             {/* OP Badge: White bg, black text */}
+                             <span className="px-2.5 py-0.5 rounded border border-black bg-white text-black text-[9px] font-black tracking-wider leading-none shadow-sm">
+                               OP
+                             </span>
+                           </div>
+                         )}
                           <h1 className="text-5xl font-black font-mono tracking-tighter select-none leading-none">
                             {genNumber === "" ? "00" : String(genNumber).padStart(2, "0")}
                           </h1>
