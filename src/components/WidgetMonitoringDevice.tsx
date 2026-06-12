@@ -122,7 +122,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
   // Generator form state
   const [genType, setGenType] = useState<DeviceType>("ps4");
-  const [genNumber, setGenNumber] = useState<number>(1);
+  const [genNumber, setGenNumber] = useState<number | "">(1);
   const [genStikType, setGenStikType] = useState<"OP" | "OM" | "">("OM");
   const [genBgColor, setGenBgColor] = useState("#1e1b4b");
   const [genTextColor, setGenTextColor] = useState("#ffffff");
@@ -351,12 +351,13 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
     e.preventDefault();
     if (!isOwner) return;
 
-    const deviceId = `${genType}_${String(genNumber).padStart(2, "0")}`;
+    const numValue = genNumber === "" ? 1 : genNumber;
+    const deviceId = `${genType}_${String(numValue).padStart(2, "0")}`;
 
     // check if it's already registered under another ID
     const duplicate = devices.find(d => d.id === deviceId && d.id !== editingStickerId);
     if (duplicate && !editingStickerId) {
-      if (!confirm(`Unit ${DEVICE_LABELS[genType]} nomor ${genNumber} sudah ada. Ingin menimpa desain stiker ini?`)) {
+      if (!confirm(`Unit ${DEVICE_LABELS[genType]} nomor ${numValue} sudah ada. Ingin menimpa desain stiker ini?`)) {
         return;
       }
     }
@@ -367,7 +368,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       const payload: RegisteredDevice = {
         id: deviceId,
         type: genType,
-        number: genNumber,
+        number: numValue,
         stikType: genType.startsWith("stik") ? genStikType : "",
         status: existingData?.status || "baik",
         keterangan: existingData?.keterangan || "",
@@ -461,7 +462,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
   // QR Code creation string helper
   const qrUrl = useMemo(() => {
-    const deviceId = editingStickerId || `${genType}_${String(genNumber).padStart(2, "0")}`;
+    const numValue = genNumber === "" ? 1 : genNumber;
+    const deviceId = editingStickerId || `${genType}_${String(numValue).padStart(2, "0")}`;
     return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(deviceId)}&ecc=M`;
   }, [editingStickerId, genType, genNumber]);
 
@@ -696,7 +698,13 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                         min="1"
                         value={genNumber}
                         onChange={(e) => {
-                          setGenNumber(Math.max(1, parseInt(e.target.value) || 1));
+                          const val = e.target.value;
+                          if (val === "") {
+                            setGenNumber("");
+                          } else {
+                            const parsed = parseInt(val);
+                            setGenNumber(isNaN(parsed) ? 1 : parsed);
+                          }
                           setEditingStickerId(null);
                         }}
                         className="bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-4 py-2 text-zinc-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
@@ -860,7 +868,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                              </span>
                            )}
                           <h1 className="text-5xl font-black font-mono tracking-tighter select-none leading-none">
-                            {String(genNumber).padStart(2, "0")}
+                            {genNumber === "" ? "00" : String(genNumber).padStart(2, "0")}
                           </h1>
                         </div>
                       </div>
