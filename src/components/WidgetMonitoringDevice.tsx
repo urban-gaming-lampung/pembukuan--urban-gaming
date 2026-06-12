@@ -1080,9 +1080,39 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                         {genType.startsWith("stik") && (
                            <div className="flex items-center gap-1.5 select-none my-0.5">
                               {/* OM Badge: Black bg, white text */}
-                              <span className="inline-flex items-center justify-center w-8 h-4 rounded border border-black bg-black text-white text-[9px] font-black tracking-wider leading-none shadow-sm">OM</span>
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  width: "32px",
+                                  height: "16px",
+                                  lineHeight: "14px",
+                                  textAlign: "center",
+                                  fontSize: "9px",
+                                  fontWeight: 900,
+                                  borderRadius: "4px",
+                                  border: "1px solid #000000",
+                                  backgroundColor: "#000000",
+                                  color: "#ffffff",
+                                  boxSizing: "border-box"
+                                }}
+                              >OM</span>
                               {/* OP Badge: White bg, black text */}
-                              <span className="inline-flex items-center justify-center w-8 h-4 rounded border border-black bg-white text-black text-[9px] font-black tracking-wider leading-none shadow-sm">OP</span>
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  width: "32px",
+                                  height: "16px",
+                                  lineHeight: "14px",
+                                  textAlign: "center",
+                                  fontSize: "9px",
+                                  fontWeight: 900,
+                                  borderRadius: "4px",
+                                  border: "1px solid #000000",
+                                  backgroundColor: "#ffffff",
+                                  color: "#000000",
+                                  boxSizing: "border-box"
+                                }}
+                              >OP</span>
                            </div>
                          )}
                           <h1 className="text-5xl font-black font-mono tracking-tighter select-none leading-none">
@@ -1512,9 +1542,39 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                       {dev.type.startsWith("stik") && (
                         <div className="flex items-center gap-1.5 select-none my-0.5">
                           {/* OM Badge: Black bg, white text */}
-                          <span className="inline-flex items-center justify-center w-8 h-4 rounded border border-black bg-black text-white text-[9px] font-black tracking-wider leading-none shadow-sm">OM</span>
+                          <span
+                            style={{
+                              display: "inline-block",
+                              width: "32px",
+                              height: "16px",
+                              lineHeight: "14px",
+                              textAlign: "center",
+                              fontSize: "9px",
+                              fontWeight: 900,
+                              borderRadius: "4px",
+                              border: "1px solid #000000",
+                              backgroundColor: "#000000",
+                              color: "#ffffff",
+                              boxSizing: "border-box"
+                            }}
+                          >OM</span>
                           {/* OP Badge: White bg, black text */}
-                          <span className="inline-flex items-center justify-center w-8 h-4 rounded border border-black bg-white text-black text-[9px] font-black tracking-wider leading-none shadow-sm">OP</span>
+                          <span
+                            style={{
+                              display: "inline-block",
+                              width: "32px",
+                              height: "16px",
+                              lineHeight: "14px",
+                              textAlign: "center",
+                              fontSize: "9px",
+                              fontWeight: 900,
+                              borderRadius: "4px",
+                              border: "1px solid #000000",
+                              backgroundColor: "#ffffff",
+                              color: "#000000",
+                              boxSizing: "border-box"
+                            }}
+                          >OP</span>
                         </div>
                       )}
                       <h1 className="text-5xl font-black font-mono tracking-tighter select-none leading-none">
