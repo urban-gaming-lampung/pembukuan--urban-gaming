@@ -21,6 +21,7 @@ import EditRincian from "./components/EditRincian";
 import UpdateStok from "./components/UpdateStok"; 
 import PageOwner from "./components/PageOwner";
 import WidgetMonitoringStatus from "./components/WidgetMonitoringStatus";
+import WidgetMonitoringDevice from "./components/WidgetMonitoringDevice";
 import { Package, AlertCircle } from "lucide-react";
 import { collection, doc, setDoc, deleteDoc, onSnapshot, addDoc, updateDoc, query, getDocs, getDoc, where, limit, orderBy, serverTimestamp, arrayUnion } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -281,6 +282,7 @@ export default function App() {
 
   // ===== TAB STATE =====
   const [activeTab, setActiveTab] = useState<"USAHA RENTAL" | "UPDATE STOK" | "PAGE OWNER" | "MONITORING">("USAHA RENTAL");
+  const [adminMonitoringTab, setAdminMonitoringTab] = useState<"status" | "device">("status");
 
   const { activeUsers, setFocusedField } = usePresence(user, activeTab, userProfileColor, isSuperAdminOrOwner);
 
@@ -1900,15 +1902,47 @@ export default function App() {
                 stokState={appStokData.stokState}
               />
             ) : activeTab === "MONITORING" && !isSuperAdminOrOwner ? (
-              <WidgetMonitoringStatus 
-                history={history || []} 
-                rowsSewa={rowsSewa} 
-                activeDate={tanggal} 
-                onVerifyActiveRental={handleVerifyReturn} 
-                isOwner={false} 
-                hargaItems={hargaSewa}
-                isVerifyingPayment={!!paymentVerifyPrompt}
-              />
+              <div className="flex flex-col gap-4">
+                {/* Segmented Pill Switcher for Admin */}
+                <div className="flex justify-center z-10">
+                  <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-2xl border border-zinc-200/50 dark:border-white/5 shadow-inner">
+                    <button
+                      onClick={() => setAdminMonitoringTab("status")}
+                      className={`px-5 py-2.5 text-xs font-black tracking-wider uppercase rounded-xl transition-all ${
+                        adminMonitoringTab === "status"
+                          ? "bg-white dark:bg-black text-emerald-600 dark:text-emerald-400 shadow-sm"
+                          : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+                      }`}
+                    >
+                      Monitoring Status Unit
+                    </button>
+                    <button
+                      onClick={() => setAdminMonitoringTab("device")}
+                      className={`px-5 py-2.5 text-xs font-black tracking-wider uppercase rounded-xl transition-all ${
+                        adminMonitoringTab === "device"
+                          ? "bg-white dark:bg-black text-emerald-600 dark:text-emerald-400 shadow-sm"
+                          : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+                      }`}
+                    >
+                      Monitoring Device
+                    </button>
+                  </div>
+                </div>
+
+                {adminMonitoringTab === "status" ? (
+                  <WidgetMonitoringStatus 
+                    history={history || []} 
+                    rowsSewa={rowsSewa} 
+                    activeDate={tanggal} 
+                    onVerifyActiveRental={handleVerifyReturn} 
+                    isOwner={false} 
+                    hargaItems={hargaSewa}
+                    isVerifyingPayment={!!paymentVerifyPrompt}
+                  />
+                ) : (
+                  <WidgetMonitoringDevice isOwner={false} />
+                )}
+              </div>
             ) : activeTab === "UPDATE STOK" ? (
               <UpdateStok
                 adminName={user?.email}

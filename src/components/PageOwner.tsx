@@ -12,6 +12,7 @@ import { StokData, StokItemValue } from "../hooks/useStokData";
 import FilterComp from "./Filter";
 import TabPegawai from "./TabPegawai";
 import WidgetMonitoringStatus from "./WidgetMonitoringStatus";
+import WidgetMonitoringDevice from "./WidgetMonitoringDevice";
 import {
   ResponsiveContainer,
   BarChart,
@@ -1882,24 +1883,91 @@ const MetricCard = ({ title, value, icon, isHighlight = false, subtitle = "", va
 };
 
 const UnitStatusWidget = ({ rowsSewa, history, activeDate, onVerifyActiveRental, hargaItems, isVerifyingPayment }: { rowsSewa: RowSewa[], history?: HistoryItem[], activeDate?: string, onVerifyActiveRental?: (idx: number) => void, hargaItems?: any[], isVerifyingPayment?: boolean }) => {
-  const [masterUnit, setMasterUnit] = useState({ ps3: 0, ps4: 0, tv: 0, portabel: 0 });
-  const [isEditing, setIsEditing] = useState(false);
-  const [tempPs3, setTempPs3] = useState("0");
-  const [tempPs4, setTempPs4] = useState("0");
-  const [tempTv, setTempTv] = useState("0");
-  const [tempPortabel, setTempPortabel] = useState("0");
+  const [activeSlide, setActiveSlide] = useState<"status" | "device">("status");
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+  // Minimum distance for swipe
+  const minSwipeDistance = 50;
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+    
+    if (isLeftSwipe) {
+      setActiveSlide("device");
+    } else if (isRightSwipe) {
+      setActiveSlide("status");
+    }
+  };
+
   return (
-    <>
-      <WidgetMonitoringStatus 
-        history={history || []} 
-        rowsSewa={rowsSewa} 
-        activeDate={activeDate} 
-        onVerifyActiveRental={onVerifyActiveRental} 
-        isOwner={true} 
-        hargaItems={hargaItems}
-        isVerifyingPayment={isVerifyingPayment}
-      />
-    </>
+    <div className="flex flex-col gap-4">
+      {/* Segmented Pill Switcher */}
+      <div className="flex justify-center z-10">
+        <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-2xl border border-zinc-200/50 dark:border-white/5 shadow-inner">
+          <button
+            onClick={() => setActiveSlide("status")}
+            className={`px-5 py-2.5 text-xs font-black tracking-wider uppercase rounded-xl transition-all ${
+              activeSlide === "status"
+                ? "bg-white dark:bg-black text-emerald-600 dark:text-emerald-400 shadow-sm"
+                : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+            }`}
+          >
+            Monitoring Status Unit
+          </button>
+          <button
+            onClick={() => setActiveSlide("device")}
+            className={`px-5 py-2.5 text-xs font-black tracking-wider uppercase rounded-xl transition-all ${
+              activeSlide === "device"
+                ? "bg-white dark:bg-black text-emerald-600 dark:text-emerald-400 shadow-sm"
+                : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+            }`}
+          >
+            Monitoring Device
+          </button>
+        </div>
+      </div>
+
+      {/* Swipeable Carousel Container */}
+      <div 
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        className="w-full overflow-hidden relative"
+      >
+        <div 
+          className="flex transition-transform duration-500 ease-out"
+          style={{ transform: activeSlide === "status" ? "translateX(0%)" : "translateX(-100%)" }}
+        >
+          <div className="w-full shrink-0 px-1">
+            <WidgetMonitoringStatus 
+              history={history || []} 
+              rowsSewa={rowsSewa} 
+              activeDate={activeDate} 
+              onVerifyActiveRental={onVerifyActiveRental} 
+              isOwner={true} 
+              hargaItems={hargaItems}
+              isVerifyingPayment={isVerifyingPayment}
+            />
+          </div>
+          <div className="w-full shrink-0 px-1">
+            <WidgetMonitoringDevice isOwner={true} />
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 

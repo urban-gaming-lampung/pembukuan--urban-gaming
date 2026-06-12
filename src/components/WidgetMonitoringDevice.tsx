@@ -1,0 +1,1267 @@
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { 
+  QrCode, ScanLine, Camera, Gamepad2, Monitor, Smartphone, 
+  Plus, Trash2, Edit, Save, CheckCircle2, XCircle, AlertCircle, 
+  Upload, Activity, History, Sparkles, Download, RefreshCw, X, Eye
+} from "lucide-react";
+import { doc, setDoc, onSnapshot, collection, deleteDoc, updateDoc } from "firebase/firestore";
+import { db, auth } from "../lib/firebase";
+import html2canvas from "html2canvas";
+import { Html5Qrcode } from "html5-qrcode";
+import Section from "./common/Section";
+
+type DeviceType = "ps3" | "ps4" | "stik_ps3" | "stik_ps4" | "tv" | "playbox";
+
+interface RegisteredDevice {
+  id: string; // type_number e.g. ps4_03
+  type: DeviceType;
+  number: number;
+  stikType: "OP" | "OM" | "";
+  status: "baik" | "rusak";
+  keterangan: string;
+  stickerColor: string;
+  fontColor: string;
+  updatedAt: number;
+  updatedBy: string;
+}
+
+interface WidgetMonitoringDeviceProps {
+  isOwner?: boolean;
+}
+
+const DEVICE_LABELS: Record<DeviceType, string> = {
+  ps3: "PLAYSTATION 3",
+  ps4: "PLAYSTATION 4",
+  stik_ps3: "STIK PS3",
+  stik_ps4: "STIK PS4",
+  tv: "TV MONITOR",
+  playbox: "PLAYBOX / PORTABEL"
+};
+
+const PRESET_COLORS = [
+  { name: "Cyber Black", bg: "#000000", text: "#ffffff" },
+  { name: "Clean White", bg: "#ffffff", text: "#000000" },
+  { name: "Neon Yellow", bg: "#facc15", text: "#000000" },
+  { name: "Neon Blue", bg: "#1d4ed8", text: "#ffffff" },
+  { name: "Acid Green", bg: "#15803d", text: "#ffffff" },
+  { name: "Crimson Red", bg: "#b91c1c", text: "#ffffff" },
+  { name: "Gaming Purple", bg: "#6d28d9", text: "#ffffff" },
+];
+
+const getBadgeStyle = (stikType: "OP" | "OM" | "", bg: string, text: string) => {
+  const isOm = stikType === "OM";
+  
+  // OM: Bright Crimson Red (khas gaming), OP: Bright Neon Blue (khas gaming)
+  let badgeBg = isOm ? "#dc2626" : "#2563eb";
+  let badgeText = "#ffffff";
+
+  // Normalize inputs to lower case for comparison
+  const normBg = bg.toLowerCase().trim();
+
+  // If the sticker background color is the same as the badge background, shift it to yellow/black or green/white
+  if (isOm) {
+    if (normBg === "#dc2626" || normBg === "#b91c1c" || normBg === "#000000" || normBg === "#7f1d1d") {
+      badgeBg = "#facc15"; // Neon Yellow
+      badgeText = "#000000";
+    }
+  } else {
+    if (normBg === "#1d4ed8" || normBg === "#2563eb" || normBg === "#000000" || normBg === "#1e1b4b") {
+      badgeBg = "#15803d"; // Acid Green
+      badgeText = "#ffffff";
+    }
+  }
+
+  return { backgroundColor: badgeBg, color: badgeText };
+};
+
+const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner = false }) => {
+  // Navigation sub-tabs for owner
+  const [activeSubTab, setActiveSubTab] = useState<"kondisi" | "generator" | "history">("kondisi");
+
+  // Auth State
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged(u => {
+      setCurrentUserEmail(u?.email || null);
+    });
+    return () => unsub();
+  }, []);
+
+  // Master Capacities State
+  const [masterCapacities, setMasterCapacities] = useState<Record<DeviceType, number>>({
+    ps3: 0,
+    ps4: 0,
+    stik_ps3: 0,
+    stik_ps4: 0,
+    tv: 0,
+    playbox: 0
+  });
+  const [tempCapacities, setTempCapacities] = useState<Record<DeviceType, string>>({
+    ps3: "0",
+    ps4: "0",
+    stik_ps3: "0",
+    stik_ps4: "0",
+    tv: "0",
+    playbox: "0"
+  });
+  const [isEditingMaster, setIsEditingMaster] = useState(false);
+
+  // Registered Devices from Firestore
+  const [devices, setDevices] = useState<RegisteredDevice[]>([]);
+  const [devicesLoaded, setDevicesLoaded] = useState(false);
+
+  // Scanner state
+  const [showScanner, setShowScanner] = useState(false);
+  const [scanningError, setScanningError] = useState<string | null>(null);
+  const qrCodeRef = useRef<Html5Qrcode | null>(null);
+
+  // Selected device for Status Update Modal
+  const [updatingDevice, setUpdatingDevice] = useState<Partial<RegisteredDevice> | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<"baik" | "rusak">("baik");
+  const [updateKeterangan, setUpdateKeterangan] = useState("");
+
+  // Generator form state
+  const [genType, setGenType] = useState<DeviceType>("ps4");
+  const [genNumber, setGenNumber] = useState<number>(1);
+  const [genStikType, setGenStikType] = useState<"OP" | "OM" | "">("OM");
+  const [genBgColor, setGenBgColor] = useState("#1e1b4b");
+  const [genTextColor, setGenTextColor] = useState("#ffffff");
+  const [editingStickerId, setEditingStickerId] = useState<string | null>(null);
+
+  const stickerPreviewRef = useRef<HTMLDivElement>(null);
+
+  // Listen to Master Capacities
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "data", "master_devices"), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() as Record<DeviceType, number>;
+        const sanitized: Record<DeviceType, number> = {
+          ps3: data.ps3 || 0,
+          ps4: data.ps4 || 0,
+          stik_ps3: data.stik_ps3 || 0,
+          stik_ps4: data.stik_ps4 || 0,
+          tv: data.tv || 0,
+          playbox: data.playbox || 0
+        };
+        setMasterCapacities(sanitized);
+        setTempCapacities({
+          ps3: String(sanitized.ps3),
+          ps4: String(sanitized.ps4),
+          stik_ps3: String(sanitized.stik_ps3),
+          stik_ps4: String(sanitized.stik_ps4),
+          tv: String(sanitized.tv),
+          playbox: String(sanitized.playbox)
+        });
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Listen to Registered Devices
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "monitoring_devices"), (snap) => {
+      const list: RegisteredDevice[] = [];
+      snap.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() } as RegisteredDevice);
+      });
+      setDevices(list);
+      setDevicesLoaded(true);
+    });
+    return () => unsub();
+  }, []);
+
+  // Save Master Capacities
+  const handleSaveMaster = async () => {
+    if (!isOwner) return;
+    const updatePayload: Record<DeviceType, number> = {
+      ps3: Math.max(0, parseInt(tempCapacities.ps3) || 0),
+      ps4: Math.max(0, parseInt(tempCapacities.ps4) || 0),
+      stik_ps3: Math.max(0, parseInt(tempCapacities.stik_ps3) || 0),
+      stik_ps4: Math.max(0, parseInt(tempCapacities.stik_ps4) || 0),
+      tv: Math.max(0, parseInt(tempCapacities.tv) || 0),
+      playbox: Math.max(0, parseInt(tempCapacities.playbox) || 0)
+    };
+    try {
+      await setDoc(doc(db, "data", "master_devices"), updatePayload, { merge: true });
+      setIsEditingMaster(false);
+    } catch (e) {
+      console.error("Error saving master capacities:", e);
+      alert("Gagal menyimpan data master kapasitas.");
+    }
+  };
+
+  // QR Scanning trigger
+  const startScanning = async () => {
+    setShowScanner(true);
+    setScanningError(null);
+    setTimeout(async () => {
+      try {
+        const html5QrCode = new Html5Qrcode("qr-reader-view");
+        qrCodeRef.current = html5QrCode;
+        
+        const config = { 
+          fps: 15, 
+          qrbox: (width: number, height: number) => {
+            const size = Math.min(width, height) * 0.75;
+            return { width: size, height: size };
+          }
+        };
+        
+        await html5QrCode.start(
+          { facingMode: "environment" },
+          config,
+          (decodedText) => {
+            handleScannedId(decodedText);
+            stopScanning();
+          },
+          (errorMessage) => {
+            // Scan silently
+          }
+        );
+      } catch (err: any) {
+        console.error("Camera access error:", err);
+        setScanningError("Gagal mengakses kamera. Pastikan izin kamera telah diberikan atau gunakan opsi Upload Gambar.");
+      }
+    }, 350);
+  };
+
+  const stopScanning = async () => {
+    if (qrCodeRef.current) {
+      if (qrCodeRef.current.isScanning) {
+        try {
+          await qrCodeRef.current.stop();
+        } catch (e) {
+          console.error("Stop scanning error:", e);
+        }
+      }
+      qrCodeRef.current = null;
+    }
+    setShowScanner(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (qrCodeRef.current && qrCodeRef.current.isScanning) {
+        qrCodeRef.current.stop().catch(console.error);
+      }
+    };
+  }, []);
+
+  // Process scanned or manual device ID
+  const handleScannedId = async (idText: string) => {
+    const trimmedId = idText.trim();
+    
+    // Validate if it is a valid format: e.g. type_number
+    const match = trimmedId.match(/^([a-z0-9_]+)_(\d+)$/);
+    if (!match) {
+      alert(`Format QR Code tidak dikenali: "${trimmedId}". Pastikan QR Code digenerate dari aplikasi ini.`);
+      return;
+    }
+
+    const typeCandidate = match[1] as DeviceType;
+    const numCandidate = parseInt(match[2]);
+
+    if (!DEVICE_LABELS[typeCandidate]) {
+      alert(`Tipe device "${typeCandidate}" tidak terdaftar dalam sistem.`);
+      return;
+    }
+
+    // Lookup device in Firestore
+    const existing = devices.find(d => d.id === trimmedId);
+
+    if (existing) {
+      setUpdatingDevice(existing);
+      setUpdateStatus(existing.status);
+      setUpdateKeterangan(existing.keterangan);
+    } else {
+      // Create temporary mock device if scanned unregistered sticker
+      setUpdatingDevice({
+        id: trimmedId,
+        type: typeCandidate,
+        number: numCandidate,
+        status: "baik",
+        keterangan: "",
+        stikType: typeCandidate.startsWith("stik") ? "OM" : ""
+      });
+      setUpdateStatus("baik");
+      setUpdateKeterangan("");
+    }
+  };
+
+  // Upload scan file fallback
+  const handleUploadScanFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      const html5QrCode = new Html5Qrcode("qr-reader-file-temp");
+      html5QrCode.scanFile(file, false)
+        .then((decodedText) => {
+          handleScannedId(decodedText);
+          html5QrCode.clear();
+        })
+        .catch((err) => {
+          alert("Gagal membaca QR Code dari file. Pastikan QR code terlihat jelas & berada di tengah gambar.");
+          console.error(err);
+          html5QrCode.clear();
+        });
+    }
+  };
+
+  // Update device status in Firestore
+  const handleSaveStatusUpdate = async () => {
+    if (!updatingDevice?.id) return;
+    
+    const deviceId = updatingDevice.id;
+    const isNew = !devices.some(d => d.id === deviceId);
+
+    const updatedData: Partial<RegisteredDevice> = {
+      status: updateStatus,
+      keterangan: updateStatus === "rusak" ? updateKeterangan : "",
+      updatedAt: Date.now(),
+      updatedBy: currentUserEmail || "Admin"
+    };
+
+    try {
+      if (isNew) {
+        // If it's a completely new scanned device, initialize other values
+        const payload: RegisteredDevice = {
+          id: deviceId,
+          type: updatingDevice.type as DeviceType,
+          number: updatingDevice.number || 1,
+          stikType: updatingDevice.stikType || "",
+          status: updateStatus,
+          keterangan: updateStatus === "rusak" ? updateKeterangan : "",
+          stickerColor: "#1e1b4b", // default navy
+          fontColor: "#ffffff",
+          updatedAt: Date.now(),
+          updatedBy: currentUserEmail || "Admin"
+        };
+        await setDoc(doc(db, "monitoring_devices", deviceId), payload);
+      } else {
+        await updateDoc(doc(db, "monitoring_devices", deviceId), updatedData);
+      }
+      setUpdatingDevice(null);
+    } catch (e) {
+      console.error("Error updating device status:", e);
+      alert("Gagal mengupdate status kondisi device.");
+    }
+  };
+
+  // Save/Generate Sticker Config
+  const handleSaveSticker = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isOwner) return;
+
+    const deviceId = `${genType}_${String(genNumber).padStart(2, "0")}`;
+
+    // check if it's already registered under another ID
+    const duplicate = devices.find(d => d.id === deviceId && d.id !== editingStickerId);
+    if (duplicate && !editingStickerId) {
+      if (!confirm(`Unit ${DEVICE_LABELS[genType]} nomor ${genNumber} sudah ada. Ingin menimpa desain stiker ini?`)) {
+        return;
+      }
+    }
+
+    try {
+      const existingData = devices.find(d => d.id === deviceId);
+      
+      const payload: RegisteredDevice = {
+        id: deviceId,
+        type: genType,
+        number: genNumber,
+        stikType: genType.startsWith("stik") ? genStikType : "",
+        status: existingData?.status || "baik",
+        keterangan: existingData?.keterangan || "",
+        stickerColor: genBgColor,
+        fontColor: genTextColor,
+        updatedAt: Date.now(),
+        updatedBy: currentUserEmail || "Owner"
+      };
+
+      await setDoc(doc(db, "monitoring_devices", deviceId), payload);
+      
+      // If we edited a sticker and changed its ID (type/number changed), delete the old one
+      if (editingStickerId && editingStickerId !== deviceId) {
+        await deleteDoc(doc(db, "monitoring_devices", editingStickerId));
+      }
+
+      setEditingStickerId(deviceId); // Display current preview
+      alert("Stiker berhasil disimpan ke database!");
+    } catch (e) {
+      console.error(e);
+      alert("Gagal menyimpan konfigurasi stiker.");
+    }
+  };
+
+  // Open sticker editor from History
+  const startEditSticker = (dev: RegisteredDevice) => {
+    setGenType(dev.type);
+    setGenNumber(dev.number);
+    setGenStikType(dev.stikType);
+    setGenBgColor(dev.stickerColor);
+    setGenTextColor(dev.fontColor);
+    setEditingStickerId(dev.id);
+    setActiveSubTab("generator");
+  };
+
+  // Delete device registration
+  const handleDeleteDevice = async (id: string) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus device ini dari daftar monitoring? Riwayat kondisi device ini akan hilang.")) {
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, "monitoring_devices", id));
+      if (editingStickerId === id) {
+        setEditingStickerId(null);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Gagal menghapus device.");
+    }
+  };
+
+  // Download Sticker PNG
+  const handleDownloadSticker = async () => {
+    if (!stickerPreviewRef.current) return;
+    try {
+      // temporarily scale up the container for clear rendering resolution
+      const originalStyle = stickerPreviewRef.current.style.transform;
+      stickerPreviewRef.current.style.transform = "none";
+
+      const canvas = await html2canvas(stickerPreviewRef.current, {
+        scale: 4, // 4x scale for high resolution print quality
+        useCORS: true,
+        backgroundColor: null
+      });
+
+      stickerPreviewRef.current.style.transform = originalStyle;
+
+      const link = document.createElement("a");
+      link.download = `sticker_${editingStickerId || "device"}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch (e) {
+      console.error("Error capturing sticker:", e);
+      alert("Gagal mengunduh stiker PNG.");
+    }
+  };
+
+  // Helper to get device count by status
+  const getDeviceStats = (type: DeviceType) => {
+    const list = devices.filter(d => d.type === type);
+    const capacity = masterCapacities[type] || 0;
+    
+    // Count broken
+    const rusakCount = list.filter(d => d.status === "rusak").length;
+    
+    // We assume default status of capacity slots are "baik" unless flagged "rusak"
+    const baikCount = Math.max(0, capacity - rusakCount);
+
+    return { total: capacity, baik: baikCount, rusak: rusakCount };
+  };
+
+  // QR Code creation string helper
+  const qrUrl = useMemo(() => {
+    const deviceId = editingStickerId || `${genType}_${String(genNumber).padStart(2, "0")}`;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(deviceId)}&ecc=M`;
+  }, [editingStickerId, genType, genNumber]);
+
+  return (
+    <>
+      <Section title="Monitoring Device (Kondisi Alat)">
+        <div className="bg-white dark:bg-[#111111] border border-zinc-200 dark:border-white/10 rounded-2xl md:rounded-[32px] p-4 sm:p-6 lg:p-8 flex flex-col gap-6 w-full overflow-hidden relative shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-black/20">
+          
+          {/* Glassmorphic Background Blur */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 dark:bg-emerald-500/5 blur-3xl rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-teal-500/10 dark:bg-teal-500/5 blur-3xl rounded-full translate-y-1/2 -translate-x-1/2 pointer-events-none" />
+
+          {/* Owner Tab Pill Switcher */}
+          {isOwner && (
+            <div className="flex bg-zinc-100/80 dark:bg-[#1c1c1e] p-1 rounded-2xl self-start w-full sm:w-auto z-10 border border-zinc-200/50 dark:border-white/5 backdrop-blur-md">
+              <button
+                onClick={() => setActiveSubTab("kondisi")}
+                className={`flex-1 sm:flex-initial px-5 py-2.5 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+                  activeSubTab === "kondisi"
+                    ? "bg-white dark:bg-black text-emerald-600 dark:text-emerald-400 shadow-sm"
+                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5" /> Kondisi Device
+              </button>
+              <button
+                onClick={() => {
+                  setActiveSubTab("generator");
+                  setEditingStickerId(null);
+                }}
+                className={`flex-1 sm:flex-initial px-5 py-2.5 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+                  activeSubTab === "generator"
+                    ? "bg-white dark:bg-black text-emerald-600 dark:text-emerald-400 shadow-sm"
+                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" /> Sticker Generator
+              </button>
+              <button
+                onClick={() => setActiveSubTab("history")}
+                className={`flex-1 sm:flex-initial px-5 py-2.5 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+                  activeSubTab === "history"
+                    ? "bg-white dark:bg-black text-emerald-600 dark:text-emerald-400 shadow-sm"
+                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+                }`}
+              >
+                <History className="w-3.5 h-3.5" /> Riwayat & Master
+              </button>
+            </div>
+          )}
+
+          {/* Tab 1: Kondisi Device (Visible to Admin & Owner) */}
+          {(!isOwner || activeSubTab === "kondisi") && (
+            <div className="flex flex-col gap-6 z-10 w-full animate-in fade-in duration-300">
+              
+              {/* Camera Scanner Trigger Card */}
+              <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-zinc-50 dark:bg-white/5 p-5 sm:p-6 rounded-[24px] border border-zinc-200 dark:border-white/5 shadow-inner">
+                <div className="flex items-center gap-4 text-left">
+                  <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                    <QrCode className="w-6 h-6 animate-pulse" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-zinc-855 dark:text-zinc-100 flex items-center gap-1.5">
+                      Scan QR Code Device
+                    </h4>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-md">
+                      Gunakan kamera HP/laptop Anda untuk memindai kode QR stiker pada unit secara instan, atau upload file foto QR Code.
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto shrink-0">
+                  <button
+                    onClick={startScanning}
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-500/15 active:scale-95"
+                  >
+                    <Camera className="w-4 h-4" /> Buka Kamera Scan
+                  </button>
+
+                  <label className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-3 bg-white dark:bg-zinc-800 hover:bg-zinc-55 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-300 transition-all cursor-pointer">
+                    <Upload className="w-4 h-4" /> Upload Foto QR
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleUploadScanFile}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Status Grid Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {(Object.keys(DEVICE_LABELS) as DeviceType[]).map((type) => {
+                  const stats = getDeviceStats(type);
+                  const registeredForType = devices.filter(d => d.type === type);
+                  
+                  // Compute largest badge number to show
+                  const maxRegisteredNum = registeredForType.reduce((max, d) => d.number > max ? d.number : max, 0);
+                  const displayLimit = Math.max(stats.total, maxRegisteredNum);
+
+                  let devIcon = <Gamepad2 className="w-5 h-5 text-emerald-555" />;
+                  if (type.startsWith("stik")) devIcon = <Gamepad2 className="w-5 h-5 text-blue-500" />;
+                  if (type === "tv") devIcon = <Monitor className="w-5 h-5 text-purple-500" />;
+                  if (type === "playbox") devIcon = <Smartphone className="w-5 h-5 text-amber-500" />;
+
+                  return (
+                    <div
+                      key={type}
+                      className="bg-zinc-50 dark:bg-white/5 rounded-3xl p-5 border border-zinc-200/80 dark:border-white/5 flex flex-col justify-between shadow-sm min-h-[170px] transition-all hover:shadow-md"
+                    >
+                      <div>
+                        {/* Header */}
+                        <div className="flex items-center justify-between mb-4 border-b border-zinc-200/50 dark:border-white/5 pb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2.5 rounded-2xl bg-white dark:bg-black border border-zinc-200 dark:border-white/5 shadow-sm">
+                              {devIcon}
+                            </div>
+                            <div className="text-left">
+                              <h3 className="text-xs font-black tracking-wider text-zinc-900 dark:text-white uppercase">
+                                {DEVICE_LABELS[type]}
+                              </h3>
+                              <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">
+                                Kapasitas: {stats.total} unit
+                              </p>
+                            </div>
+                          </div>
+                          
+                          {/* Mini Stats Pill */}
+                          <div className="flex items-center gap-1.5 bg-white dark:bg-black px-2.5 py-1 rounded-full border border-zinc-200/50 dark:border-white/5 shadow-inner">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 tracking-tight">{stats.baik}</span>
+                            <span className="text-[10px] font-medium text-zinc-400">|</span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                            <span className="text-[10px] font-black text-red-600 dark:text-red-400 tracking-tight">{stats.rusak}</span>
+                          </div>
+                        </div>
+
+                        {/* Badges Grid */}
+                        {displayLimit > 0 ? (
+                          <div className="flex flex-wrap gap-2 pt-2 justify-start">
+                            {Array.from({ length: displayLimit }).map((_, index) => {
+                              const badgeNum = index + 1;
+                              const deviceId = `${type}_${String(badgeNum).padStart(2, "0")}`;
+                              const registered = registeredForType.find(d => d.number === badgeNum);
+                              
+                              let badgeStyle = "bg-zinc-100/60 dark:bg-zinc-900/40 border-zinc-200/80 dark:border-zinc-800 text-zinc-400 dark:text-zinc-500 hover:bg-zinc-200/60 dark:hover:bg-zinc-800/60 border-dashed"; // Unregistered
+                              let labelSuffix = "";
+
+                              if (registered) {
+                                if (registered.status === "rusak") {
+                                  badgeStyle = "bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20 shadow-sm animate-pulse";
+                                } else {
+                                  badgeStyle = "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 shadow-sm";
+                                }
+                                if (registered.stikType) {
+                                  labelSuffix = ` ${registered.stikType}`;
+                                }
+                              }
+
+                              return (
+                                <button
+                                  key={deviceId}
+                                  onClick={() => handleScannedId(deviceId)}
+                                  className={`relative border px-3 py-2 rounded-xl text-xs font-mono font-black transition-all hover:scale-105 active:scale-95 ${badgeStyle}`}
+                                  title={registered?.status === "rusak" ? `RUSAK: ${registered.keterangan}` : `Kondisi Baik`}
+                                >
+                                  {String(badgeNum).padStart(2, "0")}
+                                  {labelSuffix && (
+                                    <span className="text-[8px] font-bold opacity-80 block -mt-0.5 leading-none">
+                                      {labelSuffix}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-center py-6 text-zinc-400 dark:text-zinc-500 text-xs border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-white dark:bg-black/20">
+                            Belum ada unit terdaftar.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Tab 2: Sticker Generator (Owner Only) */}
+          {isOwner && activeSubTab === "generator" && (
+            <div className="flex flex-col lg:flex-row gap-8 z-10 w-full animate-in fade-in duration-300">
+              
+              {/* Generator Configuration Panel */}
+              <div className="lg:w-1/2 flex flex-col gap-6">
+                <form onSubmit={handleSaveSticker} className="flex flex-col gap-4 bg-zinc-50 dark:bg-white/5 p-6 rounded-3xl border border-zinc-200 dark:border-white/5">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-black tracking-widest uppercase text-zinc-900 dark:text-white flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-emerald-500" /> Desain Sticker Unit
+                    </h3>
+                    {editingStickerId && (
+                      <span className="text-[10px] bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded-md">
+                        Mode Edit: {editingStickerId}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Device Type */}
+                  <div className="flex flex-col gap-1.5 text-left">
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Tipe Device</label>
+                    <select
+                      value={genType}
+                      onChange={(e) => {
+                        setGenType(e.target.value as DeviceType);
+                        setEditingStickerId(null);
+                      }}
+                      className="bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-4 py-3 text-zinc-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
+                    >
+                      {(Object.keys(DEVICE_LABELS) as DeviceType[]).map(type => (
+                        <option key={type} value={type}>{DEVICE_LABELS[type]}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Number */}
+                    <div className="flex flex-col gap-1.5 text-left">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Nomor Unit</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={genNumber}
+                        onChange={(e) => {
+                          setGenNumber(Math.max(1, parseInt(e.target.value) || 1));
+                          setEditingStickerId(null);
+                        }}
+                        className="bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-4 py-2 text-zinc-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                      />
+                    </div>
+
+                    {/* Controller OP/OM Type */}
+                    {genType.startsWith("stik") && (
+                      <div className="flex flex-col gap-1.5 text-left">
+                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Tipe Controller</label>
+                        <select
+                          value={genStikType}
+                          onChange={(e) => {
+                            setGenStikType(e.target.value as "OP" | "OM" | "");
+                            setEditingStickerId(null);
+                          }}
+                          className="bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-zinc-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
+                        >
+                          <option value="OM">Original Mesin (OM)</option>
+                          <option value="OP">Original Pabrik (OP)</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Preset Colors */}
+                  <div className="flex flex-col gap-2 mt-2 text-left">
+                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Preset Warna Premium</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {PRESET_COLORS.map((color, idx) => {
+                        const isSelected = genBgColor === color.bg && genTextColor === color.text;
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => {
+                              setGenBgColor(color.bg);
+                              setGenTextColor(color.text);
+                              setEditingStickerId(null);
+                            }}
+                            className={`h-9 px-2 rounded-xl text-[10px] font-bold transition-all hover:scale-[1.03] active:scale-95 flex items-center justify-center gap-1 ${
+                              isSelected ? "ring-2 ring-emerald-500 dark:ring-emerald-400" : "border border-zinc-200 dark:border-white/5"
+                            }`}
+                            style={{ backgroundColor: color.bg, color: color.text }}
+                          >
+                            {color.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Custom Colors */}
+                  <div className="grid grid-cols-2 gap-4 mt-2">
+                    <div className="flex flex-col gap-1.5 text-left">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Warna Background</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="color"
+                          value={genBgColor}
+                          onChange={(e) => {
+                            setGenBgColor(e.target.value);
+                            setEditingStickerId(null);
+                          }}
+                          className="w-10 h-10 p-0.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-black cursor-pointer shrink-0"
+                        />
+                        <input
+                          type="text"
+                          value={genBgColor.toUpperCase()}
+                          onChange={(e) => {
+                            setGenBgColor(e.target.value);
+                            setEditingStickerId(null);
+                          }}
+                          className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-3 text-xs font-mono font-bold focus:ring-2 focus:ring-emerald-500 outline-none text-zinc-800 dark:text-zinc-200"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5 text-left">
+                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Warna Teks</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="color"
+                          value={genTextColor}
+                          onChange={(e) => {
+                            setGenTextColor(e.target.value);
+                            setEditingStickerId(null);
+                          }}
+                          className="w-10 h-10 p-0.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-black cursor-pointer shrink-0"
+                        />
+                        <input
+                          type="text"
+                          value={genTextColor.toUpperCase()}
+                          onChange={(e) => {
+                            setGenTextColor(e.target.value);
+                            setEditingStickerId(null);
+                          }}
+                          className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-3 text-xs font-mono font-bold focus:ring-2 focus:ring-emerald-500 outline-none text-zinc-800 dark:text-zinc-200"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2.5 mt-4">
+                    {editingStickerId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingStickerId(null);
+                          setGenNumber(devices.length + 1);
+                        }}
+                        className="bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-2xl px-4 py-3 text-xs font-black uppercase transition-all active:scale-95"
+                      >
+                        Reset
+                      </button>
+                    )}
+                    <button
+                      type="submit"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl py-3.5 text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-emerald-500/10 active:scale-95 flex items-center justify-center gap-2"
+                    >
+                      <Save className="w-4 h-4" /> Simpan Stiker ke Database
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Preview & Download Panel */}
+              <div className="lg:w-1/2 flex flex-col items-center justify-center bg-zinc-55 dark:bg-[#18181b] p-6 sm:p-8 rounded-3xl border border-zinc-200 dark:border-zinc-800/60 shadow-inner">
+                <h4 className="text-[10px] font-black tracking-widest uppercase text-zinc-400 mb-6 flex items-center gap-1.5"><Eye className="w-3.5 h-3.5 text-emerald-555" /> Preview Desain Stiker</h4>
+
+                {/* Sticker Elements Container */}
+                <div className="relative border-4 border-dashed border-zinc-300 dark:border-zinc-800 p-2 sm:p-4 rounded-[28px] bg-zinc-100 dark:bg-black/40 shadow-inner w-full max-w-[420px] overflow-hidden flex items-center justify-center min-h-[180px] sm:min-h-[260px]">
+                  <div className="scale-[0.75] min-[400px]:scale-[0.85] sm:scale-100 origin-center shrink-0 my-[-25px] sm:my-0">
+                    <div
+                      ref={stickerPreviewRef}
+                      className="w-[380px] h-[228px] flex flex-row items-center justify-between p-6 relative select-none shadow-2xl"
+                      style={{
+                        backgroundColor: genBgColor,
+                        color: genTextColor,
+                        fontFamily: "Inter, Roboto, sans-serif",
+                        borderRadius: "20px"
+                      }}
+                    >
+                      {/* Left side details */}
+                      <div className="flex-1 flex flex-col justify-between items-start h-full text-left pr-5">
+                        <div className="flex flex-col items-start">
+                          <h2 className="text-[13px] font-black tracking-[0.25em] leading-tight select-none uppercase">URBAN GAMING</h2>
+                          <p className="text-[8px] font-black tracking-widest opacity-85 mt-1 uppercase select-none">
+                            {genType.startsWith("stik") && genStikType ? `CONTROLLER ${genStikType}` : DEVICE_LABELS[genType]}
+                          </p>
+                        </div>
+                        
+                        <div className="flex flex-col items-start gap-1.5 mt-2">
+                          {/* Controller OP/OM high-contrast badge */}
+                          {genType.startsWith("stik") && genStikType && (
+                             <span 
+                               className="px-3.5 py-1 rounded-full text-[10px] font-black shadow-md tracking-wider leading-none"
+                               style={getBadgeStyle(genStikType, genBgColor, genTextColor)}
+                             >
+                               {genStikType === "OM" ? "ORIGINAL MESIN" : "ORIGINAL PABRIK"}
+                             </span>
+                           )}
+                          <h1 className="text-5xl font-black font-mono tracking-tighter select-none leading-none">
+                            {String(genNumber).padStart(2, "0")}
+                          </h1>
+                        </div>
+                      </div>
+
+                      {/* Right side: QR Code */}
+                      <div 
+                        className={`p-3 rounded-2xl shadow-inner flex items-center justify-center shrink-0 border ${
+                          genBgColor.toLowerCase() === "#ffffff" || genBgColor.toLowerCase() === "#fff"
+                            ? "bg-white border-zinc-200" 
+                            : "bg-white border-white/20"
+                        }`}
+                      >
+                        <img
+                          src={qrUrl}
+                          alt="QR Code"
+                          className="w-24 h-24 object-contain select-none"
+                          crossOrigin="anonymous"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Download Button */}
+                <button
+                  type="button"
+                  onClick={handleDownloadSticker}
+                  className="mt-6 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-blue-500/10 active:scale-95 animate-in fade-in duration-300"
+                >
+                  <Download className="w-4 h-4" /> Download Sticker (PNG)
+                </button>
+              </div>
+
+            </div>
+          )}
+
+          {/* Tab 3: History & Master Settings (Owner Only) */}
+          {isOwner && activeSubTab === "history" && (
+            <div className="flex flex-col gap-8 z-10 w-full animate-in fade-in duration-300">
+              
+              {/* Master Inventaris Settings */}
+              <div className="bg-zinc-50 dark:bg-white/5 p-5 sm:p-6 rounded-3xl border border-zinc-200 dark:border-white/5 shadow-sm">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-sm font-black tracking-widest uppercase text-zinc-900 dark:text-white flex items-center gap-2">
+                    <Save className="w-4 h-4 text-emerald-500" /> Pengaturan Kapasitas Alat
+                  </h3>
+                  <button
+                    onClick={() => {
+                      if (isEditingMaster) handleSaveMaster();
+                      else setIsEditingMaster(true);
+                    }}
+                    className="text-xs px-4 py-2.5 rounded-xl bg-white dark:bg-black text-emerald-600 dark:text-emerald-400 font-bold border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    {isEditingMaster ? (
+                      <>Simpan Kapasitas</>
+                    ) : (
+                      <>Edit Kapasitas</>
+                    )}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                  {(Object.keys(DEVICE_LABELS) as DeviceType[]).map((type) => {
+                    let inputIcon = <Gamepad2 className="w-4 h-4 text-emerald-500" />;
+                    if (type.startsWith("stik")) inputIcon = <Gamepad2 className="w-4 h-4 text-blue-500" />;
+                    if (type === "tv") inputIcon = <Monitor className="w-4 h-4 text-purple-500" />;
+                    if (type === "playbox") inputIcon = <Smartphone className="w-4 h-4 text-amber-500" />;
+
+                    return (
+                      <div key={type} className="bg-white dark:bg-black border border-zinc-200/80 dark:border-zinc-800 rounded-2xl p-4 flex flex-col items-center gap-2 shadow-inner">
+                        <div className="flex items-center gap-1 text-[9px] font-black text-zinc-400 uppercase tracking-wider text-center truncate w-full justify-center">
+                          {inputIcon} <span className="truncate">{DEVICE_LABELS[type]}</span>
+                        </div>
+                        {isEditingMaster ? (
+                          <input
+                            type="number"
+                            min="0"
+                            value={tempCapacities[type]}
+                            onChange={(e) => setTempCapacities({ ...tempCapacities, [type]: e.target.value })}
+                            className="w-full bg-zinc-55 dark:bg-zinc-900 border border-zinc-250 dark:border-zinc-800 rounded-xl px-2 py-1.5 text-zinc-900 dark:text-white font-mono font-bold text-base text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        ) : (
+                          <div className="w-full text-zinc-900 dark:text-white font-mono font-black text-xl text-center py-1 select-none">
+                            {masterCapacities[type]}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* History Section */}
+              <div className="flex flex-col gap-4 text-left">
+                <h3 className="text-sm font-black tracking-widest uppercase text-zinc-900 dark:text-white flex items-center gap-2 mb-2">
+                  <History className="w-4 h-4 text-emerald-500" /> Daftar Unit Terdaftar ({devices.length} Unit)
+                </h3>
+
+                {devices.length > 0 ? (
+                  <>
+                    {/* Desktop Responsive Table (visible on md screens and up) */}
+                    <div className="hidden md:block overflow-x-auto rounded-2xl border border-zinc-200 dark:border-white/5 bg-white dark:bg-[#161618]">
+                      <table className="w-full border-collapse text-left text-xs">
+                        <thead>
+                          <tr className="bg-zinc-50 dark:bg-white/5 border-b border-zinc-200 dark:border-white/5 text-zinc-400 font-bold uppercase tracking-wider">
+                            <th className="px-6 py-4">ID Unit</th>
+                            <th className="px-6 py-4">Tipe Alat</th>
+                            <th className="px-6 py-4">No</th>
+                            <th className="px-6 py-4">Kategori Stik</th>
+                            <th className="px-6 py-4">Kondisi</th>
+                            <th className="px-6 py-4">Warna Stiker</th>
+                            <th className="px-6 py-4">Diupdate Oleh</th>
+                            <th className="px-6 py-4 text-right">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-200 dark:divide-white/5">
+                          {devices
+                            .sort((a, b) => a.type.localeCompare(b.type) || a.number - b.number)
+                            .map((dev) => (
+                              <tr key={dev.id} className="hover:bg-zinc-50 dark:hover:bg-white/5 transition-colors">
+                                <td className="px-6 py-4 font-mono font-bold text-zinc-800 dark:text-zinc-200">{dev.id}</td>
+                                <td className="px-6 py-4 font-bold text-zinc-650 dark:text-zinc-300">{DEVICE_LABELS[dev.type]}</td>
+                                <td className="px-6 py-4 font-mono text-zinc-800 dark:text-zinc-200">{String(dev.number).padStart(2, "0")}</td>
+                                <td className="px-6 py-4">
+                                  {dev.stikType ? (
+                                    <span className={`px-2.5 py-0.5 font-black rounded-lg text-[9px] tracking-wider uppercase ${
+                                      dev.stikType === "OM" 
+                                        ? "bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400" 
+                                        : "bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400"
+                                    }`}>
+                                      {dev.stikType === "OM" ? "Original Mesin" : "Original Pabrik"}
+                                    </span>
+                                  ) : "-"}
+                                </td>
+                                <td className="px-6 py-4">
+                                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
+                                    dev.status === "baik" 
+                                      ? "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
+                                      : "bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 animate-pulse"
+                                  }`}>
+                                    {dev.status === "baik" ? "Normal" : "Rusak"}
+                                  </span>
+                                  {dev.status === "rusak" && dev.keterangan && (
+                                    <p className="text-[10px] text-zinc-400 mt-0.5 italic max-w-xs truncate" title={dev.keterangan}>{dev.keterangan}</p>
+                                  )}
+                                </td>
+                                <td className="px-6 py-4">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-5 h-5 rounded border border-white/10" style={{ backgroundColor: dev.stickerColor }} />
+                                    <span className="font-mono text-[10px] text-zinc-400">{dev.stickerColor}</span>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 text-zinc-400">
+                                  {dev.updatedBy.split("@")[0]}
+                                  <p className="text-[9px] opacity-75">{new Date(dev.updatedAt).toLocaleString("id-ID")}</p>
+                                </td>
+                                <td className="px-6 py-4 text-right">
+                                  <div className="flex justify-end gap-2">
+                                    <button
+                                      onClick={() => startEditSticker(dev)}
+                                      className="p-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-zinc-650 dark:text-zinc-300 transition-colors"
+                                      title="Edit sticker style"
+                                    >
+                                      <Edit className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteDevice(dev.id)}
+                                      className="p-2 bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-950/40 text-red-600 dark:text-red-400 rounded-lg transition-colors"
+                                      title="Hapus unit"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile Card-Based History (visible on mobile/tablet below md) */}
+                    <div className="grid grid-cols-1 gap-4 md:hidden">
+                      {devices
+                        .sort((a, b) => a.type.localeCompare(b.type) || a.number - b.number)
+                        .map((dev) => (
+                          <div key={dev.id} className="bg-white dark:bg-[#161618] border border-zinc-200 dark:border-white/5 rounded-2xl p-4 flex flex-col gap-3 shadow-sm">
+                            <div className="flex justify-between items-start">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-7 h-7 rounded-lg border border-white/15 flex items-center justify-center text-xs font-mono font-black text-white shrink-0 shadow-sm" style={{ backgroundColor: dev.stickerColor }}>
+                                  {dev.number}
+                                </div>
+                                <div>
+                                  <h4 className="text-xs font-black text-zinc-800 dark:text-zinc-200 uppercase">{DEVICE_LABELS[dev.type]}</h4>
+                                  <p className="text-[10px] font-mono text-zinc-400 mt-0.5">{dev.id}</p>
+                                </div>
+                              </div>
+                              
+                              {/* Condition Badge */}
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[9px] ${
+                                dev.status === "baik" 
+                                  ? "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
+                                  : "bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 animate-pulse"
+                              }`}>
+                                {dev.status === "baik" ? "Normal" : "Rusak"}
+                              </span>
+                            </div>
+
+                            {dev.stikType && (
+                               <div className="flex items-center gap-2">
+                                 <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Kategori:</span>
+                                 <span className={`px-2 py-0.5 font-black rounded text-[9px] uppercase tracking-wider ${
+                                   dev.stikType === "OM"
+                                     ? "bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400"
+                                     : "bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400"
+                                 }`}>
+                                   {dev.stikType === "OM" ? "Original Mesin" : "Original Pabrik"}
+                                 </span>
+                               </div>
+                             )}
+
+                            {dev.status === "rusak" && dev.keterangan && (
+                              <p className="text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-black/35 p-2.5 rounded-xl border border-zinc-200/50 dark:border-white/5 italic">
+                                {dev.keterangan}
+                              </p>
+                            )}
+
+                            <div className="flex justify-between items-center text-[10px] text-zinc-400 border-t border-zinc-100 dark:border-white/5 pt-2.5 mt-1">
+                              <div>
+                                <span>Oleh: {dev.updatedBy.split("@")[0]}</span>
+                                <span className="block text-[8px] opacity-75">{new Date(dev.updatedAt).toLocaleString("id-ID")}</span>
+                              </div>
+                              <div className="flex gap-2">
+                                <button onClick={() => startEditSticker(dev)} className="p-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl text-zinc-600 dark:text-zinc-300 transition-all">
+                                  <Edit className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={() => handleDeleteDevice(dev.id)} className="p-2 bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-950/40 text-red-600 dark:text-red-400 rounded-xl transition-all">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-12 text-zinc-400 dark:text-zinc-500 text-xs border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-zinc-50 dark:bg-black/20">
+                    Belum ada unit yang terdaftar. Gunakan Generator untuk mendaftarkan dan membuat stiker QR.
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )}
+
+        </div>
+      </Section>
+
+      {/* Hidden container for QR file reader temp scanner initialization */}
+      <div id="qr-reader-file-temp" className="hidden" />
+
+      {/* Modal 1: QR Scanner Modal (Floating) */}
+      {showScanner && (
+        <div className="fixed inset-0 z-[800] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={stopScanning}></div>
+          <div className="relative w-full max-w-md bg-zinc-950 rounded-[32px] overflow-hidden border border-white/10 shadow-2xl z-10 animate-in zoom-in-95 duration-200">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between p-5 border-b border-white/5">
+              <div className="flex items-center gap-2 text-left">
+                <QrCode className="w-5 h-5 text-emerald-400 animate-pulse" />
+                <h3 className="text-sm font-black text-white uppercase tracking-wider">Pindai QR Code Device</h3>
+              </div>
+              <button onClick={stopScanning} className="p-1.5 hover:bg-white/10 rounded-full text-zinc-400 hover:text-white transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Camera Viewport */}
+            <div id="qr-reader-view" className="w-full aspect-square bg-black overflow-hidden" />
+
+            {/* Footer / Alternate Options */}
+            <div className="p-5 bg-zinc-900/50 border-t border-white/5 flex flex-col gap-3">
+              <p className="text-[11px] text-zinc-400 text-center">
+                Posisikan QR Code di dalam kotak untuk memindai secara otomatis.
+              </p>
+              <div className="flex gap-2">
+                <label className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-xs font-bold text-white transition-all cursor-pointer">
+                  <Upload className="w-4 h-4 text-emerald-400" /> Upload File QR
+                  <input type="file" accept="image/*" onChange={handleUploadScanFile} className="hidden" />
+                </label>
+                <button onClick={stopScanning} className="flex-1 px-4 py-3 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 text-red-400 rounded-2xl text-xs font-bold transition-all">
+                  Batal
+                </button>
+              </div>
+            </div>
+
+            {scanningError && (
+              <div className="absolute inset-0 bg-zinc-955 flex flex-col items-center justify-center p-6 text-center z-20">
+                <AlertCircle className="w-12 h-12 text-red-500 mb-3 animate-bounce" />
+                <p className="text-sm text-zinc-300 font-bold mb-4">{scanningError}</p>
+                <div className="flex flex-col gap-2 w-full">
+                  <label className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white/10 hover:bg-white/15 border border-white/15 rounded-2xl text-xs font-bold text-white transition-all cursor-pointer">
+                    <Upload className="w-4 h-4 text-emerald-400" /> Upload File QR
+                    <input type="file" accept="image/*" onChange={handleUploadScanFile} className="hidden" />
+                  </label>
+                  <button onClick={stopScanning} className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-2xl text-xs font-bold transition-all">
+                    Tutup
+                  </button>
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+
+      {/* Modal 2: Status Update Modal (Baik/Rusak + Keterangan) */}
+      {updatingDevice && (
+        <div className="fixed inset-0 z-[800] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setUpdatingDevice(null)}></div>
+          <div className="bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-2xl rounded-[32px] p-6 max-w-sm w-full shadow-2xl shadow-black/30 border border-zinc-100 dark:border-white/10 relative z-10 animate-in zoom-in-95 duration-200">
+            
+            <div className="w-12 h-1.5 bg-zinc-300 dark:bg-zinc-700 rounded-full mx-auto mb-5"></div>
+            
+            <h3 className="text-lg font-black text-center text-zinc-950 dark:text-white uppercase tracking-tight">
+              {DEVICE_LABELS[updatingDevice.type as DeviceType]}
+            </h3>
+            <p className="text-2xl font-black text-center text-emerald-600 dark:text-emerald-400 font-mono mt-1 mb-4">
+              UNIT {String(updatingDevice.number).padStart(2, "0")}
+            </p>
+
+            <div className="flex flex-col gap-4">
+              {/* Radio Group Status */}
+              <div className="flex flex-col gap-1.5 text-left">
+                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Kondisi Alat</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setUpdateStatus("baik")}
+                    className={`py-3.5 rounded-2xl font-bold text-xs flex flex-col items-center justify-center gap-1.5 border transition-all ${
+                      updateStatus === "baik"
+                        ? "bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-sm font-black"
+                        : "bg-white dark:bg-black border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-white/5"
+                    }`}
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Kondisi Normal
+                  </button>
+                  <button
+                    onClick={() => setUpdateStatus("rusak")}
+                    className={`py-3.5 rounded-2xl font-bold text-xs flex flex-col items-center justify-center gap-1.5 border transition-all ${
+                      updateStatus === "rusak"
+                        ? "bg-red-500/10 border-red-500 text-red-600 dark:text-red-400 shadow-sm font-black"
+                        : "bg-white dark:bg-black border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-white/5"
+                    }`}
+                  >
+                    <XCircle className="w-4 h-4 text-red-500" /> Kondisi Rusak
+                  </button>
+                </div>
+              </div>
+
+              {/* Keterangan Kerusakan */}
+              {updateStatus === "rusak" && (
+                <div className="flex flex-col gap-1.5 text-left animate-in slide-in-from-top-2 duration-200">
+                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Keterangan Kerusakan</label>
+                  <textarea
+                    value={updateKeterangan}
+                    onChange={(e) => setUpdateKeterangan(e.target.value)}
+                    placeholder="Contoh: Tombol R2 macet, Analog kiri ngedrift..."
+                    rows={3}
+                    className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-2xl p-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              )}
+
+              {/* Update Log metadata */}
+              {updatingDevice.updatedAt && (
+                <div className="text-[10px] text-zinc-450 dark:text-zinc-500 text-center">
+                  Diupdate oleh: {updatingDevice.updatedBy?.split("@")[0]}
+                  <span className="block mt-0.5">Waktu: {new Date(updatingDevice.updatedAt || 0).toLocaleString("id-ID")}</span>
+                </div>
+              )}
+
+              <div className="flex gap-3 mt-4">
+                <button
+                  onClick={() => setUpdatingDevice(null)}
+                  className="flex-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-bold rounded-2xl py-3.5 transition-all text-xs"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={handleSaveStatusUpdate}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl py-3.5 transition-all text-xs shadow-md shadow-emerald-500/10 active:scale-95"
+                >
+                  Simpan Status
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+export default WidgetMonitoringDevice;
