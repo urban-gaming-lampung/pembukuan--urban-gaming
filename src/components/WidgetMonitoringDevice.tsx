@@ -585,7 +585,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
         compress: true
       });
 
-      const scale = 2.5; // 2.5x scale memberikan keseimbangan ketajaman cetak & ukuran file optimal
+      const scale = 1.3; // optimal scale karena DOM A4 template sudah 2x upscaled
       
       for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
         setPdfLoadingText(`Merender halaman ${pageIdx + 1} dari ${pages.length}...`);
@@ -1071,7 +1071,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                         <div className="flex flex-col items-start">
                           <h2 className="text-[13px] font-black tracking-[0.25em] leading-tight select-none uppercase">URBAN GAMING</h2>
                           <p className="text-[8px] font-black tracking-widest opacity-85 mt-1 uppercase select-none">
-                          {genType.startsWith("stik") ? "CONTROLLER" : DEVICE_LABELS[genType]}
+                          {genType.startsWith("stik") ? (genType === "stik_ps3" ? "STIK PS3" : "STIK PS4") : DEVICE_LABELS[genType]}
                         </p>
                       </div>
                       
@@ -1467,15 +1467,15 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
               key={pageIdx} 
               id={`pdf-page-${pageIdx}`}
               style={{
-                width: "794px",
-                height: "1123px",
-                padding: "46px 55px",
+                width: "1588px",
+                height: "2246px",
+                padding: "92px 110px",
                 boxSizing: "border-box",
                 display: "grid",
-                gridTemplateColumns: "repeat(3, 190px)",
-                gridTemplateRows: "repeat(8, 114px)",
-                columnGap: "54px",
-                rowGap: "17px",
+                gridTemplateColumns: "repeat(3, 380px)",
+                gridTemplateRows: "repeat(8, 228px)",
+                columnGap: "108px",
+                rowGap: "34px",
                 backgroundColor: "#ffffff",
                 position: "relative",
                 overflow: "hidden"
@@ -1484,122 +1484,40 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
               {pageDevices.map((dev) => (
                 <div
                   key={dev.id}
+                  className="flex flex-row items-center justify-between p-6 relative select-none"
                   style={{
-                    width: "190px",
-                    height: "114px",
+                    width: "380px",
+                    height: "228px",
                     boxSizing: "border-box",
-                    display: "flex",
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "12px",
-                    borderRadius: "10px",
                     backgroundColor: dev.stickerColor || "#1e1b4b",
                     color: dev.fontColor || "#ffffff",
                     fontFamily: "Inter, Roboto, sans-serif",
-                    position: "relative",
-                    overflow: "hidden",
+                    borderRadius: "20px",
                     border: "1px solid rgba(120, 120, 120, 0.2)"
                   }}
                 >
                   {/* Left side details */}
-                  <div
-                    style={{
-                      flex: 1,
-                      display: "flex",
-                      flexDirection: "column",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      height: "100%",
-                      textAlign: "left",
-                      paddingRight: "6px"
-                    }}
-                  >
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
-                      <h2
-                        style={{
-                          fontSize: "6.5px",
-                          fontWeight: 900,
-                          letterSpacing: "0.25em",
-                          lineHeight: 1.1,
-                          textTransform: "uppercase",
-                          margin: 0
-                        }}
-                      >
-                        URBAN GAMING
-                      </h2>
-                      <p
-                        style={{
-                          fontSize: "4px",
-                          fontWeight: 900,
-                          letterSpacing: "0.1em",
-                          opacity: 0.85,
-                          marginTop: "2px",
-                          textTransform: "uppercase",
-                          margin: 0
-                        }}
-                      >
-                        {dev.type.startsWith("stik") ? "CONTROLLER" : DEVICE_LABELS[dev.type]}
+                  <div className="flex-1 flex flex-col justify-between items-start h-full text-left pr-5">
+                    <div className="flex flex-col items-start">
+                      <h2 className="text-[13px] font-black tracking-[0.25em] leading-tight select-none uppercase">URBAN GAMING</h2>
+                      <p className="text-[8px] font-black tracking-widest opacity-85 mt-1 uppercase select-none">
+                        {dev.type.startsWith("stik") 
+                          ? (dev.type === "stik_ps3" ? "STIK PS3" : "STIK PS4") 
+                          : DEVICE_LABELS[dev.type]}
                       </p>
                     </div>
 
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "3px" }}>
+                    <div className="flex flex-col items-start gap-1.5 mt-2">
+                      {/* Controller OP/OM side-by-side badges for crossing out */}
                       {dev.type.startsWith("stik") && (
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "3px",
-                            marginTop: "3px",
-                            marginBottom: "3px"
-                          }}
-                        >
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              width: "16px",
-                              height: "8px",
-                              borderRadius: "2px",
-                              border: "0.5px solid #000000",
-                              backgroundColor: "#000000",
-                              color: "#ffffff",
-                              fontSize: "4.5px",
-                              fontWeight: 900,
-                              lineHeight: 1,
-                              textAlign: "center"
-                            }}
-                          >OM</span>
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              width: "16px",
-                              height: "8px",
-                              borderRadius: "2px",
-                              border: "0.5px solid #000000",
-                              backgroundColor: "#ffffff",
-                              color: "#000000",
-                              fontSize: "4.5px",
-                              fontWeight: 900,
-                              lineHeight: 1,
-                              textAlign: "center"
-                            }}
-                          >OP</span>
+                        <div className="flex items-center gap-1.5 select-none my-0.5">
+                          {/* OM Badge: Black bg, white text */}
+                          <span className="inline-flex items-center justify-center w-8 h-4 rounded border border-black bg-black text-white text-[9px] font-black tracking-wider leading-none shadow-sm">OM</span>
+                          {/* OP Badge: White bg, black text */}
+                          <span className="inline-flex items-center justify-center w-8 h-4 rounded border border-black bg-white text-black text-[9px] font-black tracking-wider leading-none shadow-sm">OP</span>
                         </div>
                       )}
-                      <h1
-                        style={{
-                          fontSize: "24px",
-                          fontWeight: 900,
-                          fontFamily: "monospace",
-                          letterSpacing: "-0.05em",
-                          lineHeight: 1,
-                          margin: 0
-                        }}
-                      >
+                      <h1 className="text-5xl font-black font-mono tracking-tighter select-none leading-none">
                         {String(dev.number).padStart(2, "0")}
                       </h1>
                     </div>
@@ -1607,31 +1525,16 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
                   {/* Right side: QR Code */}
                   <div
-                    style={{
-                      padding: "6px",
-                      borderRadius: "8px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                      backgroundColor: "#ffffff",
-                      border:
-                        dev.stickerColor?.toLowerCase() === "#ffffff" || dev.stickerColor?.toLowerCase() === "#fff"
-                          ? "1px solid #e4e4e7"
-                          : "1px solid rgba(255,255,255,0.2)",
-                      width: "48px",
-                      height: "48px",
-                      boxSizing: "border-box"
-                    }}
+                    className={`p-3 rounded-2xl shadow-inner flex items-center justify-center shrink-0 border ${
+                      dev.stickerColor?.toLowerCase() === "#ffffff" || dev.stickerColor?.toLowerCase() === "#fff"
+                        ? "bg-white border-zinc-200"
+                        : "bg-white border-white/20"
+                    }`}
                   >
                     <img
                       src={preloadedQrCodes[dev.id]}
                       alt="QR Code"
-                      style={{
-                        width: "36px",
-                        height: "36px",
-                        objectFit: "contain"
-                      }}
+                      className="w-24 h-24 object-contain select-none"
                       crossOrigin="anonymous"
                     />
                   </div>
