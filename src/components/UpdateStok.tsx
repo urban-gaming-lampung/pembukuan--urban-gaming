@@ -136,12 +136,30 @@ const StokTable: React.FC<{
   );
 };
 
-const MasterInventarisForm = ({ type, catList, onAdd }: { type: "rental"|"jualan", catList: StokKategori[], onAdd: (tipe: "rental"|"jualan", cat: string, item: string)=>Promise<boolean> }) => {
+const MasterInventarisForm = ({ 
+  type, 
+  catList, 
+  onAdd, 
+  isOwner 
+}: { 
+  type: "rental" | "jualan"; 
+  catList: StokKategori[]; 
+  onAdd: (tipe: "rental" | "jualan", cat: string, item: string) => Promise<boolean>; 
+  isOwner?: boolean;
+}) => {
    const [kategori, setKategori] = useState(catList[0]?.kategori || "");
    const [isNewCat, setIsNewCat] = useState(false);
    const [newCatName, setNewCatName] = useState("");
    const [itemName, setItemName] = useState("");
    const [loading, setLoading] = useState(false);
+   const [isAdding, setIsAdding] = useState(false);
+
+   // Sync default category if list changes
+   React.useEffect(() => {
+     if (catList.length > 0 && (!kategori || !catList.some(c => c.kategori === kategori))) {
+       setKategori(catList[0].kategori);
+     }
+   }, [catList]);
 
    const handleSimpan = async () => {
        if (!itemName.trim()) return;
@@ -157,6 +175,7 @@ const MasterInventarisForm = ({ type, catList, onAdd }: { type: "rental"|"jualan
                setKategori(finalCat.toUpperCase());
                setNewCatName("");
            }
+           setIsAdding(false); // Close form after successful save
        } else {
            alert("Item sudah ada di kategori ini atau terjadi kesalahan.");
        }
@@ -164,43 +183,74 @@ const MasterInventarisForm = ({ type, catList, onAdd }: { type: "rental"|"jualan
    };
 
    return (
-        <div className="bg-white/70 dark:bg-[#1C1C1E]/60 backdrop-blur-2xl ring-1 ring-zinc-200/50 dark:ring-white/10 p-6 rounded-[32px] mb-6 flex flex-col gap-5 shadow-xl shadow-black/5 relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/10 dark:bg-blue-500/20 blur-3xl rounded-full translate-x-1/4 -translate-y-1/4 pointer-events-none" />
-            <h3 className="text-[13px] font-black text-zinc-800 dark:text-zinc-200 capitalize tracking-wider flex items-center gap-2 z-10">
-               <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse shadow-sm shadow-blue-500/50"></span>
-               MASTER INVENTARIS (OWNER)
-            </h3>
-            <div className="flex flex-col sm:flex-row gap-4 z-10 w-full mt-1">
-               <div className="flex-[1.5] flex flex-col gap-2">
-                  <label className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider ml-1">Kategori</label>
-                  <select 
-                     value={isNewCat ? "NEW" : kategori}
-                     onChange={(e) => {
-                        if (e.target.value === "NEW") setIsNewCat(true);
-                        else { setIsNewCat(false); setKategori(e.target.value); }
-                     }}
-                     className="w-full bg-zinc-100/50 dark:bg-black/20 ring-1 ring-black/5 dark:ring-white/10 rounded-[16px] px-4 py-3 text-[13px] font-bold text-zinc-900 dark:text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all shadow-sm"
-                  >
-                     {catList.map(c => <option key={c.kategori} value={c.kategori}>{c.kategori}</option>)}
-                     <option value="NEW" className="font-bold text-blue-600 dark:text-blue-400">+ BUAT KATEGORI BARU</option>
-                  </select>
-                  {isNewCat && (
-                     <input type="text" placeholder="Ketik nama kategori..." value={newCatName} onChange={e => setNewCatName(e.target.value)} className="w-full mt-1 bg-zinc-100/50 dark:bg-black/20 ring-1 ring-black/5 dark:ring-white/10 rounded-[16px] px-4 py-3 text-[13px] font-bold uppercase text-zinc-900 dark:text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all shadow-sm" />
-                  )}
-               </div>
-               <div className="flex-[2] flex flex-col gap-2">
-                  <label className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider ml-1">Nama Barang / Unit Baru</label>
-                  <input type="text" placeholder="Contoh: Kopi Susu" value={itemName} onChange={e => setItemName(e.target.value)} className="w-full bg-zinc-100/50 dark:bg-black/20 ring-1 ring-black/5 dark:ring-white/10 rounded-[16px] px-4 py-3 text-[13px] font-bold capitalize text-zinc-900 dark:text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all shadow-sm" />
-               </div>
-               <div className="flex flex-col gap-2 justify-end">
-                  <button disabled={loading || !itemName || (isNewCat && !newCatName)} onClick={handleSimpan} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold px-6 py-3 rounded-[16px] transition-all text-[13px] tracking-wide flex items-center justify-center shadow-lg shadow-blue-500/25 active:scale-95 h-full max-h-[46px] sm:max-h-full sm:h-[46px]">
-                     {loading ? "..." : "Simpan Item"}
-                  </button>
-               </div>
-            </div>
-        </div>
-    )
-}
+         <div className="bg-white/70 dark:bg-[#1C1C1E]/60 backdrop-blur-2xl ring-1 ring-zinc-200/50 dark:ring-white/10 p-6 rounded-[32px] mb-6 flex flex-col gap-5 shadow-xl shadow-black/5 relative overflow-hidden group">
+             <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/10 dark:bg-blue-500/20 blur-3xl rounded-full translate-x-1/4 -translate-y-1/4 pointer-events-none" />
+             
+             <div className="flex items-center justify-between z-10 w-full">
+                <h3 className="text-[13px] font-black text-zinc-800 dark:text-zinc-200 capitalize tracking-wider flex items-center gap-2">
+                   <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse shadow-sm shadow-blue-500/50"></span>
+                   MASTER INVENTARIS {isOwner ? "(OWNER)" : ""}
+                </h3>
+                {isOwner && (
+                   <button
+                      onClick={() => setIsAdding(!isAdding)}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-white dark:bg-black text-blue-600 dark:text-blue-400 font-bold border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-all shadow-sm"
+                   >
+                      {isAdding ? "Batal" : "Tambah Item"}
+                   </button>
+                )}
+             </div>
+
+             {isAdding && isOwner ? (
+                <div className="flex flex-col sm:flex-row gap-4 z-10 w-full mt-1 animate-in fade-in slide-in-from-top-2 duration-300">
+                   <div className="flex-[1.5] flex flex-col gap-2">
+                      <label className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider ml-1">Kategori</label>
+                      <select 
+                         value={isNewCat ? "NEW" : kategori}
+                         onChange={(e) => {
+                            if (e.target.value === "NEW") setIsNewCat(true);
+                            else { setIsNewCat(false); setKategori(e.target.value); }
+                         }}
+                         className="w-full bg-zinc-100/50 dark:bg-black/20 ring-1 ring-black/5 dark:ring-white/10 rounded-[16px] px-4 py-3 text-[13px] font-bold text-zinc-900 dark:text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all shadow-sm"
+                      >
+                         {catList.map(c => <option key={c.kategori} value={c.kategori}>{c.kategori}</option>)}
+                         <option value="NEW" className="font-bold text-blue-600 dark:text-blue-400">+ BUAT KATEGORI BARU</option>
+                      </select>
+                      {isNewCat && (
+                         <input type="text" placeholder="Ketik nama kategori..." value={newCatName} onChange={e => setNewCatName(e.target.value)} className="w-full mt-1 bg-zinc-100/50 dark:bg-black/20 ring-1 ring-black/5 dark:ring-white/10 rounded-[16px] px-4 py-3 text-[13px] font-bold uppercase text-zinc-900 dark:text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all shadow-sm" />
+                      )}
+                   </div>
+                   <div className="flex-[2] flex flex-col gap-2">
+                      <label className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider ml-1">Nama Barang / Unit Baru</label>
+                      <input type="text" placeholder="Contoh: Kopi Susu" value={itemName} onChange={e => setItemName(e.target.value)} className="w-full bg-zinc-100/50 dark:bg-black/20 ring-1 ring-black/5 dark:ring-white/10 rounded-[16px] px-4 py-3 text-[13px] font-bold capitalize text-zinc-900 dark:text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all shadow-sm" />
+                   </div>
+                   <div className="flex flex-col gap-2 justify-end">
+                      <button disabled={loading || !itemName || (isNewCat && !newCatName)} onClick={handleSimpan} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold px-6 py-3 rounded-[16px] transition-all text-[13px] tracking-wide flex items-center justify-center shadow-lg shadow-blue-500/25 active:scale-95 h-full max-h-[46px] sm:max-h-full sm:h-[46px]">
+                         {loading ? "..." : "Simpan Item"}
+                      </button>
+                   </div>
+                </div>
+             ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-1 z-10 animate-in fade-in duration-300">
+                   {catList.map(c => (
+                      <div key={c.kategori} className="bg-zinc-50/50 dark:bg-black/20 p-4 rounded-2xl border border-zinc-200/50 dark:border-white/5 flex flex-col gap-2">
+                         <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest leading-none">
+                            {c.kategori.replace("UPDATE ", "")}
+                         </span>
+                         <div className="flex flex-wrap gap-1.5 mt-1">
+                            {c.items.map(item => (
+                               <span key={item} className="text-xs px-2.5 py-1 bg-white dark:bg-zinc-900/60 border border-zinc-200/60 dark:border-white/5 text-zinc-700 dark:text-zinc-300 font-bold rounded-lg shadow-sm">
+                                  {item}
+                               </span>
+                            ))}
+                         </div>
+                      </div>
+                   ))}
+                </div>
+             )}
+         </div>
+    );
+};
 
 type UpdateStokProps = {
   adminName?: string;
@@ -239,11 +289,11 @@ export default function UpdateStok({ adminName, isOwner, stokState, updateStok, 
         </button>
       </div>
 
-      {isOwner && activeSubTab === "RENTAL" && (
-         <MasterInventarisForm type="rental" catList={masterCategories.rental} onAdd={addStokItem} />
+      {activeSubTab === "RENTAL" && (
+         <MasterInventarisForm type="rental" catList={masterCategories.rental} onAdd={addStokItem} isOwner={isOwner} />
       )}
-      {isOwner && activeSubTab === "JUALAN" && (
-         <MasterInventarisForm type="jualan" catList={masterCategories.jualan} onAdd={addStokItem} />
+      {activeSubTab === "JUALAN" && (
+         <MasterInventarisForm type="jualan" catList={masterCategories.jualan} onAdd={addStokItem} isOwner={isOwner} />
       )}
 
       {activeSubTab === "RENTAL" ? (
