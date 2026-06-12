@@ -581,10 +581,11 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       const pdf = new jsPDF({
         orientation: "portrait",
         unit: "mm",
-        format: "a4"
+        format: "a4",
+        compress: true
       });
 
-      const scale = 3; // 3x scale untuk kualitas cetak tinggi
+      const scale = 2.5; // 2.5x scale memberikan keseimbangan ketajaman cetak & ukuran file optimal
       
       for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
         setPdfLoadingText(`Merender halaman ${pageIdx + 1} dari ${pages.length}...`);
@@ -602,13 +603,13 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
           logging: false
         });
 
-        const imgData = canvas.toDataURL("image/png");
+        const imgData = canvas.toDataURL("image/jpeg", 0.82);
 
         if (pageIdx > 0) {
           pdf.addPage();
         }
 
-        pdf.addImage(imgData, "PNG", 0, 0, 210, 297);
+        pdf.addImage(imgData, "JPEG", 0, 0, 210, 297, undefined, "FAST");
         setPdfProgress(Math.round(50 + ((pageIdx + 1) / pages.length) * 45));
       }
 
@@ -1078,14 +1079,10 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                         {/* Controller OP/OM side-by-side badges for crossing out */}
                         {genType.startsWith("stik") && (
                            <div className="flex items-center gap-1.5 select-none my-0.5">
-                             {/* OM Badge: Black bg, white text */}
-                             <span className="px-2.5 py-0.5 rounded border border-black bg-black text-white text-[9px] font-black tracking-wider leading-none shadow-sm">
-                               OM
-                             </span>
-                             {/* OP Badge: White bg, black text */}
-                             <span className="px-2.5 py-0.5 rounded border border-black bg-white text-black text-[9px] font-black tracking-wider leading-none shadow-sm">
-                               OP
-                             </span>
+                              {/* OM Badge: Black bg, white text */}
+                              <span className="inline-flex items-center justify-center w-8 h-4 rounded border border-black bg-black text-white text-[9px] font-black tracking-wider leading-none shadow-sm">OM</span>
+                              {/* OP Badge: White bg, black text */}
+                              <span className="inline-flex items-center justify-center w-8 h-4 rounded border border-black bg-white text-black text-[9px] font-black tracking-wider leading-none shadow-sm">OP</span>
                            </div>
                          )}
                           <h1 className="text-5xl font-black font-mono tracking-tighter select-none leading-none">
@@ -1559,34 +1556,36 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                         >
                           <span
                             style={{
-                              padding: "0.2mm 0.8mm",
-                              borderRadius: "0.4mm",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              width: "5.2mm",
+                              height: "2.8mm",
+                              borderRadius: "0.6mm",
                               border: "0.15mm solid #000000",
                               backgroundColor: "#000000",
                               color: "#ffffff",
-                              fontSize: "1.1mm",
+                              fontSize: "1.3mm",
                               fontWeight: 900,
-                              letterSpacing: "0.05em",
                               lineHeight: 1
                             }}
-                          >
-                            OM
-                          </span>
+                          >OM</span>
                           <span
                             style={{
-                              padding: "0.2mm 0.8mm",
-                              borderRadius: "0.4mm",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              width: "5.2mm",
+                              height: "2.8mm",
+                              borderRadius: "0.6mm",
                               border: "0.15mm solid #000000",
                               backgroundColor: "#ffffff",
                               color: "#000000",
-                              fontSize: "1.1mm",
+                              fontSize: "1.3mm",
                               fontWeight: 900,
-                              letterSpacing: "0.05em",
                               lineHeight: 1
                             }}
-                          >
-                            OP
-                          </span>
+                          >OP</span>
                         </div>
                       )}
                       <h1
