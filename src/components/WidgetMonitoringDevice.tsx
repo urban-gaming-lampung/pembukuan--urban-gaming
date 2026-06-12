@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { 
   QrCode, ScanLine, Camera, Gamepad2, Monitor, Smartphone, 
   Plus, Trash2, Edit, Save, CheckCircle2, XCircle, AlertCircle, 
@@ -196,6 +197,12 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
     setScanningError(null);
     setTimeout(async () => {
       try {
+        const element = document.getElementById("qr-reader-view");
+        if (!element) {
+          console.warn("qr-reader-view not found in DOM yet");
+          return;
+        }
+
         const html5QrCode = new Html5Qrcode("qr-reader-view");
         qrCodeRef.current = html5QrCode;
         
@@ -207,17 +214,47 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
           }
         };
         
-        await html5QrCode.start(
-          { facingMode: "environment" },
-          config,
-          (decodedText) => {
-            handleScannedId(decodedText);
-            stopScanning();
-          },
-          (errorMessage) => {
-            // Scan silently
+        // Try environment/back camera first
+        try {
+          await html5QrCode.start(
+            { facingMode: "environment" },
+            config,
+            (decodedText) => {
+              handleScannedId(decodedText);
+              stopScanning();
+            },
+            () => {} // scan silently
+          );
+        } catch (firstErr) {
+          console.warn("Failed back camera, trying front camera...", firstErr);
+          try {
+            await html5QrCode.start(
+              { facingMode: "user" },
+              config,
+              (decodedText) => {
+                handleScannedId(decodedText);
+                stopScanning();
+              },
+              () => {} // scan silently
+            );
+          } catch (secondErr) {
+            console.warn("Failed front camera, trying default available camera...", secondErr);
+            const devices = await Html5Qrcode.getCameras();
+            if (devices && devices.length > 0) {
+              await html5QrCode.start(
+                devices[0].id,
+                config,
+                (decodedText) => {
+                  handleScannedId(decodedText);
+                  stopScanning();
+                },
+                () => {} // scan silently
+              );
+            } else {
+              throw new Error("No camera devices found");
+            }
           }
-        );
+        }
       } catch (err: any) {
         console.error("Camera access error:", err);
         setScanningError("Gagal mengakses kamera. Pastikan izin kamera telah diberikan atau gunakan opsi Upload Gambar.");
@@ -1128,8 +1165,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       <div id="qr-reader-file-temp" className="hidden" />
 
       {/* Modal 1: QR Scanner Modal (Floating) */}
-      {showScanner && (
-        <div className="fixed inset-0 z-[800] flex items-center justify-center p-4">
+      {showScanner && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={stopScanning}></div>
           <div className="relative w-full max-w-md bg-zinc-950 rounded-[32px] overflow-hidden border border-white/10 shadow-2xl z-10 animate-in zoom-in-95 duration-200">
             
@@ -1164,7 +1201,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
             </div>
 
             {scanningError && (
-              <div className="absolute inset-0 bg-zinc-955 flex flex-col items-center justify-center p-6 text-center z-20">
+              <div className="absolute inset-0 bg-zinc-950 flex flex-col items-center justify-center p-6 text-center z-20">
                 <AlertCircle className="w-12 h-12 text-red-500 mb-3 animate-bounce" />
                 <p className="text-sm text-zinc-300 font-bold mb-4">{scanningError}</p>
                 <div className="flex flex-col gap-2 w-full">
@@ -1180,12 +1217,13 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
             )}
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal 2: Status Update Modal (Baik/Rusak + Keterangan) */}
-      {updatingDevice && (
-        <div className="fixed inset-0 z-[800] flex items-center justify-center p-4">
+      {updatingDevice && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setUpdatingDevice(null)}></div>
           <div className="bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-2xl rounded-[32px] p-6 max-w-sm w-full shadow-2xl shadow-black/30 border border-zinc-100 dark:border-white/10 relative z-10 animate-in zoom-in-95 duration-200">
             
@@ -1264,7 +1302,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
