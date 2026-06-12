@@ -510,7 +510,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                     : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
                 }`}
               >
-                <History className="w-3.5 h-3.5" /> Riwayat & Master
+                <History className="w-3.5 h-3.5" /> Riwayat Sticker
               </button>
             </div>
           )}
@@ -552,6 +552,56 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                       className="hidden"
                     />
                   </label>
+                </div>
+              </div>
+
+              {/* Master Inventaris Card (Visible to both Owner and Admin) */}
+              <div className="bg-zinc-50 dark:bg-[#1C1C1E] p-5 rounded-[24px] border border-zinc-200 dark:border-white/5 shadow-inner w-full">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-bold tracking-widest uppercase text-zinc-900 dark:text-white flex items-center gap-2">
+                    <Save className="w-4 h-4 text-emerald-500" /> Master Inventaris Device
+                  </h3>
+                  {isOwner && (
+                    <button
+                      onClick={() => {
+                        if (isEditingMaster) handleSaveMaster();
+                        else setIsEditingMaster(true);
+                      }}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-white dark:bg-black text-emerald-600 dark:text-emerald-405 font-bold border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-all shadow-sm"
+                    >
+                      {isEditingMaster ? "Simpan" : "Edit"}
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {(Object.keys(DEVICE_LABELS) as DeviceType[]).map((type) => {
+                    let inputIcon = <Gamepad2 className="w-4 h-4 text-emerald-500" />;
+                    if (type.startsWith("stik")) inputIcon = <Gamepad2 className="w-4 h-4 text-blue-500" />;
+                    if (type === "tv") inputIcon = <Monitor className="w-4 h-4 text-purple-500" />;
+                    if (type === "playbox") inputIcon = <Smartphone className="w-4 h-4 text-amber-500" />;
+
+                    return (
+                      <div key={type} className="flex flex-col gap-1.5 bg-white dark:bg-black border border-zinc-200/80 dark:border-zinc-800 rounded-2xl p-3 items-center justify-center shadow-sm">
+                        <div className="flex items-center gap-1 text-[9px] font-black text-zinc-400 uppercase tracking-wider text-center truncate w-full justify-center">
+                          {inputIcon} <span className="truncate">{DEVICE_LABELS[type]}</span>
+                        </div>
+                        {isEditingMaster && isOwner ? (
+                          <input
+                            type="number"
+                            min="0"
+                            value={tempCapacities[type]}
+                            onChange={(e) => setTempCapacities({ ...tempCapacities, [type]: e.target.value })}
+                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2 py-1 text-zinc-900 dark:text-white font-mono font-bold text-sm text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        ) : (
+                          <div className="w-full text-zinc-900 dark:text-white font-mono font-black text-base text-center py-0.5 select-none">
+                            {masterCapacities[type]}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -908,58 +958,6 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
           {/* Tab 3: History & Master Settings (Owner Only) */}
           {isOwner && activeSubTab === "history" && (
             <div className="flex flex-col gap-8 z-10 w-full animate-in fade-in duration-300">
-              
-              {/* Master Inventaris Settings */}
-              <div className="bg-zinc-50 dark:bg-white/5 p-5 sm:p-6 rounded-3xl border border-zinc-200 dark:border-white/5 shadow-sm">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-sm font-black tracking-widest uppercase text-zinc-900 dark:text-white flex items-center gap-2">
-                    <Save className="w-4 h-4 text-emerald-500" /> Pengaturan Kapasitas Alat
-                  </h3>
-                  <button
-                    onClick={() => {
-                      if (isEditingMaster) handleSaveMaster();
-                      else setIsEditingMaster(true);
-                    }}
-                    className="text-xs px-4 py-2.5 rounded-xl bg-white dark:bg-black text-emerald-600 dark:text-emerald-400 font-bold border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-all flex items-center gap-1.5 shadow-sm"
-                  >
-                    {isEditingMaster ? (
-                      <>Simpan Kapasitas</>
-                    ) : (
-                      <>Edit Kapasitas</>
-                    )}
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                  {(Object.keys(DEVICE_LABELS) as DeviceType[]).map((type) => {
-                    let inputIcon = <Gamepad2 className="w-4 h-4 text-emerald-500" />;
-                    if (type.startsWith("stik")) inputIcon = <Gamepad2 className="w-4 h-4 text-blue-500" />;
-                    if (type === "tv") inputIcon = <Monitor className="w-4 h-4 text-purple-500" />;
-                    if (type === "playbox") inputIcon = <Smartphone className="w-4 h-4 text-amber-500" />;
-
-                    return (
-                      <div key={type} className="bg-white dark:bg-black border border-zinc-200/80 dark:border-zinc-800 rounded-2xl p-4 flex flex-col items-center gap-2 shadow-inner">
-                        <div className="flex items-center gap-1 text-[9px] font-black text-zinc-400 uppercase tracking-wider text-center truncate w-full justify-center">
-                          {inputIcon} <span className="truncate">{DEVICE_LABELS[type]}</span>
-                        </div>
-                        {isEditingMaster ? (
-                          <input
-                            type="number"
-                            min="0"
-                            value={tempCapacities[type]}
-                            onChange={(e) => setTempCapacities({ ...tempCapacities, [type]: e.target.value })}
-                            className="w-full bg-zinc-55 dark:bg-zinc-900 border border-zinc-250 dark:border-zinc-800 rounded-xl px-2 py-1.5 text-zinc-900 dark:text-white font-mono font-bold text-base text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          />
-                        ) : (
-                          <div className="w-full text-zinc-900 dark:text-white font-mono font-black text-xl text-center py-1 select-none">
-                            {masterCapacities[type]}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
 
               {/* History Section */}
               <div className="flex flex-col gap-4 text-left">
