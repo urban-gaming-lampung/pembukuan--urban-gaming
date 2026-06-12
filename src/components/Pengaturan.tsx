@@ -1449,6 +1449,52 @@ const Pengaturan: React.FC<Props> = ({
                   </div>
                 )}
               </div>
+
+              {/* Card 7: Cara Install HEN di PS3 */}
+              <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+                <div
+                  className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  onClick={() => setSopExpanded(sopExpanded === 7 ? null : 7)}
+                >
+                  <span className="font-bold text-[14px] text-zinc-800 dark:text-zinc-100">CARA INSTALL HEN DI PS3 (FW 4.90 / 4.91 HFW)</span>
+                  <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${sopExpanded === 7 ? 'rotate-180' : ''}`} />
+                </div>
+                {sopExpanded === 7 && (
+                  <div className="p-4 bg-white dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-700 animate-in slide-in-from-top-2 duration-200 space-y-4">
+                    <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-950/40 p-3 rounded-xl flex gap-2.5">
+                      <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                      <span className="text-xs text-blue-800 dark:text-blue-300">
+                        <b>Catatan:</b> Proses instalasi HEN terbagi menjadi 2 tahap besar, yaitu <b>install Hybrid Firmware (HFW)</b> terlebih dahulu lewat USB flashdisk, kemudian mengaktifkan <b>explot HEN via Browser internet PS3</b>.
+                      </span>
+                    </div>
+
+                    <div>
+                      <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase mb-1">Tahap 1: Instalasi Hybrid Firmware (HFW)</h4>
+                      <ul className="list-decimal pl-5 space-y-1.5 text-[13px] text-zinc-600 dark:text-zinc-300">
+                        <li>Siapkan USB Flashdisk (format ke <b>FAT32</b>).</li>
+                        <li>Download file HFW yang sesuai dengan versi sistem Anda (misal: 4.91 HFW).</li>
+                        <li>Di dalam flashdisk, buat struktur folder: <code>PS3</code> &gt; <code>UPDATE</code> (gunakan huruf kapital).</li>
+                        <li>Copy/salin file HFW ke dalam folder <code>UPDATE</code> dan ubah nama filenya menjadi <code>PS3UPDAT.PUP</code>.</li>
+                        <li>Hubungkan USB Flashdisk ke port USB kanan PS3, masuk ke menu <b>Settings</b> &gt; <b>System Update</b> &gt; <b>Update via Storage Media</b>. Ikuti petunjuk untuk menyelesaikan update. *(Disarankan install HFW 2x berturut-turut agar instalasi bersih).*</li>
+                      </ul>
+                    </div>
+
+                    <div>
+                      <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase mb-1">Tahap 2: Pemasangan PS3HEN via Web Browser</h4>
+                      <ul className="list-decimal pl-5 space-y-1.5 text-[13px] text-zinc-600 dark:text-zinc-300">
+                        <li>Hubungkan PS3 ke jaringan Internet yang stabil (Wi-Fi/LAN).</li>
+                        <li>Buka aplikasi <b>Internet Browser</b> bawaan PS3.</li>
+                        <li>Tekan tombol <b>Triangle (Segitiga)</b> &gt; masuk ke <b>Tools</b> &gt; bersihkan semua <b>Cookies, Search History, Cache, dan Authentication Info</b>.</li>
+                        <li>Tekan <b>Start</b>, masukkan alamat situs exploit terpercaya (misal: <code>https://ps3xploit.me</code> atau <code>https://ps3addict.github.io/autohen</code>).</li>
+                        <li>Pilih menu **PS3HEN** &gt; **HEN Auto Installer** (atau ikuti instruksi auto-installer di layar).</li>
+                        <li>Klik tombol <b>Initialize HEN Installer</b>, lalu klik <b>Install HEN</b> setelah inisialisasi selesai.</li>
+                        <li>Browser akan mendownload package dan menginstalnya otomatis. Setelah sukses 100%, keluar dari browser atau restart PS3 Anda.</li>
+                        <li>Setelah restart, ikon <b>Enable HEN (Telur Emas)</b> akan muncul di menu Game XMB. Klik ikon tersebut setiap kali PS3 baru dinyalakan untuk mengaktifkan mode jailbreak.</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </IOSGroup>
         </div>
