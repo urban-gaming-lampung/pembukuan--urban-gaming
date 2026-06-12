@@ -1092,56 +1092,32 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                         {/* Controller OP/OM side-by-side badges for crossing out */}
                         {genType.startsWith("stik") && (
                            <div className="flex items-center gap-1.5 select-none my-0.5" style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
-                              {/* OM Badge: Black bg, white text */}
-                              <span
-                                style={{
-                                  display: "inline-table",
-                                  width: "32px",
-                                  height: "16px",
-                                  borderRadius: "4px",
-                                  border: "1px solid #000000",
-                                  backgroundColor: "#000000",
-                                  boxSizing: "border-box",
-                                  verticalAlign: "middle"
-                                }}
-                              >
-                                <span
-                                  style={{
-                                    display: "table-cell",
-                                    verticalAlign: "middle",
-                                    textAlign: "center",
-                                    fontSize: "9px",
-                                    fontWeight: 900,
-                                    color: "#ffffff",
-                                    lineHeight: 1
-                                  }}
-                                >OM</span>
-                              </span>
-                              {/* OP Badge: White bg, black text */}
-                              <span
-                                style={{
-                                  display: "inline-table",
-                                  width: "32px",
-                                  height: "16px",
-                                  borderRadius: "4px",
-                                  border: "1px solid #000000",
-                                  backgroundColor: "#ffffff",
-                                  boxSizing: "border-box",
-                                  verticalAlign: "middle"
-                                }}
-                              >
-                                <span
-                                  style={{
-                                    display: "table-cell",
-                                    verticalAlign: "middle",
-                                    textAlign: "center",
-                                    fontSize: "9px",
-                                    fontWeight: 900,
-                                    color: "#000000",
-                                    lineHeight: 1
-                                  }}
-                                >OP</span>
-                              </span>
+                              {/* OM Badge: Black bg, white text SVG */}
+                              <svg width="32" height="16" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                                <rect width="32" height="16" rx="4" fill="#000000" />
+                                <text 
+                                  x="16" 
+                                  y="11" 
+                                  textAnchor="middle" 
+                                  fontFamily="Inter, Roboto, sans-serif" 
+                                  fontWeight="900" 
+                                  fontSize="9" 
+                                  fill="#ffffff"
+                                >OM</text>
+                              </svg>
+                              {/* OP Badge: White bg, black text SVG */}
+                              <svg width="32" height="16" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                                <rect x="0.5" y="0.5" width="31" height="15" rx="3.5" fill="#ffffff" stroke="#000000" strokeWidth="1" />
+                                <text 
+                                  x="16" 
+                                  y="11" 
+                                  textAnchor="middle" 
+                                  fontFamily="Inter, Roboto, sans-serif" 
+                                  fontWeight="900" 
+                                  fontSize="9" 
+                                  fill="#000000"
+                                >OP</text>
+                              </svg>
                            </div>
                          )}
                           <h1 className="text-5xl font-black font-mono tracking-tighter select-none leading-none">
@@ -1570,56 +1546,32 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                       {/* Controller OP/OM side-by-side badges for crossing out */}
                       {dev.type.startsWith("stik") && (
                         <div className="flex items-center gap-1.5 select-none my-0.5" style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
-                          {/* OM Badge: Black bg, white text */}
-                          <span
-                            style={{
-                              display: "inline-table",
-                              width: "32px",
-                              height: "16px",
-                              borderRadius: "4px",
-                              border: "1px solid #000000",
-                              backgroundColor: "#000000",
-                              boxSizing: "border-box",
-                              verticalAlign: "middle"
-                            }}
-                          >
-                            <span
-                              style={{
-                                display: "table-cell",
-                                verticalAlign: "middle",
-                                textAlign: "center",
-                                fontSize: "9px",
-                                fontWeight: 900,
-                                color: "#ffffff",
-                                lineHeight: 1
-                              }}
-                            >OM</span>
-                          </span>
-                          {/* OP Badge: White bg, black text */}
-                          <span
-                            style={{
-                              display: "inline-table",
-                              width: "32px",
-                              height: "16px",
-                              borderRadius: "4px",
-                              border: "1px solid #000000",
-                              backgroundColor: "#ffffff",
-                              boxSizing: "border-box",
-                              verticalAlign: "middle"
-                            }}
-                          >
-                            <span
-                              style={{
-                                display: "table-cell",
-                                verticalAlign: "middle",
-                                textAlign: "center",
-                                fontSize: "9px",
-                                fontWeight: 900,
-                                color: "#000000",
-                                lineHeight: 1
-                              }}
-                            >OP</span>
-                          </span>
+                          {/* OM Badge: Black bg, white text SVG */}
+                          <svg width="32" height="16" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                            <rect width="32" height="16" rx="4" fill="#000000" />
+                            <text 
+                              x="16" 
+                              y="11" 
+                              textAnchor="middle" 
+                              fontFamily="Inter, Roboto, sans-serif" 
+                              fontWeight="900" 
+                              fontSize="9" 
+                              fill="#ffffff"
+                            >OM</text>
+                          </svg>
+                          {/* OP Badge: White bg, black text SVG */}
+                          <svg width="32" height="16" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                            <rect x="0.5" y="0.5" width="31" height="15" rx="3.5" fill="#ffffff" stroke="#000000" strokeWidth="1" />
+                            <text 
+                              x="16" 
+                              y="11" 
+                              textAnchor="middle" 
+                              fontFamily="Inter, Roboto, sans-serif" 
+                              fontWeight="900" 
+                              fontSize="9" 
+                              fill="#000000"
+                            >OP</text>
+                          </svg>
                         </div>
                       )}
                       <h1 className="text-5xl font-black font-mono tracking-tighter select-none leading-none">
