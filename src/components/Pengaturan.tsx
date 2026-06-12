@@ -2,7 +2,43 @@ import React, { useMemo, useState, useEffect } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { collection, addDoc, deleteDoc, onSnapshot, query, doc, updateDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { Trash2, Pencil } from "lucide-react";
+import {
+  Settings,
+  Bot,
+  Wallet,
+  FileText,
+  Cloud,
+  Upload,
+  Trash2,
+  ClipboardList,
+  Info,
+  User,
+  LogOut,
+  CreditCard,
+  Sparkles,
+  Zap,
+  Gamepad2,
+  Coffee,
+  Wrench,
+  Truck,
+  Save,
+  FolderOpen,
+  FileSpreadsheet,
+  Pin,
+  BookOpen,
+  Lightbulb,
+  Phone,
+  Lock,
+  ChevronLeft,
+  X,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  Check,
+  Pencil,
+  Plus,
+  ChevronRight
+} from "lucide-react";
 // import SopPdf from "../SOP/SOP_SewaPS_URBAN.pdf";
 
 interface Price {
@@ -98,13 +134,6 @@ const compressImage = (file: File, maxWidth: number, maxHeight: number, quality:
   });
 };
 
-const LockIcon = ({ size = 16, className }: { size?: number, className?: string }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-  </svg>
-);
-
 // --- Apple Design Components ---
 const IOSGroup = ({ children, title, className = "" }: { children: React.ReactNode; title?: string; className?: string }) => (
   <div className={`mb-6 ${className}`}>
@@ -129,7 +158,7 @@ const IOSRow = ({
   chevron = true,
   destructive = false,
 }: {
-  icon?: string;
+  icon?: React.ReactNode;
   iconColor?: string;
   label: string;
   value?: React.ReactNode;
@@ -147,7 +176,7 @@ const IOSRow = ({
     <div className="flex items-center gap-3 min-w-0">
       {icon && (
         <div
-          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-[15px] shadow-sm text-white ${iconColor || "bg-zinc-500"
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] shadow-sm text-white ${iconColor || "bg-zinc-500"
             }`}
         >
           {icon}
@@ -162,7 +191,7 @@ const IOSRow = ({
     </div>
     <div className="flex items-center gap-2 shrink-0">
       {value && <span className="text-[15px] text-zinc-500 dark:text-zinc-400">{value}</span>}
-      {chevron && onClick && <span className="text-zinc-400 dark:text-zinc-500 text-lg">›</span>}
+      {chevron && onClick && <ChevronRight className="w-4 h-4 text-zinc-400 dark:text-zinc-500" />}
     </div>
   </button>
 );
@@ -172,7 +201,7 @@ const SegmentedControl = <T extends string>({
   value,
   onChange,
 }: {
-  options: { value: T; label: string; icon?: string }[];
+  options: { value: T; label: string; icon?: React.ReactNode }[];
   value: T;
   onChange: (val: T) => void;
 }) => (
@@ -188,7 +217,7 @@ const SegmentedControl = <T extends string>({
             : "text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
             }`}
         >
-          {opt.icon && <span>{opt.icon}</span>}
+          {opt.icon && <span className="flex items-center justify-center">{opt.icon}</span>}
           {opt.label}
         </button>
       );
@@ -351,15 +380,15 @@ const Pengaturan: React.FC<Props> = ({
 
   const menu = useMemo(() => {
     const allMenus = [
-      { key: "general" as const, label: "Umum", icon: "⚙️", color: "bg-zinc-500" },
-      { key: "asisten" as const, label: "Asisten", icon: "🤖", color: "bg-cyan-500" },
-      { key: "gaji" as const, label: "Gaji Saya", icon: "💰", color: "bg-emerald-500" },
-      { key: "edit" as const, label: "Edit Rincian", icon: "📝", color: "bg-blue-500" },
-      { key: "backup" as const, label: "Backup & Restore", icon: "☁️", color: "bg-green-500" },
-      { key: "export" as const, label: "Export Data", icon: "📤", color: "bg-orange-500" },
-      { key: "reset" as const, label: "Reset", icon: "🗑️", color: "bg-red-500" },
-      { key: "sop" as const, label: "SOP", icon: "📋", color: "bg-teal-500" },
-      { key: "info" as const, label: "Info", icon: "ℹ️", color: "bg-indigo-500" },
+      { key: "general" as const, label: "Umum", icon: <Settings size={15} />, color: "bg-zinc-500" },
+      { key: "asisten" as const, label: "Asisten", icon: <Bot size={15} />, color: "bg-cyan-500" },
+      { key: "gaji" as const, label: "Gaji Saya", icon: <Wallet size={15} />, color: "bg-emerald-500" },
+      { key: "edit" as const, label: "Edit Rincian", icon: <FileText size={15} />, color: "bg-blue-500" },
+      { key: "backup" as const, label: "Backup & Restore", icon: <Cloud size={15} />, color: "bg-green-500" },
+      { key: "export" as const, label: "Export Data", icon: <Upload size={15} />, color: "bg-orange-500" },
+      { key: "reset" as const, label: "Reset", icon: <Trash2 size={15} />, color: "bg-red-500" },
+      { key: "sop" as const, label: "Panduan", icon: <ClipboardList size={15} />, color: "bg-teal-500" },
+      { key: "info" as const, label: "Info", icon: <Info size={15} />, color: "bg-indigo-500" },
     ];
     if (!isOwner) {
       const filtered = allMenus.filter(m => !["asisten", "edit", "backup", "export", "reset"].includes(m.key));
@@ -608,7 +637,7 @@ const Pengaturan: React.FC<Props> = ({
             <div className="p-6 flex flex-col items-center justify-center text-center border-b border-zinc-100 dark:border-zinc-700/50">
               <div className="relative mb-4 group cursor-pointer">
                 <div className="w-24 h-24 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden shadow-inner flex items-center justify-center relative border-4 transition-colors" style={{ borderColor: userProfileColor || '#3b82f6' }}>
-                  {userProfilePic ? <img src={userProfilePic} className="w-full h-full object-cover" /> : <div className="text-4xl text-zinc-400">👤</div>}
+                  {userProfilePic ? <img src={userProfilePic} className="w-full h-full object-cover" /> : <User size={40} className="text-zinc-400" />}
                   <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                     <span className="text-xs text-white font-medium">Ubah</span>
                   </div>
@@ -669,7 +698,7 @@ const Pengaturan: React.FC<Props> = ({
           </IOSGroup>
           <IOSGroup title="Otentikasi">
             <IOSRow
-              label="Keluar (Logout)" icon="🚪" iconColor="bg-red-500" destructive isLast
+              label="Keluar (Logout)" icon={<LogOut size={16} />} iconColor="bg-red-500" destructive isLast
               onClick={() => { if (confirm("Yakin ingin keluar dari akun Admin?")) runOrAlert(onLogout); }}
             />
           </IOSGroup>
@@ -747,7 +776,7 @@ const Pengaturan: React.FC<Props> = ({
                               </span>
                               <div className="flex items-center gap-3">
                                 <span className="text-[13px] font-black text-emerald-600 dark:text-emerald-400">Rp {tDiterimaSemua.toLocaleString("id-ID")}</span>
-                                <span className={`text-zinc-400 transition-transform duration-200 inline-block ${isExpanded ? 'rotate-180' : ''}`}>▼</span>
+                                <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
                               </div>
                             </div>
 
@@ -866,8 +895,8 @@ const Pengaturan: React.FC<Props> = ({
                   value={tableMode}
                   onChange={(val) => runOrAlert(() => onTableModeChange?.(val as "Lama" | "Baru"))}
                   options={[
-                    { value: "Lama", label: "Klasik", icon: "📄" },
-                    { value: "Baru", label: "Kartu", icon: "💳" },
+                    { value: "Lama", label: "Klasik", icon: <FileText size={14} /> },
+                    { value: "Baru", label: "Kartu", icon: <CreditCard size={14} /> },
                   ]}
                 />
               </div>
@@ -889,8 +918,8 @@ const Pengaturan: React.FC<Props> = ({
                       runOrAlert(() => onKualitasGambarChange?.(val as ImageQuality))
                     }
                     options={[
-                      { value: "Tinggi", label: "HD", icon: "✨" },
-                      { value: "Hemat", label: "Low", icon: "⚡" },
+                      { value: "Tinggi", label: "HD", icon: <Sparkles size={14} /> },
+                      { value: "Hemat", label: "Low", icon: <Zap size={14} /> },
                     ]}
                   />
                 </div>
@@ -914,9 +943,9 @@ const Pengaturan: React.FC<Props> = ({
                     min="0" max="100" step="5" 
                     value={localPegawaiPersen} 
                     onChange={(e) => setLocalPegawaiPersen(Number(e.target.value))}
-                    onMouseUp={() => runOrAlert(() => setOngkirConfig && setOngkirConfig({ ...ongkirConfig, pegawaiPersen: localPegawaiPersen }))}
-                    onTouchEnd={() => runOrAlert(() => setOngkirConfig && setOngkirConfig({ ...ongkirConfig, pegawaiPersen: localPegawaiPersen }))}
-                    className="w-full h-2 bg-zinc-200 rounded-lg appearance-none cursor-pointer dark:bg-zinc-700 accent-blue-500"
+                    onMouseUp={(e) => { const val = Number(e.currentTarget.value); runOrAlert(() => setOngkirConfig && setOngkirConfig({ ...ongkirConfig, pegawaiPersen: val })); }}
+                    onTouchEnd={(e) => { const val = Number(e.currentTarget.value); runOrAlert(() => setOngkirConfig && setOngkirConfig({ ...ongkirConfig, pegawaiPersen: val })); }}
+                    className="w-full ios-slider cursor-pointer"
                   />
                 </div>
               </div>
@@ -947,9 +976,9 @@ const Pengaturan: React.FC<Props> = ({
                     type="range" min="0" max="10000" step="500" 
                     value={localNominalDenda} 
                     onChange={(e) => setLocalNominalDenda(Number(e.target.value))}
-                    onMouseUp={() => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, nominalDenda: localNominalDenda }))}
-                    onTouchEnd={() => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, nominalDenda: localNominalDenda }))}
-                    className="w-full h-2 bg-zinc-200 rounded-lg appearance-none cursor-pointer dark:bg-zinc-700 accent-red-500"
+                    onMouseUp={(e) => { const val = Number(e.currentTarget.value); runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, nominalDenda: val })); }}
+                    onTouchEnd={(e) => { const val = Number(e.currentTarget.value); runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, nominalDenda: val })); }}
+                    className="w-full ios-slider cursor-pointer"
                   />
                 </div>
               </div>
@@ -966,9 +995,9 @@ const Pengaturan: React.FC<Props> = ({
                     type="range" min="0" max="60" step="5" 
                     value={localWaktuToleransi} 
                     onChange={(e) => setLocalWaktuToleransi(Number(e.target.value))}
-                    onMouseUp={() => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, waktuToleransi: localWaktuToleransi }))}
-                    onTouchEnd={() => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, waktuToleransi: localWaktuToleransi }))}
-                    className="w-full h-2 bg-zinc-200 rounded-lg appearance-none cursor-pointer dark:bg-zinc-700 accent-amber-500"
+                    onMouseUp={(e) => { const val = Number(e.currentTarget.value); runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, waktuToleransi: val })); }}
+                    onTouchEnd={(e) => { const val = Number(e.currentTarget.value); runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, waktuToleransi: val })); }}
+                    className="w-full ios-slider cursor-pointer"
                   />
                 </div>
               </div>
@@ -985,9 +1014,9 @@ const Pengaturan: React.FC<Props> = ({
                     type="range" min="5" max="60" step="5" 
                     value={localDurasiWaktuPotongan} 
                     onChange={(e) => setLocalDurasiWaktuPotongan(Number(e.target.value))}
-                    onMouseUp={() => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, durasiWaktuPotongan: localDurasiWaktuPotongan }))}
-                    onTouchEnd={() => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, durasiWaktuPotongan: localDurasiWaktuPotongan }))}
-                    className="w-full h-2 bg-zinc-200 rounded-lg appearance-none cursor-pointer dark:bg-zinc-700 accent-blue-500"
+                    onMouseUp={(e) => { const val = Number(e.currentTarget.value); runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, durasiWaktuPotongan: val })); }}
+                    onTouchEnd={(e) => { const val = Number(e.currentTarget.value); runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, durasiWaktuPotongan: val })); }}
+                    className="w-full ios-slider cursor-pointer"
                   />
                 </div>
               </div>
@@ -1004,9 +1033,9 @@ const Pengaturan: React.FC<Props> = ({
                     type="range" min="0" max="100000" step="5000"
                     value={localDendaTidakAbsenPulang}
                     onChange={(e) => setLocalDendaTidakAbsenPulang(Number(e.target.value))}
-                    onMouseUp={() => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, dendaTidakAbsenPulang: localDendaTidakAbsenPulang }))}
-                    onTouchEnd={() => runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, dendaTidakAbsenPulang: localDendaTidakAbsenPulang }))}
-                    className="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-rose-500"
+                    onMouseUp={(e) => { const val = Number(e.currentTarget.value); runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, dendaTidakAbsenPulang: val })); }}
+                    onTouchEnd={(e) => { const val = Number(e.currentTarget.value); runOrAlert(() => setAbsenConfig && setAbsenConfig({ ...absenConfig, dendaTidakAbsenPulang: val })); }}
+                    className="w-full ios-slider cursor-pointer"
                   />
                   <div className="flex justify-between mt-2 text-[10px] font-medium text-zinc-400">
                     <span>Rp 0</span>
@@ -1025,10 +1054,10 @@ const Pengaturan: React.FC<Props> = ({
             Pilih kategori untuk mengubah harga atau nama item. Perubahan tersimpan otomatis.
           </div>
           <IOSGroup title="Kategori Item">
-            <IOSRow label="Pemasukan Harian" value={`${sHarian.count} Item`} icon="🎮" iconColor="bg-blue-500" onClick={() => openEditModal(onOpenEditHarian)} />
-            <IOSRow label="Jajanan" value={`${sJajanan.count} Item`} icon="🍜" iconColor="bg-orange-500" onClick={() => openEditModal(onOpenEditJajanan)} />
-            <IOSRow label="Jasa & Aksesoris" value={`${sJasa.count} Item`} icon="🧰" iconColor="bg-slate-500" onClick={() => openEditModal(onOpenEditJasaAks)} />
-            <IOSRow label="Sewa PS" value={`${sSewa.count} Item`} icon="🚚" iconColor="bg-green-500" isLast onClick={() => openEditModal(onOpenEditSewa)} />
+            <IOSRow label="Pemasukan Harian" value={`${sHarian.count} Item`} icon={<Gamepad2 size={16} />} iconColor="bg-blue-500" onClick={() => openEditModal(onOpenEditHarian)} />
+            <IOSRow label="Jajanan" value={`${sJajanan.count} Item`} icon={<Coffee size={16} />} iconColor="bg-orange-500" onClick={() => openEditModal(onOpenEditJajanan)} />
+            <IOSRow label="Jasa & Aksesoris" value={`${sJasa.count} Item`} icon={<Wrench size={16} />} iconColor="bg-slate-500" onClick={() => openEditModal(onOpenEditJasaAks)} />
+            <IOSRow label="Sewa PS" value={`${sSewa.count} Item`} icon={<Truck size={16} />} iconColor="bg-green-500" isLast onClick={() => openEditModal(onOpenEditSewa)} />
           </IOSGroup>
         </>
       )}
@@ -1122,22 +1151,22 @@ const Pengaturan: React.FC<Props> = ({
             )}
           </IOSGroup>
           <IOSGroup title="Pencadangan File (Lokal/Flashdisk)">
-            <IOSRow label="Backup Data ke File" icon="💾" iconColor="bg-blue-500" onClick={() => triggerSecurity("backup")} />
-            <IOSRow label="Restore dari File" icon="📁" iconColor="bg-green-500" isLast onClick={() => triggerSecurity("restore")} />
+            <IOSRow label="Backup Data ke File" icon={<Save size={16} />} iconColor="bg-blue-500" onClick={() => triggerSecurity("backup")} />
+            <IOSRow label="Restore dari File" icon={<FolderOpen size={16} />} iconColor="bg-green-500" isLast onClick={() => triggerSecurity("restore")} />
           </IOSGroup>
         </div>
       )}
 
       {tab === "export" && (
         <IOSGroup title="Laporan">
-          <IOSRow label="Download Laporan CSV" icon="🧾" iconColor="bg-indigo-500" isLast onClick={() => runOrAlert(onExportCSV)} />
+          <IOSRow label="Download Laporan CSV" icon={<FileSpreadsheet size={16} />} iconColor="bg-indigo-500" isLast onClick={() => runOrAlert(onExportCSV)} />
         </IOSGroup>
       )}
 
       {tab === "reset" && (
         <IOSGroup title="Zona Bahaya">
           <IOSRow
-            label="Reset Semua Pengaturan" icon="🗑️" iconColor="bg-red-500" destructive isLast
+            label="Reset Semua Pengaturan" icon={<Trash2 size={16} />} iconColor="bg-red-500" destructive isLast
             onClick={() => triggerSecurity("reset")}
           />
         </IOSGroup>
@@ -1145,15 +1174,16 @@ const Pengaturan: React.FC<Props> = ({
 
       {tab === "sop" && (
         <div className="space-y-5">
-          <IOSGroup title="Standar Operasional Prosedur (SOP)">
+          <IOSGroup title="Panduan & SOP Pembukuan">
             <div className="p-4 space-y-3">
+              {/* Card 0: SOP Sewa */}
               <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
                 <div
                   className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                   onClick={() => setSopExpanded(sopExpanded === 0 ? null : 0)}
                 >
                   <span className="font-bold text-[14px] text-zinc-800 dark:text-zinc-100">SOP SEWA PLAYSTATION (URBAN)</span>
-                  <span className={`text-zinc-400 transition-transform duration-200 inline-block ${sopExpanded === 0 ? 'rotate-180' : ''}`}>▼</span>
+                  <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${sopExpanded === 0 ? 'rotate-180' : ''}`} />
                 </div>
                 {sopExpanded === 0 && (
                   <div className="p-4 bg-white dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-700 animate-in slide-in-from-top-2 duration-200 space-y-6">
@@ -1171,10 +1201,102 @@ const Pengaturan: React.FC<Props> = ({
                         download="SOP_SewaPS_URBAN.pdf"
                         className="bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-bold py-2.5 px-6 rounded-xl text-[13px] flex items-center justify-center gap-2 hover:bg-blue-200 dark:hover:bg-blue-500/30 transition-colors"
                       >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                        <Download size={14} />
                         Download SOP ini
                       </a>
                     </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Card 1: PS3 CFW */}
+              <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+                <div
+                  className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  onClick={() => setSopExpanded(sopExpanded === 1 ? null : 1)}
+                >
+                  <span className="font-bold text-[14px] text-zinc-800 dark:text-zinc-100">CARA ISI GAME PS3 CFW</span>
+                  <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${sopExpanded === 1 ? 'rotate-180' : ''}`} />
+                </div>
+                {sopExpanded === 1 && (
+                  <div className="p-4 bg-white dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-700 animate-in slide-in-from-top-2 duration-200 space-y-4">
+                    <div>
+                      <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase mb-1">A. Format PKG (Instal via XMB)</h4>
+                      <ul className="list-decimal pl-5 space-y-1 text-[13px] text-zinc-600 dark:text-zinc-300">
+                        <li>Pastikan USB Flashdisk / Hardisk Eksternal diformat ke file sistem <b>FAT32</b>.</li>
+                        <li>Copy/salin file game berformat <code>.pkg</code> ke direktori terluar (root) USB Flashdisk.</li>
+                        <li>Colokkan USB ke port USB PS3.</li>
+                        <li>Di menu utama XMB PS3, masuk ke menu <b>Package Manager</b> &gt; <b>Install Package Files</b> &gt; <b>Standard</b>.</li>
+                        <li>Pilih file game <code>.pkg</code> dan tunggu proses instalasi selesai. Jika game memiliki beberapa part, instal berurutan (Part 1, Part 2, dst).</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase mb-1">B. Format Folder (Copy via MultiMan)</h4>
+                      <ul className="list-decimal pl-5 space-y-1 text-[13px] text-zinc-600 dark:text-zinc-300">
+                        <li>Siapkan USB Flashdisk / Hardisk Eksternal berisi folder game (berisi folder <code>PS3_GAME</code> di dalamnya).</li>
+                        <li>Hubungkan USB ke PS3, lalu buka aplikasi <b>MultiMan</b>.</li>
+                        <li>Masuk ke menu <b>mmOS (File Manager)</b> &gt; buka <b>PS3 Root</b> &gt; double click di <b>dev_usb000</b> atau <b>dev_usb001</b>.</li>
+                        <li>Arahkan stik ke folder game, tekan tombol <b>O (Lingkar)</b>, lalu pilih <b>Copy</b>.</li>
+                        <li>Buka jendela baru: double click <b>PS3 Root</b> &gt; <b>dev_hdd0</b> &gt; masuk ke folder <b>GAMES</b>.</li>
+                        <li>Tekan tombol <b>O (Lingkar)</b> di area kosong dalam folder GAMES, lalu pilih <b>Paste</b>.</li>
+                        <li>Setelah selesai memindahkan, keluar ke menu game MultiMan, lalu tekan <b>L1</b> untuk me-refresh daftar game.</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Card 2: PS3 HEN */}
+              <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+                <div
+                  className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  onClick={() => setSopExpanded(sopExpanded === 2 ? null : 2)}
+                >
+                  <span className="font-bold text-[14px] text-zinc-800 dark:text-zinc-100">CARA ISI GAME PS3 HEN</span>
+                  <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${sopExpanded === 2 ? 'rotate-180' : ''}`} />
+                </div>
+                {sopExpanded === 2 && (
+                  <div className="p-4 bg-white dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-700 animate-in slide-in-from-top-2 duration-200 space-y-4">
+                    <div className="bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-950/40 p-3 rounded-xl flex gap-2.5">
+                      <Info className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                      <span className="text-xs text-red-800 dark:text-red-300">
+                        <b>PENTING:</b> Sebelum melakukan instalasi game PKG atau menyalin folder via MultiMan, Anda <b>wajib mengaktifkan HEN terlebih dahulu</b>.
+                      </span>
+                    </div>
+                    <ul className="list-decimal pl-5 space-y-2 text-[13px] text-zinc-600 dark:text-zinc-300">
+                      <li>Di menu utama XMB PS3, navigasikan ke kolom Game, lalu pilih menu <b>Enable HEN</b>. Tunggu hingga proses exploit sukses.</li>
+                      <li>Jika HEN tidak aktif, aplikasi homebrew (seperti MultiMan, WebMan, Package Manager) akan <b>hang/crash / menyebabkan PS3 mati otomatis</b>.</li>
+                      <li><b>Proses Pengisian Game:</b> Setelah HEN dalam keadaan aktif, Anda dapat mengikuti metode pengisian format <b>PKG</b> maupun format <b>Folder (MultiMan)</b> yang sama persis seperti pada panduan <b>PS3 CFW</b>.</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              {/* Card 3: PS4 HEN */}
+              <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+                <div
+                  className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  onClick={() => setSopExpanded(sopExpanded === 3 ? null : 3)}
+                >
+                  <span className="font-bold text-[14px] text-zinc-800 dark:text-zinc-100">CARA ISI GAME PS4 HEN</span>
+                  <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${sopExpanded === 3 ? 'rotate-180' : ''}`} />
+                </div>
+                {sopExpanded === 3 && (
+                  <div className="p-4 bg-white dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-700 animate-in slide-in-from-top-2 duration-200 space-y-4">
+                    <ul className="list-decimal pl-5 space-y-2 text-[13px] text-zinc-600 dark:text-zinc-300">
+                      <li>Pastikan PS4 sudah dalam kondisi jailbreak/explot aktif (GoldHEN/HEN aktif di dashboard).</li>
+                      <li>Siapkan USB Flashdisk / Hardisk Eksternal dengan format file sistem <b>exFAT</b> (format FAT32 tidak didukung karena file game PS4 biasanya berukuran &gt;4GB).</li>
+                      <li>Copy file game berformat <code>.pkg</code> ke direktori terluar (root) USB Flashdisk.</li>
+                      <li>Hubungkan USB Flashdisk ke salah satu port USB di PS4.</li>
+                      <li>Masuk ke menu <b>Settings</b> di PS4 &gt; scroll ke paling bawah dan buka menu <b>Debug Settings</b> (atau menu <b>GoldHEN</b>).</li>
+                      <li>Pilih menu <b>Game</b> &gt; <b>Package Installer</b>.</li>
+                      <li>Pilih file game <code>.pkg</code> yang ingin diinstal.
+                        <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-1 italic font-semibold">
+                          *Tips: Selalu instal file "Base Game" terlebih dahulu, diikuti dengan file "Update", kemudian file "DLC" (jika ada).
+                        </div>
+                      </li>
+                      <li>Tunggu hingga proses instalasi di dashboard selesai. Ikon game akan muncul di halaman depan PS4 dan siap dimainkan.</li>
+                    </ul>
                   </div>
                 )}
               </div>
@@ -1188,8 +1310,8 @@ const Pengaturan: React.FC<Props> = ({
         <div className="space-y-5">
           {/* 1. Header Logo (Tetap Fixed/Diluar Scroll) */}
           <div className="text-center space-y-2">
-            <div className="w-16 h-16 bg-zinc-900 dark:bg-white rounded-[18px] mx-auto shadow-lg flex items-center justify-center text-3xl">
-              🎮
+            <div className="w-16 h-16 bg-zinc-900 dark:bg-zinc-800 rounded-[18px] mx-auto shadow-lg flex items-center justify-center text-white">
+              <Gamepad2 size={32} />
             </div>
             <div>
               <h3 className="text-xl font-bold text-zinc-900 dark:text-white">URBAN Console</h3>
@@ -1203,7 +1325,7 @@ const Pengaturan: React.FC<Props> = ({
             <div className="max-h-[380px] overflow-y-auto p-5 scrollbar-thin">
               {/* Tentang */}
               <h4 className="text-sm font-semibold text-zinc-900 dark:text-white flex items-center gap-2 mb-2">
-                <span>📌</span> Tentang Aplikasi
+                <Pin size={16} className="text-zinc-500 shrink-0" /> Tentang Aplikasi
               </h4>
               <p className="text-[14px] leading-relaxed text-zinc-600 dark:text-zinc-300 mb-6">
                 Aplikasi ini digunakan untuk mencatat transaksi, pemasukan, dan pengeluaran <b>URBAN PlayStation Lampung</b>. Aplikasi bersifat pribadi untuk kebutuhan internal.
@@ -1211,7 +1333,7 @@ const Pengaturan: React.FC<Props> = ({
 
               {/* Panduan */}
               <h4 className="text-sm font-semibold text-zinc-900 dark:text-white flex items-center gap-2 mb-2">
-                <span>📝</span> Panduan Singkat
+                <BookOpen size={16} className="text-zinc-500 shrink-0" /> Panduan Singkat
               </h4>
               <div className="text-[14px] leading-relaxed text-zinc-600 dark:text-zinc-300 space-y-3 mb-6">
                 <p>
@@ -1225,7 +1347,7 @@ const Pengaturan: React.FC<Props> = ({
                   <li><b>Reset Setting</b> tersedia di menu <b>Reset Setting</b> untuk mengembalikan pengaturan default (data transaksi tetap aman).</li>
                 </ul>
                 <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-900/30 p-3 rounded-xl flex gap-2.5 mt-2">
-                  <span className="shrink-0">💡</span>
+                  <Lightbulb size={16} className="text-amber-500 shrink-0 mt-0.5" />
                   <span className="text-xs text-yellow-800 dark:text-yellow-200/80">
                     <b>Tips:</b> Jangan lupa lakukan backup data secara berkala agar catatan tidak hilang.
                   </span>
@@ -1234,7 +1356,7 @@ const Pengaturan: React.FC<Props> = ({
 
               {/* Kontak */}
               <h4 className="text-sm font-semibold text-zinc-900 dark:text-white flex items-center gap-2 mb-2">
-                <span>📞</span> Kontak
+                <Phone size={16} className="text-zinc-500 shrink-0" /> Kontak
               </h4>
               <div className="text-[14px] text-zinc-600 dark:text-zinc-300">
                 <div className="font-medium">URBAN PlayStation Lampung</div>
@@ -1249,34 +1371,125 @@ const Pengaturan: React.FC<Props> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-6 bg-black/40 backdrop-blur-sm transition-all duration-300">
+      <style dangerouslySetInnerHTML={{__html: `
+        /* Custom iOS range inputs styling */
+        input[type="range"].ios-slider {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 100%;
+          height: 6px;
+          border-radius: 9999px;
+          background: #E5E5EA;
+          outline: none;
+          transition: background 0.2s ease;
+        }
+        .dark input[type="range"].ios-slider {
+          background: #2C2C2E;
+        }
+        input[type="range"].ios-slider::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          background: #FFFFFF;
+          border: 0.5px solid rgba(0, 0, 0, 0.08);
+          box-shadow: 0px 3px 8px rgba(0, 0, 0, 0.12), 0px 3px 1px rgba(0, 0, 0, 0.04);
+          cursor: pointer;
+          transition: transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        input[type="range"].ios-slider::-moz-range-thumb {
+          width: 24px;
+          height: 24px;
+          border: none;
+          border-radius: 50%;
+          background: #FFFFFF;
+          border: 0.5px solid rgba(0, 0, 0, 0.08);
+          box-shadow: 0px 3px 8px rgba(0, 0, 0, 0.12), 0px 3px 1px rgba(0, 0, 0, 0.04);
+          cursor: pointer;
+          transition: transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+        input[type="range"].ios-slider:active::-webkit-slider-thumb {
+          transform: scale(1.15);
+        }
+        input[type="range"].ios-slider:active::-moz-range-thumb {
+          transform: scale(1.15);
+        }
+
+        /* Tab change transitions */
+        .animate-tab-change {
+          animation: iosTabSlide 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        @keyframes iosTabSlide {
+          from {
+            opacity: 0;
+            transform: translateY(8px) scale(0.995);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        
+        /* Smooth squircle bounce */
+        .sidebar-icon-squircle {
+          transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        button:hover .sidebar-icon-squircle {
+          transform: scale(1.08) rotate(3deg);
+        }
+        
+        /* Custom iOS-style scrollbars */
+        .scrollbar-ios::-webkit-scrollbar {
+          width: 5px;
+          height: 5px;
+        }
+        .scrollbar-ios::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .scrollbar-ios::-webkit-scrollbar-thumb {
+          background: rgba(0, 0, 0, 0.12);
+          border-radius: 9999px;
+        }
+        .dark .scrollbar-ios::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.12);
+        }
+        .scrollbar-ios::-webkit-scrollbar-thumb:hover {
+          background: rgba(0, 0, 0, 0.25);
+        }
+        .dark .scrollbar-ios::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.25);
+        }
+      `}} />
+
       {/* ✅ FIX: Tinggi Desktop dikunci di 640px (md:h-[640px]).
         Jadi walaupun isi kontennya sedikit (seperti tab 'Export'), kotak modal tetap besar.
         Ini menjaga layout tidak berubah-ubah (jumping).
       */}
-      <div className="w-full h-full md:h-[640px] md:max-w-[850px] bg-[#F2F2F7] dark:bg-black md:rounded-[20px] shadow-2xl overflow-hidden flex flex-col md:flex-row border border-zinc-200/50 dark:border-zinc-800">
+      <div className="w-full h-full md:h-[640px] md:max-w-[850px] bg-[#F2F2F7]/95 dark:bg-black/95 backdrop-blur-2xl md:rounded-[20px] shadow-2xl overflow-hidden flex flex-col md:flex-row border border-zinc-200/50 dark:border-zinc-800">
 
         {/* SIDEBAR (Desktop) */}
-        <div className="hidden md:flex flex-col w-[260px] bg-[#F2F2F7]/50 dark:bg-[#1c1c1e]/50 border-r border-zinc-200 dark:border-zinc-800 py-6 px-3 backdrop-blur-xl">
+        <div className="hidden md:flex flex-col w-[260px] bg-[#F2F2F7]/40 dark:bg-[#1c1c1e]/40 border-r border-zinc-200 dark:border-zinc-800 py-6 px-3 backdrop-blur-xl">
           <div className="px-3 mb-6"><h2 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">Pengaturan</h2></div>
 
           {/* iOS Profile Head (Desktop) */}
           <div className="px-1 mb-5">
             <div onClick={() => setTab("profile")} className={`bg-white/80 dark:bg-[#2C2C2E]/80 backdrop-blur-md rounded-2xl p-3 flex items-center gap-3 cursor-pointer shadow-sm border border-black/5 dark:border-white/5 transition-all ${tab === 'profile' ? 'ring-2 ring-blue-500 border-transparent dark:ring-blue-400' : 'hover:bg-white dark:hover:bg-[#2C2C2E]'}`}>
               <div className="w-11 h-11 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
-                {userProfilePic ? <img src={userProfilePic} className="w-full h-full object-cover" /> : <div className="text-zinc-400">👤</div>}
+                {userProfilePic ? <img src={userProfilePic} className="w-full h-full object-cover" /> : <User size={18} className="text-zinc-400" />}
               </div>
               <div className="flex-1 w-0">
                 <h3 className="text-[15px] font-bold text-zinc-900 dark:text-white truncate leading-tight">{userEmail?.split('@')[0] || "User"}</h3>
                 <p className="text-[11px] text-zinc-500 truncate leading-tight mt-0.5">Edit akun, cek detail...</p>
               </div>
-              <div className="text-zinc-400 text-lg mr-1 opacity-60">›</div>
+              <ChevronRight className="w-4 h-4 text-zinc-400 opacity-60 mr-1" />
             </div>
           </div>
 
-          <div className="space-y-1 flex-1 overflow-y-auto">
+          <div className="space-y-1 flex-1 overflow-y-auto scrollbar-ios">
             {menu.map((m) => (
               <button key={m.key} onClick={() => setTab(m.key)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${tab === m.key ? "bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-sm" : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50"}`}>
-                <div className={`w-6 h-6 rounded-[6px] flex items-center justify-center text-[12px] text-white shadow-sm ${m.color}`}>{m.icon}</div>
+                <div className={`w-6 h-6 rounded-[6px] flex items-center justify-center text-[12px] text-white shadow-sm sidebar-icon-squircle ${m.color}`}>{m.icon}</div>
                 <span>{m.label}</span>
               </button>
             ))}
@@ -1287,25 +1500,25 @@ const Pengaturan: React.FC<Props> = ({
         <div className={`flex flex-col flex-1 bg-[#F2F2F7] dark:bg-black h-full md:hidden ${mobileView === 'content' ? 'hidden' : 'flex'}`}>
           <div className="px-5 py-4 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md sticky top-0 z-10 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center">
             <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">Pengaturan</h2>
-            <button onClick={onClose} className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center font-bold text-zinc-500">✕</button>
+            <button onClick={onClose} className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors"><X className="w-4 h-4" /></button>
           </div>
-          <div className="flex-1 overflow-y-auto p-5">
+          <div className="flex-1 overflow-y-auto p-5 scrollbar-ios">
             {/* iOS Profile Head (Mobile) */}
             <IOSGroup className="!mb-8">
               <div onClick={() => { setTab("profile"); setMobileView("content"); }} className="p-4 flex flex-row items-center gap-4 cursor-pointer active:bg-zinc-100 dark:active:bg-zinc-700/50 transition-colors">
                 <div className="w-16 h-16 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden shrink-0 flex items-center justify-center">
-                  {userProfilePic ? <img src={userProfilePic} className="w-full h-full object-cover" /> : <div className="text-2xl text-zinc-400">👤</div>}
+                  {userProfilePic ? <img src={userProfilePic} className="w-full h-full object-cover" /> : <User size={28} className="text-zinc-400" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-[20px] font-bold text-zinc-900 dark:text-white truncate">{userEmail?.split('@')[0] || "User"}</h3>
                   <p className="text-[13px] text-zinc-500 truncate mt-0.5">Edit akun, cek detail...</p>
                 </div>
-                <div className="text-zinc-400 text-2xl mr-1 opacity-60">›</div>
+                <ChevronRight className="w-5 h-5 text-zinc-400 opacity-60 mr-1" />
               </div>
             </IOSGroup>
 
             <IOSGroup>{menu.map((m, i) => (<IOSRow key={m.key} label={m.label} icon={m.icon} iconColor={m.color} isLast={i === menu.length - 1} onClick={() => { setTab(m.key); setMobileView("content"); }} />))}</IOSGroup>
-            <IOSGroup><IOSRow label="Tutup Pengaturan" icon="✕" iconColor="bg-zinc-400" isLast onClick={onClose} /></IOSGroup>
+            <IOSGroup><IOSRow label="Tutup Pengaturan" icon={<X size={16} />} iconColor="bg-zinc-400" isLast onClick={onClose} /></IOSGroup>
           </div>
         </div>
 
@@ -1313,12 +1526,18 @@ const Pengaturan: React.FC<Props> = ({
         <div className={`flex flex-col flex-1 bg-[#F2F2F7] dark:bg-black h-full overflow-hidden ${mobileView === 'menu' ? 'hidden md:flex' : 'flex'}`}>
           <div className="shrink-0 h-14 md:h-16 px-4 md:px-8 border-b border-zinc-200/80 dark:border-zinc-800/80 flex items-center justify-between bg-white/50 dark:bg-zinc-900/50 backdrop-blur-xl">
             <div className="flex items-center gap-2">
-              <button onClick={() => setMobileView('menu')} className="md:hidden text-blue-500 flex items-center gap-1 font-medium -ml-2 pr-2"><span className="text-2xl">‹</span> Kembali</button>
+              <button onClick={() => setMobileView('menu')} className="md:hidden text-[#007AFF] dark:text-[#0A84FF] flex items-center gap-0.5 font-normal text-[17px] -ml-2 pr-2 active:opacity-60 transition-opacity"><ChevronLeft className="w-6 h-6 -ml-1" /> Kembali</button>
               <h3 className="text-lg md:text-xl font-bold text-zinc-900 dark:text-white">{menu.find(m => m.key === tab)?.label}</h3>
             </div>
-            <button onClick={onClose} className="hidden md:flex text-xs font-medium bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 px-3 py-1.5 rounded-full hover:bg-zinc-300 dark:hover:bg-zinc-700 transition">Esc</button>
+            <button onClick={onClose} className="hidden md:flex items-center justify-center w-8 h-8 rounded-full bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 transition-colors shadow-sm" title="Tutup (Esc)"><X className="w-4 h-4" /></button>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 md:p-8"><div className="max-w-2xl mx-auto md:mx-0">{renderContent()}</div></div>
+          <div className="flex-1 overflow-y-auto p-4 md:p-8 scrollbar-ios">
+            <div className="max-w-2xl mx-auto md:mx-0">
+              <div key={tab} className="animate-tab-change">
+                {renderContent()}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1331,7 +1550,7 @@ const Pengaturan: React.FC<Props> = ({
           <div className="relative w-full max-w-[320px] overflow-hidden rounded-[24px] bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xl shadow-2xl ring-1 ring-black/5 animate-in zoom-in-95 duration-200">
             <div className="p-6 text-center">
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
-                <LockIcon className="text-red-600 dark:text-red-500" size={24} />
+                <Lock className="text-red-600 dark:text-red-500" size={24} />
               </div>
               <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
                 Restricted Access
