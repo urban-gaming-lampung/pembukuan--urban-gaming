@@ -1300,6 +1300,58 @@ const Pengaturan: React.FC<Props> = ({
                   </div>
                 )}
               </div>
+
+              {/* Card 4: Hardisk External PNP PS4 */}
+              <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+                <div
+                  className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  onClick={() => setSopExpanded(sopExpanded === 4 ? null : 4)}
+                >
+                  <span className="font-bold text-[14px] text-zinc-800 dark:text-zinc-100">CARA MEMBUAT HDD EXTERNAL PNP PS4</span>
+                  <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${sopExpanded === 4 ? 'rotate-180' : ''}`} />
+                </div>
+                {sopExpanded === 4 && (
+                  <div className="p-4 bg-white dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-700 animate-in slide-in-from-top-2 duration-200 space-y-4">
+                    <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-950/40 p-3 rounded-xl flex gap-2.5">
+                      <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                      <div className="text-xs text-blue-800 dark:text-blue-300">
+                        <span className="font-bold">Apa itu HDD External PNP (Plug and Play) PS4?</span>
+                        <p className="mt-1">
+                          Hardisk External PNP adalah media penyimpanan luar (USB 3.0) yang diformat khusus agar dapat langsung terdeteksi di PS4. Ada 2 tipe PNP:
+                        </p>
+                        <ul className="list-disc pl-4 mt-1.5 space-y-1">
+                          <li><b>Tipe exFAT (Untuk Installer Game):</b> Bisa dibaca di PC/Laptop dan PS4. Berguna untuk memindahkan file game <code>.pkg</code> dari PC ke PS4 untuk diinstal.</li>
+                          <li><b>Tipe Extended Storage (Untuk Langsung Main):</b> Diformat langsung oleh PS4. Game diinstal dan dimainkan langsung dari HDD eksternal ini, menghemat memori internal PS4 (tidak bisa dibaca di PC).</li>
+                        </ul>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase mb-1">A. Pembuatan Tipe exFAT (Untuk Copy & Install PKG)</h4>
+                      <ul className="list-decimal pl-5 space-y-1.5 text-[13px] text-zinc-600 dark:text-zinc-300">
+                        <li>Hubungkan Hardisk Eksternal ke PC / Laptop Windows menggunakan port USB 3.0.</li>
+                        <li>Buka <b>This PC</b> / <b>File Explorer</b> &gt; klik kanan pada drive Hardisk Eksternal tersebut, lalu pilih <b>Format...</b></li>
+                        <li>Pada bagian <b>File System</b>, ubah nilainya menjadi <b>exFAT</b> (jangan pilih NTFS atau FAT32).</li>
+                        <li>Pada bagian <b>Allocation Unit Size</b>, biarkan default, beri nama drive pada <i>Volume Label</i> (misal: "PS4-GAME"), centang <b>Quick Format</b>, lalu klik <b>Start</b>.</li>
+                        <li>Setelah selesai format, buat folder atau langsung copy file game berformat <code>.pkg</code> ke direktori terluar (root) hardisk tersebut.</li>
+                        <li>Eject hardisk dengan aman dari PC, lalu colokkan ke port USB PS4 HEN untuk mulai instalasi lewat <i>Package Installer</i>.</li>
+                      </ul>
+                    </div>
+
+                    <div>
+                      <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase mb-1">B. Pembuatan Tipe Extended Storage (Untuk Simpan & Main Langsung)</h4>
+                      <ul className="list-decimal pl-5 space-y-1.5 text-[13px] text-zinc-600 dark:text-zinc-300">
+                        <li>Pastikan Hardisk Eksternal mendukung minimal <b>USB 3.0</b> dengan kapasitas antara <b>250 GB - 8 TB</b>.</li>
+                        <li>Hubungkan Hardisk Eksternal ke salah satu port USB di konsol PS4 Anda.</li>
+                        <li>Di PS4, masuk ke menu <b>Settings</b> &gt; <b>Devices</b> &gt; <b>USB Storage Devices</b>.</li>
+                        <li>Pilih nama Hardisk Eksternal Anda, lalu pilih opsi <b>Format as Extended Storage</b>.</li>
+                        <li>Ikuti petunjuk di layar dan pilih <b>Next</b> lalu <b>Format</b>. Setelah selesai, hardisk Anda akan menjadi penyimpanan default baru untuk instalasi game.</li>
+                        <li><span className="font-semibold text-amber-600 dark:text-amber-400">*Catatan:</span> Ketika Anda menginstal game <code>.pkg</code> via <i>Package Installer</i>, game tersebut akan otomatis terpasang dan berjalan langsung dari Hardisk Eksternal ini.</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </IOSGroup>
         </div>
