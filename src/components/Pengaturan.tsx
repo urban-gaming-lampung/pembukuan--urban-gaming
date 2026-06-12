@@ -1407,6 +1407,48 @@ const Pengaturan: React.FC<Props> = ({
                   </div>
                 )}
               </div>
+
+              {/* Card 6: Cara HEN BD-JB PS4 */}
+              <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+                <div
+                  className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  onClick={() => setSopExpanded(sopExpanded === 6 ? null : 6)}
+                >
+                  <span className="font-bold text-[14px] text-zinc-800 dark:text-zinc-100">CARA HEN BD-JB PS4 (FW 9.00 - 11.00+)</span>
+                  <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${sopExpanded === 6 ? 'rotate-180' : ''}`} />
+                </div>
+                {sopExpanded === 6 && (
+                  <div className="p-4 bg-white dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-700 animate-in slide-in-from-top-2 duration-200 space-y-4">
+                    <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-950/40 p-3 rounded-xl flex gap-2.5">
+                      <Info className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                      <div className="text-xs text-amber-800 dark:text-amber-300">
+                        <span className="font-semibold">Informasi Awal (Asumsi Sudah Memiliki Kaset BD-JB):</span>
+                        <p className="mt-1">
+                          Panduan ini ditujukan bagi Anda yang sudah memiliki kaset Blu-ray Disc khusus exploit BD-JB (biasanya dibeli pre-burn/siap pakai di toko online). Anda tidak perlu melakukan burning disc lagi di PC.
+                        </p>
+                      </div>
+                    </div>
+
+                    <ul className="list-decimal pl-5 space-y-2 text-[13px] text-zinc-600 dark:text-zinc-300">
+                      <li>
+                        <b>Persiapan USB Payload:</b>
+                        <ul className="list-disc pl-5 mt-1 space-y-1">
+                          <li>Siapkan USB Flashdisk kosong, format ke sistem file <b>FAT32</b> atau <b>exFAT</b>.</li>
+                          <li>Download file payload GoldHEN terbaru (biasanya berupa file <code>goldhen.bin</code>).</li>
+                          <li>Copy/salin file <code>goldhen.bin</code> tersebut ke direktori terluar (root) USB Flashdisk.</li>
+                        </ul>
+                      </li>
+                      <li>Colokkan USB Flashdisk berisi payload <code>goldhen.bin</code> ke salah satu port USB pada PS4 Anda.</li>
+                      <li>Nyalakan konsol PS4 Anda, lalu masukkan kaset Blu-ray <b>BD-JB Exploit</b> ke dalam disc drive PS4.</li>
+                      <li>Buka pemutar Blu-ray (disc player) dari dashboard menu utama PS4 untuk memutar disc tersebut.</li>
+                      <li>Tunggu beberapa saat. Program Java di dalam kaset akan berjalan otomatis, memicu kernel exploit, dan mencari file <code>goldhen.bin</code> pada USB Flashdisk Anda.</li>
+                      <li>Setelah exploit berhasil dipicu, notifikasi **"GoldHEN Loaded / Exploit Success"** akan muncul di pojok kiri atas layar.</li>
+                      <li><b>Selesai!</b> Keluarkan kaset BD-JB dan cabut USB Flashdisk Anda. Game bajakan sekarang sudah aktif dan siap dimainkan.</li>
+                      <li><span className="font-semibold text-amber-600 dark:text-amber-400">*Tips Rental:</span> Agar tidak perlu memancing ulang exploit setiap kali PS4 dinyalakan, gunakan fitur <b>Rest Mode</b> (Mode Istirahat) saat mematikan PS4. Selama konsol tidak mati total, status HEN akan tetap aktif.</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
             </div>
           </IOSGroup>
         </div>
