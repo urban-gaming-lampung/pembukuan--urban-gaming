@@ -488,13 +488,23 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
   const handleDownloadSticker = async () => {
     if (!stickerPreviewRef.current) return;
     try {
+      // Tunggu font selesai dimuat
+      if (document.fonts) {
+        await document.fonts.ready;
+      }
+
       // Create a temporary container for rendering off-screen
       const tempContainer = document.createElement("div");
-      tempContainer.style.position = "absolute";
-      tempContainer.style.top = "-9999px";
-      tempContainer.style.left = "-9999px";
+      tempContainer.style.position = "fixed";
+      tempContainer.style.top = "0";
+      tempContainer.style.left = "0";
+      tempContainer.style.width = "380px";
+      tempContainer.style.height = "228px";
+      tempContainer.style.overflow = "hidden";
+      tempContainer.style.zIndex = "-9999";
       tempContainer.style.opacity = "1";
       tempContainer.style.visibility = "visible";
+      tempContainer.style.pointerEvents = "none";
       
       // Copy the HTML content of the sticker
       tempContainer.innerHTML = stickerPreviewRef.current.outerHTML;
@@ -551,6 +561,9 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
     setPdfLoadingText("Menyiapkan data stiker...");
 
     try {
+      if (document.fonts) {
+        await document.fonts.ready;
+      }
       const sortedDevices = [...devices].sort(
         (a, b) => a.type.localeCompare(b.type) || a.number - b.number
       );
@@ -1078,41 +1091,57 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                       <div className="flex flex-col items-start gap-1.5 mt-2">
                         {/* Controller OP/OM side-by-side badges for crossing out */}
                         {genType.startsWith("stik") && (
-                           <div className="flex items-center gap-1.5 select-none my-0.5">
+                           <div className="flex items-center gap-1.5 select-none my-0.5" style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
                               {/* OM Badge: Black bg, white text */}
                               <span
                                 style={{
-                                  display: "inline-block",
+                                  display: "inline-table",
                                   width: "32px",
                                   height: "16px",
-                                  lineHeight: "14px",
-                                  textAlign: "center",
-                                  fontSize: "9px",
-                                  fontWeight: 900,
                                   borderRadius: "4px",
                                   border: "1px solid #000000",
                                   backgroundColor: "#000000",
-                                  color: "#ffffff",
-                                  boxSizing: "border-box"
+                                  boxSizing: "border-box",
+                                  verticalAlign: "middle"
                                 }}
-                              >OM</span>
+                              >
+                                <span
+                                  style={{
+                                    display: "table-cell",
+                                    verticalAlign: "middle",
+                                    textAlign: "center",
+                                    fontSize: "9px",
+                                    fontWeight: 900,
+                                    color: "#ffffff",
+                                    lineHeight: 1
+                                  }}
+                                >OM</span>
+                              </span>
                               {/* OP Badge: White bg, black text */}
                               <span
                                 style={{
-                                  display: "inline-block",
+                                  display: "inline-table",
                                   width: "32px",
                                   height: "16px",
-                                  lineHeight: "14px",
-                                  textAlign: "center",
-                                  fontSize: "9px",
-                                  fontWeight: 900,
                                   borderRadius: "4px",
                                   border: "1px solid #000000",
                                   backgroundColor: "#ffffff",
-                                  color: "#000000",
-                                  boxSizing: "border-box"
+                                  boxSizing: "border-box",
+                                  verticalAlign: "middle"
                                 }}
-                              >OP</span>
+                              >
+                                <span
+                                  style={{
+                                    display: "table-cell",
+                                    verticalAlign: "middle",
+                                    textAlign: "center",
+                                    fontSize: "9px",
+                                    fontWeight: 900,
+                                    color: "#000000",
+                                    lineHeight: 1
+                                  }}
+                                >OP</span>
+                              </span>
                            </div>
                          )}
                           <h1 className="text-5xl font-black font-mono tracking-tighter select-none leading-none">
@@ -1540,41 +1569,57 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                     <div className="flex flex-col items-start gap-1.5 mt-2">
                       {/* Controller OP/OM side-by-side badges for crossing out */}
                       {dev.type.startsWith("stik") && (
-                        <div className="flex items-center gap-1.5 select-none my-0.5">
+                        <div className="flex items-center gap-1.5 select-none my-0.5" style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
                           {/* OM Badge: Black bg, white text */}
                           <span
                             style={{
-                              display: "inline-block",
+                              display: "inline-table",
                               width: "32px",
                               height: "16px",
-                              lineHeight: "14px",
-                              textAlign: "center",
-                              fontSize: "9px",
-                              fontWeight: 900,
                               borderRadius: "4px",
                               border: "1px solid #000000",
                               backgroundColor: "#000000",
-                              color: "#ffffff",
-                              boxSizing: "border-box"
+                              boxSizing: "border-box",
+                              verticalAlign: "middle"
                             }}
-                          >OM</span>
+                          >
+                            <span
+                              style={{
+                                display: "table-cell",
+                                verticalAlign: "middle",
+                                textAlign: "center",
+                                fontSize: "9px",
+                                fontWeight: 900,
+                                color: "#ffffff",
+                                lineHeight: 1
+                              }}
+                            >OM</span>
+                          </span>
                           {/* OP Badge: White bg, black text */}
                           <span
                             style={{
-                              display: "inline-block",
+                              display: "inline-table",
                               width: "32px",
                               height: "16px",
-                              lineHeight: "14px",
-                              textAlign: "center",
-                              fontSize: "9px",
-                              fontWeight: 900,
                               borderRadius: "4px",
                               border: "1px solid #000000",
                               backgroundColor: "#ffffff",
-                              color: "#000000",
-                              boxSizing: "border-box"
+                              boxSizing: "border-box",
+                              verticalAlign: "middle"
                             }}
-                          >OP</span>
+                          >
+                            <span
+                              style={{
+                                display: "table-cell",
+                                verticalAlign: "middle",
+                                textAlign: "center",
+                                fontSize: "9px",
+                                fontWeight: 900,
+                                color: "#000000",
+                                lineHeight: 1
+                              }}
+                            >OP</span>
+                          </span>
                         </div>
                       )}
                       <h1 className="text-5xl font-black font-mono tracking-tighter select-none leading-none">
