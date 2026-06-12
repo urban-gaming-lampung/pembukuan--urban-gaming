@@ -1352,6 +1352,61 @@ const Pengaturan: React.FC<Props> = ({
                   </div>
                 )}
               </div>
+
+              {/* Card 5: Pengertian CFW, HEN, ODE, Matrix */}
+              <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+                <div
+                  className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  onClick={() => setSopExpanded(sopExpanded === 5 ? null : 5)}
+                >
+                  <span className="font-bold text-[14px] text-zinc-800 dark:text-zinc-100">PENGERTIAN CFW, HEN, ODE, & MATRIX</span>
+                  <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${sopExpanded === 5 ? 'rotate-180' : ''}`} />
+                </div>
+                {sopExpanded === 5 && (
+                  <div className="p-4 bg-white dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-700 animate-in slide-in-from-top-2 duration-200 space-y-4">
+                    <div className="text-xs text-zinc-500 leading-relaxed">
+                      Berikut adalah istilah modifikasi/jailbreak yang umum digunakan pada konsol PlayStation (PS2, PS3, dan PS4):
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <div>
+                        <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase">1. CFW (Custom Firmware)</h4>
+                        <p className="text-[13px] text-zinc-600 dark:text-zinc-300 mt-0.5">
+                          Sistem operasi (firmware) konsol yang sudah dimodifikasi secara permanen agar bisa menjalankan homebrew dan game bajakan langsung dari HDD.
+                          <br /><b>Kelebihan:</b> Permanen (tidak perlu diaktifkan ulang setelah PS dimatikan), fitur sangat lengkap (control fan, temperatur, dll).
+                          <br /><b>Penerapan:</b> Hanya tersedia di <b>PS3</b> tipe Fat dan Slim seri tertentu (seri 20xx/21xx/25xx dengan minver down 3.56). Di PS4 tidak ada istilah CFW murni.
+                        </p>
+                      </div>
+
+                      <div className="border-t border-zinc-100 dark:border-zinc-800/60 pt-3">
+                        <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase">2. HEN (Homebrew Enabler)</h4>
+                        <p className="text-[13px] text-zinc-600 dark:text-zinc-300 mt-0.5">
+                          Jailbreak berbasis software (aplikasi/browser exploit) yang bersifat non-permanen. Fitur jailbreak hanya aktif selama konsol menyala.
+                          <br /><b>Karakteristik:</b> Setiap kali konsol dinyalakan atau di-restart, Anda <b>wajib mengaktifkan HEN terlebih dahulu</b> (klik ikon "Enable HEN" di PS3 atau buka exploit via browser/PPPwn di PS4). Jika tidak, game bajakan tidak akan bisa dibuka.
+                          <br /><b>Penerapan:</b> Digunakan pada <b>PS3</b> Slim seri akhir (30xx) / Super Slim (40xx) yang tidak bisa dipasang CFW, serta semua jenis exploit di <b>PS4</b> (GoldHEN).
+                        </p>
+                      </div>
+
+                      <div className="border-t border-zinc-100 dark:border-zinc-800/60 pt-3">
+                        <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase">3. ODE (Optical Drive Emulator)</h4>
+                        <p className="text-[13px] text-zinc-600 dark:text-zinc-300 mt-0.5">
+                          Modifikasi berbasis hardware (perangkat keras tambahan berupa chip emulasi) yang dipasang untuk memanipulasi pembacaan Bluray Drive agar konsol membaca game dari hardisk eksternal.
+                          <br /><b>Karakteristik:</b> Sangat populer dulu untuk membobol PS3 seri Super Slim sebelum HEN ditemukan. Saat ini sudah jarang digunakan karena HEN gratis dan lebih praktis.
+                          <br /><b>Penerapan:</b> Umumnya dipasang di <b>PS3</b> Fat/Slim/Super Slim.
+                        </p>
+                      </div>
+
+                      <div className="border-t border-zinc-100 dark:border-zinc-800/60 pt-3">
+                        <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase">4. MATRIX (Modchip PS2)</h4>
+                        <p className="text-[13px] text-zinc-600 dark:text-zinc-300 mt-0.5">
+                          Modchip (IC tambahan) yang disolder pada motherboard PS2 untuk membypass proteksi region lock dan membolehkan pembacaan kaset bajakan.
+                          <br /><b>Penerapan di Hardisk:</b> Di rental/toko Indonesia, "PS2 Matrix" berarti PS2 yang dipasang chip Matrix v5.0 (atau sejenis) agar saat dinyalakan langsung otomatis melakukan boot ke <b>Open PS2 Loader (OPL)</b> dari hardisk eksternal/internal tanpa memerlukan MC Boot (memory card exploit).
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </IOSGroup>
         </div>
