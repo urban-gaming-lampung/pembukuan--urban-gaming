@@ -1467,15 +1467,15 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
               key={pageIdx} 
               id={`pdf-page-${pageIdx}`}
               style={{
-                width: "210mm",
-                height: "297mm",
-                padding: "11mm 15mm",
+                width: "794px",
+                height: "1123px",
+                padding: "46px 55px",
                 boxSizing: "border-box",
                 display: "grid",
-                gridTemplateColumns: "repeat(3, 50mm)",
-                gridTemplateRows: "repeat(8, 30mm)",
-                columnGap: "15mm",
-                rowGap: "5mm",
+                gridTemplateColumns: "repeat(3, 190px)",
+                gridTemplateRows: "repeat(8, 114px)",
+                columnGap: "54px",
+                rowGap: "17px",
                 backgroundColor: "#ffffff",
                 position: "relative",
                 overflow: "hidden"
@@ -1485,21 +1485,21 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                 <div
                   key={dev.id}
                   style={{
-                    width: "50mm",
-                    height: "30mm",
+                    width: "190px",
+                    height: "114px",
                     boxSizing: "border-box",
                     display: "flex",
                     flexDirection: "row",
                     alignItems: "center",
                     justifyContent: "space-between",
-                    padding: "3.2mm 2.8mm",
-                    borderRadius: "2.6mm",
+                    padding: "12px",
+                    borderRadius: "10px",
                     backgroundColor: dev.stickerColor || "#1e1b4b",
                     color: dev.fontColor || "#ffffff",
                     fontFamily: "Inter, Roboto, sans-serif",
                     position: "relative",
                     overflow: "hidden",
-                    border: "0.15mm solid rgba(120, 120, 120, 0.2)"
+                    border: "1px solid rgba(120, 120, 120, 0.2)"
                   }}
                 >
                   {/* Left side details */}
@@ -1512,15 +1512,15 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                       alignItems: "flex-start",
                       height: "100%",
                       textAlign: "left",
-                      paddingRight: "1.5mm"
+                      paddingRight: "6px"
                     }}
                   >
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
                       <h2
                         style={{
-                          fontSize: "1.8mm",
+                          fontSize: "6.5px",
                           fontWeight: 900,
-                          letterSpacing: "0.15em",
+                          letterSpacing: "0.25em",
                           lineHeight: 1.1,
                           textTransform: "uppercase",
                           margin: 0
@@ -1530,11 +1530,11 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                       </h2>
                       <p
                         style={{
-                          fontSize: "1.0mm",
+                          fontSize: "4px",
                           fontWeight: 900,
-                          letterSpacing: "0.08em",
+                          letterSpacing: "0.1em",
                           opacity: 0.85,
-                          marginTop: "0.4mm",
+                          marginTop: "2px",
                           textTransform: "uppercase",
                           margin: 0
                         }}
@@ -1543,15 +1543,15 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                       </p>
                     </div>
 
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "0.5mm" }}>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "3px" }}>
                       {dev.type.startsWith("stik") && (
                         <div
                           style={{
                             display: "flex",
                             alignItems: "center",
-                            gap: "0.8mm",
-                            marginTop: "0.6mm",
-                            marginBottom: "0.6mm"
+                            gap: "3px",
+                            marginTop: "3px",
+                            marginBottom: "3px"
                           }}
                         >
                           <span
@@ -1559,15 +1559,16 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                               display: "inline-flex",
                               alignItems: "center",
                               justifyContent: "center",
-                              width: "5.2mm",
-                              height: "2.8mm",
-                              borderRadius: "0.6mm",
-                              border: "0.15mm solid #000000",
+                              width: "16px",
+                              height: "8px",
+                              borderRadius: "2px",
+                              border: "0.5px solid #000000",
                               backgroundColor: "#000000",
                               color: "#ffffff",
-                              fontSize: "1.3mm",
+                              fontSize: "4.5px",
                               fontWeight: 900,
-                              lineHeight: 1
+                              lineHeight: 1,
+                              textAlign: "center"
                             }}
                           >OM</span>
                           <span
@@ -1575,22 +1576,23 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                               display: "inline-flex",
                               alignItems: "center",
                               justifyContent: "center",
-                              width: "5.2mm",
-                              height: "2.8mm",
-                              borderRadius: "0.6mm",
-                              border: "0.15mm solid #000000",
+                              width: "16px",
+                              height: "8px",
+                              borderRadius: "2px",
+                              border: "0.5px solid #000000",
                               backgroundColor: "#ffffff",
                               color: "#000000",
-                              fontSize: "1.3mm",
+                              fontSize: "4.5px",
                               fontWeight: 900,
-                              lineHeight: 1
+                              lineHeight: 1,
+                              textAlign: "center"
                             }}
                           >OP</span>
                         </div>
                       )}
                       <h1
                         style={{
-                          fontSize: "6.8mm",
+                          fontSize: "24px",
                           fontWeight: 900,
                           fontFamily: "monospace",
                           letterSpacing: "-0.05em",
@@ -1606,8 +1608,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                   {/* Right side: QR Code */}
                   <div
                     style={{
-                      padding: "1.4mm",
-                      borderRadius: "1.8mm",
+                      padding: "6px",
+                      borderRadius: "8px",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -1615,10 +1617,10 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                       backgroundColor: "#ffffff",
                       border:
                         dev.stickerColor?.toLowerCase() === "#ffffff" || dev.stickerColor?.toLowerCase() === "#fff"
-                          ? "0.15mm solid #e4e4e7"
-                          : "0.15mm solid rgba(255,255,255,0.2)",
-                      width: "14.5mm",
-                      height: "14.5mm",
+                          ? "1px solid #e4e4e7"
+                          : "1px solid rgba(255,255,255,0.2)",
+                      width: "48px",
+                      height: "48px",
                       boxSizing: "border-box"
                     }}
                   >
@@ -1626,8 +1628,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                       src={preloadedQrCodes[dev.id]}
                       alt="QR Code"
                       style={{
-                        width: "11.7mm",
-                        height: "11.7mm",
+                        width: "36px",
+                        height: "36px",
                         objectFit: "contain"
                       }}
                       crossOrigin="anonymous"
