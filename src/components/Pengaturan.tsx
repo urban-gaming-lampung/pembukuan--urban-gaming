@@ -395,7 +395,7 @@ const Pengaturan: React.FC<Props> = ({
       const infoItem = filtered.find(m => m.key === "info");
       const sopItem = filtered.find(m => m.key === "sop");
       const rest = filtered.filter(m => !["info", "sop"].includes(m.key));
-      return [...rest, infoItem!, sopItem!];
+      return [...rest, sopItem!, infoItem!];
     }
     return allMenus.filter(m => m.key !== "gaji");
   }, [isOwner]);
