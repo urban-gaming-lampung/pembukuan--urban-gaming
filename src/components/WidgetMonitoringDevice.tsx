@@ -52,7 +52,7 @@ const PRESET_COLORS = [
 
 const preloadQrCode = (id: string): Promise<string> => {
   return new Promise((resolve) => {
-    const url = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(id)}&ecc=M`;
+    const url = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(id)}&ecc=M`;
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.src = url;
@@ -529,7 +529,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       }
 
       const canvas = await html2canvas(clonedSticker, {
-        scale: 4, // 4x scale for high resolution print quality
+        scale: 8, // 8x scale (2x of previous 4x) for ultra-high resolution print quality
         useCORS: true,
         backgroundColor: null,
         logging: false,
@@ -598,7 +598,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
         compress: true
       });
 
-      const scale = 1.3; // optimal scale karena DOM A4 template sudah 2x upscaled
+      const scale = 6.4; // 6.4x scale (2x of previous 3.2x) for ultra-high crispness (1200+ DPI print resolution)
       
       for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
         setPdfLoadingText(`Merender halaman ${pageIdx + 1} dari ${pages.length}...`);
@@ -616,13 +616,13 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
           logging: false
         });
 
-        const imgData = canvas.toDataURL("image/jpeg", 0.82);
+        const imgData = canvas.toDataURL("image/png");
 
         if (pageIdx > 0) {
           pdf.addPage();
         }
 
-        pdf.addImage(imgData, "JPEG", 0, 0, 210, 297, undefined, "FAST");
+        pdf.addImage(imgData, "PNG", 0, 0, 210, 297, undefined, "FAST");
         setPdfProgress(Math.round(50 + ((pageIdx + 1) / pages.length) * 45));
       }
 
@@ -661,7 +661,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
   const qrUrl = useMemo(() => {
     const numValue = genNumber === "" ? 1 : genNumber;
     const deviceId = editingStickerId || `${genType}_${String(numValue).padStart(2, "0")}`;
-    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(deviceId)}&ecc=M`;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(deviceId)}&ecc=M`;
   }, [editingStickerId, genType, genNumber]);
 
   return (
