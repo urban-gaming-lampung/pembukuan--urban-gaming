@@ -10,6 +10,7 @@ import { db, auth } from "../lib/firebase";
 import html2canvas from "html2canvas";
 import { Html5Qrcode } from "html5-qrcode";
 import Section from "./common/Section";
+import jsPDF from "jspdf";
 
 type DeviceType = "ps3" | "ps4" | "stik_ps3" | "stik_ps4" | "tv" | "playbox";
 
@@ -49,7 +50,33 @@ const PRESET_COLORS = [
   { name: "Gaming Purple", bg: "#6d28d9", text: "#ffffff" },
 ];
 
-
+const preloadQrCode = (id: string): Promise<string> => {
+  return new Promise((resolve) => {
+    const url = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(id)}&ecc=M`;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = url;
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(img, 0, 0);
+        try {
+          resolve(canvas.toDataURL("image/png"));
+          return;
+        } catch (e) {
+          console.error("CORS canvas conversion failed for", id, e);
+        }
+      }
+      resolve(url); // fallback
+    };
+    img.onerror = () => {
+      resolve(url); // fallback
+    };
+  });
+};
 
 const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner = false }) => {
   // Navigation sub-tabs for owner
@@ -106,6 +133,24 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
   const [editingStickerId, setEditingStickerId] = useState<string | null>(null);
 
   const stickerPreviewRef = useRef<HTMLDivElement>(null);
+
+  // PDF Download States
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState(0);
+  const [pdfLoadingText, setPdfLoadingText] = useState("");
+  const [preloadedQrCodes, setPreloadedQrCodes] = useState<Record<string, string>>({});
+
+  const pages = useMemo(() => {
+    const sortedDevices = [...devices].sort(
+      (a, b) => a.type.localeCompare(b.type) || a.number - b.number
+    );
+    const itemsPerPage = 24;
+    const chunks: RegisteredDevice[][] = [];
+    for (let i = 0; i < sortedDevices.length; i += itemsPerPage) {
+      chunks.push(sortedDevices.slice(i, i + itemsPerPage));
+    }
+    return chunks;
+  }, [devices]);
 
   // Listen to Master Capacities
   useEffect(() => {
@@ -491,6 +536,96 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
     } catch (e) {
       console.error("Error capturing sticker:", e);
       alert("Gagal mengunduh stiker PNG.");
+    }
+  };
+
+  // Download All Stickers PDF
+  const handleDownloadAllStickersPDF = async () => {
+    if (devices.length === 0) {
+      alert("Tidak ada stiker yang tersimpan di database.");
+      return;
+    }
+
+    setIsGeneratingPdf(true);
+    setPdfProgress(5);
+    setPdfLoadingText("Menyiapkan data stiker...");
+
+    try {
+      const sortedDevices = [...devices].sort(
+        (a, b) => a.type.localeCompare(b.type) || a.number - b.number
+      );
+      
+      setPdfLoadingText("Mengunduh QR Code...");
+      const loadedQrCodes: Record<string, string> = {};
+      const totalDevices = sortedDevices.length;
+      
+      const batchSize = 5;
+      for (let i = 0; i < totalDevices; i += batchSize) {
+        const batch = sortedDevices.slice(i, i + batchSize);
+        await Promise.all(
+          batch.map(async (dev) => {
+            const base64 = await preloadQrCode(dev.id);
+            loadedQrCodes[dev.id] = base64;
+          })
+        );
+        const loadedCount = Math.min(i + batchSize, totalDevices);
+        setPdfProgress(Math.round(5 + (loadedCount / totalDevices) * 45));
+      }
+
+      setPreloadedQrCodes(loadedQrCodes);
+      setPdfProgress(50);
+      
+      // Tunggu React untuk me-render halaman ke DOM
+      await new Promise((resolve) => setTimeout(resolve, 650));
+
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4"
+      });
+
+      const scale = 3; // 3x scale untuk kualitas cetak tinggi
+      
+      for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
+        setPdfLoadingText(`Merender halaman ${pageIdx + 1} dari ${pages.length}...`);
+        
+        const pageEl = document.getElementById(`pdf-page-${pageIdx}`);
+        if (!pageEl) {
+          console.error(`Elemen halaman pdf-page-${pageIdx} tidak ditemukan!`);
+          continue;
+        }
+
+        const canvas = await html2canvas(pageEl, {
+          scale,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          logging: false
+        });
+
+        const imgData = canvas.toDataURL("image/png");
+
+        if (pageIdx > 0) {
+          pdf.addPage();
+        }
+
+        pdf.addImage(imgData, "PNG", 0, 0, 210, 297);
+        setPdfProgress(Math.round(50 + ((pageIdx + 1) / pages.length) * 45));
+      }
+
+      setPdfLoadingText("Menyimpan PDF...");
+      setPdfProgress(98);
+      
+      pdf.save(`stiker_all_urban_gaming_${new Date().toISOString().slice(0, 10)}.pdf`);
+      setPdfProgress(100);
+      
+      setTimeout(() => {
+        setIsGeneratingPdf(false);
+      }, 500);
+
+    } catch (error) {
+      console.error("Gagal generate PDF stiker:", error);
+      alert("Terjadi kesalahan saat membuat PDF stiker.");
+      setIsGeneratingPdf(false);
     }
   };
 
@@ -978,14 +1113,23 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                   </div>
                 </div>
 
-                {/* Download Button */}
-                <button
-                  type="button"
-                  onClick={handleDownloadSticker}
-                  className="mt-6 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-blue-500/10 active:scale-95 animate-in fade-in duration-300"
-                >
-                  <Download className="w-4 h-4" /> Download Sticker (PNG)
-                </button>
+                {/* Download Buttons */}
+                <div className="mt-6 flex flex-col sm:flex-row gap-3 w-full justify-center">
+                  <button
+                    type="button"
+                    onClick={handleDownloadSticker}
+                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-blue-500/10 active:scale-95 animate-in fade-in duration-300"
+                  >
+                    <Download className="w-4 h-4" /> Download Sticker (PNG)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadAllStickersPDF}
+                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-emerald-500/10 active:scale-95 animate-in fade-in duration-300"
+                  >
+                    <QrCode className="w-4 h-4" /> Download Semua Sticker (PDF)
+                  </button>
+                </div>
               </div>
 
             </div>
@@ -997,9 +1141,20 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
               {/* History Section */}
               <div className="flex flex-col gap-4 text-left">
-                <h3 className="text-sm font-black tracking-widest uppercase text-zinc-900 dark:text-white flex items-center gap-2 mb-2">
-                  <History className="w-4 h-4 text-emerald-500" /> Daftar Unit Terdaftar ({devices.length} Unit)
-                </h3>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+                  <h3 className="text-sm font-black tracking-widest uppercase text-zinc-900 dark:text-white flex items-center gap-2">
+                    <History className="w-4 h-4 text-emerald-500" /> Daftar Unit Terdaftar ({devices.length} Unit)
+                  </h3>
+                  {devices.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleDownloadAllStickersPDF}
+                      className="self-start sm:self-auto flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
+                    >
+                      <QrCode className="w-3.5 h-3.5" /> Download Semua (PDF)
+                    </button>
+                  )}
+                </div>
 
                 {devices.length > 0 ? (
                   <>
@@ -1300,6 +1455,223 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                 </button>
               </div>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+      {/* Off-screen PDF Page Renderer */}
+      {isGeneratingPdf && (
+        <div 
+          id="pdf-render-pages-container"
+          style={{ position: "absolute", left: "-9999px", top: 0, pointerEvents: "none" }}
+        >
+          {pages.map((pageDevices, pageIdx) => (
+            <div 
+              key={pageIdx} 
+              id={`pdf-page-${pageIdx}`}
+              style={{
+                width: "210mm",
+                height: "297mm",
+                padding: "11mm 15mm",
+                boxSizing: "border-box",
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 50mm)",
+                gridTemplateRows: "repeat(8, 30mm)",
+                columnGap: "15mm",
+                rowGap: "5mm",
+                backgroundColor: "#ffffff",
+                position: "relative",
+                overflow: "hidden"
+              }}
+            >
+              {pageDevices.map((dev) => (
+                <div
+                  key={dev.id}
+                  style={{
+                    width: "50mm",
+                    height: "30mm",
+                    boxSizing: "border-box",
+                    display: "flex",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "3.2mm 2.8mm",
+                    borderRadius: "2.6mm",
+                    backgroundColor: dev.stickerColor || "#1e1b4b",
+                    color: dev.fontColor || "#ffffff",
+                    fontFamily: "Inter, Roboto, sans-serif",
+                    position: "relative",
+                    overflow: "hidden",
+                    border: "0.15mm solid rgba(120, 120, 120, 0.2)"
+                  }}
+                >
+                  {/* Left side details */}
+                  <div
+                    style={{
+                      flex: 1,
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      height: "100%",
+                      textAlign: "left",
+                      paddingRight: "1.5mm"
+                    }}
+                  >
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+                      <h2
+                        style={{
+                          fontSize: "1.8mm",
+                          fontWeight: 900,
+                          letterSpacing: "0.15em",
+                          lineHeight: 1.1,
+                          textTransform: "uppercase",
+                          margin: 0
+                        }}
+                      >
+                        URBAN GAMING
+                      </h2>
+                      <p
+                        style={{
+                          fontSize: "1.0mm",
+                          fontWeight: 900,
+                          letterSpacing: "0.08em",
+                          opacity: 0.85,
+                          marginTop: "0.4mm",
+                          textTransform: "uppercase",
+                          margin: 0
+                        }}
+                      >
+                        {dev.type.startsWith("stik") ? "CONTROLLER" : DEVICE_LABELS[dev.type]}
+                      </p>
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "0.5mm" }}>
+                      {dev.type.startsWith("stik") && (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.8mm",
+                            marginTop: "0.6mm",
+                            marginBottom: "0.6mm"
+                          }}
+                        >
+                          <span
+                            style={{
+                              padding: "0.2mm 0.8mm",
+                              borderRadius: "0.4mm",
+                              border: "0.15mm solid #000000",
+                              backgroundColor: "#000000",
+                              color: "#ffffff",
+                              fontSize: "1.1mm",
+                              fontWeight: 900,
+                              letterSpacing: "0.05em",
+                              lineHeight: 1
+                            }}
+                          >
+                            OM
+                          </span>
+                          <span
+                            style={{
+                              padding: "0.2mm 0.8mm",
+                              borderRadius: "0.4mm",
+                              border: "0.15mm solid #000000",
+                              backgroundColor: "#ffffff",
+                              color: "#000000",
+                              fontSize: "1.1mm",
+                              fontWeight: 900,
+                              letterSpacing: "0.05em",
+                              lineHeight: 1
+                            }}
+                          >
+                            OP
+                          </span>
+                        </div>
+                      )}
+                      <h1
+                        style={{
+                          fontSize: "6.8mm",
+                          fontWeight: 900,
+                          fontFamily: "monospace",
+                          letterSpacing: "-0.05em",
+                          lineHeight: 1,
+                          margin: 0
+                        }}
+                      >
+                        {String(dev.number).padStart(2, "0")}
+                      </h1>
+                    </div>
+                  </div>
+
+                  {/* Right side: QR Code */}
+                  <div
+                    style={{
+                      padding: "1.4mm",
+                      borderRadius: "1.8mm",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                      backgroundColor: "#ffffff",
+                      border:
+                        dev.stickerColor?.toLowerCase() === "#ffffff" || dev.stickerColor?.toLowerCase() === "#fff"
+                          ? "0.15mm solid #e4e4e7"
+                          : "0.15mm solid rgba(255,255,255,0.2)",
+                      width: "14.5mm",
+                      height: "14.5mm",
+                      boxSizing: "border-box"
+                    }}
+                  >
+                    <img
+                      src={preloadedQrCodes[dev.id]}
+                      alt="QR Code"
+                      style={{
+                        width: "11.7mm",
+                        height: "11.7mm",
+                        objectFit: "contain"
+                      }}
+                      crossOrigin="anonymous"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* PDF Loader Modal */}
+      {isGeneratingPdf && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative w-full max-w-sm bg-white dark:bg-[#1C1C1E] rounded-[28px] p-8 shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200 ring-1 ring-black/5 dark:ring-white/10">
+             
+             {/* PDF Icon Animation */}
+             <div className="w-16 h-16 mb-6 relative flex items-center justify-center bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl">
+                <QrCode className="w-8 h-8 text-emerald-600 dark:text-emerald-400 animate-pulse" />
+             </div>
+             
+             <h3 className="text-[19px] font-bold text-zinc-900 dark:text-white mb-2">Membuat PDF Stiker</h3>
+             <p className="text-[14px] font-medium text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-[260px] mx-auto mb-6 h-10 flex items-center justify-center">
+                 {pdfLoadingText}
+             </p>
+
+             {/* Progress Bar */}
+             <div className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-full h-3.5 mb-2 overflow-hidden shadow-inner ring-1 ring-inset ring-black/5 dark:ring-white/5 p-0.5 relative">
+                <div 
+                   className="bg-emerald-600 dark:bg-emerald-500 h-full rounded-full transition-all duration-300 ease-out relative overflow-hidden" 
+                   style={{ width: `${pdfProgress}%` }}
+                >
+                    <div className="absolute top-0 right-0 bottom-0 left-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]"></div>
+                </div>
+             </div>
+             
+             {/* Percentage */}
+             <div className="text-[13px] font-bold text-emerald-600 dark:text-emerald-400 font-mono tracking-wider">
+                 {pdfProgress}%
+             </div>
+             
           </div>
         </div>,
         document.body
