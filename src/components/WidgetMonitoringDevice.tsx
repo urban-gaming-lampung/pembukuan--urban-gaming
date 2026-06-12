@@ -277,7 +277,13 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
   };
 
   useEffect(() => {
+    const handleGlobalScan = () => {
+      startScanning();
+    };
+    window.addEventListener("trigger-device-scan", handleGlobalScan);
+
     return () => {
+      window.removeEventListener("trigger-device-scan", handleGlobalScan);
       if (qrCodeRef.current && qrCodeRef.current.isScanning) {
         qrCodeRef.current.stop().catch(console.error);
       }

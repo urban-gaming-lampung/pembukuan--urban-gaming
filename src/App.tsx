@@ -284,6 +284,18 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"USAHA RENTAL" | "UPDATE STOK" | "PAGE OWNER" | "MONITORING">("USAHA RENTAL");
   const [adminMonitoringTab, setAdminMonitoringTab] = useState<"status" | "device">("status");
 
+  const handleOpenScan = () => {
+    if (isSuperAdminOrOwner) {
+      setActiveTab("PAGE OWNER");
+    } else {
+      setActiveTab("MONITORING");
+      setAdminMonitoringTab("device");
+    }
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("trigger-device-scan"));
+    }, 100);
+  };
+
   const { activeUsers, setFocusedField } = usePresence(user, activeTab, userProfileColor, isSuperAdminOrOwner);
 
   useEffect(() => {
@@ -1813,6 +1825,7 @@ export default function App() {
               }}
               onSharePDF={handleShareCheck}
               onOpenSettings={() => setOpenSettings(true)}
+              onOpenScan={handleOpenScan}
               hasData={hasData} mandatoryFilled={mandatoryFilled}
               isEditing={!!editingId}
               hasUnsavedChanges={currentFormSignature !== savedSignature}

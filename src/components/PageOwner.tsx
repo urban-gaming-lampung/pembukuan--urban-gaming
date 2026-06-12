@@ -1885,6 +1885,14 @@ const MetricCard = ({ title, value, icon, isHighlight = false, subtitle = "", va
 const UnitStatusWidget = ({ rowsSewa, history, activeDate, onVerifyActiveRental, hargaItems, isVerifyingPayment }: { rowsSewa: RowSewa[], history?: HistoryItem[], activeDate?: string, onVerifyActiveRental?: (idx: number) => void, hargaItems?: any[], isVerifyingPayment?: boolean }) => {
   const [activeSlide, setActiveSlide] = useState<"status" | "device">("status");
 
+  useEffect(() => {
+    const handleGlobalScan = () => {
+      setActiveSlide("device");
+    };
+    window.addEventListener("trigger-device-scan", handleGlobalScan);
+    return () => window.removeEventListener("trigger-device-scan", handleGlobalScan);
+  }, []);
+
   return (
     <div className="flex flex-col gap-4">
       {/* Segmented Pill Switcher */}
