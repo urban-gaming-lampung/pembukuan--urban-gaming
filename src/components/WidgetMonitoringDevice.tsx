@@ -637,7 +637,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
         compress: true
       });
 
-      const scale = 6.4; // 6.4x scale (2x of previous 3.2x) for ultra-high crispness (1200+ DPI print resolution)
+      const scale = 3.2; // Optimized 3.2x scale (600 DPI print quality, perfect balance between crispness and performance)
       
       for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
         setPdfLoadingText(`Merender halaman ${pageIdx + 1} dari ${pages.length}...`);
@@ -655,13 +655,14 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
           logging: false
         });
 
-        const imgData = canvas.toDataURL("image/png");
+        // Use JPEG with 92% compression quality instead of PNG to drastically reduce PDF file size and rendering load
+        const imgData = canvas.toDataURL("image/jpeg", 0.92);
 
         if (pageIdx > 0) {
           pdf.addPage();
         }
 
-        pdf.addImage(imgData, "PNG", 0, 0, 210, 297, undefined, "FAST");
+        pdf.addImage(imgData, "JPEG", 0, 0, 210, 297, undefined, "FAST");
         setPdfProgress(Math.round(50 + ((pageIdx + 1) / pages.length) * 45));
       }
 
