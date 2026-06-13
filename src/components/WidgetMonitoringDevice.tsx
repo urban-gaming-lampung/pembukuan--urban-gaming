@@ -141,15 +141,54 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
   const [preloadedQrCodes, setPreloadedQrCodes] = useState<Record<string, string>>({});
 
   const pages = useMemo(() => {
-    const sortedDevices = [...devices].sort(
-      (a, b) => a.type.localeCompare(b.type) || a.number - b.number
-    );
-    const itemsPerPage = 65;
-    const chunks: RegisteredDevice[][] = [];
-    for (let i = 0; i < sortedDevices.length; i += itemsPerPage) {
-      chunks.push(sortedDevices.slice(i, i + itemsPerPage));
+    // Group devices by category
+    const squareDevices: RegisteredDevice[] = [];
+    const stikPs4Devices: RegisteredDevice[] = [];
+    const stikPs3Devices: RegisteredDevice[] = [];
+
+    devices.forEach((dev) => {
+      if (dev.type === "stik_ps4") {
+        stikPs4Devices.push(dev);
+      } else if (dev.type === "stik_ps3") {
+        stikPs3Devices.push(dev);
+      } else {
+        squareDevices.push(dev);
+      }
+    });
+
+    // Sort each group
+    const sortByNum = (a: RegisteredDevice, b: RegisteredDevice) => a.type.localeCompare(b.type) || a.number - b.number;
+    squareDevices.sort(sortByNum);
+    stikPs4Devices.sort(sortByNum);
+    stikPs3Devices.sort(sortByNum);
+
+    const chunkedPages: { type: "square" | "stik_ps4" | "stik_ps3"; devices: RegisteredDevice[] }[] = [];
+
+    // Chunk square devices (15 per page)
+    for (let i = 0; i < squareDevices.length; i += 15) {
+      chunkedPages.push({
+        type: "square",
+        devices: squareDevices.slice(i, i + 15)
+      });
     }
-    return chunks;
+
+    // Chunk stik_ps4 devices (44 per page)
+    for (let i = 0; i < stikPs4Devices.length; i += 44) {
+      chunkedPages.push({
+        type: "stik_ps4",
+        devices: stikPs4Devices.slice(i, i + 44)
+      });
+    }
+
+    // Chunk stik_ps3 devices (65 per page)
+    for (let i = 0; i < stikPs3Devices.length; i += 65) {
+      chunkedPages.push({
+        type: "stik_ps3",
+        devices: stikPs3Devices.slice(i, i + 65)
+      });
+    }
+
+    return chunkedPages;
   }, [devices]);
 
   // Listen to Master Capacities
@@ -498,8 +537,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       tempContainer.style.position = "fixed";
       tempContainer.style.top = "0";
       tempContainer.style.left = "0";
-      tempContainer.style.width = "265px";
-      tempContainer.style.height = "151px";
+      tempContainer.style.width = genType === "stik_ps4" ? "529px" : (genType === "stik_ps3" ? "265px" : "378px");
+      tempContainer.style.height = genType === "stik_ps4" ? "76px" : (genType === "stik_ps3" ? "151px" : "378px");
       tempContainer.style.overflow = "hidden";
       tempContainer.style.zIndex = "-9999";
       tempContainer.style.opacity = "1";
@@ -533,8 +572,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
         useCORS: true,
         backgroundColor: null,
         logging: false,
-        width: 265,
-        height: 151
+        width: genType === "stik_ps4" ? 529 : (genType === "stik_ps3" ? 265 : 378),
+        height: genType === "stik_ps4" ? 76 : (genType === "stik_ps3" ? 151 : 378)
       });
 
       document.body.removeChild(tempContainer);
@@ -1068,31 +1107,37 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
                 {/* Sticker Elements Container */}
                 <div className="relative border-4 border-dashed border-zinc-300 dark:border-zinc-800 p-2 sm:p-4 rounded-[28px] bg-zinc-100 dark:bg-black/40 shadow-inner w-full max-w-[420px] overflow-hidden flex items-center justify-center min-h-[180px] sm:min-h-[260px]">
-                  <div className="scale-[0.75] min-[400px]:scale-[0.85] sm:scale-100 origin-center shrink-0 my-[-25px] sm:my-0">
+                  <div className={`${
+                    genType === "stik_ps4" 
+                      ? "scale-[0.55] min-[400px]:scale-[0.65] sm:scale-[0.75]" 
+                      : (genType === "stik_ps3" ? "scale-[0.75] min-[400px]:scale-[0.85] sm:scale-100" : "scale-[0.75] min-[400px]:scale-[0.85] sm:scale-100")
+                  } origin-center shrink-0 my-[-25px] sm:my-0`}>
                     <div
                       ref={stickerPreviewRef}
-                      className="w-[265px] h-[151px] flex flex-row items-center justify-between p-3.5 relative select-none shadow-2xl"
+                      className={`flex ${genType === "stik_ps4" || genType === "stik_ps3" ? "flex-row" : "flex-col"} items-center justify-between ${
+                        genType === "stik_ps4" ? "p-2.5" : (genType === "stik_ps3" ? "p-3.5" : "p-6")
+                      } relative select-none shadow-2xl`}
                       style={{
+                        width: genType === "stik_ps4" ? "529px" : (genType === "stik_ps3" ? "265px" : "378px"),
+                        height: genType === "stik_ps4" ? "76px" : (genType === "stik_ps3" ? "151px" : "378px"),
                         backgroundColor: genBgColor,
                         color: genTextColor,
                         fontFamily: "Inter, Roboto, sans-serif",
-                        borderRadius: "12px"
+                        borderRadius: genType === "stik_ps4" ? "8px" : (genType === "stik_ps3" ? "12px" : "24px"),
+                        boxSizing: "border-box",
+                        textAlign: genType === "stik_ps4" || genType === "stik_ps3" ? "left" : "center"
                       }}
                     >
-                      {/* Left side details */}
-                      <div className="flex-1 flex flex-col justify-between items-start h-full text-left pr-3">
-                        <div className="flex flex-col items-start">
-                          <h2 className="text-[10px] font-black tracking-[0.2em] leading-tight select-none uppercase">URBAN GAMING</h2>
-                          <p className="text-[7px] font-black tracking-widest opacity-85 mt-0.5 uppercase select-none">
-                          {genType.startsWith("stik") ? (genType === "stik_ps3" ? "STIK PS3" : "STIK PS4") : DEVICE_LABELS[genType]}
-                        </p>
-                      </div>
-                      
-                      <div className="flex flex-col items-start gap-1 mt-1">
-                        {/* Controller OP/OM side-by-side badges for crossing out */}
-                        {genType.startsWith("stik") && (
-                           <div className="flex items-center gap-1 select-none my-0.5" style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
-                              {/* OM Badge: Black bg, white text SVG */}
+                      {genType === "stik_ps4" && (
+                        <>
+                          {/* Left side details */}
+                          <div className="flex-1 flex flex-row items-center justify-between h-full text-left pr-3 gap-3">
+                            <div className="flex flex-col justify-center items-start shrink-0">
+                              <h2 className="text-[9px] font-black tracking-[0.1em] leading-tight select-none uppercase">URBAN GAMING</h2>
+                              <p className="text-[7px] font-black tracking-widest opacity-85 mt-0.5 uppercase select-none">STIK PS4</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {/* OM Badge */}
                               <svg width="24" height="12" style={{ display: "inline-block", verticalAlign: "middle" }}>
                                 <rect width="24" height="12" rx="3" fill="#000000" />
                                 <text 
@@ -1105,7 +1150,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                                   fill="#ffffff"
                                 >OM</text>
                               </svg>
-                              {/* OP Badge: White bg, black text SVG */}
+                              {/* OP Badge */}
                               <svg width="24" height="12" style={{ display: "inline-block", verticalAlign: "middle" }}>
                                 <rect x="0.5" y="0.5" width="23" height="11" rx="2.5" fill="#ffffff" stroke="#000000" strokeWidth="0.75" />
                                 <text 
@@ -1118,29 +1163,120 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                                   fill="#000000"
                                 >OP</text>
                               </svg>
-                           </div>
-                        )}
-                          <h1 className="text-3xl font-black font-mono tracking-tighter select-none leading-none">
+                              <h1 className="text-2xl font-black font-mono tracking-tighter select-none leading-none">
+                                {genNumber === "" ? "00" : String(genNumber).padStart(2, "0")}
+                              </h1>
+                            </div>
+                          </div>
+
+                          {/* Right side: QR Code */}
+                          <div
+                            className={`p-1 rounded-lg shadow-inner flex items-center justify-center shrink-0 border ${
+                              genBgColor.toLowerCase() === "#ffffff" || genBgColor.toLowerCase() === "#fff"
+                                ? "bg-white border-zinc-200"
+                                : "bg-white border-white/20"
+                            }`}
+                          >
+                            <img
+                              src={qrUrl}
+                              alt="QR Code"
+                              className="w-12 h-12 object-contain select-none"
+                              crossOrigin="anonymous"
+                            />
+                          </div>
+                        </>
+                      )}
+
+                      {genType === "stik_ps3" && (
+                        <>
+                          {/* Left side details */}
+                          <div className="flex-1 flex flex-col justify-between items-start h-full text-left pr-3">
+                            <div className="flex flex-col items-start">
+                              <h2 className="text-[10px] font-black tracking-[0.2em] leading-tight select-none uppercase">URBAN GAMING</h2>
+                              <p className="text-[7px] font-black tracking-widest opacity-85 mt-0.5 uppercase select-none">STIK PS3</p>
+                            </div>
+
+                            <div className="flex flex-col items-start gap-1 mt-1">
+                              <div className="flex items-center gap-1 select-none my-0.5" style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
+                                <svg width="24" height="12" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                                  <rect width="24" height="12" rx="3" fill="#000000" />
+                                  <text 
+                                    x="12" 
+                                    y="9" 
+                                    textAnchor="middle" 
+                                    fontFamily="Inter, Roboto, sans-serif" 
+                                    fontWeight="900" 
+                                    fontSize="7" 
+                                    fill="#ffffff"
+                                  >OM</text>
+                                </svg>
+                                <svg width="24" height="12" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                                  <rect x="0.5" y="0.5" width="23" height="11" rx="2.5" fill="#ffffff" stroke="#000000" strokeWidth="0.75" />
+                                  <text 
+                                    x="12" 
+                                    y="9" 
+                                    textAnchor="middle" 
+                                    fontFamily="Inter, Roboto, sans-serif" 
+                                    fontWeight="900" 
+                                    fontSize="7" 
+                                    fill="#000000"
+                                  >OP</text>
+                                </svg>
+                              </div>
+                              <h1 className="text-3xl font-black font-mono tracking-tighter select-none leading-none">
+                                {genNumber === "" ? "00" : String(genNumber).padStart(2, "0")}
+                              </h1>
+                            </div>
+                          </div>
+
+                          {/* Right side: QR Code */}
+                          <div
+                            className={`p-1.5 rounded-xl shadow-inner flex items-center justify-center shrink-0 border ${
+                              genBgColor.toLowerCase() === "#ffffff" || genBgColor.toLowerCase() === "#fff"
+                                ? "bg-white border-zinc-200"
+                                : "bg-white border-white/20"
+                            }`}
+                          >
+                            <img
+                              src={qrUrl}
+                              alt="QR Code"
+                              className="w-16 h-16 object-contain select-none"
+                              crossOrigin="anonymous"
+                            />
+                          </div>
+                        </>
+                      )}
+
+                      {genType !== "stik_ps4" && genType !== "stik_ps3" && (
+                        <>
+                          <div className="flex flex-col items-center text-center">
+                            <h2 className="text-[16px] font-black tracking-[0.25em] leading-tight select-none uppercase">URBAN GAMING</h2>
+                            <p className="text-[10px] font-black tracking-widest opacity-85 mt-1.5 uppercase select-none">
+                              {genType === "tv" ? "TV MONITOR" : DEVICE_LABELS[genType]}
+                            </p>
+                          </div>
+
+                          <h1 className="text-7xl font-black font-mono tracking-tighter select-none leading-none my-4">
                             {genNumber === "" ? "00" : String(genNumber).padStart(2, "0")}
                           </h1>
-                        </div>
-                      </div>
 
-                      {/* Right side: QR Code */}
-                      <div 
-                        className={`p-1.5 rounded-xl shadow-inner flex items-center justify-center shrink-0 border ${
-                          genBgColor.toLowerCase() === "#ffffff" || genBgColor.toLowerCase() === "#fff"
-                            ? "bg-white border-zinc-200" 
-                            : "bg-white border-white/20"
-                        }`}
-                      >
-                        <img
-                          src={qrUrl}
-                          alt="QR Code"
-                          className="w-16 h-16 object-contain select-none"
-                          crossOrigin="anonymous"
-                        />
-                      </div>
+                          {/* QR Code */}
+                          <div
+                            className={`p-2.5 rounded-2xl shadow-inner flex items-center justify-center shrink-0 border ${
+                              genBgColor.toLowerCase() === "#ffffff" || genBgColor.toLowerCase() === "#fff"
+                                ? "bg-white border-zinc-200"
+                                : "bg-white border-white/20"
+                            }`}
+                          >
+                            <img
+                              src={qrUrl}
+                              alt="QR Code"
+                              className="w-24 h-24 object-contain select-none"
+                              crossOrigin="anonymous"
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1497,56 +1633,53 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
           id="pdf-render-pages-container"
           style={{ position: "absolute", left: "-9999px", top: 0, pointerEvents: "none" }}
         >
-          {pages.map((pageDevices, pageIdx) => (
+          {pages.map((page, pageIdx) => (
             <div 
               key={pageIdx} 
               id={`pdf-page-${pageIdx}`}
               style={{
                 width: "1588px",
                 height: "2246px",
-                padding: "80px 79px",
-                boxSizing: "border-box",
-                display: "grid",
-                gridTemplateColumns: "repeat(5, 265px)",
-                gridTemplateRows: "repeat(13, 151px)",
-                columnGap: "26px",
-                rowGap: "10px",
                 backgroundColor: "#ffffff",
                 position: "relative",
-                overflow: "hidden"
+                overflow: "hidden",
+                boxSizing: "border-box",
+                display: "grid",
+                padding: page.type === "square" ? "100px 117px" : (page.type === "stik_ps4" ? "130px 125px" : "80px 79px"),
+                gridTemplateColumns: page.type === "square" ? "repeat(3, 378px)" : (page.type === "stik_ps4" ? "repeat(2, 529px)" : "repeat(5, 265px)"),
+                gridTemplateRows: page.type === "square" ? "repeat(5, 378px)" : (page.type === "stik_ps4" ? "repeat(22, 76px)" : "repeat(13, 151px)"),
+                columnGap: page.type === "square" ? "40px" : (page.type === "stik_ps4" ? "80px" : "26px"),
+                rowGap: page.type === "square" ? "30px" : (page.type === "stik_ps4" ? "15px" : "10px"),
               }}
             >
-              {pageDevices.map((dev) => (
+              {page.devices.map((dev) => (
                 <div
                   key={dev.id}
-                  className="flex flex-row items-center justify-between p-3.5 relative select-none"
+                  className={`flex ${dev.type === "stik_ps4" || dev.type === "stik_ps3" ? "flex-row" : "flex-col"} items-center justify-between ${
+                    dev.type === "stik_ps4" ? "p-2.5" : (dev.type === "stik_ps3" ? "p-3.5" : "p-6")
+                  } relative select-none`}
                   style={{
-                    width: "265px",
-                    height: "151px",
+                    width: dev.type === "stik_ps4" ? "529px" : (dev.type === "stik_ps3" ? "265px" : "378px"),
+                    height: dev.type === "stik_ps4" ? "76px" : (dev.type === "stik_ps3" ? "151px" : "378px"),
                     boxSizing: "border-box",
                     backgroundColor: dev.stickerColor || "#1e1b4b",
                     color: dev.fontColor || "#ffffff",
                     fontFamily: "Inter, Roboto, sans-serif",
-                    borderRadius: "12px",
-                    border: "1px solid rgba(120, 120, 120, 0.2)"
+                    borderRadius: dev.type === "stik_ps4" ? "8px" : (dev.type === "stik_ps3" ? "12px" : "24px"),
+                    border: "1px solid rgba(120, 120, 120, 0.2)",
+                    textAlign: dev.type === "stik_ps4" || dev.type === "stik_ps3" ? "left" : "center"
                   }}
                 >
-                  {/* Left side details */}
-                  <div className="flex-1 flex flex-col justify-between items-start h-full text-left pr-3">
-                    <div className="flex flex-col items-start">
-                      <h2 className="text-[10px] font-black tracking-[0.2em] leading-tight select-none uppercase">URBAN GAMING</h2>
-                      <p className="text-[7px] font-black tracking-widest opacity-85 mt-0.5 uppercase select-none">
-                        {dev.type.startsWith("stik") 
-                          ? (dev.type === "stik_ps3" ? "STIK PS3" : "STIK PS4") 
-                          : DEVICE_LABELS[dev.type]}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-col items-start gap-1 mt-1">
-                      {/* Controller OP/OM side-by-side badges for crossing out */}
-                      {dev.type.startsWith("stik") && (
-                        <div className="flex items-center gap-1 select-none my-0.5" style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
-                          {/* OM Badge: Black bg, white text SVG */}
+                  {dev.type === "stik_ps4" && (
+                    <>
+                      {/* Left side details */}
+                      <div className="flex-1 flex flex-row items-center justify-between h-full text-left pr-3 gap-3">
+                        <div className="flex flex-col justify-center items-start shrink-0">
+                          <h2 className="text-[9px] font-black tracking-[0.1em] leading-tight select-none uppercase">URBAN GAMING</h2>
+                          <p className="text-[7px] font-black tracking-widest opacity-85 mt-0.5 uppercase select-none">STIK PS4</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {/* OM Badge */}
                           <svg width="24" height="12" style={{ display: "inline-block", verticalAlign: "middle" }}>
                             <rect width="24" height="12" rx="3" fill="#000000" />
                             <text 
@@ -1559,7 +1692,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                               fill="#ffffff"
                             >OM</text>
                           </svg>
-                          {/* OP Badge: White bg, black text SVG */}
+                          {/* OP Badge */}
                           <svg width="24" height="12" style={{ display: "inline-block", verticalAlign: "middle" }}>
                             <rect x="0.5" y="0.5" width="23" height="11" rx="2.5" fill="#ffffff" stroke="#000000" strokeWidth="0.75" />
                             <text 
@@ -1572,29 +1705,120 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                               fill="#000000"
                             >OP</text>
                           </svg>
+                          <h1 className="text-2xl font-black font-mono tracking-tighter select-none leading-none">
+                            {String(dev.number).padStart(2, "0")}
+                          </h1>
                         </div>
-                      )}
-                      <h1 className="text-3xl font-black font-mono tracking-tighter select-none leading-none">
+                      </div>
+
+                      {/* Right side: QR Code */}
+                      <div
+                        className={`p-1 rounded-lg shadow-inner flex items-center justify-center shrink-0 border ${
+                          dev.stickerColor?.toLowerCase() === "#ffffff" || dev.stickerColor?.toLowerCase() === "#fff"
+                            ? "bg-white border-zinc-200"
+                            : "bg-white border-white/20"
+                        }`}
+                      >
+                        <img
+                          src={preloadedQrCodes[dev.id]}
+                          alt="QR Code"
+                          className="w-12 h-12 object-contain select-none"
+                          crossOrigin="anonymous"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {dev.type === "stik_ps3" && (
+                    <>
+                      {/* Left side details */}
+                      <div className="flex-1 flex flex-col justify-between items-start h-full text-left pr-3">
+                        <div className="flex flex-col items-start">
+                          <h2 className="text-[10px] font-black tracking-[0.2em] leading-tight select-none uppercase">URBAN GAMING</h2>
+                          <p className="text-[7px] font-black tracking-widest opacity-85 mt-0.5 uppercase select-none">STIK PS3</p>
+                        </div>
+
+                        <div className="flex flex-col items-start gap-1 mt-1">
+                          <div className="flex items-center gap-1 select-none my-0.5" style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
+                            <svg width="24" height="12" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                              <rect width="24" height="12" rx="3" fill="#000000" />
+                              <text 
+                                x="12" 
+                                y="9" 
+                                textAnchor="middle" 
+                                fontFamily="Inter, Roboto, sans-serif" 
+                                fontWeight="900" 
+                                fontSize="7" 
+                                fill="#ffffff"
+                              >OM</text>
+                            </svg>
+                            <svg width="24" height="12" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                              <rect x="0.5" y="0.5" width="23" height="11" rx="2.5" fill="#ffffff" stroke="#000000" strokeWidth="0.75" />
+                              <text 
+                                x="12" 
+                                y="9" 
+                                textAnchor="middle" 
+                                fontFamily="Inter, Roboto, sans-serif" 
+                                fontWeight="900" 
+                                fontSize="7" 
+                                fill="#000000"
+                              >OP</text>
+                            </svg>
+                          </div>
+                          <h1 className="text-3xl font-black font-mono tracking-tighter select-none leading-none">
+                            {String(dev.number).padStart(2, "0")}
+                          </h1>
+                        </div>
+                      </div>
+
+                      {/* Right side: QR Code */}
+                      <div
+                        className={`p-1.5 rounded-xl shadow-inner flex items-center justify-center shrink-0 border ${
+                          dev.stickerColor?.toLowerCase() === "#ffffff" || dev.stickerColor?.toLowerCase() === "#fff"
+                            ? "bg-white border-zinc-200"
+                            : "bg-white border-white/20"
+                        }`}
+                      >
+                        <img
+                          src={preloadedQrCodes[dev.id]}
+                          alt="QR Code"
+                          className="w-16 h-16 object-contain select-none"
+                          crossOrigin="anonymous"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {dev.type !== "stik_ps4" && dev.type !== "stik_ps3" && (
+                    <>
+                      <div className="flex flex-col items-center text-center">
+                        <h2 className="text-[16px] font-black tracking-[0.25em] leading-tight select-none uppercase">URBAN GAMING</h2>
+                        <p className="text-[10px] font-black tracking-widest opacity-85 mt-1.5 uppercase select-none">
+                          {dev.type === "tv" ? "TV MONITOR" : DEVICE_LABELS[dev.type]}
+                        </p>
+                      </div>
+
+                      <h1 className="text-7xl font-black font-mono tracking-tighter select-none leading-none my-4">
                         {String(dev.number).padStart(2, "0")}
                       </h1>
-                    </div>
-                  </div>
 
-                  {/* Right side: QR Code */}
-                  <div
-                    className={`p-1.5 rounded-xl shadow-inner flex items-center justify-center shrink-0 border ${
-                      dev.stickerColor?.toLowerCase() === "#ffffff" || dev.stickerColor?.toLowerCase() === "#fff"
-                        ? "bg-white border-zinc-200"
-                        : "bg-white border-white/20"
-                    }`}
-                  >
-                    <img
-                      src={preloadedQrCodes[dev.id]}
-                      alt="QR Code"
-                      className="w-16 h-16 object-contain select-none"
-                      crossOrigin="anonymous"
-                    />
-                  </div>
+                      {/* QR Code */}
+                      <div
+                        className={`p-2.5 rounded-2xl shadow-inner flex items-center justify-center shrink-0 border ${
+                          dev.stickerColor?.toLowerCase() === "#ffffff" || dev.stickerColor?.toLowerCase() === "#fff"
+                            ? "bg-white border-zinc-200"
+                            : "bg-white border-white/20"
+                        }`}
+                      >
+                        <img
+                          src={preloadedQrCodes[dev.id]}
+                          alt="QR Code"
+                          className="w-24 h-24 object-contain select-none"
+                          crossOrigin="anonymous"
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
