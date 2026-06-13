@@ -1937,7 +1937,7 @@ export default function App() {
                           : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
                       }`}
                     >
-                      Monitoring Device
+                      Monitoring Kondisi Unit
                     </button>
                   </div>
                 </div>

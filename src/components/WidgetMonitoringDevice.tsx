@@ -706,7 +706,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
   return (
     <>
-      <Section title="Monitoring Device (Kondisi Alat)">
+      <Section title="Monitoring Kondisi Unit (Kondisi Alat)">
         <div className="bg-white dark:bg-[#111111] border border-zinc-200 dark:border-white/10 rounded-2xl md:rounded-[32px] p-4 sm:p-6 lg:p-8 flex flex-col gap-6 w-full overflow-hidden relative shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-black/20">
           
           {/* Glassmorphic Background Blur */}
