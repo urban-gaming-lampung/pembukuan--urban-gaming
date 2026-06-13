@@ -684,8 +684,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
   // Helper to get device count by status
   const getDeviceStats = (type: DeviceType) => {
-    const list = devices.filter(d => d.type === type);
     const capacity = masterCapacities[type] || 0;
+    const list = devices.filter(d => d.type === type && d.number <= capacity);
     
     // Count broken
     const rusakCount = list.filter(d => d.status === "rusak").length;
@@ -847,9 +847,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                   const stats = getDeviceStats(type);
                   const registeredForType = devices.filter(d => d.type === type);
                   
-                  // Compute largest badge number to show
-                  const maxRegisteredNum = registeredForType.reduce((max, d) => d.number > max ? d.number : max, 0);
-                  const displayLimit = Math.max(stats.total, maxRegisteredNum);
+                  // Show badges strictly according to master capacity
+                  const displayLimit = stats.total;
 
                   let devIcon = <Gamepad2 className="w-5 h-5 text-emerald-555" />;
                   if (type.startsWith("stik")) devIcon = <Gamepad2 className="w-5 h-5 text-blue-500" />;
