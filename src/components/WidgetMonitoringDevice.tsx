@@ -1131,14 +1131,12 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                       {genType === "stik_ps4" && (
                         <>
                           {/* Left side details */}
-                          <div className="flex-1 flex flex-row items-center justify-between h-full text-left pr-3 gap-3">
-                            <div className="flex flex-col justify-center items-start shrink-0">
-                              <h2 className="text-[9px] font-black tracking-[0.1em] leading-tight select-none uppercase">URBAN GAMING</h2>
-                              <p className="text-[7px] font-black tracking-widest opacity-85 mt-0.5 uppercase select-none">STIK PS4</p>
-                            </div>
-                            <div className="flex items-center gap-2">
+                          <div className="flex flex-col justify-center items-start h-full text-left gap-0.5">
+                            <h2 className="text-[12px] font-black tracking-wide leading-tight select-none uppercase">URBAN GAMING</h2>
+                            <p className="text-[8px] font-black tracking-widest opacity-85 uppercase select-none">STIK PS4</p>
+                            <div className="flex items-center gap-1.5 mt-0.5 select-none">
                               {/* OM Badge */}
-                              <svg width="24" height="12" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                              <svg width="24" height="12" style={{ display: "inline-block" }}>
                                 <rect width="24" height="12" rx="3" fill="#000000" />
                                 <text 
                                   x="12" 
@@ -1151,7 +1149,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                                 >OM</text>
                               </svg>
                               {/* OP Badge */}
-                              <svg width="24" height="12" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                              <svg width="24" height="12" style={{ display: "inline-block" }}>
                                 <rect x="0.5" y="0.5" width="23" height="11" rx="2.5" fill="#ffffff" stroke="#000000" strokeWidth="0.75" />
                                 <text 
                                   x="12" 
@@ -1163,26 +1161,28 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                                   fill="#000000"
                                 >OP</text>
                               </svg>
-                              <h1 className="text-2xl font-black font-mono tracking-tighter select-none leading-none">
-                                {genNumber === "" ? "00" : String(genNumber).padStart(2, "0")}
-                              </h1>
                             </div>
                           </div>
 
-                          {/* Right side: QR Code */}
-                          <div
-                            className={`p-1 rounded-lg shadow-inner flex items-center justify-center shrink-0 border ${
-                              genBgColor.toLowerCase() === "#ffffff" || genBgColor.toLowerCase() === "#fff"
-                                ? "bg-white border-zinc-200"
-                                : "bg-white border-white/20"
-                            }`}
-                          >
-                            <img
-                              src={qrUrl}
-                              alt="QR Code"
-                              className="w-12 h-12 object-contain select-none"
-                              crossOrigin="anonymous"
-                            />
+                          {/* Right side: Number and QR Code */}
+                          <div className="flex items-center gap-3">
+                            <h1 className="text-[32px] font-black font-mono tracking-tighter select-none leading-none">
+                              {genNumber === "" ? "00" : String(genNumber).padStart(2, "0")}
+                            </h1>
+                            <div
+                              className={`p-1 bg-white rounded-lg shadow-inner flex items-center justify-center shrink-0 border ${
+                                genBgColor.toLowerCase() === "#ffffff" || genBgColor.toLowerCase() === "#fff"
+                                  ? "border-zinc-200"
+                                  : "border-white/20"
+                              }`}
+                            >
+                              <img
+                                src={qrUrl}
+                                alt="QR Code"
+                                className="w-11 h-11 object-contain select-none"
+                                crossOrigin="anonymous"
+                              />
+                            </div>
                           </div>
                         </>
                       )}
@@ -1673,14 +1673,12 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                   {dev.type === "stik_ps4" && (
                     <>
                       {/* Left side details */}
-                      <div className="flex-1 flex flex-row items-center justify-between h-full text-left pr-3 gap-3">
-                        <div className="flex flex-col justify-center items-start shrink-0">
-                          <h2 className="text-[9px] font-black tracking-[0.1em] leading-tight select-none uppercase">URBAN GAMING</h2>
-                          <p className="text-[7px] font-black tracking-widest opacity-85 mt-0.5 uppercase select-none">STIK PS4</p>
-                        </div>
-                        <div className="flex items-center gap-2">
+                      <div className="flex flex-col justify-center items-start h-full text-left gap-0.5">
+                        <h2 className="text-[12px] font-black tracking-wide leading-tight select-none uppercase">URBAN GAMING</h2>
+                        <p className="text-[8px] font-black tracking-widest opacity-85 uppercase select-none">STIK PS4</p>
+                        <div className="flex items-center gap-1.5 mt-0.5 select-none">
                           {/* OM Badge */}
-                          <svg width="24" height="12" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                          <svg width="24" height="12" style={{ display: "inline-block" }}>
                             <rect width="24" height="12" rx="3" fill="#000000" />
                             <text 
                               x="12" 
@@ -1693,7 +1691,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                             >OM</text>
                           </svg>
                           {/* OP Badge */}
-                          <svg width="24" height="12" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                          <svg width="24" height="12" style={{ display: "inline-block" }}>
                             <rect x="0.5" y="0.5" width="23" height="11" rx="2.5" fill="#ffffff" stroke="#000000" strokeWidth="0.75" />
                             <text 
                               x="12" 
@@ -1705,26 +1703,28 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                               fill="#000000"
                             >OP</text>
                           </svg>
-                          <h1 className="text-2xl font-black font-mono tracking-tighter select-none leading-none">
-                            {String(dev.number).padStart(2, "0")}
-                          </h1>
                         </div>
                       </div>
 
-                      {/* Right side: QR Code */}
-                      <div
-                        className={`p-1 rounded-lg shadow-inner flex items-center justify-center shrink-0 border ${
-                          dev.stickerColor?.toLowerCase() === "#ffffff" || dev.stickerColor?.toLowerCase() === "#fff"
-                            ? "bg-white border-zinc-200"
-                            : "bg-white border-white/20"
-                        }`}
-                      >
-                        <img
-                          src={preloadedQrCodes[dev.id]}
-                          alt="QR Code"
-                          className="w-12 h-12 object-contain select-none"
-                          crossOrigin="anonymous"
-                        />
+                      {/* Right side: Number and QR Code */}
+                      <div className="flex items-center gap-3">
+                        <h1 className="text-[32px] font-black font-mono tracking-tighter select-none leading-none">
+                          {String(dev.number).padStart(2, "0")}
+                        </h1>
+                        <div
+                          className={`p-1 bg-white rounded-lg shadow-inner flex items-center justify-center shrink-0 border ${
+                            dev.stickerColor?.toLowerCase() === "#ffffff" || dev.stickerColor?.toLowerCase() === "#fff"
+                              ? "border-zinc-200"
+                              : "border-white/20"
+                          }`}
+                        >
+                          <img
+                            src={preloadedQrCodes[dev.id]}
+                            alt="QR Code"
+                            className="w-11 h-11 object-contain select-none"
+                            crossOrigin="anonymous"
+                          />
+                        </div>
                       </div>
                     </>
                   )}
