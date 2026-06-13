@@ -1293,7 +1293,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                   <button
                     type="button"
                     onClick={handleDownloadAllStickersPDF}
-                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-emerald-500/10 active:scale-95 animate-in fade-in duration-300"
+                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-red-500/10 active:scale-95 animate-in fade-in duration-300"
                   >
                     <QrCode className="w-4 h-4" /> Download Semua Sticker (PDF)
                   </button>
@@ -1317,7 +1317,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                     <button
                       type="button"
                       onClick={handleDownloadAllStickersPDF}
-                      className="self-start sm:self-auto flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
+                      className="self-start sm:self-auto flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-red-500/10 active:scale-95"
                     >
                       <QrCode className="w-3.5 h-3.5" /> Download Semua (PDF)
                     </button>
@@ -1833,8 +1833,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
           <div className="relative w-full max-w-sm bg-white dark:bg-[#1C1C1E] rounded-[28px] p-8 shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200 ring-1 ring-black/5 dark:ring-white/10">
              
              {/* PDF Icon Animation */}
-             <div className="w-16 h-16 mb-6 relative flex items-center justify-center bg-emerald-50 dark:bg-emerald-500/10 rounded-2xl">
-                <QrCode className="w-8 h-8 text-emerald-600 dark:text-emerald-400 animate-pulse" />
+             <div className="w-16 h-16 mb-6 relative flex items-center justify-center bg-red-50 dark:bg-red-500/10 rounded-2xl">
+                <QrCode className="w-8 h-8 text-red-600 dark:text-red-400 animate-pulse" />
              </div>
              
              <h3 className="text-[19px] font-bold text-zinc-900 dark:text-white mb-2">Membuat PDF Stiker</h3>
@@ -1845,7 +1845,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
              {/* Progress Bar */}
              <div className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-full h-3.5 mb-2 overflow-hidden shadow-inner ring-1 ring-inset ring-black/5 dark:ring-white/5 p-0.5 relative">
                 <div 
-                   className="bg-emerald-600 dark:bg-emerald-500 h-full rounded-full transition-all duration-300 ease-out relative overflow-hidden" 
+                   className="bg-red-600 dark:bg-red-500 h-full rounded-full transition-all duration-300 ease-out relative overflow-hidden" 
                    style={{ width: `${pdfProgress}%` }}
                 >
                     <div className="absolute top-0 right-0 bottom-0 left-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]"></div>
@@ -1853,7 +1853,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
              </div>
              
              {/* Percentage */}
-             <div className="text-[13px] font-bold text-emerald-600 dark:text-emerald-400 font-mono tracking-wider">
+             <div className="text-[13px] font-bold text-red-600 dark:text-red-400 font-mono tracking-wider">
                  {pdfProgress}%
              </div>
              
