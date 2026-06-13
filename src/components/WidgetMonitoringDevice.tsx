@@ -144,7 +144,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
     const sortedDevices = [...devices].sort(
       (a, b) => a.type.localeCompare(b.type) || a.number - b.number
     );
-    const itemsPerPage = 24;
+    const itemsPerPage = 65;
     const chunks: RegisteredDevice[][] = [];
     for (let i = 0; i < sortedDevices.length; i += itemsPerPage) {
       chunks.push(sortedDevices.slice(i, i + itemsPerPage));
@@ -498,8 +498,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       tempContainer.style.position = "fixed";
       tempContainer.style.top = "0";
       tempContainer.style.left = "0";
-      tempContainer.style.width = "380px";
-      tempContainer.style.height = "228px";
+      tempContainer.style.width = "265px";
+      tempContainer.style.height = "151px";
       tempContainer.style.overflow = "hidden";
       tempContainer.style.zIndex = "-9999";
       tempContainer.style.opacity = "1";
@@ -533,8 +533,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
         useCORS: true,
         backgroundColor: null,
         logging: false,
-        width: 380,
-        height: 228
+        width: 265,
+        height: 151
       });
 
       document.body.removeChild(tempContainer);
@@ -1071,56 +1071,56 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                   <div className="scale-[0.75] min-[400px]:scale-[0.85] sm:scale-100 origin-center shrink-0 my-[-25px] sm:my-0">
                     <div
                       ref={stickerPreviewRef}
-                      className="w-[380px] h-[228px] flex flex-row items-center justify-between p-6 relative select-none shadow-2xl"
+                      className="w-[265px] h-[151px] flex flex-row items-center justify-between p-3.5 relative select-none shadow-2xl"
                       style={{
                         backgroundColor: genBgColor,
                         color: genTextColor,
                         fontFamily: "Inter, Roboto, sans-serif",
-                        borderRadius: "20px"
+                        borderRadius: "12px"
                       }}
                     >
                       {/* Left side details */}
-                      <div className="flex-1 flex flex-col justify-between items-start h-full text-left pr-5">
+                      <div className="flex-1 flex flex-col justify-between items-start h-full text-left pr-3">
                         <div className="flex flex-col items-start">
-                          <h2 className="text-[13px] font-black tracking-[0.25em] leading-tight select-none uppercase">URBAN GAMING</h2>
-                          <p className="text-[8px] font-black tracking-widest opacity-85 mt-1 uppercase select-none">
+                          <h2 className="text-[10px] font-black tracking-[0.2em] leading-tight select-none uppercase">URBAN GAMING</h2>
+                          <p className="text-[7px] font-black tracking-widest opacity-85 mt-0.5 uppercase select-none">
                           {genType.startsWith("stik") ? (genType === "stik_ps3" ? "STIK PS3" : "STIK PS4") : DEVICE_LABELS[genType]}
                         </p>
                       </div>
                       
-                      <div className="flex flex-col items-start gap-1.5 mt-2">
+                      <div className="flex flex-col items-start gap-1 mt-1">
                         {/* Controller OP/OM side-by-side badges for crossing out */}
                         {genType.startsWith("stik") && (
-                           <div className="flex items-center gap-1.5 select-none my-0.5" style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
+                           <div className="flex items-center gap-1 select-none my-0.5" style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
                               {/* OM Badge: Black bg, white text SVG */}
-                              <svg width="32" height="16" style={{ display: "inline-block", verticalAlign: "middle" }}>
-                                <rect width="32" height="16" rx="4" fill="#000000" />
+                              <svg width="24" height="12" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                                <rect width="24" height="12" rx="3" fill="#000000" />
                                 <text 
-                                  x="16" 
-                                  y="11" 
+                                  x="12" 
+                                  y="9" 
                                   textAnchor="middle" 
                                   fontFamily="Inter, Roboto, sans-serif" 
                                   fontWeight="900" 
-                                  fontSize="9" 
+                                  fontSize="7" 
                                   fill="#ffffff"
                                 >OM</text>
                               </svg>
                               {/* OP Badge: White bg, black text SVG */}
-                              <svg width="32" height="16" style={{ display: "inline-block", verticalAlign: "middle" }}>
-                                <rect x="0.5" y="0.5" width="31" height="15" rx="3.5" fill="#ffffff" stroke="#000000" strokeWidth="1" />
+                              <svg width="24" height="12" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                                <rect x="0.5" y="0.5" width="23" height="11" rx="2.5" fill="#ffffff" stroke="#000000" strokeWidth="0.75" />
                                 <text 
-                                  x="16" 
-                                  y="11" 
+                                  x="12" 
+                                  y="9" 
                                   textAnchor="middle" 
                                   fontFamily="Inter, Roboto, sans-serif" 
                                   fontWeight="900" 
-                                  fontSize="9" 
+                                  fontSize="7" 
                                   fill="#000000"
                                 >OP</text>
                               </svg>
                            </div>
-                         )}
-                          <h1 className="text-5xl font-black font-mono tracking-tighter select-none leading-none">
+                        )}
+                          <h1 className="text-3xl font-black font-mono tracking-tighter select-none leading-none">
                             {genNumber === "" ? "00" : String(genNumber).padStart(2, "0")}
                           </h1>
                         </div>
@@ -1128,7 +1128,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
                       {/* Right side: QR Code */}
                       <div 
-                        className={`p-3 rounded-2xl shadow-inner flex items-center justify-center shrink-0 border ${
+                        className={`p-1.5 rounded-xl shadow-inner flex items-center justify-center shrink-0 border ${
                           genBgColor.toLowerCase() === "#ffffff" || genBgColor.toLowerCase() === "#fff"
                             ? "bg-white border-zinc-200" 
                             : "bg-white border-white/20"
@@ -1137,7 +1137,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                         <img
                           src={qrUrl}
                           alt="QR Code"
-                          className="w-24 h-24 object-contain select-none"
+                          className="w-16 h-16 object-contain select-none"
                           crossOrigin="anonymous"
                         />
                       </div>
@@ -1504,13 +1504,13 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
               style={{
                 width: "1588px",
                 height: "2246px",
-                padding: "92px 110px",
+                padding: "80px 79px",
                 boxSizing: "border-box",
                 display: "grid",
-                gridTemplateColumns: "repeat(3, 380px)",
-                gridTemplateRows: "repeat(8, 228px)",
-                columnGap: "108px",
-                rowGap: "34px",
+                gridTemplateColumns: "repeat(5, 265px)",
+                gridTemplateRows: "repeat(13, 151px)",
+                columnGap: "26px",
+                rowGap: "10px",
                 backgroundColor: "#ffffff",
                 position: "relative",
                 overflow: "hidden"
@@ -1519,62 +1519,62 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
               {pageDevices.map((dev) => (
                 <div
                   key={dev.id}
-                  className="flex flex-row items-center justify-between p-6 relative select-none"
+                  className="flex flex-row items-center justify-between p-3.5 relative select-none"
                   style={{
-                    width: "380px",
-                    height: "228px",
+                    width: "265px",
+                    height: "151px",
                     boxSizing: "border-box",
                     backgroundColor: dev.stickerColor || "#1e1b4b",
                     color: dev.fontColor || "#ffffff",
                     fontFamily: "Inter, Roboto, sans-serif",
-                    borderRadius: "20px",
+                    borderRadius: "12px",
                     border: "1px solid rgba(120, 120, 120, 0.2)"
                   }}
                 >
                   {/* Left side details */}
-                  <div className="flex-1 flex flex-col justify-between items-start h-full text-left pr-5">
+                  <div className="flex-1 flex flex-col justify-between items-start h-full text-left pr-3">
                     <div className="flex flex-col items-start">
-                      <h2 className="text-[13px] font-black tracking-[0.25em] leading-tight select-none uppercase">URBAN GAMING</h2>
-                      <p className="text-[8px] font-black tracking-widest opacity-85 mt-1 uppercase select-none">
+                      <h2 className="text-[10px] font-black tracking-[0.2em] leading-tight select-none uppercase">URBAN GAMING</h2>
+                      <p className="text-[7px] font-black tracking-widest opacity-85 mt-0.5 uppercase select-none">
                         {dev.type.startsWith("stik") 
                           ? (dev.type === "stik_ps3" ? "STIK PS3" : "STIK PS4") 
                           : DEVICE_LABELS[dev.type]}
                       </p>
                     </div>
 
-                    <div className="flex flex-col items-start gap-1.5 mt-2">
+                    <div className="flex flex-col items-start gap-1 mt-1">
                       {/* Controller OP/OM side-by-side badges for crossing out */}
                       {dev.type.startsWith("stik") && (
-                        <div className="flex items-center gap-1.5 select-none my-0.5" style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
+                        <div className="flex items-center gap-1 select-none my-0.5" style={{ display: "flex", flexDirection: "row", alignItems: "center" }}>
                           {/* OM Badge: Black bg, white text SVG */}
-                          <svg width="32" height="16" style={{ display: "inline-block", verticalAlign: "middle" }}>
-                            <rect width="32" height="16" rx="4" fill="#000000" />
+                          <svg width="24" height="12" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                            <rect width="24" height="12" rx="3" fill="#000000" />
                             <text 
-                              x="16" 
-                              y="11" 
+                              x="12" 
+                              y="9" 
                               textAnchor="middle" 
                               fontFamily="Inter, Roboto, sans-serif" 
                               fontWeight="900" 
-                              fontSize="9" 
+                              fontSize="7" 
                               fill="#ffffff"
                             >OM</text>
                           </svg>
                           {/* OP Badge: White bg, black text SVG */}
-                          <svg width="32" height="16" style={{ display: "inline-block", verticalAlign: "middle" }}>
-                            <rect x="0.5" y="0.5" width="31" height="15" rx="3.5" fill="#ffffff" stroke="#000000" strokeWidth="1" />
+                          <svg width="24" height="12" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                            <rect x="0.5" y="0.5" width="23" height="11" rx="2.5" fill="#ffffff" stroke="#000000" strokeWidth="0.75" />
                             <text 
-                              x="16" 
-                              y="11" 
+                              x="12" 
+                              y="9" 
                               textAnchor="middle" 
                               fontFamily="Inter, Roboto, sans-serif" 
                               fontWeight="900" 
-                              fontSize="9" 
+                              fontSize="7" 
                               fill="#000000"
                             >OP</text>
                           </svg>
                         </div>
                       )}
-                      <h1 className="text-5xl font-black font-mono tracking-tighter select-none leading-none">
+                      <h1 className="text-3xl font-black font-mono tracking-tighter select-none leading-none">
                         {String(dev.number).padStart(2, "0")}
                       </h1>
                     </div>
@@ -1582,7 +1582,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
                   {/* Right side: QR Code */}
                   <div
-                    className={`p-3 rounded-2xl shadow-inner flex items-center justify-center shrink-0 border ${
+                    className={`p-1.5 rounded-xl shadow-inner flex items-center justify-center shrink-0 border ${
                       dev.stickerColor?.toLowerCase() === "#ffffff" || dev.stickerColor?.toLowerCase() === "#fff"
                         ? "bg-white border-zinc-200"
                         : "bg-white border-white/20"
@@ -1591,7 +1591,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                     <img
                       src={preloadedQrCodes[dev.id]}
                       alt="QR Code"
-                      className="w-24 h-24 object-contain select-none"
+                      className="w-16 h-16 object-contain select-none"
                       crossOrigin="anonymous"
                     />
                   </div>
