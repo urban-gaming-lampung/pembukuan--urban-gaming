@@ -1125,7 +1125,10 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                         fontFamily: "Inter, Roboto, sans-serif",
                         borderRadius: genType === "stik_ps4" ? "8px" : (genType === "stik_ps3" ? "12px" : "24px"),
                         boxSizing: "border-box",
-                        textAlign: genType === "stik_ps4" || genType === "stik_ps3" ? "left" : "center"
+                        textAlign: genType === "stik_ps4" || genType === "stik_ps3" ? "left" : "center",
+                        border: genBgColor.toLowerCase() === "#ffffff" || genBgColor.toLowerCase() === "#fff"
+                          ? "2px dashed #cbd5e1"
+                          : "none"
                       }}
                     >
                       {genType === "stik_ps4" && (
@@ -1666,7 +1669,9 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                     color: dev.fontColor || "#ffffff",
                     fontFamily: "Inter, Roboto, sans-serif",
                     borderRadius: dev.type === "stik_ps4" ? "8px" : (dev.type === "stik_ps3" ? "12px" : "24px"),
-                    border: "1px solid rgba(120, 120, 120, 0.2)",
+                    border: dev.stickerColor?.toLowerCase() === "#ffffff" || dev.stickerColor?.toLowerCase() === "#fff"
+                      ? "2px dashed #9ca3af"
+                      : "1px solid rgba(120, 120, 120, 0.2)",
                     textAlign: dev.type === "stik_ps4" || dev.type === "stik_ps3" ? "left" : "center"
                   }}
                 >
