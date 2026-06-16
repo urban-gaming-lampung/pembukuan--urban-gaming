@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { INITIAL_STOK_RENTAL, INITIAL_STOK_JUALAN, StokKategori, StokItemValue, StokData, MasterStokCategories } from "../hooks/useStokData";
 import { Package } from "lucide-react";
+import WidgetMonitoringDevice from "./WidgetMonitoringDevice";
 
 const StokTable: React.FC<{
   title: string;
@@ -297,15 +298,18 @@ export default function UpdateStok({ adminName, isOwner, stokState, updateStok, 
       )}
 
       {activeSubTab === "RENTAL" ? (
-         <StokTable
-           title="TABEL UPDATE STOK RENTAL"
-           categories={masterCategories.rental}
-           type="rental"
-           colorTheme="pink"
-           data={stokState.rental}
-           onUpdate={updateStok}
-           adminName={adminName}
-         />
+         <div className="space-y-8 animate-in fade-in duration-300">
+            <StokTable
+              title="TABEL UPDATE STOK RENTAL"
+              categories={masterCategories.rental}
+              type="rental"
+              colorTheme="pink"
+              data={stokState.rental}
+              onUpdate={updateStok}
+              adminName={adminName}
+            />
+            <WidgetMonitoringDevice isOwner={isOwner} />
+         </div>
       ) : (
          <StokTable
            title="TABEL UPDATE STOK JUALAN"

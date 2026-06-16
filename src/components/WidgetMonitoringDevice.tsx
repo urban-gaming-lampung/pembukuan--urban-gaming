@@ -25,6 +25,12 @@ interface RegisteredDevice {
   fontColor: string;
   updatedAt: number;
   updatedBy: string;
+  history?: Array<{
+    updatedAt: number;
+    status: "baik" | "rusak";
+    keterangan: string;
+    updatedBy: string;
+  }>;
 }
 
 interface WidgetMonitoringDeviceProps {
@@ -415,12 +421,24 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
     
     const deviceId = updatingDevice.id;
     const isNew = !devices.some(d => d.id === deviceId);
+    const existingDevice = devices.find(d => d.id === deviceId);
+
+    const newHistoryEntry = {
+      updatedAt: Date.now(),
+      updatedBy: currentUserEmail || "Admin",
+      status: updateStatus,
+      keterangan: updateStatus === "rusak" ? updateKeterangan : "Diperbaiki / Kondisi Normal"
+    };
+
+    const currentHistory = existingDevice?.history || [];
+    const updatedHistory = [...currentHistory, newHistoryEntry];
 
     const updatedData: Partial<RegisteredDevice> = {
       status: updateStatus,
       keterangan: updateStatus === "rusak" ? updateKeterangan : "",
       updatedAt: Date.now(),
-      updatedBy: currentUserEmail || "Admin"
+      updatedBy: currentUserEmail || "Admin",
+      history: updatedHistory
     };
 
     try {
@@ -436,7 +454,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
           stickerColor: "#1e1b4b", // default navy
           fontColor: "#ffffff",
           updatedAt: Date.now(),
-          updatedBy: currentUserEmail || "Admin"
+          updatedBy: currentUserEmail || "Admin",
+          history: [newHistoryEntry]
         };
         await setDoc(doc(db, "monitoring_devices", deviceId), payload);
       } else {
@@ -1550,7 +1569,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       {updatingDevice && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setUpdatingDevice(null)}></div>
-          <div className="bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-2xl rounded-[32px] p-6 max-w-sm w-full shadow-2xl shadow-black/30 border border-zinc-100 dark:border-white/10 relative z-10 animate-in zoom-in-95 duration-200">
+          <div className="bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-2xl rounded-[32px] p-6 max-w-sm w-full max-h-[90vh] overflow-y-auto shadow-2xl shadow-black/30 border border-zinc-100 dark:border-white/10 relative z-10 animate-in zoom-in-95 duration-200">
             
             <div className="w-12 h-1.5 bg-zinc-300 dark:bg-zinc-700 rounded-full mx-auto mb-5"></div>
             
@@ -1624,6 +1643,48 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                 >
                   Simpan Status
                 </button>
+              </div>
+
+              {/* Damage/Repair History Section */}
+              <div className="border-t border-zinc-150 dark:border-white/5 pt-4 mt-2">
+                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block text-left mb-2">
+                  Riwayat Kerusakan & Perbaikan ({updatingDevice.history?.length || 0})
+                </label>
+                {updatingDevice.history && updatingDevice.history.length > 0 ? (
+                  <div className="flex flex-col gap-2 max-h-36 overflow-y-auto pr-1 text-left">
+                    {[...updatingDevice.history].reverse().map((entry, idx) => (
+                      <div 
+                        key={idx} 
+                        className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/50 dark:border-white/5 text-[11px]"
+                      >
+                        <div className="flex justify-between items-center mb-1">
+                          <span className={`font-black px-1.5 py-0.5 rounded text-[9px] uppercase ${
+                            entry.status === "rusak"
+                              ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+                              : "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
+                          }`}>
+                            {entry.status === "rusak" ? "RUSAK" : "NORMAL"}
+                          </span>
+                          <span className="text-[9px] text-zinc-400 font-mono">
+                            {new Date(entry.updatedAt).toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: '2-digit' })}
+                          </span>
+                        </div>
+                        {entry.keterangan && (
+                          <p className="text-zinc-700 dark:text-zinc-300 font-bold leading-relaxed mb-0.5">
+                            {entry.keterangan}
+                          </p>
+                        )}
+                        <span className="text-[9px] text-zinc-400 dark:text-zinc-500 block">
+                          Oleh: {entry.updatedBy?.split("@")[0]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-zinc-455 dark:text-zinc-500 italic text-center py-2">
+                    Belum ada riwayat kondisi
+                  </p>
+                )}
               </div>
             </div>
           </div>
