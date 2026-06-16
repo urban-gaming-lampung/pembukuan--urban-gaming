@@ -1658,7 +1658,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
             <div className="flex flex-col gap-4">
               {/* Radio Group Status */}
               <div className="flex flex-col gap-1.5 text-left">
-                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Kondisi Alat</label>
+                <label className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Kondisi Alat</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => setUpdateStatus("baik")}
@@ -1686,7 +1686,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
               {/* Keterangan Kerusakan */}
               {updateStatus === "rusak" && (
                 <div className="flex flex-col gap-1.5 text-left animate-in slide-in-from-top-2 duration-200">
-                  <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Keterangan Kerusakan</label>
+                  <label className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Keterangan Kerusakan</label>
                   <textarea
                     value={updateKeterangan}
                     onChange={(e) => setUpdateKeterangan(e.target.value)}
@@ -1699,7 +1699,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
               {/* Update Log metadata */}
               {updatingDevice.updatedAt && (
-                <div className="text-[10px] text-zinc-450 dark:text-zinc-500 text-center">
+                <div className="text-[10px] text-zinc-500 dark:text-zinc-400 text-center">
                   Diupdate oleh: {updatingDevice.updatedBy?.split("@")[0]}
                   <span className="block mt-0.5">Waktu: {new Date(updatingDevice.updatedAt || 0).toLocaleString("id-ID")}</span>
                 </div>
@@ -1722,7 +1722,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
               {/* Damage/Repair History Section */}
               <div className="border-t border-zinc-150 dark:border-white/5 pt-4 mt-2">
-                <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest block text-left mb-2">
+                <label className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest block text-left mb-2">
                   Riwayat Kerusakan & Perbaikan ({updatingDevice.history?.length || 0})
                 </label>
                 {updatingDevice.history && updatingDevice.history.length > 0 ? (
@@ -1749,14 +1749,14 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                             {entry.keterangan}
                           </p>
                         )}
-                        <span className="text-[9px] text-zinc-400 dark:text-zinc-500 block">
+                        <span className="text-[9px] text-zinc-500 dark:text-zinc-400 block">
                           Oleh: {entry.updatedBy?.split("@")[0]}
                         </span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-[11px] text-zinc-455 dark:text-zinc-500 italic text-center py-2">
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 italic text-center py-2">
                     Belum ada riwayat kondisi
                   </p>
                 )}
