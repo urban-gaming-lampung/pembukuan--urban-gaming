@@ -215,33 +215,37 @@ function calculateIntegratedCounts(devices: RegisteredDevice[], capacities: Reco
     "UPDATE DEVICE - PLAYBOX / PORTABEL": { bagus: 0, rusak: 0 }
   };
 
-  // 1. stik_ps3 OP vs OM
+  // 1. stik_ps3 OP vs OM (OM is counted explicitly from stickers; OP is the rest of the capacity)
   const capStikPs3 = capacities["stik_ps3"] || 0;
   const stikPs3Devices = devices.filter(d => d.type === "stik_ps3" && d.number <= capStikPs3);
-  stikPs3Devices.forEach(d => {
-    const isRusak = d.status === "rusak";
-    if (d.stikType === "OP") {
-      if (isRusak) counts["UPDATE STIK - STIK PS3"].rusak++;
-      else counts["UPDATE STIK - STIK PS3"].bagus++;
-    } else if (d.stikType === "OM") {
-      if (isRusak) counts["UPDATE STIK - STIK PS3 ORI MESIN"].rusak++;
-      else counts["UPDATE STIK - STIK PS3 ORI MESIN"].bagus++;
-    }
-  });
+  
+  // Count OM
+  const omPs3 = stikPs3Devices.filter(d => d.stikType === "OM");
+  const omPs3Rusak = omPs3.filter(d => d.status === "rusak").length;
+  const omPs3Bagus = omPs3.length - omPs3Rusak;
+
+  // OP is the rest of the capacity. Unspecified stikType ("") stickers that are rusak count as OP Rusak.
+  const opPs3Rusak = stikPs3Devices.filter(d => d.stikType !== "OM" && d.status === "rusak").length;
+  const opPs3Bagus = Math.max(0, capStikPs3 - omPs3.length - opPs3Rusak);
+
+  counts["UPDATE STIK - STIK PS3 ORI MESIN"] = { bagus: omPs3Bagus, rusak: omPs3Rusak };
+  counts["UPDATE STIK - STIK PS3"] = { bagus: opPs3Bagus, rusak: opPs3Rusak };
 
   // 2. stik_ps4 OP vs OM
   const capStikPs4 = capacities["stik_ps4"] || 0;
   const stikPs4Devices = devices.filter(d => d.type === "stik_ps4" && d.number <= capStikPs4);
-  stikPs4Devices.forEach(d => {
-    const isRusak = d.status === "rusak";
-    if (d.stikType === "OP") {
-      if (isRusak) counts["UPDATE STIK - STIK PS4"].rusak++;
-      else counts["UPDATE STIK - STIK PS4"].bagus++;
-    } else if (d.stikType === "OM") {
-      if (isRusak) counts["UPDATE STIK - STIK PS4 ORI MESIN"].rusak++;
-      else counts["UPDATE STIK - STIK PS4 ORI MESIN"].bagus++;
-    }
-  });
+
+  // Count OM
+  const omPs4 = stikPs4Devices.filter(d => d.stikType === "OM");
+  const omPs4Rusak = omPs4.filter(d => d.status === "rusak").length;
+  const omPs4Bagus = omPs4.length - omPs4Rusak;
+
+  // OP is the rest of the capacity. Unspecified stikType ("") stickers that are rusak count as OP Rusak.
+  const opPs4Rusak = stikPs4Devices.filter(d => d.stikType !== "OM" && d.status === "rusak").length;
+  const opPs4Bagus = Math.max(0, capStikPs4 - omPs4.length - opPs4Rusak);
+
+  counts["UPDATE STIK - STIK PS4 ORI MESIN"] = { bagus: omPs4Bagus, rusak: omPs4Rusak };
+  counts["UPDATE STIK - STIK PS4"] = { bagus: opPs4Bagus, rusak: opPs4Rusak };
 
   // Helper for direct devices (ps3, ps4, tv, playbox)
   const computeDirectStats = (type: string, categoryKey: string) => {
