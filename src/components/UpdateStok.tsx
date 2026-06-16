@@ -315,10 +315,10 @@ export default function UpdateStok({ adminName, isOwner, stokState, updateStok, 
         </button>
       </div>
 
-      {activeSubTab === "RENTAL" && (
+      {activeSubTab === "RENTAL" && isOwner && (
          <MasterInventarisForm type="rental" catList={masterCategories.rental} onAdd={addStokItem} isOwner={isOwner} />
       )}
-      {activeSubTab === "JUALAN" && (
+      {activeSubTab === "JUALAN" && isOwner && (
          <MasterInventarisForm type="jualan" catList={masterCategories.jualan} onAdd={addStokItem} isOwner={isOwner} />
       )}
 
