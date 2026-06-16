@@ -132,6 +132,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
   const [updatingDevice, setUpdatingDevice] = useState<Partial<RegisteredDevice> | null>(null);
   const [updateStatus, setUpdateStatus] = useState<"baik" | "rusak">("baik");
   const [updateKeterangan, setUpdateKeterangan] = useState("");
+  const [updateStikType, setUpdateStikType] = useState<"OP" | "OM">("OP");
 
   // Generator form state
   const [genType, setGenType] = useState<DeviceType>("ps4");
@@ -427,6 +428,9 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       setUpdatingDevice(existing);
       setUpdateStatus(existing.status);
       setUpdateKeterangan(existing.keterangan);
+      if (existing.type.startsWith("stik")) {
+        setUpdateStikType(existing.stikType === "OM" ? "OM" : "OP");
+      }
     } else {
       // Create temporary mock device if scanned unregistered sticker
       setUpdatingDevice({
@@ -435,10 +439,13 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
         number: numCandidate,
         status: "baik",
         keterangan: "",
-        stikType: typeCandidate.startsWith("stik") ? "OM" : ""
+        stikType: typeCandidate.startsWith("stik") ? "OP" : ""
       });
       setUpdateStatus("baik");
       setUpdateKeterangan("");
+      if (typeCandidate.startsWith("stik")) {
+        setUpdateStikType("OP");
+      }
     }
   };
 
@@ -486,6 +493,10 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       history: updatedHistory
     };
 
+    if (updatingDevice.type?.startsWith("stik")) {
+      updatedData.stikType = updateStikType;
+    }
+
     try {
       if (isNew) {
         // If it's a completely new scanned device, initialize other values
@@ -493,7 +504,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
           id: deviceId,
           type: updatingDevice.type as DeviceType,
           number: updatingDevice.number || 1,
-          stikType: updatingDevice.stikType || "",
+          stikType: updatingDevice.type?.startsWith("stik") ? updateStikType : "",
           status: updateStatus,
           keterangan: updateStatus === "rusak" ? updateKeterangan : "",
           stickerColor: "#1e1b4b", // default navy
@@ -1656,6 +1667,37 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
             </p>
 
             <div className="flex flex-col gap-4">
+              {/* Kategori Stik (Khusus Stik PS3 & PS4) */}
+              {updatingDevice.type?.startsWith("stik") && (
+                <div className="flex flex-col gap-1.5 text-left animate-in fade-in duration-200">
+                  <label className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Kategori Stik</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setUpdateStikType("OP")}
+                      className={`py-3.5 rounded-2xl font-bold text-xs flex flex-col items-center justify-center gap-1.5 border transition-all ${
+                        updateStikType === "OP"
+                          ? "bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm font-black"
+                          : "bg-white dark:bg-black border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-white/5"
+                      }`}
+                    >
+                      Original Pabrik (OP)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUpdateStikType("OM")}
+                      className={`py-3.5 rounded-2xl font-bold text-xs flex flex-col items-center justify-center gap-1.5 border transition-all ${
+                        updateStikType === "OM"
+                          ? "bg-rose-500/10 border-rose-500 text-rose-600 dark:text-rose-400 shadow-sm font-black"
+                          : "bg-white dark:bg-black border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-white/5"
+                      }`}
+                    >
+                      Original Mesin (OM)
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Radio Group Status */}
               <div className="flex flex-col gap-1.5 text-left">
                 <label className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Kondisi Alat</label>
