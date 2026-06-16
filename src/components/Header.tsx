@@ -224,7 +224,7 @@ export default function Header({
                     </span>
                   </h1>
 
-                  <div className={`flex flex-row items-center gap-2 mt-1 transition-all duration-300 ${scrolled ? "opacity-0 h-0 overflow-hidden" : "opacity-100 h-auto"}`}>
+                  <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 transition-all duration-300 ${scrolled ? "opacity-0 h-0 overflow-hidden" : "opacity-100 h-auto"}`}>
                     <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-100/80 dark:bg-zinc-800/80 border border-zinc-200/50 dark:border-white/10 shrink-0">
                       <Icons.Calendar />
                       <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">{tanggal}</span>
