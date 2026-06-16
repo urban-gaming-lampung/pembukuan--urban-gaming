@@ -1446,8 +1446,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                                   {dev.stikType ? (
                                     <span className={`px-2.5 py-0.5 font-black rounded-lg text-[9px] tracking-wider uppercase ${
                                       dev.stikType === "OM" 
-                                        ? "bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400" 
-                                        : "bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400"
+                                        ? "bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400" 
+                                        : "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
                                     }`}>
                                       {dev.stikType === "OM" ? "Original Mesin" : "Original Pabrik"}
                                     </span>
@@ -1530,9 +1530,9 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                                <div className="flex items-center gap-2">
                                  <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Kategori:</span>
                                  <span className={`px-2 py-0.5 font-black rounded text-[9px] uppercase tracking-wider ${
-                                   dev.stikType === "OM"
-                                     ? "bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400"
-                                     : "bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400"
+                                    dev.stikType === "OM"
+                                      ? "bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400"
+                                      : "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
                                  }`}>
                                    {dev.stikType === "OM" ? "Original Mesin" : "Original Pabrik"}
                                  </span>
@@ -1677,7 +1677,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                       onClick={() => setUpdateStikType("OP")}
                       className={`py-3.5 rounded-2xl font-bold text-xs flex flex-col items-center justify-center gap-1.5 border transition-all ${
                         updateStikType === "OP"
-                          ? "bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm font-black"
+                          ? "bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-sm font-black"
                           : "bg-white dark:bg-black border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-white/5"
                       }`}
                     >
@@ -1688,7 +1688,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                       onClick={() => setUpdateStikType("OM")}
                       className={`py-3.5 rounded-2xl font-bold text-xs flex flex-col items-center justify-center gap-1.5 border transition-all ${
                         updateStikType === "OM"
-                          ? "bg-rose-500/10 border-rose-500 text-rose-600 dark:text-rose-400 shadow-sm font-black"
+                          ? "bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm font-black"
                           : "bg-white dark:bg-black border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-white/5"
                       }`}
                     >
