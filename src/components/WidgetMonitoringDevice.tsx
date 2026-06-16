@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import { 
   QrCode, ScanLine, Camera, Gamepad2, Monitor, Smartphone, 
   Plus, Trash2, Edit, Save, CheckCircle2, XCircle, AlertCircle, 
-  Upload, Activity, History, Sparkles, Download, RefreshCw, X, Eye
+  Upload, Activity, History, Sparkles, Download, RefreshCw, X, Eye,
+  Flashlight, FlashlightOff
 } from "lucide-react";
 import { doc, setDoc, onSnapshot, collection, deleteDoc, updateDoc } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
@@ -124,6 +125,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
   const [showScanner, setShowScanner] = useState(false);
   const [scanningError, setScanningError] = useState<string | null>(null);
   const qrCodeRef = useRef<Html5Qrcode | null>(null);
+  const [isTorchSupported, setIsTorchSupported] = useState(false);
+  const [isTorchOn, setIsTorchOn] = useState(false);
 
   // Selected device for Status Update Modal
   const [updatingDevice, setUpdatingDevice] = useState<Partial<RegisteredDevice> | null>(null);
@@ -257,6 +260,43 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
     }
   };
 
+  // Check if torch is supported
+  const checkTorchSupport = () => {
+    try {
+      if (qrCodeRef.current && qrCodeRef.current.isScanning) {
+        const capabilities = qrCodeRef.current.getRunningTrackCameraCapabilities();
+        if (capabilities && typeof capabilities.torchFeature === "function") {
+          const torch = capabilities.torchFeature();
+          if (torch.isSupported()) {
+            setIsTorchSupported(true);
+            setIsTorchOn(!!torch.value());
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Error checking torch support:", e);
+    }
+  };
+
+  // Toggle the torch
+  const toggleTorch = async () => {
+    try {
+      if (qrCodeRef.current && qrCodeRef.current.isScanning) {
+        const capabilities = qrCodeRef.current.getRunningTrackCameraCapabilities();
+        if (capabilities && typeof capabilities.torchFeature === "function") {
+          const torch = capabilities.torchFeature();
+          if (torch.isSupported()) {
+            const nextState = !isTorchOn;
+            await torch.apply(nextState);
+            setIsTorchOn(nextState);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Error toggling torch:", e);
+    }
+  };
+
   // QR Scanning trigger
   const startScanning = async () => {
     setShowScanner(true);
@@ -291,6 +331,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
             },
             () => {} // scan silently
           );
+          checkTorchSupport();
         } catch (firstErr) {
           console.warn("Failed back camera, trying front camera...", firstErr);
           try {
@@ -303,6 +344,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
               },
               () => {} // scan silently
             );
+            checkTorchSupport();
           } catch (secondErr) {
             console.warn("Failed front camera, trying default available camera...", secondErr);
             const devices = await Html5Qrcode.getCameras();
@@ -316,6 +358,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                 },
                 () => {} // scan silently
               );
+              checkTorchSupport();
             } else {
               throw new Error("No camera devices found");
             }
@@ -340,6 +383,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       qrCodeRef.current = null;
     }
     setShowScanner(false);
+    setIsTorchSupported(false);
+    setIsTorchOn(false);
   };
 
   useEffect(() => {
@@ -1541,7 +1586,22 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
             </div>
 
             {/* Camera Viewport */}
-            <div id="qr-reader-view" className="w-full aspect-square bg-black overflow-hidden" />
+            <div className="relative w-full aspect-square bg-black overflow-hidden">
+              <div id="qr-reader-view" className="w-full h-full" />
+              {isTorchSupported && (
+                <button
+                  onClick={toggleTorch}
+                  className={`absolute bottom-4 right-4 z-20 p-3 rounded-full backdrop-blur-md transition-all border ${
+                    isTorchOn
+                      ? "bg-yellow-500 border-yellow-400 text-black shadow-lg shadow-yellow-500/30 scale-105"
+                      : "bg-black/60 border-white/20 text-white hover:bg-black/80 hover:scale-105"
+                  } active:scale-95`}
+                  title="Toggle Flashlight"
+                >
+                  {isTorchOn ? <Flashlight className="w-5 h-5 fill-current" /> : <FlashlightOff className="w-5 h-5" />}
+                </button>
+              )}
+            </div>
 
             {/* Footer / Alternate Options */}
             <div className="p-5 bg-zinc-900/50 border-t border-white/5 flex flex-col gap-3">
