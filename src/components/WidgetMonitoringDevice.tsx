@@ -491,7 +491,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
         id: deviceId,
         type: genType,
         number: numValue,
-        stikType: "",
+        stikType: genType.startsWith("stik") ? genStikType : "",
         status: existingData?.status || "baik",
         keterangan: existingData?.keterangan || "",
         stickerColor: genBgColor,
@@ -1016,7 +1016,22 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                       />
                     </div>
 
-
+                    {genType.startsWith("stik") && (
+                      <div className="flex flex-col gap-1.5 text-left">
+                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Kategori Stik</label>
+                        <select
+                          value={genStikType}
+                          onChange={(e) => {
+                            setGenStikType(e.target.value as "OP" | "OM");
+                            setEditingStickerId(null);
+                          }}
+                          className="bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-4 py-2 text-zinc-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
+                        >
+                          <option value="OM">Original Mesin (OM)</option>
+                          <option value="OP">Original Pabrik (OP)</option>
+                        </select>
+                      </div>
+                    )}
                   </div>
 
                   {/* Preset Colors */}

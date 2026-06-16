@@ -1,7 +1,17 @@
 import React, { useState } from "react";
 import { INITIAL_STOK_RENTAL, INITIAL_STOK_JUALAN, StokKategori, StokItemValue, StokData, MasterStokCategories } from "../hooks/useStokData";
-import { Package } from "lucide-react";
-import WidgetMonitoringDevice from "./WidgetMonitoringDevice";
+import { Package, Activity } from "lucide-react";
+
+const INTEGRATED_CATEGORIES = [
+  "UPDATE STIK - STIK PS3",
+  "UPDATE STIK - STIK PS3 ORI MESIN",
+  "UPDATE STIK - STIK PS4",
+  "UPDATE STIK - STIK PS4 ORI MESIN",
+  "UPDATE KONSOL - PLAYSTATION 3",
+  "UPDATE KONSOL - PLAYSTATION 4",
+  "UPDATE DEVICE - TV MONITOR",
+  "UPDATE DEVICE - PLAYBOX / PORTABEL"
+];
 
 const StokTable: React.FC<{
   title: string;
@@ -68,14 +78,15 @@ const StokTable: React.FC<{
 
               {/* Items List */}
               <div className="flex flex-col divide-y divide-zinc-100 dark:divide-white/5">
-                {items.map((item, itemIdx) => {
+                 {items.map((item, itemIdx) => {
                   const itemData = data[cat.kategori]?.[item] || { jumlah: 0 };
                   const val = itemData.jumlah;
                   const adminStr = itemData.lastEditBy ? ` oleh ${itemData.lastEditBy.split('@')[0]}` : "";
                   const hint = itemData.lastEditDate ? `telah di edit${adminStr}, ${itemData.lastEditDate}, ${(itemData.lastEditDelta && itemData.lastEditDelta > 0) ? `+${itemData.lastEditDelta}` : itemData.lastEditDelta}` : "";
+                  const isIntegrated = type === "rental" && INTEGRATED_CATEGORIES.some(ic => ic.toLowerCase() === cat.kategori.toLowerCase());
 
                   return (
-                    <div key={`${cat.kategori}-${item}`} className="flex flex-row items-center justify-between p-4 hover:bg-zinc-50/50 dark:hover:bg-white/[0.02] transition-colors group">
+                    <div key={`${cat.kategori}-${item}`} className="flex flex-row items-center justify-between p-4 hover:bg-zinc-55/50 dark:hover:bg-white/[0.02] transition-colors group">
                        <div className="flex flex-col flex-1 pr-4">
                           <div className="flex items-center gap-2.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 dark:bg-zinc-600 shrink-0"></span>
@@ -90,41 +101,53 @@ const StokTable: React.FC<{
                           )}
                        </div>
                        
-                       <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            onClick={() => {
-                              const num = val > 0 ? val - 1 : 0;
-                              onUpdate(type, cat.kategori, item, num, adminName);
-                            }}
-                            className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-[12px] bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 active:bg-zinc-300 dark:active:bg-zinc-600 text-zinc-600 dark:text-zinc-300 font-bold text-[22px] active:scale-95 transition-all outline-none leading-none pb-0.5 select-none`}
-                            aria-label="Kurangi stok"
-                          >
-                            −
-                          </button>
-                          
-                          <input
-                            type="number" inputMode="numeric" pattern="[0-9]*"
-                            min="0"
-                            className={`w-[50px] sm:w-[70px] bg-zinc-100/80 dark:bg-zinc-800 border border-transparent focus:ring-2 rounded-[12px] px-2 py-2 sm:py-2.5 text-center text-[16px] sm:text-[17px] font-bold text-zinc-900 dark:text-zinc-100 transition-all outline-none font-mono ${inputFocusClass}`}
-                            value={val || ""}
-                            placeholder="0"
-                            onChange={(e) => {
-                              const num = parseInt(e.target.value, 10);
-                              onUpdate(type, cat.kategori, item, isNaN(num) ? 0 : num, adminName);
-                            }}
-                          />
-                          
-                          <button
-                            onClick={() => {
-                              const num = (val || 0) + 1;
-                              onUpdate(type, cat.kategori, item, num, adminName);
-                            }}
-                            className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-[12px] bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 active:bg-zinc-300 dark:active:bg-zinc-600 text-zinc-600 dark:text-zinc-300 font-bold text-[22px] active:scale-95 transition-all outline-none leading-none pb-0.5 select-none`}
-                            aria-label="Tambah stok"
-                          >
-                            +
-                          </button>
-                       </div>
+                       {isIntegrated ? (
+                          <div className="flex items-center gap-3 shrink-0">
+                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-sm">
+                                <Activity className="w-3 h-3 shrink-0 animate-pulse text-emerald-500" />
+                                Monitoring
+                             </span>
+                             <div className="w-[50px] sm:w-[70px] bg-zinc-100/40 dark:bg-zinc-800/40 border border-zinc-200 dark:border-white/5 rounded-[12px] py-2 sm:py-2.5 text-center text-[16px] sm:text-[17px] font-bold text-zinc-500 dark:text-zinc-400 font-mono select-none">
+                                {val}
+                             </div>
+                          </div>
+                       ) : (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                             <button
+                               onClick={() => {
+                                 const num = val > 0 ? val - 1 : 0;
+                                 onUpdate(type, cat.kategori, item, num, adminName);
+                               }}
+                               className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-[12px] bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 active:bg-zinc-300 dark:active:bg-zinc-600 text-zinc-600 dark:text-zinc-300 font-bold text-[22px] active:scale-95 transition-all outline-none leading-none pb-0.5 select-none`}
+                               aria-label="Kurangi stok"
+                             >
+                               −
+                             </button>
+                             
+                             <input
+                               type="number" inputMode="numeric" pattern="[0-9]*"
+                               min="0"
+                               className={`w-[50px] sm:w-[70px] bg-zinc-100/80 dark:bg-zinc-800 border border-transparent focus:ring-2 rounded-[12px] px-2 py-2 sm:py-2.5 text-center text-[16px] sm:text-[17px] font-bold text-zinc-900 dark:text-zinc-100 transition-all outline-none font-mono ${inputFocusClass}`}
+                               value={val || ""}
+                               placeholder="0"
+                               onChange={(e) => {
+                                 const num = parseInt(e.target.value, 10);
+                                 onUpdate(type, cat.kategori, item, isNaN(num) ? 0 : num, adminName);
+                               }}
+                             />
+                             
+                             <button
+                               onClick={() => {
+                                 const num = (val || 0) + 1;
+                                 onUpdate(type, cat.kategori, item, num, adminName);
+                               }}
+                               className={`w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-[12px] bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 active:bg-zinc-300 dark:active:bg-zinc-600 text-zinc-600 dark:text-zinc-300 font-bold text-[22px] active:scale-95 transition-all outline-none leading-none pb-0.5 select-none`}
+                               aria-label="Tambah stok"
+                             >
+                               +
+                             </button>
+                          </div>
+                       )}
                     </div>
                   );
                 })}
@@ -214,8 +237,10 @@ const MasterInventarisForm = ({
                          }}
                          className="w-full bg-zinc-100/50 dark:bg-black/20 ring-1 ring-black/5 dark:ring-white/10 rounded-[16px] px-4 py-3 text-[13px] font-bold text-zinc-900 dark:text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all shadow-sm"
                       >
-                         {catList.map(c => <option key={c.kategori} value={c.kategori}>{c.kategori}</option>)}
-                         <option value="NEW" className="font-bold text-blue-600 dark:text-blue-400">+ BUAT KATEGORI BARU</option>
+                          {catList
+                            .filter(c => !INTEGRATED_CATEGORIES.some(ic => ic.toLowerCase() === c.kategori.toLowerCase()))
+                            .map(c => <option key={c.kategori} value={c.kategori}>{c.kategori}</option>)}
+                          <option value="NEW" className="font-bold text-blue-600 dark:text-blue-400">+ BUAT KATEGORI BARU</option>
                       </select>
                       {isNewCat && (
                          <input type="text" placeholder="Ketik nama kategori..." value={newCatName} onChange={e => setNewCatName(e.target.value)} className="w-full mt-1 bg-zinc-100/50 dark:bg-black/20 ring-1 ring-black/5 dark:ring-white/10 rounded-[16px] px-4 py-3 text-[13px] font-bold uppercase text-zinc-900 dark:text-white focus:ring-2 focus:ring-blue-500/50 outline-none transition-all shadow-sm" />
@@ -308,7 +333,6 @@ export default function UpdateStok({ adminName, isOwner, stokState, updateStok, 
               onUpdate={updateStok}
               adminName={adminName}
             />
-            <WidgetMonitoringDevice isOwner={isOwner} />
          </div>
       ) : (
          <StokTable
