@@ -281,6 +281,10 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
   // Toggle the torch
   const toggleTorch = async () => {
+    if (!isTorchSupported) {
+      alert("Lampu senter tidak didukung oleh browser di perangkat ini. Silakan aktifkan senter secara manual dari Control Center.");
+      return;
+    }
     try {
       if (qrCodeRef.current && qrCodeRef.current.isScanning) {
         const capabilities = qrCodeRef.current.getRunningTrackCameraCapabilities();
@@ -295,6 +299,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       }
     } catch (e) {
       console.error("Error toggling torch:", e);
+      alert("Gagal mengontrol lampu senter di perangkat ini.");
     }
   };
 
@@ -1599,19 +1604,17 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
             {/* Camera Viewport */}
             <div className="relative w-full aspect-square bg-black overflow-hidden">
               <div id="qr-reader-view" className="w-full h-full" />
-              {isTorchSupported && (
-                <button
-                  onClick={toggleTorch}
-                  className={`absolute bottom-4 right-4 z-20 p-3 rounded-full backdrop-blur-md transition-all border ${
-                    isTorchOn
-                      ? "bg-yellow-500 border-yellow-400 text-black shadow-lg shadow-yellow-500/30 scale-105"
-                      : "bg-black/60 border-white/20 text-white hover:bg-black/80 hover:scale-105"
-                  } active:scale-95`}
-                  title="Toggle Flashlight"
-                >
-                  {isTorchOn ? <Flashlight className="w-5 h-5 fill-current" /> : <FlashlightOff className="w-5 h-5" />}
-                </button>
-              )}
+              <button
+                onClick={toggleTorch}
+                className={`absolute bottom-4 left-4 z-20 p-3 rounded-full backdrop-blur-md transition-all border ${
+                  isTorchOn
+                    ? "bg-yellow-500 border-yellow-400 text-black shadow-lg shadow-yellow-500/30 scale-105"
+                    : "bg-black/60 border-white/20 text-white hover:bg-black/80 hover:scale-105"
+                } active:scale-95`}
+                title="Toggle Flashlight"
+              >
+                {isTorchOn ? <Flashlight className="w-5 h-5 fill-current" /> : <FlashlightOff className="w-5 h-5" />}
+              </button>
             </div>
 
             {/* Footer / Alternate Options */}
