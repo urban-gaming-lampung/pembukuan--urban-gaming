@@ -265,7 +265,21 @@ function calculateIntegratedCounts(devices: RegisteredDevice[], capacities: Reco
 }
 
 function checkAndSyncIntegratedCounts() {
-  if (!_stokLoaded || !_devicesLoaded || !_capacitiesLoaded) return;
+  const isLoaded = _stokLoaded && _devicesLoaded && _capacitiesLoaded;
+  
+  // Write initial execution diagnostics to debug_sync
+  setDoc(doc(db, "data", "debug_sync"), {
+    timestamp: new Date().toLocaleString('id-ID'),
+    stokLoaded: _stokLoaded,
+    devicesLoaded: _devicesLoaded,
+    capacitiesLoaded: _capacitiesLoaded,
+    isLoaded,
+    devicesCount: _devicesState.length,
+    capacities: _capacitiesState,
+    masterCategoriesKeys: _masterCategories.rental.map(c => c.kategori)
+  }, { merge: true }).catch(err => console.error("[useStokData] debug log failed:", err));
+
+  if (!isLoaded) return;
 
   const computedCounts = calculateIntegratedCounts(_devicesState, _capacitiesState);
   const docRef = doc(db, "data", "stok");
@@ -308,37 +322,67 @@ function checkAndSyncIntegratedCounts() {
     }
   });
 
-  if (hasUpdates) {
-    updateDoc(docRef, updates).catch(err => {
-      console.warn("[useStokData] Failed to update monitoring counts via updateDoc, trying setDoc merge:", err);
-      const fallbackPayload: Record<string, any> = { rental: {} };
-      Object.entries(computedCounts).forEach(([category, values]) => {
-        const catObj = _masterCategories.rental.find(c => c.kategori.toUpperCase() === category.toUpperCase());
-        if (!catObj) return;
-        const bagusKey = getItemKey(catObj.items, "bagus");
-        const rusakKey = getItemKey(catObj.items, "rusak");
-        
-        const currentBagus = _stokState.rental?.[category]?.[bagusKey]?.jumlah ?? 0;
-        const currentRusak = _stokState.rental?.[category]?.[rusakKey]?.jumlah ?? 0;
+  setDoc(doc(db, "data", "debug_sync"), {
+    hasUpdates,
+    updates: updates
+  }, { merge: true }).catch(err => console.error("[useStokData] debug log failed:", err));
 
-        fallbackPayload.rental[category] = {
-          ...(_stokState.rental?.[category] || {}),
-          [bagusKey]: {
-            jumlah: values.bagus,
-            lastEditDate: new Date().toLocaleString('id-ID', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' }).replace(/\./g, ':'),
-            lastEditDelta: values.bagus - currentBagus,
-            lastEditBy: "System (Monitoring)"
-          },
-          [rusakKey]: {
-            jumlah: values.rusak,
-            lastEditDate: new Date().toLocaleString('id-ID', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' }).replace(/\./g, ':'),
-            lastEditDelta: values.rusak - currentRusak,
-            lastEditBy: "System (Monitoring)"
-          }
-        };
+  if (hasUpdates) {
+    updateDoc(docRef, updates)
+      .then(() => {
+        setDoc(doc(db, "data", "debug_sync"), {
+          writeStatus: "updateDoc_success",
+          writeError: null
+        }, { merge: true }).catch(console.error);
+      })
+      .catch(err => {
+        console.warn("[useStokData] Failed to update monitoring counts via updateDoc, trying setDoc merge:", err);
+        setDoc(doc(db, "data", "debug_sync"), {
+          writeStatus: "updateDoc_failed_trying_setDoc",
+          writeError: err.message
+        }, { merge: true }).catch(console.error);
+
+        const fallbackPayload: Record<string, any> = { rental: {} };
+        Object.entries(computedCounts).forEach(([category, values]) => {
+          const catObj = _masterCategories.rental.find(c => c.kategori.toUpperCase() === category.toUpperCase());
+          if (!catObj) return;
+          const bagusKey = getItemKey(catObj.items, "bagus");
+          const rusakKey = getItemKey(catObj.items, "rusak");
+          
+          const currentBagus = _stokState.rental?.[category]?.[bagusKey]?.jumlah ?? 0;
+          const currentRusak = _stokState.rental?.[category]?.[rusakKey]?.jumlah ?? 0;
+
+          fallbackPayload.rental[category] = {
+            ...(_stokState.rental?.[category] || {}),
+            [bagusKey]: {
+              jumlah: values.bagus,
+              lastEditDate: new Date().toLocaleString('id-ID', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' }).replace(/\./g, ':'),
+              lastEditDelta: values.bagus - currentBagus,
+              lastEditBy: "System (Monitoring)"
+            },
+            [rusakKey]: {
+              jumlah: values.rusak,
+              lastEditDate: new Date().toLocaleString('id-ID', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' }).replace(/\./g, ':'),
+              lastEditDelta: values.rusak - currentRusak,
+              lastEditBy: "System (Monitoring)"
+            }
+          };
+        });
+
+        setDoc(docRef, fallbackPayload, { merge: true })
+          .then(() => {
+            setDoc(doc(db, "data", "debug_sync"), {
+              writeStatus: "setDoc_success"
+            }, { merge: true }).catch(console.error);
+          })
+          .catch(fallbackErr => {
+            console.error("[useStokData] setDoc merge also failed:", fallbackErr);
+            setDoc(doc(db, "data", "debug_sync"), {
+              writeStatus: "setDoc_failed",
+              fallbackError: fallbackErr.message
+            }, { merge: true }).catch(console.error);
+          });
       });
-      setDoc(docRef, fallbackPayload, { merge: true }).catch(console.error);
-    });
   }
 }
 
@@ -505,21 +549,18 @@ function updateStokItem(tipe: "rental" | "jualan", kategori: string, item: strin
   };
   notifyStokListeners();
 
-  // Write ONLY the specific item path to Firestore using dot-notation
-  // This prevents overwriting unrelated categories/items
+  // Write to Firestore using setDoc with merge: true to avoid dot-notation and slash issues
   const docRef = doc(db, "data", "stok");
-  const fieldPath = `${tipe}.${kategori}.${item}`;
+  const payload = {
+    [tipe]: {
+      [kategori]: {
+        [item]: nextItemValue
+      }
+    }
+  };
 
-  updateDoc(docRef, { [fieldPath]: nextItemValue }).catch((err) => {
-    // If doc doesn't exist yet, updateDoc fails — fallback to setDoc merge
-    console.warn("[useStokData] updateDoc failed, falling back to setDoc merge:", err);
-    setDoc(docRef, {
-      [tipe]: {
-        [kategori]: {
-          [item]: nextItemValue,
-        },
-      },
-    }, { merge: true }).catch(console.error);
+  setDoc(docRef, payload, { merge: true }).catch((err) => {
+    console.error("[useStokData] setDoc merge update failed:", err);
   });
 }
 
