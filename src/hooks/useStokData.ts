@@ -283,7 +283,7 @@ function checkAndSyncIntegratedCounts() {
 
   const computedCounts = calculateIntegratedCounts(_devicesState, _capacitiesState);
   const docRef = doc(db, "data", "stok");
-  const updates: Record<string, any> = {};
+  const payload: Record<string, any> = { rental: {} };
   let hasUpdates = false;
 
   Object.entries(computedCounts).forEach(([category, values]) => {
@@ -299,9 +299,11 @@ function checkAndSyncIntegratedCounts() {
     const currentBagus = currentBagusObj?.jumlah ?? -1;
     const currentRusak = currentRusakObj?.jumlah ?? -1;
 
+    const categoryUpdates: Record<string, any> = {};
+
     if (currentBagus !== values.bagus) {
       const delta = values.bagus - (currentBagus === -1 ? 0 : currentBagus);
-      updates[`rental.${category}.${bagusKey}`] = {
+      categoryUpdates[bagusKey] = {
         jumlah: values.bagus,
         lastEditDate: new Date().toLocaleString('id-ID', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' }).replace(/\./g, ':'),
         lastEditDelta: delta,
@@ -312,7 +314,7 @@ function checkAndSyncIntegratedCounts() {
 
     if (currentRusak !== values.rusak) {
       const delta = values.rusak - (currentRusak === -1 ? 0 : currentRusak);
-      updates[`rental.${category}.${rusakKey}`] = {
+      categoryUpdates[rusakKey] = {
         jumlah: values.rusak,
         lastEditDate: new Date().toLocaleString('id-ID', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' }).replace(/\./g, ':'),
         lastEditDelta: delta,
@@ -320,68 +322,31 @@ function checkAndSyncIntegratedCounts() {
       };
       hasUpdates = true;
     }
+
+    if (Object.keys(categoryUpdates).length > 0) {
+      payload.rental[category] = categoryUpdates;
+    }
   });
 
   setDoc(doc(db, "data", "debug_sync"), {
     hasUpdates,
-    updates: updates
+    payload: payload
   }, { merge: true }).catch(err => console.error("[useStokData] debug log failed:", err));
 
   if (hasUpdates) {
-    updateDoc(docRef, updates)
+    setDoc(docRef, payload, { merge: true })
       .then(() => {
         setDoc(doc(db, "data", "debug_sync"), {
-          writeStatus: "updateDoc_success",
+          writeStatus: "setDoc_success",
           writeError: null
         }, { merge: true }).catch(console.error);
       })
       .catch(err => {
-        console.warn("[useStokData] Failed to update monitoring counts via updateDoc, trying setDoc merge:", err);
+        console.error("[useStokData] Failed to update monitoring counts via setDoc merge:", err);
         setDoc(doc(db, "data", "debug_sync"), {
-          writeStatus: "updateDoc_failed_trying_setDoc",
+          writeStatus: "setDoc_failed",
           writeError: err.message
         }, { merge: true }).catch(console.error);
-
-        const fallbackPayload: Record<string, any> = { rental: {} };
-        Object.entries(computedCounts).forEach(([category, values]) => {
-          const catObj = _masterCategories.rental.find(c => c.kategori.toUpperCase() === category.toUpperCase());
-          if (!catObj) return;
-          const bagusKey = getItemKey(catObj.items, "bagus");
-          const rusakKey = getItemKey(catObj.items, "rusak");
-          
-          const currentBagus = _stokState.rental?.[category]?.[bagusKey]?.jumlah ?? 0;
-          const currentRusak = _stokState.rental?.[category]?.[rusakKey]?.jumlah ?? 0;
-
-          fallbackPayload.rental[category] = {
-            ...(_stokState.rental?.[category] || {}),
-            [bagusKey]: {
-              jumlah: values.bagus,
-              lastEditDate: new Date().toLocaleString('id-ID', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' }).replace(/\./g, ':'),
-              lastEditDelta: values.bagus - currentBagus,
-              lastEditBy: "System (Monitoring)"
-            },
-            [rusakKey]: {
-              jumlah: values.rusak,
-              lastEditDate: new Date().toLocaleString('id-ID', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit' }).replace(/\./g, ':'),
-              lastEditDelta: values.rusak - currentRusak,
-              lastEditBy: "System (Monitoring)"
-            }
-          };
-        });
-
-        setDoc(docRef, fallbackPayload, { merge: true })
-          .then(() => {
-            setDoc(doc(db, "data", "debug_sync"), {
-              writeStatus: "setDoc_success"
-            }, { merge: true }).catch(console.error);
-          })
-          .catch(fallbackErr => {
-            console.error("[useStokData] setDoc merge also failed:", fallbackErr);
-            setDoc(doc(db, "data", "debug_sync"), {
-              writeStatus: "setDoc_failed",
-              fallbackError: fallbackErr.message
-            }, { merge: true }).catch(console.error);
-          });
       });
   }
 }
