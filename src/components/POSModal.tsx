@@ -148,10 +148,36 @@ function buildEscPosBytes(cart: CartItem[], buyerName: string, total: number, ad
   return new Uint8Array(commands);
 }
 
+function getProductSubCategory(name: string): "Unit PS" | "Stik" | "Hardisk" | "Aksesoris" {
+  const lower = name.toLowerCase();
+  
+  if (lower.includes("hdd") || lower.includes("hardisk") || lower.includes("hard disk") || lower.includes("external")) {
+    return "Hardisk";
+  }
+  
+  if (
+    (lower.startsWith("ps3") || lower.startsWith("ps4") || lower.startsWith("ps5") || lower.startsWith("playstation") || lower.startsWith("konsol")) &&
+    !lower.includes("kabel") && !lower.includes("charger") && !lower.includes("kaset") && !lower.includes("servis")
+  ) {
+    return "Unit PS";
+  }
+  
+  if (lower.includes("stik") || lower.includes("controller")) {
+    return "Stik";
+  }
+  
+  return "Aksesoris";
+}
+
 export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName }: POSModalProps) {
   const [activeSub, setActiveSub] = useState<"JUALAN" | "RENTAL" | "SERVIS">("JUALAN");
+  const [activeJualanSub, setActiveJualanSub] = useState<"SEMUA" | "Unit PS" | "Stik" | "Hardisk" | "Aksesoris">("SEMUA");
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
+
+  useEffect(() => {
+    setActiveJualanSub("SEMUA");
+  }, [activeSub]);
   
   // Form states for adding product
   const [openAddProduct, setOpenAddProduct] = useState(false);
@@ -506,10 +532,18 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     window.location.href = intentUrl;
   };
 
-  // Filter products by category
+  // Filter products by category, sort alphabetically by name, and filter by sub-category if in JUALAN
   const filteredProducts = useMemo(() => {
-    return products.filter((p) => p.category === activeSub);
-  }, [products, activeSub]);
+    let result = products.filter((p) => p.category === activeSub);
+    
+    // If activeSub is JUALAN and a specific sub-category is selected, filter by it
+    if (activeSub === "JUALAN" && activeJualanSub !== "SEMUA") {
+      result = result.filter((p) => getProductSubCategory(p.name) === activeJualanSub);
+    }
+    
+    // Sort alphabetically by name
+    return result.sort((a, b) => a.name.localeCompare(b.name));
+  }, [products, activeSub, activeJualanSub]);
 
   if (!open) return null;
 
@@ -655,6 +689,38 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     Tambah Produk Baru
                   </button>
                 )}
+              </div>
+            )}
+
+            {/* Sub-Category Pills for JUALAN */}
+            {activeSub === "JUALAN" && (
+              <div className="px-4 py-3 border-b border-zinc-200/50 dark:border-white/5 bg-zinc-50/50 dark:bg-black/10 flex items-center gap-1.5 overflow-x-auto scrollbar-none shrink-0">
+                {(["SEMUA", "Unit PS", "Stik", "Hardisk", "Aksesoris"] as const).map((subJualan) => {
+                  const count = subJualan === "SEMUA" 
+                    ? products.filter(p => p.category === "JUALAN").length 
+                    : products.filter(p => p.category === "JUALAN" && getProductSubCategory(p.name) === subJualan).length;
+                  
+                  return (
+                    <button
+                      key={subJualan}
+                      onClick={() => setActiveJualanSub(subJualan)}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap active:scale-95 transition-all ${
+                        activeJualanSub === subJualan
+                          ? "bg-black dark:bg-white text-white dark:text-black shadow-sm"
+                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 border border-zinc-200/50 dark:border-white/5"
+                      }`}
+                    >
+                      <span>{subJualan}</span>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
+                        activeJualanSub === subJualan
+                          ? "bg-white/20 dark:bg-black/10 text-white dark:text-black"
+                          : "bg-zinc-100 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500"
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
 
