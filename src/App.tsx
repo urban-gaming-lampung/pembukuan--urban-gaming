@@ -32,6 +32,7 @@ import { useFormDraft } from "./hooks/useFormDraft";
 import LiveCursors from "./components/LiveCursors";
 import Login from "./components/Login";
 import { uploadBackupToDrive, downloadBackupFromDrive } from "./lib/googleDrive";
+import versionData from "./version.json";
 
 import { lazy, Suspense } from "react";
 import { useGameConfig } from "./games/hooks/useGameConfig";
@@ -112,6 +113,19 @@ function saveCatalogState(currentProducts: any[], currentGames: any[]) {
     state.games[g.id] = { price: g.price, name: g.name || "" };
   });
   localStorage.setItem("pos_catalog_state", JSON.stringify(state));
+}
+
+function isVersionLower(v1: string, v2: string): boolean {
+  const parts1 = v1.split('.').map(Number);
+  const parts2 = v2.split('.').map(Number);
+  
+  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+    const num1 = parts1[i] || 0;
+    const num2 = parts2[i] || 0;
+    if (num1 < num2) return true;
+    if (num1 > num2) return false;
+  }
+  return false;
 }
 
 export default function App() {
@@ -496,11 +510,14 @@ export default function App() {
     }
   }, [editingId, tanggal, rukoStatusDbTanggal]);
 
-  // Real-time Firestore sync listeners to detect POS updates (products & games)
+  // Real-time Firestore sync listeners to detect POS updates (products & games) and code changes
   useEffect(() => {
+    if (!user) return;
+
     let productsLoaded = false;
     let gamesLoaded = false;
 
+    // 1. Listen to products changes
     const qProducts = query(collection(db, "products"));
     const unsubProducts = onSnapshot(qProducts, (snap) => {
       const currentList: any[] = [];
@@ -525,6 +542,7 @@ export default function App() {
       console.error("Firestore onSnapshot error (products notification):", err);
     });
 
+    // 2. Listen to games changes
     const qGames = query(collection(listGameDb, "games"));
     const unsubGames = onSnapshot(qGames, (snap) => {
       const currentList: any[] = [];
@@ -554,11 +572,44 @@ export default function App() {
       console.error("Firestore onSnapshot error (games notification):", err);
     });
 
+    // 3. Listen to code/version changes
+    const unsubVersion = onSnapshot(doc(db, "data", "app_version"), (snap) => {
+      const clientVersion = versionData.version || "4.0.0";
+      if (snap.exists()) {
+        const data = snap.data();
+        const dbVersion = data.version || "4.0.0";
+
+        if (dbVersion !== clientVersion) {
+          if (isVersionLower(clientVersion, dbVersion)) {
+            // Client is outdated! Show red dot.
+            setHasPOSUpdate(true);
+          } else {
+            // Client is newer (just deployed). Publish new version.
+            setDoc(doc(db, "data", "app_version"), {
+              version: clientVersion,
+              updatedAt: serverTimestamp(),
+              updatedBy: user.email || "System"
+            }, { merge: true }).catch(console.error);
+          }
+        }
+      } else {
+        // Document doesn't exist yet, initialize it.
+        setDoc(doc(db, "data", "app_version"), {
+          version: clientVersion,
+          updatedAt: serverTimestamp(),
+          updatedBy: user.email || "System"
+        }, { merge: true }).catch(console.error);
+      }
+    }, (err) => {
+      console.error("Firestore onSnapshot error (app_version notification):", err);
+    });
+
     return () => {
       unsubProducts();
       unsubGames();
+      unsubVersion();
     };
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "data", "ruko_status"), (snap) => {
