@@ -253,7 +253,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
           imageUrl: data.cover || "",
           platform: data.platform || "",
           size: data.size || "",
-          available: !isGameUnavailable(originalName),
+          available: true,
         });
       });
       setGames(list);
@@ -270,10 +270,6 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
   // Cart operations
   const addToCart = (product: Product) => {
-    if (product.category === "ISI GAME" && isGameUnavailable(product.name)) {
-      alert("Game tidak tersedia!");
-      return;
-    }
     setCart((prev) => {
       const idx = prev.findIndex((item) => item.id === product.id);
       if (idx >= 0) {
@@ -596,14 +592,8 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       // Platform filter
       result = result.filter((p) => p.platform === activeIsiGameSub);
       
-      // Sort alphabetically by name, putting unavailable games at the bottom
-      return result.sort((a, b) => {
-        const isA_un = isGameUnavailable(a.name);
-        const isB_un = isGameUnavailable(b.name);
-        if (isA_un && !isB_un) return 1;
-        if (!isA_un && isB_un) return -1;
-        return getGameDisplayName(a.name).localeCompare(getGameDisplayName(b.name), "id", { sensitivity: "base" });
-      });
+      // Sort alphabetically by name
+      return result.sort((a, b) => a.name.localeCompare(b.name, "id", { sensitivity: "base" }));
     }
 
     let result = products.filter((p) => p.category === activeSub);
@@ -895,7 +885,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                           qty > 0 
                             ? "border-black/50 dark:border-white/5 ring-1 ring-black/20 dark:ring-white/20" 
                             : "border-zinc-200/60 dark:border-white/5"
-                        } ${p.category === "ISI GAME" && p.available === false ? "opacity-50 !cursor-not-allowed hover:!border-zinc-200/60 dark:hover:!border-white/5 hover:!shadow-none" : ""}`}
+                        }`}
                       >
                         {/* Selected Indicator Badge (Left for Admin/Owner, Right for users) */}
                         {qty > 0 && (
@@ -920,13 +910,6 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
                         {/* Product Image */}
                         <div className="aspect-square w-full bg-zinc-100 dark:bg-black/20 flex items-center justify-center overflow-hidden shrink-0 relative">
-                          {p.category === "ISI GAME" && p.available === false && (
-                            <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] z-10 flex items-center justify-center">
-                              <span className="bg-red-600/90 text-white font-black text-[9px] md:text-[10px] tracking-widest px-2.5 py-1 rounded-full uppercase shadow-lg">
-                                Tidak Tersedia
-                              </span>
-                            </div>
-                          )}
                           {p.imageUrl ? (
                             <img
                               src={p.imageUrl}
