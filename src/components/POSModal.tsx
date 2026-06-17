@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { X, ShoppingCart, Plus, Minus, Trash2, Printer, Download, PlusCircle, Sparkles, Pencil, Search } from "lucide-react";
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../lib/firebase";
+import { db, storage, listGameDb } from "../lib/firebase";
 import jsPDF from "jspdf";
 
 const qrisImg = new URL("/images/QRIS.jpeg", import.meta.url).href;
@@ -11,9 +11,11 @@ interface Product {
   id: string;
   name: string;
   price: number;
-  category: "JUALAN" | "RENTAL" | "SERVIS";
+  category: "JUALAN" | "RENTAL" | "SERVIS" | "ISI GAME";
   imageUrl: string;
   createdAt?: any;
+  platform?: string;
+  size?: string;
 }
 
 interface CartItem extends Product {
@@ -115,7 +117,8 @@ function buildEscPosBytes(cart: CartItem[], buyerName: string, total: number, ad
   // Cart Items
   cart.forEach((item) => {
     commands.push(...left, ...boldOn);
-    commands = commands.concat(Array.from(encoder.encode(`${item.name}\n`)));
+    const displayName = item.category === "ISI GAME" && item.platform ? `${item.name} (${item.platform})` : item.name;
+    commands = commands.concat(Array.from(encoder.encode(`${displayName}\n`)));
     commands.push(...boldOff);
     
     const qtyPriceStr = `  ${item.quantity} x Rp ${item.price.toLocaleString("id-ID")}`;
@@ -173,14 +176,17 @@ function getProductSubCategory(name: string): "Unit PS" | "Stik" | "Hardisk" | "
 }
 
 export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName }: POSModalProps) {
-  const [activeSub, setActiveSub] = useState<"JUALAN" | "RENTAL" | "SERVIS">("JUALAN");
+  const [activeSub, setActiveSub] = useState<"JUALAN" | "RENTAL" | "SERVIS" | "ISI GAME">("JUALAN");
   const [activeJualanSub, setActiveJualanSub] = useState<"SEMUA" | "Unit PS" | "Stik" | "Hardisk" | "Aksesoris">("SEMUA");
+  const [activeIsiGameSub, setActiveIsiGameSub] = useState<"SEMUA" | "PS3 CFW/HEN" | "PS4 HEN" | "PS5 HEN" | "Switch CFW" | "PC">("SEMUA");
   const [searchQuery, setSearchQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
+  const [games, setGames] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
 
   useEffect(() => {
     setActiveJualanSub("SEMUA");
+    setActiveIsiGameSub("SEMUA");
     setSearchQuery("");
   }, [activeSub]);
   
@@ -223,6 +229,30 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       setProducts(list);
     }, (err) => {
       console.error("Firestore onSnapshot error (products):", err);
+    });
+    return () => unsub();
+  }, []);
+
+  // Real-time Firestore sync for games (from secondary database list-game-digital)
+  useEffect(() => {
+    const q = query(collection(listGameDb, "games"));
+    const unsub = onSnapshot(q, (snap) => {
+      const list: Product[] = [];
+      snap.forEach((docSnap) => {
+        const data = docSnap.data();
+        list.push({
+          id: docSnap.id,
+          name: data.name || "",
+          price: data.price || 0,
+          category: "ISI GAME",
+          imageUrl: data.cover || "",
+          platform: data.platform || "",
+          size: data.size || "",
+        });
+      });
+      setGames(list);
+    }, (err) => {
+      console.error("Firestore onSnapshot error (games):", err);
     });
     return () => unsub();
   }, []);
@@ -322,7 +352,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     setSelectedProductForEdit(p);
     setEditProdName(p.name);
     setEditProdPrice(p.price);
-    setEditProdCategory(p.category);
+    setEditProdCategory(p.category as any);
     setEditProdImageUrl(p.imageUrl || "");
     setEditProdImage(null);
     setOpenEditProduct(true);
@@ -459,7 +489,8 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     let y = 46;
     cart.forEach((item) => {
       docPdf.setFont("courier", "bold");
-      docPdf.text(item.name, 5, y);
+      const displayName = item.category === "ISI GAME" && item.platform ? `${item.name} (${item.platform})` : item.name;
+      docPdf.text(displayName, 5, y);
       y += 4;
       docPdf.setFont("courier", "normal");
       docPdf.text(`  ${item.quantity} x Rp ${item.price.toLocaleString("id-ID")}`, 5, y);
@@ -543,6 +574,24 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
   // Filter products by category, sort alphabetically by name, search query, and filter by sub-category if in JUALAN
   const filteredProducts = useMemo(() => {
+    if (activeSub === "ISI GAME") {
+      let result = games;
+      
+      // Search query filter
+      if (searchQuery.trim() !== "") {
+        const q = searchQuery.toLowerCase();
+        result = result.filter((p) => p.name.toLowerCase().includes(q));
+      }
+      
+      // Platform filter
+      if (activeIsiGameSub !== "SEMUA") {
+        result = result.filter((p) => p.platform === activeIsiGameSub);
+      }
+      
+      // Sort alphabetically by name
+      return result.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
     let result = products.filter((p) => p.category === activeSub);
     
     // Search query filter
@@ -558,7 +607,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     
     // Sort alphabetically by name
     return result.sort((a, b) => a.name.localeCompare(b.name));
-  }, [products, activeSub, activeJualanSub, searchQuery]);
+  }, [products, games, activeSub, activeJualanSub, activeIsiGameSub, searchQuery]);
 
   return (
     <div className={`fixed inset-0 z-[100] items-center justify-center bg-black/40 backdrop-blur-md transition-opacity duration-300 font-sans ${open ? "flex" : "hidden"}`}>
@@ -595,12 +644,12 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               ============================================================ */}
           {/* Mobile sub-menu bar (Horizontal at the top) */}
           <div className="md:hidden p-4 bg-white/50 dark:bg-black/10 border-b border-zinc-200/60 dark:border-white/5 shrink-0">
-            <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-[14px] gap-1">
-              {(["JUALAN", "RENTAL", "SERVIS"] as const).map((sub) => (
+            <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-[14px] gap-1 overflow-x-auto no-scrollbar">
+              {(["JUALAN", "RENTAL", "ISI GAME", "SERVIS"] as const).map((sub) => (
                 <button
                   key={sub}
                   onClick={() => setActiveSub(sub)}
-                  className={`flex-1 py-2.5 text-xs font-bold rounded-[10px] tracking-wide transition-all ${
+                  className={`flex-1 min-w-[75px] py-2.5 text-[11px] font-bold rounded-[10px] tracking-wide transition-all ${
                     activeSub === sub
                       ? "bg-white dark:bg-[#2C2C2E] text-black dark:text-white shadow-sm ring-1 ring-black/5"
                       : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700"
@@ -612,7 +661,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             </div>
             
             {/* Add product button for Super Admin on Mobile */}
-            {isSuperAdminOrOwner && (
+            {isSuperAdminOrOwner && activeSub !== "ISI GAME" && (
               <div className="mt-3 flex gap-2">
                 <button 
                   onClick={() => setOpenAddProduct(true)}
@@ -640,24 +689,30 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               <span className="text-[10px] font-black tracking-widest text-zinc-400 dark:text-zinc-500 uppercase px-3">
                 KATEGORI POS
               </span>
-              {(["JUALAN", "RENTAL", "SERVIS"] as const).map((sub) => (
-                <button
-                  key={sub}
-                  onClick={() => setActiveSub(sub)}
-                  className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl font-bold text-sm tracking-wide transition-all ${
-                    activeSub === sub
-                      ? "bg-black dark:bg-white text-white dark:text-black shadow-md shadow-black/10 dark:shadow-white/5"
-                      : "text-zinc-600 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:bg-zinc-800/50"
-                  }`}
-                >
-                  <span>{sub}</span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
-                    activeSub === sub ? "bg-white/20 text-white" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-500"
-                  }`}>
-                    {products.filter(p => p.category === sub).length}
-                  </span>
-                </button>
-              ))}
+              {(["JUALAN", "RENTAL", "ISI GAME", "SERVIS"] as const).map((sub) => {
+                const count = sub === "ISI GAME" 
+                  ? games.length 
+                  : products.filter(p => p.category === sub).length;
+                  
+                return (
+                  <button
+                    key={sub}
+                    onClick={() => setActiveSub(sub)}
+                    className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl font-bold text-sm tracking-wide transition-all ${
+                      activeSub === sub
+                        ? "bg-black dark:bg-white text-white dark:text-black shadow-md shadow-black/10 dark:shadow-white/5"
+                        : "text-zinc-600 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:bg-zinc-800/50"
+                    }`}
+                  >
+                    <span>{sub}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                      activeSub === sub ? "bg-white/20 text-white" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-500"
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
             {/* Bottom Section in Desktop Sidebar */}
@@ -671,7 +726,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   Inisialisasi Produk
                 </button>
               )}
-              {isSuperAdminOrOwner && (
+              {isSuperAdminOrOwner && activeSub !== "ISI GAME" && (
                 <button
                   onClick={() => setOpenAddProduct(true)}
                   className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black shadow-md shadow-black/25 dark:shadow-white/10 active:scale-95 transition-all"
@@ -693,7 +748,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
                   Katalog {activeSub} &mdash; Klik item untuk menambahkan ke keranjang
                 </span>
-                {products.length > 0 && (
+                {activeSub !== "ISI GAME" && products.length > 0 && (
                   <button
                     onClick={() => setOpenAddProduct(true)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700 font-bold text-xs transition-all active:scale-95"
@@ -759,6 +814,38 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               </div>
             )}
 
+            {/* Sub-Category Pills for ISI GAME */}
+            {activeSub === "ISI GAME" && (
+              <div className="px-4 py-3 border-b border-zinc-200/50 dark:border-white/5 bg-zinc-50/50 dark:bg-black/10 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+                {(["SEMUA", "PS3 CFW/HEN", "PS4 HEN", "PS5 HEN", "Switch CFW", "PC"] as const).map((subIsiGame) => {
+                  const count = subIsiGame === "SEMUA" 
+                    ? games.length 
+                    : games.filter(g => g.platform === subIsiGame).length;
+                  
+                  return (
+                    <button
+                      key={subIsiGame}
+                      onClick={() => setActiveIsiGameSub(subIsiGame)}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap active:scale-95 transition-all ${
+                        activeIsiGameSub === subIsiGame
+                          ? "bg-black dark:bg-white text-white dark:text-black shadow-sm"
+                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 border border-zinc-200/50 dark:border-white/5"
+                      }`}
+                    >
+                      <span>{subIsiGame}</span>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
+                        activeIsiGameSub === subIsiGame
+                          ? "bg-white/20 dark:bg-black/10 text-white dark:text-black"
+                          : "bg-zinc-100 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500"
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Catalog Scrollbox */}
             <div className="flex-1 overflow-y-auto p-4 md:p-6 no-scrollbar">
               {filteredProducts.length === 0 ? (
@@ -806,7 +893,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                         )}
 
                         {/* Super Admin Edit Product Button (Right) */}
-                        {isSuperAdminOrOwner && (
+                        {isSuperAdminOrOwner && p.category !== "ISI GAME" && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -836,9 +923,23 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
                         {/* Card Details */}
                         <div className="p-2 md:p-2.5 flex-1 flex flex-col justify-between gap-1 min-w-0">
-                          <h4 className="font-bold text-[11px] md:text-xs text-zinc-900 dark:text-zinc-100 leading-snug line-clamp-2 h-8">
-                            {p.name}
-                          </h4>
+                          <div className="flex flex-col gap-0.5">
+                            <h4 className="font-bold text-[11px] md:text-xs text-zinc-900 dark:text-zinc-100 leading-snug line-clamp-2 h-8">
+                              {p.name}
+                            </h4>
+                            {p.category === "ISI GAME" && (
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-[9px] font-extrabold px-1 py-0.2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded">
+                                  {p.platform}
+                                </span>
+                                {p.size && (
+                                  <span className="text-[9px] font-semibold text-zinc-500 font-mono">
+                                    {p.size}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                           
                           <div className="flex items-center justify-between mt-1">
                             <span className="font-extrabold text-[12px] md:text-[14px] text-zinc-900 dark:text-zinc-100 font-mono">
@@ -904,6 +1005,11 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                       <div className="font-bold text-[13px] text-zinc-900 dark:text-white truncate">
                         {item.name}
                       </div>
+                      {item.category === "ISI GAME" && item.platform && (
+                        <div className="text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 mt-0.5">
+                          {item.platform}
+                        </div>
+                      )}
                       <div className="text-[11px] text-zinc-500 font-mono mt-0.5">
                         Rp {item.price.toLocaleString("id-ID")} x {item.quantity}
                       </div>
@@ -1068,6 +1174,11 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     <div className="font-bold text-sm text-zinc-900 dark:text-white truncate">
                       {item.name}
                     </div>
+                    {item.category === "ISI GAME" && item.platform && (
+                      <div className="text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 mt-0.5">
+                        {item.platform}
+                      </div>
+                    )}
                     <div className="text-[12px] text-zinc-500 font-mono mt-0.5">
                       Rp {item.price.toLocaleString("id-ID")} x {item.quantity}
                     </div>
