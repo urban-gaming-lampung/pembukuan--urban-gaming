@@ -5,6 +5,8 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../lib/firebase";
 import jsPDF from "jspdf";
 
+const qrisImg = new URL("/images/QRIS.jpeg", import.meta.url).href;
+
 interface Product {
   id: string;
   name: string;
@@ -74,7 +76,7 @@ const DEFAULT_PRODUCTS: Omit<Product, "id">[] = [
   { name: "Jasa Downgrade Konsol PS3", price: 100000, category: "SERVIS", imageUrl: "" }
 ];
 
-function buildEscPosBytes(cart: CartItem[], buyerName: string, total: number, adminName: string): Uint8Array {
+function buildEscPosBytes(cart: CartItem[], buyerName: string, total: number, adminName: string, paymentMethod: string): Uint8Array {
   const encoder = new TextEncoder();
   const init = [0x1b, 0x40]; // ESC @
   const center = [0x1b, 0x61, 0x01]; // ESC a 1
@@ -107,6 +109,7 @@ function buildEscPosBytes(cart: CartItem[], buyerName: string, total: number, ad
   commands = commands.concat(Array.from(encoder.encode(`Tanggal  : ${dateStr}\n`)));
   commands = commands.concat(Array.from(encoder.encode(`Pembeli  : ${buyerName}\n`)));
   commands = commands.concat(Array.from(encoder.encode(`Kasir    : ${adminName}\n`)));
+  commands = commands.concat(Array.from(encoder.encode(`Bayar    : ${paymentMethod}\n`)));
   commands = commands.concat(Array.from(encoder.encode("================================================\n")));
   
   // Cart Items
@@ -204,6 +207,10 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   // Save PDF Form overlay states
   const [openSavePdfForm, setOpenSavePdfForm] = useState(false);
   const [buyerName, setBuyerName] = useState("");
+
+  // Payment states
+  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "TRANSFER">("CASH");
+  const [showQrisModal, setShowQrisModal] = useState(false);
 
   // Real-time Firestore sync for products
   useEffect(() => {
@@ -426,7 +433,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
     // Generate PDF
     const itemHeight = 8;
-    const pageHeight = 70 + cart.length * itemHeight + 20;
+    const pageHeight = 75 + cart.length * itemHeight + 20;
     const docPdf = new jsPDF({ unit: "mm", format: [80, pageHeight] });
 
     docPdf.setFont("courier", "bold");
@@ -447,9 +454,10 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     docPdf.text(`Tgl     : ${dateStr}`, 5, 26);
     docPdf.text(`Pembeli : ${buyerName}`, 5, 30);
     docPdf.text(`Kasir   : ${adminName}`, 5, 34);
-    docPdf.text("-".repeat(38), 40, 38, { align: "center" });
+    docPdf.text(`Bayar   : ${paymentMethod}`, 5, 38);
+    docPdf.text("-".repeat(38), 40, 42, { align: "center" });
 
-    let y = 42;
+    let y = 46;
     cart.forEach((item) => {
       docPdf.setFont("courier", "bold");
       docPdf.text(item.name, 5, y);
@@ -488,7 +496,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     if (cart.length === 0) return;
     
     const finalBuyerName = window.prompt("Nama Pembeli / Pelanggan:", "Pelanggan") || "Pelanggan";
-    const bytes = buildEscPosBytes(cart, finalBuyerName, total, adminName);
+    const bytes = buildEscPosBytes(cart, finalBuyerName, total, adminName, paymentMethod);
     
     // 1. Web Bluetooth API Attempt
     if ((navigator as any).bluetooth) {
@@ -935,7 +943,43 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             </div>
 
             {/* Cart Summary Bottom Panel */}
-            <div className="p-4 bg-zinc-50 dark:bg-[#2C2C2E]/80 border-t border-zinc-200 dark:border-white/5 shrink-0 space-y-4">
+            <div className="p-4 bg-zinc-50 dark:bg-[#2C2C2E]/80 border-t border-zinc-200 dark:border-white/5 shrink-0 space-y-3">
+              {/* Metode Pembayaran */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">
+                  Metode Pembayaran
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setPaymentMethod("CASH")}
+                    className={`py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${
+                      paymentMethod === "CASH"
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20"
+                        : "bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    CASH / TUNAI
+                  </button>
+                  <button
+                    onClick={() => setPaymentMethod("TRANSFER")}
+                    className={`py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${
+                      paymentMethod === "TRANSFER"
+                        ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20"
+                        : "bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    TRANSFER
+                  </button>
+                </div>
+                {/* Tampilkan QRIS Button */}
+                <button
+                  onClick={() => setShowQrisModal(true)}
+                  className="w-full py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold text-[11px] transition-all active:scale-95 shadow-sm"
+                >
+                  Tampilkan QRIS
+                </button>
+              </div>
+
               <div className="flex items-end justify-between">
                 <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
                   TOTAL HARGA
@@ -1059,7 +1103,43 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             </div>
 
             {/* Bottom Section */}
-            <div className="p-5 bg-white dark:bg-[#2C2C2E]/80 border-t border-zinc-200/50 dark:border-white/5 shrink-0 space-y-4">
+            <div className="p-5 bg-white dark:bg-[#2C2C2E]/80 border-t border-zinc-200/50 dark:border-white/5 shrink-0 space-y-3">
+              {/* Metode Pembayaran */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">
+                  Metode Pembayaran
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setPaymentMethod("CASH")}
+                    className={`py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${
+                      paymentMethod === "CASH"
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20"
+                        : "bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    CASH / TUNAI
+                  </button>
+                  <button
+                    onClick={() => setPaymentMethod("TRANSFER")}
+                    className={`py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${
+                      paymentMethod === "TRANSFER"
+                        ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20"
+                        : "bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700"
+                    }`}
+                  >
+                    TRANSFER
+                  </button>
+                </div>
+                {/* Tampilkan QRIS Button */}
+                <button
+                  onClick={() => setShowQrisModal(true)}
+                  className="w-full py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold text-[11px] transition-all active:scale-95 shadow-sm"
+                >
+                  Tampilkan QRIS
+                </button>
+              </div>
+
               <div className="flex items-end justify-between">
                 <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
                   TOTAL HARGA
@@ -1365,6 +1445,46 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================
+          QRIS POPUP MODAL
+          ============================================================ */}
+      {showQrisModal && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-[360px] overflow-hidden rounded-[28px] bg-white dark:bg-zinc-900 p-6 shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-in zoom-in-95 duration-200 flex flex-col items-center">
+            <button
+              onClick={() => setShowQrisModal(false)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-white flex items-center justify-center active:scale-90 transition-all"
+            >
+              <X size={16} />
+            </button>
+            
+            <div className="text-center w-full mt-2">
+              <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase tracking-tight">
+                QRIS Pembayaran
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 mb-4">
+                Scan kode QRIS di bawah ini untuk melakukan pembayaran transfer
+              </p>
+            </div>
+
+            <div className="w-full aspect-square max-w-[280px] bg-white rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-700 p-2 shadow-inner">
+              <img
+                src={qrisImg}
+                alt="QRIS"
+                className="w-full h-full object-contain"
+              />
+            </div>
+            
+            <button
+              onClick={() => setShowQrisModal(false)}
+              className="w-full mt-5 py-3 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white font-bold text-xs rounded-xl active:scale-95 transition-all"
+            >
+              Tutup
+            </button>
           </div>
         </div>
       )}
