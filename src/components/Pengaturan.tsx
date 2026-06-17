@@ -40,6 +40,7 @@ import {
   ChevronRight
 } from "lucide-react";
 // import SopPdf from "../SOP/SOP_SewaPS_URBAN.pdf";
+import versionData from "../version.json";
 
 interface Price {
   label: string;
@@ -1510,7 +1511,7 @@ const Pengaturan: React.FC<Props> = ({
             </div>
             <div>
               <h3 className="text-xl font-bold text-zinc-900 dark:text-white">URBAN Console</h3>
-              <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mt-0.5">Build v3.5</div>
+              <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mt-0.5">Build v{versionData.version}</div>
             </div>
           </div>
 

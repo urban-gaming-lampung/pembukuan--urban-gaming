@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "node increment-version.js && tsc && vite build",
     "preview": "vite preview",
     "deploy": "npm run build",
     "test:functions": "npm --prefix functions run test"
