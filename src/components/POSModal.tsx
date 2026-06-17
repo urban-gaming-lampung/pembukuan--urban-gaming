@@ -109,7 +109,8 @@ function buildEscPosBytes(cart: CartItem[], buyerName: string, total: number, ad
   commands = commands.concat(Array.from(encoder.encode(`Tanggal  : ${dateStr}\n`)));
   commands = commands.concat(Array.from(encoder.encode(`Pembeli  : ${buyerName}\n`)));
   commands = commands.concat(Array.from(encoder.encode(`Kasir    : ${adminName}\n`)));
-  commands = commands.concat(Array.from(encoder.encode(`Bayar    : ${paymentMethod}\n`)));
+  const displayPayment = paymentMethod === "CASH" ? "CASH / TUNAI" : "TRANSFER";
+  commands = commands.concat(Array.from(encoder.encode(`Bayar    : ${displayPayment}\n`)));
   commands = commands.concat(Array.from(encoder.encode("================================================\n")));
   
   // Cart Items
@@ -454,7 +455,8 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     docPdf.text(`Tgl     : ${dateStr}`, 5, 26);
     docPdf.text(`Pembeli : ${buyerName}`, 5, 30);
     docPdf.text(`Kasir   : ${adminName}`, 5, 34);
-    docPdf.text(`Bayar   : ${paymentMethod}`, 5, 38);
+    const displayPayment = paymentMethod === "CASH" ? "CASH / TUNAI" : "TRANSFER";
+    docPdf.text(`Bayar   : ${displayPayment}`, 5, 38);
     docPdf.text("-".repeat(38), 40, 42, { align: "center" });
 
     let y = 46;
@@ -972,14 +974,12 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   </button>
                 </div>
                 {/* Tampilkan QRIS Button */}
-                <div className="flex justify-center mt-1.5">
-                  <button
-                    onClick={() => setShowQrisModal(true)}
-                    className="w-[calc(50%-4px)] py-2 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-sm bg-white hover:bg-zinc-100 dark:bg-[#1C1C1E] dark:hover:bg-zinc-800 text-zinc-900 dark:text-white border border-zinc-200 dark:border-white/10"
-                  >
-                    Tampilkan QRIS
-                  </button>
-                </div>
+                <button
+                  onClick={() => setShowQrisModal(true)}
+                  className="w-full mt-2 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-sm bg-black hover:bg-zinc-800 text-white border border-transparent dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-900 dark:border-transparent"
+                >
+                  Tampilkan QRIS
+                </button>
               </div>
 
               <div className="flex items-end justify-between">
@@ -1134,14 +1134,12 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   </button>
                 </div>
                 {/* Tampilkan QRIS Button */}
-                <div className="flex justify-center mt-1.5">
-                  <button
-                    onClick={() => setShowQrisModal(true)}
-                    className="w-[calc(50%-4px)] py-2 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-sm bg-white hover:bg-zinc-100 dark:bg-[#1C1C1E] dark:hover:bg-zinc-800 text-zinc-900 dark:text-white border border-zinc-200 dark:border-white/10"
-                  >
-                    Tampilkan QRIS
-                  </button>
-                </div>
+                <button
+                  onClick={() => setShowQrisModal(true)}
+                  className="w-full mt-2 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-sm bg-black hover:bg-zinc-800 text-white border border-transparent dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-900 dark:border-transparent"
+                >
+                  Tampilkan QRIS
+                </button>
               </div>
 
               <div className="flex items-end justify-between">
