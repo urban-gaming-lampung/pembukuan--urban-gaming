@@ -836,7 +836,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                           </h4>
                           
                           <div className="flex items-center justify-between mt-1">
-                            <span className="font-extrabold text-[10px] md:text-[11px] text-zinc-600 dark:text-zinc-400 font-mono">
+                            <span className="font-extrabold text-[12px] md:text-[14px] text-zinc-900 dark:text-zinc-100 font-mono">
                               Rp {p.price.toLocaleString("id-ID")}
                             </span>
                             
