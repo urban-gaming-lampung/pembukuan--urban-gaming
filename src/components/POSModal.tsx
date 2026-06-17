@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { X, ShoppingCart, Plus, Minus, Trash2, Printer, Download, PlusCircle, Sparkles } from "lucide-react";
-import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, setDoc } from "firebase/firestore";
+import { X, ShoppingCart, Plus, Minus, Trash2, Printer, Download, PlusCircle, Sparkles, Pencil } from "lucide-react";
+import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../lib/firebase";
 import jsPDF from "jspdf";
@@ -135,6 +135,15 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   const [newProdImage, setNewProdImage] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  // Form states for editing product
+  const [openEditProduct, setOpenEditProduct] = useState(false);
+  const [selectedProductForEdit, setSelectedProductForEdit] = useState<Product | null>(null);
+  const [editProdName, setEditProdName] = useState("");
+  const [editProdPrice, setEditProdPrice] = useState<number | "">("");
+  const [editProdCategory, setEditProdCategory] = useState<"JUALAN" | "RENTAL" | "SERVIS">("JUALAN");
+  const [editProdImage, setEditProdImage] = useState<File | null>(null);
+  const [editProdImageUrl, setEditProdImageUrl] = useState("");
+
   // Cart Popup state for mobile view
   const [openMobileCart, setOpenMobileCart] = useState(false);
 
@@ -246,6 +255,88 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       alert("Gagal menambahkan produk: " + err.message);
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleEditClick = (p: Product) => {
+    setSelectedProductForEdit(p);
+    setEditProdName(p.name);
+    setEditProdPrice(p.price);
+    setEditProdCategory(p.category);
+    setEditProdImageUrl(p.imageUrl || "");
+    setEditProdImage(null);
+    setOpenEditProduct(true);
+  };
+
+  const handleEditProductSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProductForEdit) return;
+    if (!editProdName.trim() || editProdPrice === "" || editProdPrice < 0) {
+      alert("Masukkan nama produk dan harga yang valid!");
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      let downloadURL = editProdImageUrl;
+      if (editProdImage) {
+        if (!editProdImage.type.startsWith("image/")) {
+          alert("File harus bertipe gambar (PNG/JPEG)!");
+          setIsUploading(false);
+          return;
+        }
+        if (editProdImage.size > 2 * 1024 * 1024) {
+          alert("Ukuran file maksimal 2MB!");
+          setIsUploading(false);
+          return;
+        }
+        const fileRef = ref(storage, `products/${Date.now()}_${editProdImage.name}`);
+        const uploadResult = await uploadBytes(fileRef, editProdImage);
+        downloadURL = await getDownloadURL(uploadResult.ref);
+      }
+
+      const docRef = doc(db, "products", selectedProductForEdit.id);
+      await setDoc(docRef, {
+        name: editProdName.trim(),
+        price: Number(editProdPrice),
+        category: editProdCategory,
+        imageUrl: downloadURL
+      }, { merge: true });
+
+      // Sync updated product info in cart
+      setCart((prev) =>
+        prev.map((item) =>
+          item.id === selectedProductForEdit.id
+            ? { ...item, name: editProdName.trim(), price: Number(editProdPrice), category: editProdCategory, imageUrl: downloadURL }
+            : item
+        )
+      );
+
+      setOpenEditProduct(false);
+      setSelectedProductForEdit(null);
+      setEditProdImage(null);
+      alert("Produk berhasil diperbarui!");
+    } catch (err: any) {
+      console.error("Failed to update product:", err);
+      alert("Gagal memperbarui produk: " + err.message);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDeleteProduct = async (productId: string) => {
+    if (!window.confirm("Apakah Anda yakin ingin menghapus produk ini secara permanen dari database?")) return;
+    try {
+      const docRef = doc(db, "products", productId);
+      await deleteDoc(docRef);
+      setOpenEditProduct(false);
+      setSelectedProductForEdit(null);
+      // Remove from cart if present
+      setCart((prev) => prev.filter((item) => item.id !== productId));
+      alert("Produk berhasil dihapus!");
+    } catch (err: any) {
+      console.error("Failed to delete product:", err);
+      alert("Gagal menghapus produk: " + err.message);
     }
   };
 
@@ -580,11 +671,25 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                             : "border-zinc-200/60 dark:border-white/5"
                         }`}
                       >
-                        {/* Selected Indicator Badge */}
+                        {/* Selected Indicator Badge (Left for Admin/Owner, Right for users) */}
                         {qty > 0 && (
-                          <div className="absolute top-2.5 right-2.5 z-10 w-6 h-6 rounded-full bg-blue-500 text-white font-black text-xs flex items-center justify-center shadow-md animate-in zoom-in-50 duration-200">
+                          <div className={`absolute top-2.5 ${isSuperAdminOrOwner ? "left-2.5" : "right-2.5"} z-10 w-6 h-6 rounded-full bg-blue-500 text-white font-black text-xs flex items-center justify-center shadow-md animate-in zoom-in-50 duration-200`}>
                             {qty}
                           </div>
+                        )}
+
+                        {/* Super Admin Edit Product Button (Right) */}
+                        {isSuperAdminOrOwner && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditClick(p);
+                            }}
+                            className="absolute top-2.5 right-2.5 z-10 w-8 h-8 rounded-full bg-white/80 dark:bg-black/60 backdrop-blur-md text-zinc-700 dark:text-zinc-300 hover:text-blue-500 dark:hover:text-blue-400 flex items-center justify-center shadow-md border border-zinc-200/50 dark:border-white/10 active:scale-90 transition-all"
+                            title="Edit Produk"
+                          >
+                            <Pencil size={13} />
+                          </button>
                         )}
 
                         {/* Product Image */}
@@ -1012,6 +1117,131 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               >
                 {isUploading ? "Mengunggah..." : "Simpan Produk"}
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* ============================================================
+          EDIT PRODUK OVERLAY FORM (Super Admin only)
+          ============================================================ */}
+      {openEditProduct && isSuperAdminOrOwner && selectedProductForEdit && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-[380px] overflow-hidden rounded-[28px] bg-white dark:bg-zinc-900 p-6 shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-in zoom-in-95 duration-200">
+            <button
+              onClick={() => {
+                setOpenEditProduct(false);
+                setSelectedProductForEdit(null);
+              }}
+              className="absolute top-4 right-4 w-7 h-7 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-white flex items-center justify-center active:scale-90 transition-all"
+            >
+              <X size={14} />
+            </button>
+
+            <form onSubmit={handleEditProductSubmit} className="space-y-4">
+              <div>
+                <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase tracking-tight">
+                  Edit Produk
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Ubah data produk atau hapus produk dari database
+                </p>
+              </div>
+
+              {/* Nama Barang */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
+                  Nama Barang
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Kabel HDMI 2 Meter"
+                  value={editProdName}
+                  onChange={(e) => setEditProdName(e.target.value)}
+                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-sm"
+                />
+              </div>
+
+              {/* Harga */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
+                  Harga (Rupiah)
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  placeholder="Contoh: 35000"
+                  value={editProdPrice}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEditProdPrice(val === "" ? "" : Number(val));
+                  }}
+                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold font-mono text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-sm"
+                />
+                {editProdPrice !== "" && editProdPrice >= 0 && (
+                  <div className="text-[11px] font-bold text-blue-500 font-mono pl-1">
+                    Preview: Rp {Number(editProdPrice).toLocaleString("id-ID")}
+                  </div>
+                )}
+              </div>
+
+              {/* Kategori */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
+                  Kategori
+                </label>
+                <select
+                  value={editProdCategory}
+                  onChange={(e) => setEditProdCategory(e.target.value as any)}
+                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-sm"
+                >
+                  <option value="JUALAN">JUALAN (Produk Fisik / Jasa Dagang)</option>
+                  <option value="RENTAL">RENTAL (Sewa PS / Paket Jam)</option>
+                  <option value="SERVIS">SERVIS (Jasa Service Stik / Konsol)</option>
+                </select>
+              </div>
+
+              {/* Upload Foto Baru */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
+                  Foto Baru (Opsional, Maks 2MB)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setEditProdImage(e.target.files?.[0] ?? null)}
+                  className="w-full text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 dark:file:bg-zinc-800 file:text-zinc-700 dark:file:text-zinc-200 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-700 cursor-pointer"
+                />
+                {editProdImageUrl && !editProdImage && (
+                  <div className="mt-2 text-[10px] text-zinc-500 flex items-center gap-1.5">
+                    <span className="font-semibold">Foto saat ini:</span>
+                    <a href={editProdImageUrl} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline truncate max-w-[200px]">
+                      Lihat Foto
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* Submit & Delete Buttons */}
+              <div className="space-y-2 pt-2">
+                <button
+                  type="submit"
+                  disabled={isUploading}
+                  className="w-full py-3.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/25 active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                >
+                  {isUploading ? "Mengunggah..." : "Simpan Perubahan"}
+                </button>
+                
+                <button
+                  type="button"
+                  disabled={isUploading}
+                  onClick={() => handleDeleteProduct(selectedProductForEdit.id)}
+                  className="w-full py-3.5 bg-red-100 hover:bg-red-200 dark:bg-red-500/10 dark:hover:bg-red-500/20 disabled:opacity-50 text-red-600 dark:text-red-400 font-bold text-xs rounded-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-transparent dark:border-red-500/20"
+                >
+                  Hapus Produk
+                </button>
+              </div>
             </form>
           </div>
         </div>
