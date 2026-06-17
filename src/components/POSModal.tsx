@@ -215,7 +215,6 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
   // Real-time Firestore sync for products
   useEffect(() => {
-    if (!open) return;
     const q = query(collection(db, "products"));
     const unsub = onSnapshot(q, (snap) => {
       const list: Product[] = [];
@@ -227,7 +226,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       console.error("Firestore onSnapshot error (products):", err);
     });
     return () => unsub();
-  }, [open]);
+  }, []);
 
   // Total price calculator
   const total = useMemo(() => {
@@ -563,10 +562,8 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     return result.sort((a, b) => a.name.localeCompare(b.name));
   }, [products, activeSub, activeJualanSub, searchQuery]);
 
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-md transition-opacity duration-300 font-sans">
+    <div className={`fixed inset-0 z-[100] items-center justify-center bg-black/40 backdrop-blur-md transition-opacity duration-300 font-sans ${open ? "flex" : "hidden"}`}>
       
       {/* ============================================================
           MAIN CONTAINER (Full-Screen iOS Style)
