@@ -24,6 +24,7 @@ type HeaderProps = {
   userProfilePic?: string;
   activeUsers?: PresenceData[];
   onHeightChange?: (h: number) => void;
+  hasPOSUpdate?: boolean;
 };
 
 // --- ICONS (SF Symbols Style) ---
@@ -92,6 +93,7 @@ export default function Header({
   activeUsers,
   onHeightChange,
   onOpenPOS,
+  hasPOSUpdate,
 }: HeaderProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrolled, setScrolled] = useState(false);
@@ -262,7 +264,7 @@ export default function Header({
 
               {/* Mobile Icons (Hidden on Desktop) */}
               <div className="flex md:hidden items-center gap-1">
-                <IconButton onClick={onOpenPOS} icon={<Icons.POS />} title="POS (Kasir)" />
+                <IconButton onClick={onOpenPOS} icon={<Icons.POS />} title="POS (Kasir)" hasBadge={hasPOSUpdate} />
                 <IconButton onClick={onOpenScan} icon={<Icons.QrCode />} title="Scan QR Code" />
                 <IconButton onClick={onOpenSettings} icon={<Icons.Cog />} title="Pengaturan" />
               </div>
@@ -297,7 +299,7 @@ export default function Header({
 
               {/* Desktop Icons (Hidden on Mobile) */}
               <div className="hidden md:flex items-center gap-2 md:ml-1">
-                <IconButton onClick={onOpenPOS} icon={<Icons.POS />} title="POS (Kasir)" />
+                <IconButton onClick={onOpenPOS} icon={<Icons.POS />} title="POS (Kasir)" hasBadge={hasPOSUpdate} />
                 <IconButton onClick={onOpenScan} icon={<Icons.QrCode />} title="Scan QR Code" />
                 <IconButton onClick={onOpenSettings} icon={<Icons.Cog />} title="Pengaturan" />
               </div>
@@ -400,6 +402,13 @@ const ActionButton = ({ onClick, icon, label, variant = "secondary", compact = f
   );
 };
 
-const IconButton = ({ onClick, icon, title }: { onClick: () => void; icon: React.ReactNode; title: string }) => {
-  return <button onClick={onClick} title={title} className="p-2.5 rounded-xl text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 transition-all active:scale-95 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700">{icon}</button>;
+const IconButton = ({ onClick, icon, title, hasBadge }: { onClick: () => void; icon: React.ReactNode; title: string; hasBadge?: boolean }) => {
+  return (
+    <button onClick={onClick} title={title} className="relative p-2.5 rounded-xl text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 transition-all active:scale-95 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700">
+      {icon}
+      {hasBadge && (
+        <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white dark:ring-zinc-900 animate-pulse pointer-events-none" />
+      )}
+    </button>
+  );
 };

@@ -26,7 +26,7 @@ import WidgetMonitoringDevice from "./components/WidgetMonitoringDevice";
 import { Package, AlertCircle } from "lucide-react";
 import { collection, doc, setDoc, deleteDoc, onSnapshot, addDoc, updateDoc, query, getDocs, getDoc, where, limit, orderBy, serverTimestamp, arrayUnion } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { db, auth } from "./lib/firebase";
+import { db, auth, listGameDb } from "./lib/firebase";
 import { usePresence } from "./hooks/usePresence";
 import { useFormDraft } from "./hooks/useFormDraft";
 import LiveCursors from "./components/LiveCursors";
@@ -321,6 +321,15 @@ export default function App() {
   const [shiftPegawai, _setShiftPegawai] = useState("");
   const [openSettings, setOpenSettings] = useState(false);
   const [openPOS, setOpenPOS] = useState(false);
+  const [hasPOSUpdate, setHasPOSUpdate] = useState(false);
+  const openPOSRef = useRef(openPOS);
+
+  useEffect(() => {
+    openPOSRef.current = openPOS;
+    if (openPOS) {
+      setHasPOSUpdate(false);
+    }
+  }, [openPOS]);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const setShiftPegawai = useCallback((val: string) => {
@@ -428,6 +437,42 @@ export default function App() {
       setDoc(doc(db, "data", "ruko_status"), updateData, { merge: true }).catch(console.error);
     }
   }, [editingId, tanggal, rukoStatusDbTanggal]);
+
+  // Real-time Firestore sync listeners to detect POS updates (products & games)
+  useEffect(() => {
+    let isFirstProducts = true;
+    const qProducts = query(collection(db, "products"));
+    const unsubProducts = onSnapshot(qProducts, (snap) => {
+      if (isFirstProducts) {
+        isFirstProducts = false;
+        return;
+      }
+      if (!openPOSRef.current) {
+        setHasPOSUpdate(true);
+      }
+    }, (err) => {
+      console.error("Firestore onSnapshot error (products notification):", err);
+    });
+
+    let isFirstGames = true;
+    const qGames = query(collection(listGameDb, "games"));
+    const unsubGames = onSnapshot(qGames, (snap) => {
+      if (isFirstGames) {
+        isFirstGames = false;
+        return;
+      }
+      if (!openPOSRef.current) {
+        setHasPOSUpdate(true);
+      }
+    }, (err) => {
+      console.error("Firestore onSnapshot error (games notification):", err);
+    });
+
+    return () => {
+      unsubProducts();
+      unsubGames();
+    };
+  }, []);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "data", "ruko_status"), (snap) => {
@@ -1837,6 +1882,7 @@ export default function App() {
               userEmail={user?.email}
               userProfilePic={userProfilePic || undefined}
               activeUsers={activeUsers}
+              hasPOSUpdate={hasPOSUpdate}
             />
           
           <main className="mx-auto max-w-6xl px-4 md:px-8 pb-24 space-y-6" style={{ paddingTop: 'calc(var(--app-header-height, 200px) + 16px)' }}>
