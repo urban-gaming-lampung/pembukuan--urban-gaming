@@ -109,8 +109,7 @@ function buildEscPosBytes(cart: CartItem[], buyerName: string, total: number, ad
   commands = commands.concat(Array.from(encoder.encode(`Tanggal  : ${dateStr}\n`)));
   commands = commands.concat(Array.from(encoder.encode(`Pembeli  : ${buyerName}\n`)));
   commands = commands.concat(Array.from(encoder.encode(`Kasir    : ${adminName}\n`)));
-  const displayPayment = paymentMethod === "CASH" ? "CASH / TUNAI" : "TRANSFER";
-  commands = commands.concat(Array.from(encoder.encode(`Bayar    : ${displayPayment}\n`)));
+  commands = commands.concat(Array.from(encoder.encode(`Bayar    : ${paymentMethod}\n`)));
   commands = commands.concat(Array.from(encoder.encode("================================================\n")));
   
   // Cart Items
@@ -454,8 +453,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     docPdf.text(`Tgl     : ${dateStr}`, 5, 26);
     docPdf.text(`Pembeli : ${buyerName}`, 5, 30);
     docPdf.text(`Kasir   : ${adminName}`, 5, 34);
-    const displayPayment = paymentMethod === "CASH" ? "CASH / TUNAI" : "TRANSFER";
-    docPdf.text(`Bayar   : ${displayPayment}`, 5, 38);
+    docPdf.text(`Bayar   : ${paymentMethod}`, 5, 38);
     docPdf.text("-".repeat(38), 40, 42, { align: "center" });
 
     let y = 46;
