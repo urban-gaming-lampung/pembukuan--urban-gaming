@@ -16,6 +16,7 @@ interface Product {
   createdAt?: any;
   platform?: string;
   size?: string;
+  available?: boolean;
 }
 
 interface CartItem extends Product {
@@ -175,10 +176,13 @@ function getProductSubCategory(name: string): "Unit PS" | "Stik" | "Hardisk" | "
   return "Aksesoris";
 }
 
+const isGameUnavailable = (name: string) => /^\s*\//.test(name || "");
+const getGameDisplayName = (name: string) => (name || "").replace(/^\s*\//, "").trim();
+
 export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName }: POSModalProps) {
   const [activeSub, setActiveSub] = useState<"JUALAN" | "RENTAL" | "SERVIS" | "ISI GAME">("JUALAN");
   const [activeJualanSub, setActiveJualanSub] = useState<"SEMUA" | "Unit PS" | "Stik" | "Hardisk" | "Aksesoris">("SEMUA");
-  const [activeIsiGameSub, setActiveIsiGameSub] = useState<"SEMUA" | "PS3 CFW/HEN" | "PS4 HEN" | "PS5 HEN" | "Switch CFW" | "PC">("SEMUA");
+  const [activeIsiGameSub, setActiveIsiGameSub] = useState<"PS3 CFW/HEN" | "PS4 HEN" | "PS5 HEN" | "Switch CFW" | "PC">("PS4 HEN");
   const [searchQuery, setSearchQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [games, setGames] = useState<Product[]>([]);
@@ -186,7 +190,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
   useEffect(() => {
     setActiveJualanSub("SEMUA");
-    setActiveIsiGameSub("SEMUA");
+    setActiveIsiGameSub("PS4 HEN");
     setSearchQuery("");
   }, [activeSub]);
   
@@ -240,14 +244,16 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       const list: Product[] = [];
       snap.forEach((docSnap) => {
         const data = docSnap.data();
+        const originalName = data.name || "";
         list.push({
           id: docSnap.id,
-          name: data.name || "",
+          name: getGameDisplayName(originalName),
           price: data.price || 0,
           category: "ISI GAME",
           imageUrl: data.cover || "",
           platform: data.platform || "",
           size: data.size || "",
+          available: !isGameUnavailable(originalName),
         });
       });
       setGames(list);
@@ -264,6 +270,10 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
   // Cart operations
   const addToCart = (product: Product) => {
+    if (product.category === "ISI GAME" && isGameUnavailable(product.name)) {
+      alert("Game tidak tersedia!");
+      return;
+    }
     setCart((prev) => {
       const idx = prev.findIndex((item) => item.id === product.id);
       if (idx >= 0) {
@@ -584,12 +594,16 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       }
       
       // Platform filter
-      if (activeIsiGameSub !== "SEMUA") {
-        result = result.filter((p) => p.platform === activeIsiGameSub);
-      }
+      result = result.filter((p) => p.platform === activeIsiGameSub);
       
-      // Sort alphabetically by name
-      return result.sort((a, b) => a.name.localeCompare(b.name));
+      // Sort alphabetically by name, putting unavailable games at the bottom
+      return result.sort((a, b) => {
+        const isA_un = isGameUnavailable(a.name);
+        const isB_un = isGameUnavailable(b.name);
+        if (isA_un && !isB_un) return 1;
+        if (!isA_un && isB_un) return -1;
+        return getGameDisplayName(a.name).localeCompare(getGameDisplayName(b.name), "id", { sensitivity: "base" });
+      });
     }
 
     let result = products.filter((p) => p.category === activeSub);
@@ -817,10 +831,8 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             {/* Sub-Category Pills for ISI GAME */}
             {activeSub === "ISI GAME" && (
               <div className="px-4 py-3 border-b border-zinc-200/50 dark:border-white/5 bg-zinc-50/50 dark:bg-black/10 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
-                {(["SEMUA", "PS3 CFW/HEN", "PS4 HEN", "PS5 HEN", "Switch CFW", "PC"] as const).map((subIsiGame) => {
-                  const count = subIsiGame === "SEMUA" 
-                    ? games.length 
-                    : games.filter(g => g.platform === subIsiGame).length;
+                {(["PS3 CFW/HEN", "PS4 HEN", "PS5 HEN", "Switch CFW", "PC"] as const).map((subIsiGame) => {
+                  const count = games.filter(g => g.platform === subIsiGame).length;
                   
                   return (
                     <button
@@ -881,9 +893,9 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                         onClick={() => addToCart(p)}
                         className={`group relative overflow-hidden rounded-[16px] bg-white dark:bg-[#2C2C2E] border hover:border-black/50 dark:hover:border-white/50 hover:shadow-md active:scale-[0.98] transition-all cursor-pointer flex flex-col ${
                           qty > 0 
-                            ? "border-black/50 dark:border-white/50 ring-1 ring-black/20 dark:ring-white/20" 
+                            ? "border-black/50 dark:border-white/5 ring-1 ring-black/20 dark:ring-white/20" 
                             : "border-zinc-200/60 dark:border-white/5"
-                        }`}
+                        } ${p.category === "ISI GAME" && p.available === false ? "opacity-50 !cursor-not-allowed hover:!border-zinc-200/60 dark:hover:!border-white/5 hover:!shadow-none" : ""}`}
                       >
                         {/* Selected Indicator Badge (Left for Admin/Owner, Right for users) */}
                         {qty > 0 && (
@@ -908,6 +920,13 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
                         {/* Product Image */}
                         <div className="aspect-square w-full bg-zinc-100 dark:bg-black/20 flex items-center justify-center overflow-hidden shrink-0 relative">
+                          {p.category === "ISI GAME" && p.available === false && (
+                            <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                              <span className="bg-red-600/90 text-white font-black text-[9px] md:text-[10px] tracking-widest px-2.5 py-1 rounded-full uppercase shadow-lg">
+                                Tidak Tersedia
+                              </span>
+                            </div>
+                          )}
                           {p.imageUrl ? (
                             <img
                               src={p.imageUrl}
