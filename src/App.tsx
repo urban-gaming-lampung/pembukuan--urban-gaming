@@ -59,6 +59,61 @@ type PriceListKey = "harian" | "jajanan" | "jasaAks" | "sewa";
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 
+interface CatalogItem {
+  price: number;
+  name: string;
+}
+
+interface SavedCatalogState {
+  products: Record<string, CatalogItem>;
+  games: Record<string, CatalogItem>;
+}
+
+function checkCatalogUpdates(
+  currentProducts: any[],
+  currentGames: any[],
+  savedStateStr: string | null
+): boolean {
+  if (!savedStateStr) return false;
+  try {
+    const saved: SavedCatalogState = JSON.parse(savedStateStr);
+    const savedProds = saved.products || {};
+    const savedGames = saved.games || {};
+
+    // 1. Check products count and details
+    if (currentProducts.length !== Object.keys(savedProds).length) return true;
+    for (const p of currentProducts) {
+      const savedP = savedProds[p.id];
+      if (!savedP) return true;
+      if (savedP.price !== p.price || savedP.name !== p.name) return true;
+    }
+
+    // 2. Check games count and details
+    if (currentGames.length !== Object.keys(savedGames).length) return true;
+    for (const g of currentGames) {
+      const savedG = savedGames[g.id];
+      if (!savedG) return true;
+      if (savedG.price !== g.price || savedG.name !== g.name) return true;
+    }
+
+    return false;
+  } catch (e) {
+    console.error("Error parsing saved catalog state:", e);
+    return false;
+  }
+}
+
+function saveCatalogState(currentProducts: any[], currentGames: any[]) {
+  const state: SavedCatalogState = { products: {}, games: {} };
+  currentProducts.forEach(p => {
+    state.products[p.id] = { price: p.price, name: p.name || "" };
+  });
+  currentGames.forEach(g => {
+    state.games[g.id] = { price: g.price, name: g.name || "" };
+  });
+  localStorage.setItem("pos_catalog_state", JSON.stringify(state));
+}
+
 export default function App() {
   const rootRef = useRef<HTMLDivElement>(null);
   const appStokData = useStokData();
@@ -323,11 +378,14 @@ export default function App() {
   const [openPOS, setOpenPOS] = useState(false);
   const [hasPOSUpdate, setHasPOSUpdate] = useState(false);
   const openPOSRef = useRef(openPOS);
+  const productsListRef = useRef<any[]>([]);
+  const gamesListRef = useRef<any[]>([]);
 
   useEffect(() => {
     openPOSRef.current = openPOS;
     if (openPOS) {
       setHasPOSUpdate(false);
+      saveCatalogState(productsListRef.current, gamesListRef.current);
     }
   }, [openPOS]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -440,29 +498,57 @@ export default function App() {
 
   // Real-time Firestore sync listeners to detect POS updates (products & games)
   useEffect(() => {
-    let isFirstProducts = true;
+    let productsLoaded = false;
+    let gamesLoaded = false;
+
     const qProducts = query(collection(db, "products"));
     const unsubProducts = onSnapshot(qProducts, (snap) => {
-      if (isFirstProducts) {
-        isFirstProducts = false;
-        return;
-      }
-      if (!openPOSRef.current) {
-        setHasPOSUpdate(true);
+      const currentList: any[] = [];
+      snap.forEach((docSnap) => {
+        currentList.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      productsListRef.current = currentList;
+      productsLoaded = true;
+
+      if (productsLoaded && gamesLoaded) {
+        const savedStateStr = localStorage.getItem("pos_catalog_state");
+        if (savedStateStr) {
+          const isUpdated = checkCatalogUpdates(productsListRef.current, gamesListRef.current, savedStateStr);
+          if (isUpdated && !openPOSRef.current) {
+            setHasPOSUpdate(true);
+          }
+        } else {
+          saveCatalogState(productsListRef.current, gamesListRef.current);
+        }
       }
     }, (err) => {
       console.error("Firestore onSnapshot error (products notification):", err);
     });
 
-    let isFirstGames = true;
     const qGames = query(collection(listGameDb, "games"));
     const unsubGames = onSnapshot(qGames, (snap) => {
-      if (isFirstGames) {
-        isFirstGames = false;
-        return;
-      }
-      if (!openPOSRef.current) {
-        setHasPOSUpdate(true);
+      const currentList: any[] = [];
+      snap.forEach((docSnap) => {
+        const data = docSnap.data();
+        currentList.push({
+          id: docSnap.id,
+          name: data.name || "",
+          price: data.price || 0,
+        });
+      });
+      gamesListRef.current = currentList;
+      gamesLoaded = true;
+
+      if (productsLoaded && gamesLoaded) {
+        const savedStateStr = localStorage.getItem("pos_catalog_state");
+        if (savedStateStr) {
+          const isUpdated = checkCatalogUpdates(productsListRef.current, gamesListRef.current, savedStateStr);
+          if (isUpdated && !openPOSRef.current) {
+            setHasPOSUpdate(true);
+          }
+        } else {
+          saveCatalogState(productsListRef.current, gamesListRef.current);
+        }
       }
     }, (err) => {
       console.error("Firestore onSnapshot error (games notification):", err);
