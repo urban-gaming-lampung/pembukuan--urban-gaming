@@ -972,12 +972,14 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   </button>
                 </div>
                 {/* Tampilkan QRIS Button */}
-                <button
-                  onClick={() => setShowQrisModal(true)}
-                  className="w-full py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold text-[11px] transition-all active:scale-95 shadow-sm"
-                >
-                  Tampilkan QRIS
-                </button>
+                <div className="flex justify-center mt-1.5">
+                  <button
+                    onClick={() => setShowQrisModal(true)}
+                    className="w-[calc(50%-4px)] py-2 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-sm bg-white hover:bg-zinc-100 dark:bg-[#1C1C1E] dark:hover:bg-zinc-800 text-zinc-900 dark:text-white border border-zinc-200 dark:border-white/10"
+                  >
+                    Tampilkan QRIS
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-end justify-between">
@@ -1132,12 +1134,14 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   </button>
                 </div>
                 {/* Tampilkan QRIS Button */}
-                <button
-                  onClick={() => setShowQrisModal(true)}
-                  className="w-full py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold text-[11px] transition-all active:scale-95 shadow-sm"
-                >
-                  Tampilkan QRIS
-                </button>
+                <div className="flex justify-center mt-1.5">
+                  <button
+                    onClick={() => setShowQrisModal(true)}
+                    className="w-[calc(50%-4px)] py-2 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-sm bg-white hover:bg-zinc-100 dark:bg-[#1C1C1E] dark:hover:bg-zinc-800 text-zinc-900 dark:text-white border border-zinc-200 dark:border-white/10"
+                  >
+                    Tampilkan QRIS
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-end justify-between">
@@ -1454,7 +1458,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
           ============================================================ */}
       {showQrisModal && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="relative w-full max-w-[360px] overflow-hidden rounded-[28px] bg-white dark:bg-zinc-900 p-6 shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-in zoom-in-95 duration-200 flex flex-col items-center">
+          <div className="relative w-full max-w-[450px] overflow-hidden rounded-[28px] bg-white dark:bg-zinc-900 p-6 shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-in zoom-in-95 duration-200 flex flex-col items-center">
             <button
               onClick={() => setShowQrisModal(false)}
               className="absolute top-4 right-4 w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-white flex items-center justify-center active:scale-90 transition-all"
@@ -1471,11 +1475,11 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               </p>
             </div>
 
-            <div className="w-full aspect-square max-w-[280px] bg-white rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-700 p-2 shadow-inner">
+            <div className="w-full bg-white rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-700 shadow-md">
               <img
                 src={qrisImg}
                 alt="QRIS"
-                className="w-full h-full object-contain"
+                className="w-full h-auto object-contain block"
               />
             </div>
             
