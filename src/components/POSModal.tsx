@@ -498,7 +498,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
         {/* Top iOS Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200/50 dark:border-white/5 bg-white/70 dark:bg-[#1C1C1E]/70 backdrop-blur-xl z-20 shrink-0">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 text-blue-500 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-black/10 dark:bg-white/20 text-black dark:text-white flex items-center justify-center">
               <ShoppingCart size={18} />
             </div>
             <h2 className="text-lg font-black tracking-tight text-zinc-900 dark:text-white uppercase">
@@ -529,7 +529,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   onClick={() => setActiveSub(sub)}
                   className={`flex-1 py-2.5 text-xs font-bold rounded-[10px] tracking-wide transition-all ${
                     activeSub === sub
-                      ? "bg-white dark:bg-[#2C2C2E] text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-black/5"
+                      ? "bg-white dark:bg-[#2C2C2E] text-black dark:text-white shadow-sm ring-1 ring-black/5"
                       : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700"
                   }`}
                 >
@@ -543,7 +543,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               <div className="mt-3 flex gap-2">
                 <button 
                   onClick={() => setOpenAddProduct(true)}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-bold text-xs shadow-md shadow-blue-500/25 active:scale-95 transition-all"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black shadow-md shadow-black/25 dark:shadow-white/10 active:scale-95 transition-all"
                 >
                   <PlusCircle size={14} />
                   Tambah Produk
@@ -573,7 +573,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   onClick={() => setActiveSub(sub)}
                   className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl font-bold text-sm tracking-wide transition-all ${
                     activeSub === sub
-                      ? "bg-blue-500 text-white shadow-md shadow-blue-500/10"
+                      ? "bg-black dark:bg-white text-white dark:text-black shadow-md shadow-black/10 dark:shadow-white/5"
                       : "text-zinc-600 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:bg-zinc-800/50"
                   }`}
                 >
@@ -601,7 +601,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               {isSuperAdminOrOwner && (
                 <button
                   onClick={() => setOpenAddProduct(true)}
-                  className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-bold text-xs shadow-md shadow-blue-500/25 active:scale-95 transition-all"
+                  className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black shadow-md shadow-black/25 dark:shadow-white/10 active:scale-95 transition-all"
                 >
                   <PlusCircle size={14} />
                   Tambah Produk
@@ -649,7 +649,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   {isSuperAdminOrOwner && (
                     <button
                       onClick={() => setOpenAddProduct(true)}
-                      className="mt-4 px-4 py-2 text-xs font-bold bg-blue-500 hover:bg-blue-600 text-white rounded-lg active:scale-95 shadow-md shadow-blue-500/20"
+                      className="mt-4 px-4 py-2 text-xs font-bold bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black rounded-lg active:scale-95 shadow-md shadow-black/20 dark:shadow-white/5"
                     >
                       Tambah Produk Pertama
                     </button>
@@ -665,15 +665,15 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                       <div
                         key={p.id}
                         onClick={() => addToCart(p)}
-                        className={`group relative overflow-hidden rounded-[24px] bg-white dark:bg-[#2C2C2E] border hover:border-blue-500/50 hover:shadow-lg active:scale-[0.98] transition-all cursor-pointer flex flex-col ${
+                        className={`group relative overflow-hidden rounded-[24px] bg-white dark:bg-[#2C2C2E] border hover:border-black/50 dark:hover:border-white/50 hover:shadow-lg active:scale-[0.98] transition-all cursor-pointer flex flex-col ${
                           qty > 0 
-                            ? "border-blue-500/50 ring-1 ring-blue-500/20" 
+                            ? "border-black/50 dark:border-white/50 ring-1 ring-black/20 dark:ring-white/20" 
                             : "border-zinc-200/60 dark:border-white/5"
                         }`}
                       >
                         {/* Selected Indicator Badge (Left for Admin/Owner, Right for users) */}
                         {qty > 0 && (
-                          <div className={`absolute top-2.5 ${isSuperAdminOrOwner ? "left-2.5" : "right-2.5"} z-10 w-6 h-6 rounded-full bg-blue-500 text-white font-black text-xs flex items-center justify-center shadow-md animate-in zoom-in-50 duration-200`}>
+                          <div className={`absolute top-2.5 ${isSuperAdminOrOwner ? "left-2.5" : "right-2.5"} z-10 w-6 h-6 rounded-full bg-black dark:bg-white text-white dark:text-black font-black text-xs flex items-center justify-center shadow-md animate-in zoom-in-50 duration-200`}>
                             {qty}
                           </div>
                         )}
@@ -685,7 +685,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                               e.stopPropagation();
                               handleEditClick(p);
                             }}
-                            className="absolute top-2.5 right-2.5 z-10 w-8 h-8 rounded-full bg-white/80 dark:bg-black/60 backdrop-blur-md text-zinc-700 dark:text-zinc-300 hover:text-blue-500 dark:hover:text-blue-400 flex items-center justify-center shadow-md border border-zinc-200/50 dark:border-white/10 active:scale-90 transition-all"
+                            className="absolute top-2.5 right-2.5 z-10 w-8 h-8 rounded-full bg-white/80 dark:bg-black/60 backdrop-blur-md text-zinc-700 dark:text-zinc-300 hover:text-black dark:hover:text-white flex items-center justify-center shadow-md border border-zinc-200/50 dark:border-white/10 active:scale-90 transition-all"
                             title="Edit Produk"
                           >
                             <Pencil size={13} />
@@ -835,7 +835,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 <button
                   disabled={cart.length === 0}
                   onClick={handlePrintDirect}
-                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs active:scale-95 transition-all shadow-md shadow-blue-500/25"
+                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 disabled:opacity-50 text-white dark:text-black font-bold text-xs active:scale-95 transition-all shadow-md shadow-black/25 dark:shadow-white/10"
                 >
                   <Printer size={14} />
                   Cetak Struk
@@ -852,12 +852,12 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
           <div className="md:hidden fixed bottom-5 left-0 right-0 px-4 z-40 animate-in slide-in-from-bottom-5 duration-300">
             <button
               onClick={() => setOpenMobileCart(true)}
-              className="w-full flex items-center justify-between px-5 py-4 rounded-[20px] bg-blue-500 text-white font-bold shadow-xl shadow-blue-500/30 active:scale-[0.98] transition-all"
+              className="w-full flex items-center justify-between px-5 py-4 rounded-[20px] bg-black dark:bg-white text-white dark:text-black font-bold shadow-xl shadow-black/30 dark:shadow-white/10 active:scale-[0.98] transition-all"
             >
               <div className="flex items-center gap-2.5">
                 <div className="relative">
                   <ShoppingCart size={18} />
-                  <span className="absolute -top-1.5 -right-1.5 bg-white text-blue-600 font-black text-[9px] w-4.5 h-4.5 rounded-full flex items-center justify-center shadow-sm">
+                  <span className="absolute -top-1.5 -right-1.5 bg-white dark:bg-zinc-900 text-black dark:text-white font-black text-[9px] w-4.5 h-4.5 rounded-full flex items-center justify-center shadow-sm">
                     {cart.reduce((sum, item) => sum + item.quantity, 0)}
                   </span>
                 </div>
@@ -881,7 +881,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200/50 dark:border-white/5 bg-white dark:bg-[#1C1C1E] shrink-0">
               <div className="flex items-center gap-2">
-                <ShoppingCart size={18} className="text-blue-500" />
+                <ShoppingCart size={18} className="text-black dark:text-white" />
                 <h3 className="font-black text-sm text-zinc-900 dark:text-white uppercase">
                   Keranjang Belanja
                 </h3>
@@ -956,7 +956,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 </button>
                 <button
                   onClick={handlePrintDirect}
-                  className="flex items-center justify-center gap-1.5 py-3.5 rounded-xl bg-blue-500 text-white font-bold text-xs shadow-md shadow-blue-500/20"
+                  className="flex items-center justify-center gap-1.5 py-3.5 rounded-xl bg-black dark:bg-white text-white dark:text-black font-bold text-xs shadow-md shadow-black/20 dark:shadow-white/10"
                 >
                   <Printer size={14} />
                   Cetak Struk
@@ -982,7 +982,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             
             <form onSubmit={handleSavePdfSubmit} className="space-y-4">
               <div className="text-center">
-                <div className="mx-auto w-10 h-10 rounded-full bg-blue-500/10 dark:bg-blue-500/20 text-blue-500 flex items-center justify-center mb-3">
+                <div className="mx-auto w-10 h-10 rounded-full bg-black/10 dark:bg-white/20 text-black dark:text-white flex items-center justify-center mb-3">
                   <Download size={18} />
                 </div>
                 <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase tracking-tight">
@@ -1003,13 +1003,13 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   placeholder="Contoh: Budi Santoso"
                   value={buyerName}
                   onChange={(e) => setBuyerName(e.target.value)}
-                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-sm"
+                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/25 active:scale-95 transition-all"
+                className="w-full py-3 bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black font-bold text-xs rounded-xl shadow-md shadow-black/25 dark:shadow-white/10 active:scale-95 transition-all"
               >
                 Unduh PDF Struk
               </button>
@@ -1052,7 +1052,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   placeholder="Contoh: Kabel HDMI 2 Meter"
                   value={newProdName}
                   onChange={(e) => setNewProdName(e.target.value)}
-                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-sm"
+                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
                 />
               </div>
 
@@ -1071,10 +1071,10 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     const val = e.target.value;
                     setNewProdPrice(val === "" ? "" : Number(val));
                   }}
-                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold font-mono text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-sm"
+                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold font-mono text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
                 />
                 {newProdPrice !== "" && newProdPrice >= 0 && (
-                  <div className="text-[11px] font-bold text-blue-500 font-mono pl-1">
+                  <div className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 font-mono pl-1">
                     Preview: Rp {Number(newProdPrice).toLocaleString("id-ID")}
                   </div>
                 )}
@@ -1088,7 +1088,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 <select
                   value={newProdCategory}
                   onChange={(e) => setNewProdCategory(e.target.value as any)}
-                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-sm"
+                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
                 >
                   <option value="JUALAN">JUALAN (Produk Fisik / Jasa Dagang)</option>
                   <option value="RENTAL">RENTAL (Sewa PS / Paket Jam)</option>
@@ -1113,7 +1113,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               <button
                 type="submit"
                 disabled={isUploading}
-                className="w-full py-3.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/25 active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                className="w-full py-3.5 bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 disabled:opacity-50 text-white dark:text-black font-bold text-xs rounded-xl shadow-md shadow-black/25 dark:shadow-white/10 active:scale-95 transition-all flex items-center justify-center gap-1.5"
               >
                 {isUploading ? "Mengunggah..." : "Simpan Produk"}
               </button>
@@ -1158,7 +1158,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   placeholder="Contoh: Kabel HDMI 2 Meter"
                   value={editProdName}
                   onChange={(e) => setEditProdName(e.target.value)}
-                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-sm"
+                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
                 />
               </div>
 
@@ -1177,10 +1177,10 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     const val = e.target.value;
                     setEditProdPrice(val === "" ? "" : Number(val));
                   }}
-                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold font-mono text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-sm"
+                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold font-mono text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
                 />
                 {editProdPrice !== "" && editProdPrice >= 0 && (
-                  <div className="text-[11px] font-bold text-blue-500 font-mono pl-1">
+                  <div className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 font-mono pl-1">
                     Preview: Rp {Number(editProdPrice).toLocaleString("id-ID")}
                   </div>
                 )}
@@ -1194,7 +1194,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 <select
                   value={editProdCategory}
                   onChange={(e) => setEditProdCategory(e.target.value as any)}
-                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/50 transition-all shadow-sm"
+                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
                 >
                   <option value="JUALAN">JUALAN (Produk Fisik / Jasa Dagang)</option>
                   <option value="RENTAL">RENTAL (Sewa PS / Paket Jam)</option>
@@ -1216,7 +1216,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 {editProdImageUrl && !editProdImage && (
                   <div className="mt-2 text-[10px] text-zinc-500 flex items-center gap-1.5">
                     <span className="font-semibold">Foto saat ini:</span>
-                    <a href={editProdImageUrl} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline truncate max-w-[200px]">
+                    <a href={editProdImageUrl} target="_blank" rel="noreferrer" className="text-black dark:text-white underline truncate max-w-[200px]">
                       Lihat Foto
                     </a>
                   </div>
@@ -1228,7 +1228,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 <button
                   type="submit"
                   disabled={isUploading}
-                  className="w-full py-3.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/25 active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                  className="w-full py-3.5 bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 disabled:opacity-50 text-white dark:text-black font-bold text-xs rounded-xl shadow-md shadow-black/25 dark:shadow-white/10 active:scale-95 transition-all flex items-center justify-center gap-1.5"
                 >
                   {isUploading ? "Mengunggah..." : "Simpan Perubahan"}
                 </button>
