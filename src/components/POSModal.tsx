@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { X, ShoppingCart, Plus, Minus, Trash2, Printer, Download, PlusCircle, Sparkles, Pencil } from "lucide-react";
+import { X, ShoppingCart, Plus, Minus, Trash2, Printer, Download, PlusCircle, Sparkles, Pencil, Search } from "lucide-react";
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../lib/firebase";
@@ -172,11 +172,13 @@ function getProductSubCategory(name: string): "Unit PS" | "Stik" | "Hardisk" | "
 export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName }: POSModalProps) {
   const [activeSub, setActiveSub] = useState<"JUALAN" | "RENTAL" | "SERVIS">("JUALAN");
   const [activeJualanSub, setActiveJualanSub] = useState<"SEMUA" | "Unit PS" | "Stik" | "Hardisk" | "Aksesoris">("SEMUA");
+  const [searchQuery, setSearchQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
 
   useEffect(() => {
     setActiveJualanSub("SEMUA");
+    setSearchQuery("");
   }, [activeSub]);
   
   // Form states for adding product
@@ -532,9 +534,15 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     window.location.href = intentUrl;
   };
 
-  // Filter products by category, sort alphabetically by name, and filter by sub-category if in JUALAN
+  // Filter products by category, sort alphabetically by name, search query, and filter by sub-category if in JUALAN
   const filteredProducts = useMemo(() => {
     let result = products.filter((p) => p.category === activeSub);
+    
+    // Search query filter
+    if (searchQuery.trim() !== "") {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((p) => p.name.toLowerCase().includes(q));
+    }
     
     // If activeSub is JUALAN and a specific sub-category is selected, filter by it
     if (activeSub === "JUALAN" && activeJualanSub !== "SEMUA") {
@@ -543,7 +551,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     
     // Sort alphabetically by name
     return result.sort((a, b) => a.name.localeCompare(b.name));
-  }, [products, activeSub, activeJualanSub]);
+  }, [products, activeSub, activeJualanSub, searchQuery]);
 
   if (!open) return null;
 
@@ -692,6 +700,28 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               </div>
             )}
 
+            {/* Search Bar */}
+            <div className="px-4 py-2.5 md:px-6 md:py-3 border-b border-zinc-200/50 dark:border-white/5 bg-white dark:bg-black/10 shrink-0">
+              <div className="relative flex items-center">
+                <Search size={16} className="absolute left-3.5 text-zinc-400 dark:text-zinc-500 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Cari produk..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-9 py-2 bg-zinc-100 dark:bg-zinc-800/60 text-xs md:text-sm text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 border border-transparent rounded-xl outline-none focus:bg-white focus:border-zinc-300 dark:focus:bg-[#2C2C2E] dark:focus:border-zinc-700 transition-all"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-3 w-5 h-5 flex items-center justify-center rounded-full bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-500 dark:text-zinc-400 active:scale-90 transition-all"
+                  >
+                    <X size={10} />
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* Sub-Category Pills for JUALAN */}
             {activeSub === "JUALAN" && (
               <div className="px-4 py-3 border-b border-zinc-200/50 dark:border-white/5 bg-zinc-50/50 dark:bg-black/10 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
@@ -748,7 +778,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 pb-24 md:pb-6">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-3 pb-24 md:pb-6">
                   {filteredProducts.map((p) => {
                     const cartItem = cart.find(item => item.id === p.id);
                     const qty = cartItem?.quantity || 0;
@@ -757,7 +787,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                       <div
                         key={p.id}
                         onClick={() => addToCart(p)}
-                        className={`group relative overflow-hidden rounded-[24px] bg-white dark:bg-[#2C2C2E] border hover:border-black/50 dark:hover:border-white/50 hover:shadow-lg active:scale-[0.98] transition-all cursor-pointer flex flex-col ${
+                        className={`group relative overflow-hidden rounded-[16px] bg-white dark:bg-[#2C2C2E] border hover:border-black/50 dark:hover:border-white/50 hover:shadow-md active:scale-[0.98] transition-all cursor-pointer flex flex-col ${
                           qty > 0 
                             ? "border-black/50 dark:border-white/50 ring-1 ring-black/20 dark:ring-white/20" 
                             : "border-zinc-200/60 dark:border-white/5"
@@ -765,7 +795,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                       >
                         {/* Selected Indicator Badge (Left for Admin/Owner, Right for users) */}
                         {qty > 0 && (
-                          <div className={`absolute top-2.5 ${isSuperAdminOrOwner ? "left-2.5" : "right-2.5"} z-10 w-6 h-6 rounded-full bg-black dark:bg-white text-white dark:text-black font-black text-xs flex items-center justify-center shadow-md animate-in zoom-in-50 duration-200`}>
+                          <div className={`absolute top-1.5 ${isSuperAdminOrOwner ? "left-1.5" : "right-1.5"} z-10 w-5 h-5 rounded-full bg-black dark:bg-white text-white dark:text-black font-black text-[10px] flex items-center justify-center shadow-md animate-in zoom-in-50 duration-200`}>
                             {qty}
                           </div>
                         )}
@@ -777,10 +807,10 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                               e.stopPropagation();
                               handleEditClick(p);
                             }}
-                            className="absolute top-2.5 right-2.5 z-10 w-8 h-8 rounded-full bg-white/80 dark:bg-black/60 backdrop-blur-md text-zinc-700 dark:text-zinc-300 hover:text-black dark:hover:text-white flex items-center justify-center shadow-md border border-zinc-200/50 dark:border-white/10 active:scale-90 transition-all"
+                            className="absolute top-1.5 right-1.5 z-10 w-6 h-6 rounded-full bg-white/80 dark:bg-black/60 backdrop-blur-md text-zinc-700 dark:text-zinc-300 hover:text-black dark:hover:text-white flex items-center justify-center shadow-md border border-zinc-200/50 dark:border-white/10 active:scale-90 transition-all"
                             title="Edit Produk"
                           >
-                            <Pencil size={13} />
+                            <Pencil size={11} />
                           </button>
                         )}
 
@@ -793,20 +823,20 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                               className="w-full h-full object-cover transition-transform group-hover:scale-105"
                             />
                           ) : (
-                            <div className="text-3xl text-zinc-300 dark:text-zinc-700">
+                            <div className="text-2xl text-zinc-300 dark:text-zinc-700">
                               📦
                             </div>
                           )}
                         </div>
 
                         {/* Card Details */}
-                        <div className="p-3.5 flex-1 flex flex-col justify-between gap-1.5 min-w-0">
-                          <h4 className="font-bold text-[13px] md:text-sm text-zinc-900 dark:text-zinc-100 leading-tight truncate">
+                        <div className="p-2 md:p-2.5 flex-1 flex flex-col justify-between gap-1 min-w-0">
+                          <h4 className="font-bold text-[11px] md:text-xs text-zinc-900 dark:text-zinc-100 leading-snug line-clamp-2 h-8">
                             {p.name}
                           </h4>
                           
-                          <div className="flex items-center justify-between">
-                            <span className="font-extrabold text-[12px] md:text-[13px] text-zinc-600 dark:text-zinc-400 font-mono">
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="font-extrabold text-[10px] md:text-[11px] text-zinc-600 dark:text-zinc-400 font-mono">
                               Rp {p.price.toLocaleString("id-ID")}
                             </span>
                             
@@ -817,9 +847,9 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                                   e.stopPropagation();
                                   removeFromCart(p.id);
                                 }}
-                                className="w-6 h-6 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 flex items-center justify-center active:scale-90 transition-all"
+                                className="w-5 h-5 rounded-md bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 flex items-center justify-center active:scale-90 transition-all"
                               >
-                                <Minus size={12} />
+                                <Minus size={10} />
                               </button>
                             )}
                           </div>
@@ -835,7 +865,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
           {/* ============================================================
               RIGHT PANEL: STATIC CART (Desktop only)
               ============================================================ */}
-          <div className="hidden md:flex flex-col w-80 border-l border-zinc-200/50 dark:border-white/5 bg-white dark:bg-[#1C1C1E] shrink-0 min-h-0">
+          <div className="hidden md:flex flex-col w-[380px] border-l border-zinc-200/50 dark:border-white/5 bg-white dark:bg-[#1C1C1E] shrink-0 min-h-0">
             <div className="p-4 border-b border-zinc-200/50 dark:border-white/5 flex items-center justify-between bg-zinc-50/50 dark:bg-black/10 shrink-0">
               <span className="font-black text-[11px] tracking-wider text-zinc-400 uppercase">
                 KERANJANG BELANJA
@@ -919,7 +949,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 <button
                   disabled={cart.length === 0}
                   onClick={handleSavePdf}
-                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-50 text-zinc-700 dark:text-zinc-200 font-bold text-xs active:scale-95 transition-all shadow-sm border border-transparent dark:border-white/5"
+                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold text-xs active:scale-95 transition-all shadow-md shadow-red-600/20"
                 >
                   <Download size={14} />
                   Simpan (PDF)
@@ -1041,7 +1071,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               <div className="grid grid-cols-2 gap-3 pb-4">
                 <button
                   onClick={handleSavePdf}
-                  className="flex items-center justify-center gap-1.5 py-3.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 font-bold text-xs"
+                  className="flex items-center justify-center gap-1.5 py-3.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs active:scale-95 transition-all shadow-md shadow-red-600/20"
                 >
                   <Download size={14} />
                   Simpan (PDF)
