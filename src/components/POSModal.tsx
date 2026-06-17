@@ -909,7 +909,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                         )}
 
                         {/* Product Image */}
-                        <div className="aspect-square w-full bg-zinc-100 dark:bg-black/20 flex items-center justify-center overflow-hidden shrink-0 relative">
+                        <div className={`w-full bg-zinc-100 dark:bg-black/20 flex items-center justify-center overflow-hidden shrink-0 relative ${p.category === "ISI GAME" ? "aspect-[3/4]" : "aspect-square"}`}>
                           {p.imageUrl ? (
                             <img
                               src={p.imageUrl}
