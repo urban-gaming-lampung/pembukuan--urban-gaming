@@ -20,6 +20,7 @@ import Pengaturan from "./components/Pengaturan";
 import EditRincian from "./components/EditRincian"; 
 import UpdateStok from "./components/UpdateStok"; 
 import PageOwner from "./components/PageOwner";
+import POSModal from "./components/POSModal";
 import WidgetMonitoringStatus from "./components/WidgetMonitoringStatus";
 import WidgetMonitoringDevice from "./components/WidgetMonitoringDevice";
 import { Package, AlertCircle } from "lucide-react";
@@ -319,6 +320,7 @@ export default function App() {
   const [absenSiang, setAbsenSiang] = useState("");
   const [shiftPegawai, _setShiftPegawai] = useState("");
   const [openSettings, setOpenSettings] = useState(false);
+  const [openPOS, setOpenPOS] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const setShiftPegawai = useCallback((val: string) => {
@@ -1826,6 +1828,7 @@ export default function App() {
               onSharePDF={handleShareCheck}
               onOpenSettings={() => setOpenSettings(true)}
               onOpenScan={handleOpenScan}
+              onOpenPOS={() => setOpenPOS(true)}
               hasData={hasData} mandatoryFilled={mandatoryFilled}
               isEditing={!!editingId}
               hasUnsavedChanges={currentFormSignature !== savedSignature}
@@ -2174,6 +2177,13 @@ export default function App() {
               if (user?.email) setDoc(doc(db, "users", user.email), { profileColor: color }, { merge: true }).catch(console.error);
             }}
             history={history}
+          />
+
+          <POSModal
+            open={openPOS}
+            onClose={() => setOpenPOS(false)}
+            isSuperAdminOrOwner={isSuperAdminOrOwner}
+            adminName={user?.email ? user.email.split('@')[0] : "Admin"}
           />
 
           {/* === POPUPS: APPLE UI STYLE === */}
