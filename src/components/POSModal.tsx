@@ -94,8 +94,8 @@ function buildEscPosBytes(cart: CartItem[], buyerName: string, total: number, ad
   commands.push(...center, ...doubleOn, ...boldOn);
   commands = commands.concat(Array.from(encoder.encode("URBAN GAMING\n")));
   commands.push(...doubleOff, ...boldOff);
-  commands = commands.concat(Array.from(encoder.encode("Jl. Ki Maja No. 58, Kedaton\n")));
-  commands = commands.concat(Array.from(encoder.encode("Bandar Lampung\n")));
+  commands = commands.concat(Array.from(encoder.encode("Jl. Imam Bonjol No.58, Segala Mider\n")));
+  commands = commands.concat(Array.from(encoder.encode("Tj. Karang Barat, Bandar Lampung\n")));
   commands = commands.concat(Array.from(encoder.encode("================================================\n"))); // 48 chars for 80mm
   
   const dateStr = new Date().toLocaleString("id-ID", {
@@ -433,8 +433,8 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
     docPdf.setFont("courier", "normal");
     docPdf.setFontSize(8);
-    docPdf.text("Jl. Ki Maja No. 58, Kedaton", 40, 14, { align: "center" });
-    docPdf.text("Bandar Lampung", 40, 18, { align: "center" });
+    docPdf.text("Jl. Imam Bonjol No.58, Segala Mider", 40, 14, { align: "center" });
+    docPdf.text("Tj. Karang Barat, Bandar Lampung", 40, 18, { align: "center" });
     docPdf.text("-".repeat(38), 40, 22, { align: "center" });
 
     const dateStr = new Date().toLocaleString("id-ID", {
