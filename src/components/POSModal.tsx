@@ -553,7 +553,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       {/* ============================================================
           MAIN CONTAINER (Full-Screen iOS Style)
           ============================================================ */}
-      <div className="relative w-full h-full md:w-[94vw] md:h-[90vh] md:max-w-6xl md:rounded-[32px] md:shadow-2xl bg-zinc-50 dark:bg-[#1C1C1E] border border-white/20 dark:border-white/10 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-300">
+      <div className="relative w-full h-full bg-zinc-50 dark:bg-[#1C1C1E] overflow-hidden flex flex-col animate-in fade-in duration-300">
         
         {/* Top iOS Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200/50 dark:border-white/5 bg-white/70 dark:bg-[#1C1C1E]/70 backdrop-blur-xl z-20 shrink-0">
@@ -694,7 +694,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
             {/* Sub-Category Pills for JUALAN */}
             {activeSub === "JUALAN" && (
-              <div className="px-4 py-3 border-b border-zinc-200/50 dark:border-white/5 bg-zinc-50/50 dark:bg-black/10 flex items-center gap-1.5 overflow-x-auto scrollbar-none shrink-0">
+              <div className="px-4 py-3 border-b border-zinc-200/50 dark:border-white/5 bg-zinc-50/50 dark:bg-black/10 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
                 {(["SEMUA", "Unit PS", "Stik", "Hardisk", "Aksesoris"] as const).map((subJualan) => {
                   const count = subJualan === "SEMUA" 
                     ? products.filter(p => p.category === "JUALAN").length 
@@ -725,7 +725,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             )}
 
             {/* Catalog Scrollbox */}
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 scrollbar-thin">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 no-scrollbar">
               {filteredProducts.length === 0 ? (
                 <div className="h-64 flex flex-col items-center justify-center text-center">
                   <div className="w-16 h-16 rounded-full bg-zinc-200/50 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 dark:text-zinc-600 mb-3">
@@ -852,7 +852,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             </div>
 
             {/* Cart Items List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0 scrollbar-thin">
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0 no-scrollbar">
               {cart.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center text-zinc-400 dark:text-zinc-600 py-12">
                   <ShoppingCart size={32} className="mb-2 opacity-50" />
@@ -987,7 +987,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             </div>
 
             {/* List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5 no-scrollbar">
               {cart.map((item) => (
                 <div
                   key={item.id}
