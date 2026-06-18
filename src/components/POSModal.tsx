@@ -659,19 +659,28 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
           {/* Mobile sub-menu bar (Horizontal at the top) */}
           <div className="md:hidden p-4 bg-white/50 dark:bg-black/10 border-b border-zinc-200/60 dark:border-white/5 shrink-0">
             <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-[14px] gap-1 overflow-x-auto no-scrollbar">
-              {(["JUALAN", "RENTAL", "ISI GAME", "SERVIS"] as const).map((sub) => (
-                <button
-                  key={sub}
-                  onClick={() => setActiveSub(sub)}
-                  className={`flex-1 min-w-[75px] py-2.5 text-[11px] font-bold rounded-[10px] tracking-wide transition-all ${
-                    activeSub === sub
-                      ? "bg-white dark:bg-[#2C2C2E] text-black dark:text-white shadow-sm ring-1 ring-black/5"
-                      : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700"
-                  }`}
-                >
-                  {sub}
-                </button>
-              ))}
+              {(["JUALAN", "RENTAL", "ISI GAME", "SERVIS"] as const).map((sub) => {
+                const hasCategoryUpdate = sub === "ISI GAME"
+                  ? games.some(g => catalogChanges[g.id] !== undefined)
+                  : products.some(p => p.category === sub && catalogChanges[p.id] !== undefined);
+
+                return (
+                  <button
+                    key={sub}
+                    onClick={() => setActiveSub(sub)}
+                    className={`flex-1 min-w-[75px] py-2.5 text-[11px] font-bold rounded-[10px] tracking-wide transition-all relative ${
+                      activeSub === sub
+                        ? "bg-white dark:bg-[#2C2C2E] text-black dark:text-white shadow-sm ring-1 ring-black/5"
+                        : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700"
+                    }`}
+                  >
+                    <span>{sub}</span>
+                    {hasCategoryUpdate && (
+                      <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
             
             {/* Add product button for Super Admin on Mobile */}
@@ -708,6 +717,10 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   ? games.length 
                   : products.filter(p => p.category === sub).length;
                   
+                const hasCategoryUpdate = sub === "ISI GAME"
+                  ? games.some(g => catalogChanges[g.id] !== undefined)
+                  : products.some(p => p.category === sub && catalogChanges[p.id] !== undefined);
+
                 return (
                   <button
                     key={sub}
@@ -718,7 +731,12 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                         : "text-zinc-600 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:bg-zinc-800/50"
                     }`}
                   >
-                    <span>{sub}</span>
+                    <span className="flex items-center gap-1.5">
+                      {sub}
+                      {hasCategoryUpdate && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                      )}
+                    </span>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
                       activeSub === sub ? "bg-white/20 text-white" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-500"
                     }`}>
@@ -804,17 +822,26 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     ? products.filter(p => p.category === "JUALAN").length 
                     : products.filter(p => p.category === "JUALAN" && getProductSubCategory(p.name) === subJualan).length;
                   
+                  const hasSubUpdate = subJualan === "SEMUA"
+                    ? products.some(p => p.category === "JUALAN" && catalogChanges[p.id] !== undefined)
+                    : products.some(p => p.category === "JUALAN" && getProductSubCategory(p.name) === subJualan && catalogChanges[p.id] !== undefined);
+
                   return (
                     <button
                       key={subJualan}
                       onClick={() => setActiveJualanSub(subJualan)}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap active:scale-95 transition-all ${
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap active:scale-95 transition-all relative ${
                         activeJualanSub === subJualan
                           ? "bg-black dark:bg-white text-white dark:text-black shadow-sm"
                           : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 border border-zinc-200/50 dark:border-white/5"
                       }`}
                     >
-                      <span>{subJualan}</span>
+                      <span className="flex items-center gap-1">
+                        {subJualan}
+                        {hasSubUpdate && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                        )}
+                      </span>
                       <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
                         activeJualanSub === subJualan
                           ? "bg-white/20 dark:bg-black/10 text-white dark:text-black"
@@ -833,18 +860,24 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               <div className="px-4 py-3 border-b border-zinc-200/50 dark:border-white/5 bg-zinc-50/50 dark:bg-black/10 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
                 {(["PS3 CFW/HEN", "PS4 HEN", "PS5 HEN", "Switch CFW", "PC"] as const).map((subIsiGame) => {
                   const count = games.filter(g => g.platform === subIsiGame).length;
-                  
+                  const hasSubUpdate = games.some(g => g.platform === subIsiGame && catalogChanges[g.id] !== undefined);
+
                   return (
                     <button
                       key={subIsiGame}
                       onClick={() => setActiveIsiGameSub(subIsiGame)}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap active:scale-95 transition-all ${
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap active:scale-95 transition-all relative ${
                         activeIsiGameSub === subIsiGame
                           ? "bg-black dark:bg-white text-white dark:text-black shadow-sm"
                           : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 border border-zinc-200/50 dark:border-white/5"
                       }`}
                     >
-                      <span>{subIsiGame}</span>
+                      <span className="flex items-center gap-1">
+                        {subIsiGame}
+                        {hasSubUpdate && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                        )}
+                      </span>
                       <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
                         activeIsiGameSub === subIsiGame
                           ? "bg-white/20 dark:bg-black/10 text-white dark:text-black"
