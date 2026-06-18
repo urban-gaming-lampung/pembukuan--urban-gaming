@@ -713,10 +713,12 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                         : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700"
                     }`}
                   >
-                    <span>{sub}</span>
-                    {hasCategoryUpdate && (
-                      <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                    )}
+                    <span className="flex items-center justify-center gap-1">
+                      <span>{sub}</span>
+                      {hasCategoryUpdate && (
+                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+                      )}
+                    </span>
                   </button>
                 );
               })}
@@ -773,7 +775,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     <span className="flex items-center gap-1.5">
                       {sub}
                       {hasCategoryUpdate && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
                       )}
                     </span>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
@@ -878,7 +880,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                       <span className="flex items-center gap-1">
                         {subJualan}
                         {hasSubUpdate && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
                         )}
                       </span>
                       <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
@@ -914,7 +916,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                       <span className="flex items-center gap-1">
                         {subIsiGame}
                         {hasSubUpdate && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
                         )}
                       </span>
                       <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
@@ -970,9 +972,9 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                             : "border-zinc-200/60 dark:border-white/5"
                         }`}
                       >
-                        {/* Selected Indicator Badge (Left for Admin/Owner, Right for users) */}
+                        {/* Selected Indicator Badge (Bottom Right) */}
                         {qty > 0 && (
-                          <div className={`absolute top-1.5 ${isSuperAdminOrOwner ? "left-1.5" : "right-1.5"} z-10 w-5 h-5 rounded-full bg-black dark:bg-white text-white dark:text-black font-black text-[10px] flex items-center justify-center shadow-md animate-in zoom-in-50 duration-200`}>
+                          <div className="absolute bottom-1.5 right-1.5 z-10 w-5 h-5 rounded-full bg-black dark:bg-white text-white dark:text-black font-black text-[10px] flex items-center justify-center shadow-md animate-in zoom-in-50 duration-200">
                             {qty}
                           </div>
                         )}
@@ -1005,13 +1007,9 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                             </div>
                           )}
 
-                          {/* Catalog Update Badge */}
+                          {/* Catalog Update Badge (Top Left, Red color) */}
                           {changeType && (
-                            <div className={`absolute bottom-1.5 left-1.5 z-10 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider shadow-sm border select-none ${
-                              changeType === "baru"
-                                ? "bg-emerald-500 text-white border-emerald-400"
-                                : "bg-amber-500 text-white border-amber-400"
-                            }`}>
+                            <div className="absolute top-1.5 left-1.5 z-10 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider shadow-md border border-red-500 bg-red-600 text-white select-none animate-pulse">
                               {changeType}
                             </div>
                           )}
