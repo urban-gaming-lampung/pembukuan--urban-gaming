@@ -29,6 +29,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth, listGameDb } from "./lib/firebase";
 import { usePresence } from "./hooks/usePresence";
 import { useFormDraft } from "./hooks/useFormDraft";
+import { useBodyScrollLock } from "./hooks/useBodyScrollLock";
 import LiveCursors from "./components/LiveCursors";
 import Login from "./components/Login";
 import { uploadBackupToDrive, downloadBackupFromDrive } from "./lib/googleDrive";
@@ -1297,6 +1298,22 @@ export default function App() {
   }, [unverifiedListMemo, user, activeTab]);
 
   const [paymentVerifyPrompt, setPaymentVerifyPrompt] = useState<any>(null);
+
+  // Lock body scroll on active modals/popups
+  useBodyScrollLock(openPOS);
+  useBodyScrollLock(openSettings);
+  useBodyScrollLock(showChallenge);
+  useBodyScrollLock(showDownloadAlert);
+  useBodyScrollLock(showDuplicateDateAlert);
+  useBodyScrollLock(showNewMonthAlert);
+  useBodyScrollLock(showUnsavedAlert);
+  useBodyScrollLock(!!validationAlert);
+  useBodyScrollLock(showSuccessAlert);
+  useBodyScrollLock(showStokConfirmation);
+  useBodyScrollLock(showRecheckAlert);
+  useBodyScrollLock(!!openEditRincian);
+  useBodyScrollLock(unverifiedRentals.length > 0);
+  useBodyScrollLock(!!paymentVerifyPrompt);
 
   const handleVerifyReturn = async (item: any) => {
       // Logic for checking payment status first

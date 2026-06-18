@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 // import SopPdf from "../SOP/SOP_SewaPS_URBAN.pdf";
 import versionData from "../version.json";
+import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 
 interface Price {
   label: string;
@@ -339,6 +340,7 @@ const Pengaturan: React.FC<Props> = ({
   history = [],
   isOwner: isOwnerProp,
 }) => {
+  useBodyScrollLock(open);
   const [tab, setTab] = useState<TabKey>("general");
   const [mobileView, setMobileView] = useState<"menu" | "content">("menu");
   const [sopExpanded, setSopExpanded] = useState<number | null>(null);

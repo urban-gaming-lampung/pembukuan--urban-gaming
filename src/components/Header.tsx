@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { PresenceData } from "../hooks/usePresence";
+import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 const logoImg = new URL('/images/logo.png', import.meta.url).href;
 
 type HeaderProps = {
@@ -100,6 +101,11 @@ export default function Header({
   const [openConfirm, setOpenConfirm] = useState(false);
   const [openEmptyAlert, setOpenEmptyAlert] = useState(false);
   const [openMandatoryAlert, setOpenMandatoryAlert] = useState(false);
+
+  useBodyScrollLock(openConfirm);
+  useBodyScrollLock(openEmptyAlert);
+  useBodyScrollLock(openMandatoryAlert);
+
   const okBtnRef = useRef<HTMLButtonElement | null>(null);
   const scrolledRef = useRef(false);
   const ticking = useRef(false);

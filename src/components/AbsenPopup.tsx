@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, MapPin, Camera, AlertCircle } from "lucide-react";
+import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { MapContainer, TileLayer, Marker, Circle, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -44,6 +45,7 @@ function FlyToUser({ coord }: { coord: {lat: number, lng: number} | null }) {
 }
 
 const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, onSubmit }) => {
+  useBodyScrollLock(isOpen);
   const [userCoord, setUserCoord] = useState<{lat: number, lng: number} | null>(null);
   const [isLocationMatched, setIsLocationMatched] = useState<boolean>(false);
   const [locationError, setLocationError] = useState("");

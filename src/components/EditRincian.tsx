@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 
 // --- SF SYMBOL STYLE ICONS (Inline SVGs) ---
 const Icons = {
@@ -56,6 +57,7 @@ const EditRincian: React.FC<EditRincianProps> = ({
   initialData,
   onResetDefault,
 }) => {
+  useBodyScrollLock(isOpen);
   const [items, setItems] = useState<PriceItem[]>([]);
   const [search, setSearch] = useState("");
   const [isClosing, setIsClosing] = useState(false);

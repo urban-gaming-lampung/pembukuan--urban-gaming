@@ -4,6 +4,7 @@ import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, setDoc, de
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage, listGameDb } from "../lib/firebase";
 import jsPDF from "jspdf";
+import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 
 const qrisImg = new URL("/images/QRIS.jpeg", import.meta.url).href;
 
@@ -222,6 +223,14 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   // Payment states
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "TRANSFER">("CASH");
   const [showQrisModal, setShowQrisModal] = useState(false);
+
+  // Lock body scroll on active modals/popups
+  useBodyScrollLock(open);
+  useBodyScrollLock(openAddProduct);
+  useBodyScrollLock(openEditProduct);
+  useBodyScrollLock(openMobileCart);
+  useBodyScrollLock(openSavePdfForm);
+  useBodyScrollLock(showQrisModal);
 
   // Real-time Firestore sync for products
   useEffect(() => {
