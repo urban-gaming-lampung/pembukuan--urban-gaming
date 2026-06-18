@@ -108,7 +108,7 @@ function getCatalogChanges(
   return changes;
 }
 
-function saveCatalogState(currentProducts: any[], currentGames: any[]) {
+function saveCatalogState(currentProducts: any[], currentGames: any[], email: string) {
   const state: SavedCatalogState = { products: {}, games: {} };
   currentProducts.forEach(p => {
     state.products[p.id] = { price: p.price, name: p.name || "" };
@@ -116,7 +116,7 @@ function saveCatalogState(currentProducts: any[], currentGames: any[]) {
   currentGames.forEach(g => {
     state.games[g.id] = { price: g.price, name: g.name || "" };
   });
-  localStorage.setItem("pos_catalog_state", JSON.stringify(state));
+  localStorage.setItem(`pos_catalog_state_${email}`, JSON.stringify(state));
 }
 
 function isVersionLower(v1: string, v2: string): boolean {
@@ -408,8 +408,9 @@ export default function App() {
       return copy;
     });
     
+    if (!user?.email) return;
     try {
-      const savedStateStr = localStorage.getItem("pos_catalog_state");
+      const savedStateStr = localStorage.getItem(`pos_catalog_state_${user.email}`);
       if (savedStateStr) {
         const saved = JSON.parse(savedStateStr);
         const savedProds = saved.products || {};
@@ -427,12 +428,12 @@ export default function App() {
         
         saved.products = savedProds;
         saved.games = savedGames;
-        localStorage.setItem("pos_catalog_state", JSON.stringify(saved));
+        localStorage.setItem(`pos_catalog_state_${user.email}`, JSON.stringify(saved));
       }
     } catch (e) {
       console.error("Error updating single product baseline in localStorage:", e);
     }
-  }, []);
+  }, [user?.email]);
 
   useEffect(() => {
     openPOSRef.current = openPOS;
@@ -441,10 +442,12 @@ export default function App() {
       wasOpenRef.current = true;
     } else if (wasOpenRef.current) {
       setCatalogChanges({});
-      saveCatalogState(productsListRef.current, gamesListRef.current);
+      if (user?.email) {
+        saveCatalogState(productsListRef.current, gamesListRef.current, user.email);
+      }
       wasOpenRef.current = false;
     }
-  }, [openPOS]);
+  }, [openPOS, user?.email]);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const setShiftPegawai = useCallback((val: string) => {
@@ -571,7 +574,7 @@ export default function App() {
       productsLoaded = true;
 
       if (productsLoaded && gamesLoaded) {
-        const savedStateStr = localStorage.getItem("pos_catalog_state");
+        const savedStateStr = localStorage.getItem(`pos_catalog_state_${user.email}`);
         if (savedStateStr) {
           const changes = getCatalogChanges(productsListRef.current, gamesListRef.current, savedStateStr);
           setCatalogChanges(changes);
@@ -580,7 +583,7 @@ export default function App() {
             setHasPOSUpdate(true);
           }
         } else {
-          saveCatalogState(productsListRef.current, gamesListRef.current);
+          saveCatalogState(productsListRef.current, gamesListRef.current, user.email);
         }
       }
     }, (err) => {
@@ -603,7 +606,7 @@ export default function App() {
       gamesLoaded = true;
 
       if (productsLoaded && gamesLoaded) {
-        const savedStateStr = localStorage.getItem("pos_catalog_state");
+        const savedStateStr = localStorage.getItem(`pos_catalog_state_${user.email}`);
         if (savedStateStr) {
           const changes = getCatalogChanges(productsListRef.current, gamesListRef.current, savedStateStr);
           setCatalogChanges(changes);
@@ -612,7 +615,7 @@ export default function App() {
             setHasPOSUpdate(true);
           }
         } else {
-          saveCatalogState(productsListRef.current, gamesListRef.current);
+          saveCatalogState(productsListRef.current, gamesListRef.current, user.email);
         }
       }
     }, (err) => {
