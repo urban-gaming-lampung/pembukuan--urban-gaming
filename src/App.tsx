@@ -108,7 +108,7 @@ function getCatalogChanges(
   return changes;
 }
 
-function saveCatalogState(currentProducts: any[], currentGames: any[], email: string) {
+async function saveCatalogStateDb(currentProducts: any[], currentGames: any[], email: string) {
   const state: SavedCatalogState = { products: {}, games: {} };
   currentProducts.forEach(p => {
     state.products[p.id] = { price: p.price, name: p.name || "" };
@@ -116,7 +116,12 @@ function saveCatalogState(currentProducts: any[], currentGames: any[], email: st
   currentGames.forEach(g => {
     state.games[g.id] = { price: g.price, name: g.name || "" };
   });
-  localStorage.setItem(`pos_catalog_state_${email}`, JSON.stringify(state));
+  try {
+    const userRef = doc(db, "users", email.toLowerCase().trim());
+    await setDoc(userRef, { posCatalogState: state }, { merge: true });
+  } catch (e) {
+    console.error("Error saving catalog state to Firestore:", e);
+  }
 }
 
 function isVersionLower(v1: string, v2: string): boolean {
@@ -270,20 +275,34 @@ export default function App() {
              
              if (data.kualitasGambar) setKualitasGambar(data.kualitasGambar as ImageQuality);
              if (data.tableMode) setTableMode(data.tableMode as "Lama" | "Baru");
+             
+             if (data.posCatalogState) {
+                setDbCatalogState(data.posCatalogState);
+             } else {
+                setDbCatalogState(null);
+             }
+             setUserProfileLoaded(true);
           } else {
              setUserProfilePic(null);
              setUserRole("admin");
+             setDbCatalogState(null);
+             setUserProfileLoaded(true);
              if (email !== "owner@gmail.com") {
                 signOut(auth).then(() => {
                    alert("Akun Anda telah dinonaktifkan atau dihapus.");
                 }).catch(console.error);
              }
           }
+      }, (err) => {
+         console.error("Error listening to user profile:", err);
+         setUserProfileLoaded(true);
       });
       return () => unsub();
     } else {
       setUserProfilePic(null);
       setUserRole("admin");
+      setDbCatalogState(null);
+      setUserProfileLoaded(false);
     }
   }, [user?.email]);
 
@@ -400,8 +419,14 @@ export default function App() {
   const wasOpenRef = useRef(false);
   const productsListRef = useRef<any[]>([]);
   const gamesListRef = useRef<any[]>([]);
+  const [dbCatalogState, setDbCatalogState] = useState<SavedCatalogState | null>(null);
+  const dbCatalogStateRef = useRef<SavedCatalogState | null>(null);
+  useEffect(() => {
+    dbCatalogStateRef.current = dbCatalogState;
+  }, [dbCatalogState]);
+  const [userProfileLoaded, setUserProfileLoaded] = useState(false);
 
-  const handleClearProductChange = useCallback((id: string) => {
+  const handleClearProductChange = useCallback(async (id: string) => {
     setCatalogChanges(prev => {
       const copy = { ...prev };
       delete copy[id];
@@ -410,11 +435,12 @@ export default function App() {
     
     if (!user?.email) return;
     try {
-      const savedStateStr = localStorage.getItem(`pos_catalog_state_${user.email}`);
-      if (savedStateStr) {
-        const saved = JSON.parse(savedStateStr);
-        const savedProds = saved.products || {};
-        const savedGames = saved.games || {};
+      const userRef = doc(db, "users", user.email.toLowerCase().trim());
+      const currentBaseline = dbCatalogStateRef.current;
+      if (currentBaseline) {
+        const saved = { ...currentBaseline };
+        const savedProds = { ...(saved.products || {}) };
+        const savedGames = { ...(saved.games || {}) };
 
         const prod = productsListRef.current.find(p => p.id === id);
         if (prod) {
@@ -428,10 +454,10 @@ export default function App() {
         
         saved.products = savedProds;
         saved.games = savedGames;
-        localStorage.setItem(`pos_catalog_state_${user.email}`, JSON.stringify(saved));
+        await setDoc(userRef, { posCatalogState: saved }, { merge: true });
       }
     } catch (e) {
-      console.error("Error updating single product baseline in localStorage:", e);
+      console.error("Error updating single product baseline in Firestore:", e);
     }
   }, [user?.email]);
 
@@ -443,7 +469,7 @@ export default function App() {
     } else if (wasOpenRef.current) {
       setCatalogChanges({});
       if (user?.email) {
-        saveCatalogState(productsListRef.current, gamesListRef.current, user.email);
+        saveCatalogStateDb(productsListRef.current, gamesListRef.current, user.email);
       }
       wasOpenRef.current = false;
     }
@@ -573,17 +599,17 @@ export default function App() {
       productsListRef.current = currentList;
       productsLoaded = true;
 
-      if (productsLoaded && gamesLoaded) {
-        const savedStateStr = localStorage.getItem(`pos_catalog_state_${user.email}`);
-        if (savedStateStr) {
-          const changes = getCatalogChanges(productsListRef.current, gamesListRef.current, savedStateStr);
+      if (productsLoaded && gamesLoaded && userProfileLoaded) {
+        const currentBaseline = dbCatalogStateRef.current;
+        if (currentBaseline) {
+          const changes = getCatalogChanges(productsListRef.current, gamesListRef.current, JSON.stringify(currentBaseline));
           setCatalogChanges(changes);
           const hasChanges = Object.keys(changes).length > 0;
           if (hasChanges && !openPOSRef.current) {
             setHasPOSUpdate(true);
           }
         } else {
-          saveCatalogState(productsListRef.current, gamesListRef.current, user.email);
+          saveCatalogStateDb(productsListRef.current, gamesListRef.current, user.email);
         }
       }
     }, (err) => {
@@ -605,17 +631,17 @@ export default function App() {
       gamesListRef.current = currentList;
       gamesLoaded = true;
 
-      if (productsLoaded && gamesLoaded) {
-        const savedStateStr = localStorage.getItem(`pos_catalog_state_${user.email}`);
-        if (savedStateStr) {
-          const changes = getCatalogChanges(productsListRef.current, gamesListRef.current, savedStateStr);
+      if (productsLoaded && gamesLoaded && userProfileLoaded) {
+        const currentBaseline = dbCatalogStateRef.current;
+        if (currentBaseline) {
+          const changes = getCatalogChanges(productsListRef.current, gamesListRef.current, JSON.stringify(currentBaseline));
           setCatalogChanges(changes);
           const hasChanges = Object.keys(changes).length > 0;
           if (hasChanges && !openPOSRef.current) {
             setHasPOSUpdate(true);
           }
         } else {
-          saveCatalogState(productsListRef.current, gamesListRef.current, user.email);
+          saveCatalogStateDb(productsListRef.current, gamesListRef.current, user.email);
         }
       }
     }, (err) => {
@@ -659,7 +685,26 @@ export default function App() {
       unsubGames();
       unsubVersion();
     };
-  }, [user]);
+  }, [user, userProfileLoaded]);
+
+  // Reactive effect to calculate catalog changes when baseline or profile loaded state changes
+  useEffect(() => {
+    if (!userProfileLoaded || !productsListRef.current.length) return;
+    if (dbCatalogState) {
+      const changes = getCatalogChanges(productsListRef.current, gamesListRef.current, JSON.stringify(dbCatalogState));
+      setCatalogChanges(changes);
+      const hasChanges = Object.keys(changes).length > 0;
+      if (hasChanges && !openPOSRef.current) {
+        setHasPOSUpdate(true);
+      } else {
+        setHasPOSUpdate(false);
+      }
+    } else {
+      if (user?.email) {
+        saveCatalogStateDb(productsListRef.current, gamesListRef.current, user.email);
+      }
+    }
+  }, [dbCatalogState, userProfileLoaded]);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "data", "ruko_status"), (snap) => {
