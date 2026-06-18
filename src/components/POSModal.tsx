@@ -30,6 +30,7 @@ interface POSModalProps {
   isSuperAdminOrOwner: boolean;
   adminName: string;
   catalogChanges?: Record<string, "baru" | "update harga">;
+  onClearProductChange?: (id: string) => void;
 }
 
 const DEFAULT_PRODUCTS: Omit<Product, "id">[] = [
@@ -181,7 +182,7 @@ function getProductSubCategory(name: string): "Unit PS" | "Stik" | "Hardisk" | "
 const isGameUnavailable = (name: string) => /^\s*\//.test(name || "");
 const getGameDisplayName = (name: string) => (name || "").replace(/^\s*\//, "").trim();
 
-export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName, catalogChanges = {} }: POSModalProps) {
+export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName, catalogChanges = {}, onClearProductChange }: POSModalProps) {
   const [activeSub, setActiveSub] = useState<"JUALAN" | "RENTAL" | "SERVIS" | "ISI GAME">("JUALAN");
   const [activeJualanSub, setActiveJualanSub] = useState<"SEMUA" | "Unit PS" | "Stik" | "Hardisk" | "Aksesoris">("SEMUA");
   const [activeIsiGameSub, setActiveIsiGameSub] = useState<"PS3 CFW/HEN" | "PS4 HEN" | "PS5 HEN" | "Switch CFW" | "PC">("PS4 HEN");
@@ -280,6 +281,10 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
   // Cart operations
   const addToCart = (product: Product) => {
+    // Clear the update dot/label for this product if it exists
+    if (catalogChanges[product.id] && onClearProductChange) {
+      onClearProductChange(product.id);
+    }
     setCart((prev) => {
       const idx = prev.findIndex((item) => item.id === product.id);
       if (idx >= 0) {

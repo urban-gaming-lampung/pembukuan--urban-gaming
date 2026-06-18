@@ -401,6 +401,39 @@ export default function App() {
   const productsListRef = useRef<any[]>([]);
   const gamesListRef = useRef<any[]>([]);
 
+  const handleClearProductChange = useCallback((id: string) => {
+    setCatalogChanges(prev => {
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
+    
+    try {
+      const savedStateStr = localStorage.getItem("pos_catalog_state");
+      if (savedStateStr) {
+        const saved = JSON.parse(savedStateStr);
+        const savedProds = saved.products || {};
+        const savedGames = saved.games || {};
+
+        const prod = productsListRef.current.find(p => p.id === id);
+        if (prod) {
+          savedProds[id] = { price: prod.price, name: prod.name || "" };
+        } else {
+          const game = gamesListRef.current.find(g => g.id === id);
+          if (game) {
+            savedGames[id] = { price: game.price, name: game.name || "" };
+          }
+        }
+        
+        saved.products = savedProds;
+        saved.games = savedGames;
+        localStorage.setItem("pos_catalog_state", JSON.stringify(saved));
+      }
+    } catch (e) {
+      console.error("Error updating single product baseline in localStorage:", e);
+    }
+  }, []);
+
   useEffect(() => {
     openPOSRef.current = openPOS;
     if (openPOS) {
@@ -2398,6 +2431,7 @@ export default function App() {
             isSuperAdminOrOwner={isSuperAdminOrOwner}
             adminName={user?.email ? user.email.split('@')[0] : "Admin"}
             catalogChanges={catalogChanges}
+            onClearProductChange={handleClearProductChange}
           />
 
           {/* === POPUPS: APPLE UI STYLE === */}
