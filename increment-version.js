@@ -18,8 +18,20 @@ try {
   const parts = currentVersion.split('.').map(Number);
   
   if (parts.length === 3 && !parts.some(isNaN)) {
-    parts[2] += 1; // Increment patch version
-    versionData.version = parts.join('.');
+    let [major, minor, patch] = parts;
+    if (patch >= 50) {
+      if (minor >= 9) {
+        major += 1;
+        minor = 0;
+        patch = 0;
+      } else {
+        minor += 1;
+        patch = 1;
+      }
+    } else {
+      patch += 1;
+    }
+    versionData.version = `${major}.${minor}.${patch}`;
   } else if (parts.length === 2 && !parts.some(isNaN)) {
     versionData.version = `${parts[0]}.${parts[1]}.1`;
   } else {
