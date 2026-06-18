@@ -18,6 +18,7 @@ interface Product {
   platform?: string;
   size?: string;
   available?: boolean;
+  subcategory?: "Unit PS" | "Stik" | "Hardisk" | "Aksesoris";
 }
 
 interface CartItem extends Product {
@@ -179,6 +180,10 @@ function getProductSubCategory(name: string): "Unit PS" | "Stik" | "Hardisk" | "
   return "Aksesoris";
 }
 
+function getSubCategory(p: Product): "Unit PS" | "Stik" | "Hardisk" | "Aksesoris" {
+  return p.subcategory || getProductSubCategory(p.name);
+}
+
 const isGameUnavailable = (name: string) => /^\s*\//.test(name || "");
 const getGameDisplayName = (name: string) => (name || "").replace(/^\s*\//, "").trim();
 
@@ -202,6 +207,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   const [newProdName, setNewProdName] = useState("");
   const [newProdPrice, setNewProdPrice] = useState<number | "">("");
   const [newProdCategory, setNewProdCategory] = useState<"JUALAN" | "RENTAL" | "SERVIS">("JUALAN");
+  const [newProdSubCategory, setNewProdSubCategory] = useState<"Unit PS" | "Stik" | "Hardisk" | "Aksesoris">("Aksesoris");
   const [newProdImage, setNewProdImage] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -211,8 +217,23 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   const [editProdName, setEditProdName] = useState("");
   const [editProdPrice, setEditProdPrice] = useState<number | "">("");
   const [editProdCategory, setEditProdCategory] = useState<"JUALAN" | "RENTAL" | "SERVIS">("JUALAN");
+  const [editProdSubCategory, setEditProdSubCategory] = useState<"Unit PS" | "Stik" | "Hardisk" | "Aksesoris">("Aksesoris");
   const [editProdImage, setEditProdImage] = useState<File | null>(null);
   const [editProdImageUrl, setEditProdImageUrl] = useState("");
+
+  // Autofill subcategory when name changes in Add Product Form
+  useEffect(() => {
+    if (newProdCategory === "JUALAN") {
+      setNewProdSubCategory(getProductSubCategory(newProdName));
+    }
+  }, [newProdName, newProdCategory]);
+
+  // Autofill subcategory when name changes in Edit Product Form
+  useEffect(() => {
+    if (editProdCategory === "JUALAN") {
+      setEditProdSubCategory(getProductSubCategory(editProdName));
+    }
+  }, [editProdName, editProdCategory]);
 
   // Cart Popup state for mobile view
   const [openMobileCart, setOpenMobileCart] = useState(false);
@@ -347,17 +368,23 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
         downloadURL = await getDownloadURL(uploadResult.ref);
       }
 
-      await addDoc(collection(db, "products"), {
+      const productPayload: any = {
         name: newProdName.trim(),
         price: Number(newProdPrice),
         category: newProdCategory,
         imageUrl: downloadURL,
         createdAt: serverTimestamp()
-      });
+      };
+      if (newProdCategory === "JUALAN") {
+        productPayload.subcategory = newProdSubCategory;
+      }
+
+      await addDoc(collection(db, "products"), productPayload);
 
       // Reset form
       setNewProdName("");
       setNewProdPrice("");
+      setNewProdSubCategory("Aksesoris");
       setNewProdImage(null);
       setOpenAddProduct(false);
       alert("Produk berhasil ditambahkan!");
@@ -374,6 +401,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     setEditProdName(p.name);
     setEditProdPrice(p.price);
     setEditProdCategory(p.category as any);
+    setEditProdSubCategory(p.subcategory || getProductSubCategory(p.name));
     setEditProdImageUrl(p.imageUrl || "");
     setEditProdImage(null);
     setOpenEditProduct(true);
@@ -407,18 +435,24 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       }
 
       const docRef = doc(db, "products", selectedProductForEdit.id);
-      await setDoc(docRef, {
+      const updateData: any = {
         name: editProdName.trim(),
         price: Number(editProdPrice),
         category: editProdCategory,
         imageUrl: downloadURL
-      }, { merge: true });
+      };
+      if (editProdCategory === "JUALAN") {
+        updateData.subcategory = editProdSubCategory;
+      } else {
+        updateData.subcategory = null;
+      }
+      await setDoc(docRef, updateData, { merge: true });
 
       // Sync updated product info in cart
       setCart((prev) =>
         prev.map((item) =>
           item.id === selectedProductForEdit.id
-            ? { ...item, name: editProdName.trim(), price: Number(editProdPrice), category: editProdCategory, imageUrl: downloadURL }
+            ? { ...item, name: editProdName.trim(), price: Number(editProdPrice), category: editProdCategory, imageUrl: downloadURL, subcategory: editProdCategory === "JUALAN" ? editProdSubCategory : undefined }
             : item
         )
       );
@@ -621,7 +655,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     
     // If activeSub is JUALAN and a specific sub-category is selected, filter by it
     if (activeSub === "JUALAN" && activeJualanSub !== "SEMUA") {
-      result = result.filter((p) => getProductSubCategory(p.name) === activeJualanSub);
+      result = result.filter((p) => getSubCategory(p) === activeJualanSub);
     }
     
     // Sort alphabetically by name
@@ -825,11 +859,11 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 {(["SEMUA", "Unit PS", "Stik", "Hardisk", "Aksesoris"] as const).map((subJualan) => {
                   const count = subJualan === "SEMUA" 
                     ? products.filter(p => p.category === "JUALAN").length 
-                    : products.filter(p => p.category === "JUALAN" && getProductSubCategory(p.name) === subJualan).length;
+                    : products.filter(p => p.category === "JUALAN" && getSubCategory(p) === subJualan).length;
                   
                   const hasSubUpdate = subJualan === "SEMUA"
                     ? products.some(p => p.category === "JUALAN" && catalogChanges[p.id] !== undefined)
-                    : products.some(p => p.category === "JUALAN" && getProductSubCategory(p.name) === subJualan && catalogChanges[p.id] !== undefined);
+                    : products.some(p => p.category === "JUALAN" && getSubCategory(p) === subJualan && catalogChanges[p.id] !== undefined);
 
                   return (
                     <button
@@ -1468,6 +1502,25 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 </select>
               </div>
 
+              {/* Sub-Kategori */}
+              {newProdCategory === "JUALAN" && (
+                <div className="space-y-1 animate-in fade-in duration-200">
+                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
+                    Sub-Kategori
+                  </label>
+                  <select
+                    value={newProdSubCategory}
+                    onChange={(e) => setNewProdSubCategory(e.target.value as any)}
+                    className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
+                  >
+                    <option value="Unit PS">Unit PS</option>
+                    <option value="Stik">Stik</option>
+                    <option value="Hardisk">Hardisk</option>
+                    <option value="Aksesoris">Aksesoris</option>
+                  </select>
+                </div>
+              )}
+
               {/* Upload Foto */}
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
@@ -1573,6 +1626,25 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   <option value="SERVIS">SERVIS (Jasa Service Stik / Konsol)</option>
                 </select>
               </div>
+
+              {/* Sub-Kategori */}
+              {editProdCategory === "JUALAN" && (
+                <div className="space-y-1 animate-in fade-in duration-200">
+                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
+                    Sub-Kategori
+                  </label>
+                  <select
+                    value={editProdSubCategory}
+                    onChange={(e) => setEditProdSubCategory(e.target.value as any)}
+                    className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
+                  >
+                    <option value="Unit PS">Unit PS</option>
+                    <option value="Stik">Stik</option>
+                    <option value="Hardisk">Hardisk</option>
+                    <option value="Aksesoris">Aksesoris</option>
+                  </select>
+                </div>
+              )}
 
               {/* Upload Foto Baru */}
               <div className="space-y-1">
