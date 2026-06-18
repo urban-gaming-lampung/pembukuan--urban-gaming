@@ -70,38 +70,41 @@ interface SavedCatalogState {
   games: Record<string, CatalogItem>;
 }
 
-function checkCatalogUpdates(
+function getCatalogChanges(
   currentProducts: any[],
   currentGames: any[],
   savedStateStr: string | null
-): boolean {
-  if (!savedStateStr) return false;
+): Record<string, "baru" | "update harga"> {
+  const changes: Record<string, "baru" | "update harga"> = {};
+  if (!savedStateStr) return changes;
   try {
     const saved: SavedCatalogState = JSON.parse(savedStateStr);
     const savedProds = saved.products || {};
     const savedGames = saved.games || {};
 
-    // 1. Check products count and details
-    if (currentProducts.length !== Object.keys(savedProds).length) return true;
+    // 1. Check products
     for (const p of currentProducts) {
       const savedP = savedProds[p.id];
-      if (!savedP) return true;
-      if (savedP.price !== p.price || savedP.name !== p.name) return true;
+      if (!savedP) {
+        changes[p.id] = "baru";
+      } else if (savedP.price !== p.price) {
+        changes[p.id] = "update harga";
+      }
     }
 
-    // 2. Check games count and details
-    if (currentGames.length !== Object.keys(savedGames).length) return true;
+    // 2. Check games
     for (const g of currentGames) {
       const savedG = savedGames[g.id];
-      if (!savedG) return true;
-      if (savedG.price !== g.price || savedG.name !== g.name) return true;
+      if (!savedG) {
+        changes[g.id] = "baru";
+      } else if (savedG.price !== g.price) {
+        changes[g.id] = "update harga";
+      }
     }
-
-    return false;
   } catch (e) {
-    console.error("Error parsing saved catalog state:", e);
-    return false;
+    console.error("Error parsing catalog state for changes:", e);
   }
+  return changes;
 }
 
 function saveCatalogState(currentProducts: any[], currentGames: any[]) {
@@ -391,7 +394,9 @@ export default function App() {
   const [openSettings, setOpenSettings] = useState(false);
   const [openPOS, setOpenPOS] = useState(false);
   const [hasPOSUpdate, setHasPOSUpdate] = useState(false);
+  const [catalogChanges, setCatalogChanges] = useState<Record<string, "baru" | "update harga">>({});
   const openPOSRef = useRef(openPOS);
+  const wasOpenRef = useRef(false);
   const productsListRef = useRef<any[]>([]);
   const gamesListRef = useRef<any[]>([]);
 
@@ -399,7 +404,11 @@ export default function App() {
     openPOSRef.current = openPOS;
     if (openPOS) {
       setHasPOSUpdate(false);
+      wasOpenRef.current = true;
+    } else if (wasOpenRef.current) {
+      setCatalogChanges({});
       saveCatalogState(productsListRef.current, gamesListRef.current);
+      wasOpenRef.current = false;
     }
   }, [openPOS]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -530,8 +539,10 @@ export default function App() {
       if (productsLoaded && gamesLoaded) {
         const savedStateStr = localStorage.getItem("pos_catalog_state");
         if (savedStateStr) {
-          const isUpdated = checkCatalogUpdates(productsListRef.current, gamesListRef.current, savedStateStr);
-          if (isUpdated && !openPOSRef.current) {
+          const changes = getCatalogChanges(productsListRef.current, gamesListRef.current, savedStateStr);
+          setCatalogChanges(changes);
+          const hasChanges = Object.keys(changes).length > 0;
+          if (hasChanges && !openPOSRef.current) {
             setHasPOSUpdate(true);
           }
         } else {
@@ -560,8 +571,10 @@ export default function App() {
       if (productsLoaded && gamesLoaded) {
         const savedStateStr = localStorage.getItem("pos_catalog_state");
         if (savedStateStr) {
-          const isUpdated = checkCatalogUpdates(productsListRef.current, gamesListRef.current, savedStateStr);
-          if (isUpdated && !openPOSRef.current) {
+          const changes = getCatalogChanges(productsListRef.current, gamesListRef.current, savedStateStr);
+          setCatalogChanges(changes);
+          const hasChanges = Object.keys(changes).length > 0;
+          if (hasChanges && !openPOSRef.current) {
             setHasPOSUpdate(true);
           }
         } else {
@@ -2367,6 +2380,7 @@ export default function App() {
             onClose={() => setOpenPOS(false)}
             isSuperAdminOrOwner={isSuperAdminOrOwner}
             adminName={user?.email ? user.email.split('@')[0] : "Admin"}
+            catalogChanges={catalogChanges}
           />
 
           {/* === POPUPS: APPLE UI STYLE === */}

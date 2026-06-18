@@ -28,6 +28,7 @@ interface POSModalProps {
   onClose: () => void;
   isSuperAdminOrOwner: boolean;
   adminName: string;
+  catalogChanges?: Record<string, "baru" | "update harga">;
 }
 
 const DEFAULT_PRODUCTS: Omit<Product, "id">[] = [
@@ -179,7 +180,7 @@ function getProductSubCategory(name: string): "Unit PS" | "Stik" | "Hardisk" | "
 const isGameUnavailable = (name: string) => /^\s*\//.test(name || "");
 const getGameDisplayName = (name: string) => (name || "").replace(/^\s*\//, "").trim();
 
-export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName }: POSModalProps) {
+export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName, catalogChanges = {} }: POSModalProps) {
   const [activeSub, setActiveSub] = useState<"JUALAN" | "RENTAL" | "SERVIS" | "ISI GAME">("JUALAN");
   const [activeJualanSub, setActiveJualanSub] = useState<"SEMUA" | "Unit PS" | "Stik" | "Hardisk" | "Aksesoris">("SEMUA");
   const [activeIsiGameSub, setActiveIsiGameSub] = useState<"PS3 CFW/HEN" | "PS4 HEN" | "PS5 HEN" | "Switch CFW" | "PC">("PS4 HEN");
@@ -876,6 +877,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   {filteredProducts.map((p) => {
                     const cartItem = cart.find(item => item.id === p.id);
                     const qty = cartItem?.quantity || 0;
+                    const changeType = catalogChanges[p.id];
 
                     return (
                       <div
@@ -919,6 +921,17 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                           ) : (
                             <div className="text-2xl text-zinc-300 dark:text-zinc-700">
                               📦
+                            </div>
+                          )}
+
+                          {/* Catalog Update Badge */}
+                          {changeType && (
+                            <div className={`absolute bottom-1.5 left-1.5 z-10 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider shadow-sm border select-none ${
+                              changeType === "baru"
+                                ? "bg-emerald-500 text-white border-emerald-400"
+                                : "bg-amber-500 text-white border-amber-400"
+                            }`}>
+                              {changeType}
                             </div>
                           )}
                         </div>
