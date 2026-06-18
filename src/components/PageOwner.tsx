@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from "react";
 import HistoryPembukuan from "./HistoryPembukuan";
+import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Activity, Clock, Monitor, Gamepad2, CheckCircle, Settings2, ShieldCheck, Smartphone, Sparkles, Zap, Brain, Target, BarChart3 } from "lucide-react";
 import { doc, setDoc, onSnapshot, query, collection, addDoc, deleteDoc, updateDoc, where, orderBy } from "firebase/firestore";
 import { db } from "../lib/firebase";
@@ -96,6 +97,9 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showIncomeModal, setShowIncomeModal] = useState(false);
   const [selectedIncomeCategory, setSelectedIncomeCategory] = useState<string | null>(null);
+
+  useBodyScrollLock(showAnalitikModal);
+  useBodyScrollLock(showIncomeModal);
 
   // States for Input Pengeluaran Grouping
   const [expandedExpenseMonths, setExpandedExpenseMonths] = useState<string[]>([]);
