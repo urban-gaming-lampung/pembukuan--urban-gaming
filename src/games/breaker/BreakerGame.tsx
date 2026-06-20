@@ -1,5 +1,5 @@
 import React, { useEffect, useReducer, useRef, useState } from 'react';
-import { ArrowLeft, Play, RefreshCw, Trophy } from 'lucide-react';
+import { ArrowLeft, Play, RefreshCw, Trophy, AlertTriangle, AlertCircle, CheckCircle2 } from 'lucide-react';
 import HandheldFrame from '../components/handheld/HandheldFrame';
 import GameScreen from '../components/handheld/GameScreen';
 import DPad from '../components/handheld/DPad';
@@ -120,27 +120,46 @@ export default function BreakerGame({ onClose, monthKey, currentHighScore }: Bre
     };
   }, [gameStatus, isMuted]);
 
-  // Simple sound play chiptune helper (Web Audio API)
-  const playBeep = (freq: number, type: OscillatorType, duration: number, vol = 0.05) => {
+  // Immersive sound play chiptune helper with dual-detuned oscillators and panning
+  const playBeep = (freq: number, type: OscillatorType, duration: number, vol = 0.18) => {
     if (isMuted) return;
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      const now = ctx.currentTime;
       
-      gain.gain.setValueAtTime(vol, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+      const mainGain = ctx.createGain();
+      mainGain.gain.setValueAtTime(vol, now);
+      mainGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
+      let outputNode: AudioNode = mainGain;
+      if (ctx.createStereoPanner) {
+        const panner = ctx.createStereoPanner();
+        // Give a slight random stereo panning to game-ticks to make it immersive
+        const randomPan = Math.random() * 0.4 - 0.2;
+        panner.pan.setValueAtTime(randomPan, now);
+        mainGain.connect(panner);
+        outputNode = panner;
+      }
+      outputNode.connect(ctx.destination);
 
-      osc.start();
-      osc.stop(ctx.currentTime + duration);
+      // Primary Osc
+      const osc1 = ctx.createOscillator();
+      osc1.type = type;
+      osc1.frequency.setValueAtTime(freq, now);
+      osc1.connect(mainGain);
+      osc1.start(now);
+      osc1.stop(now + duration);
+
+      // Detuned Secondary Osc (+10 cents) for premium retro chorus
+      const osc2 = ctx.createOscillator();
+      osc2.type = type === 'sine' ? 'square' : type;
+      osc2.detune.setValueAtTime(10, now);
+      osc2.frequency.setValueAtTime(freq, now);
+      osc2.connect(mainGain);
+      osc2.start(now);
+      osc2.stop(now + duration);
     } catch (e) {}
   };
 
@@ -345,7 +364,7 @@ export default function BreakerGame({ onClose, monthKey, currentHighScore }: Bre
   const handleStartPause = () => {
     if (gameStatus === 'IDLE' || gameStatus === 'GAME_OVER') {
       if (!canPlay) {
-        alert('Maaf, batas bermain harian Anda hari ini sudah habis! Kembali besok ya. 🎮');
+        alert('Maaf, batas bermain harian Anda hari ini sudah habis! Kembali besok ya.');
         return;
       }
       initSession();
@@ -526,8 +545,9 @@ export default function BreakerGame({ onClose, monthKey, currentHighScore }: Bre
 
           {/* Cheat warning */}
           {isCheated && (
-            <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-500 font-medium font-sans">
-              ⚠️ Aktivitas tidak wajar terdeteksi. Sesi dibatalkan.
+            <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-500 font-medium font-sans flex items-center justify-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>Aktivitas tidak wajar terdeteksi. Sesi dibatalkan.</span>
             </div>
           )}
 
@@ -535,8 +555,12 @@ export default function BreakerGame({ onClose, monthKey, currentHighScore }: Bre
           {gameStatus === 'GAME_OVER' && submitResultMsg && (
             <div className="p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 animate-in fade-in slide-in-from-bottom-2 duration-300 text-left space-y-3 font-sans">
               <div className="flex items-start gap-3 font-sans">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 text-base">
-                  {isSubmitSuccess ? '🎉' : '⚠️'}
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
+                  {isSubmitSuccess ? (
+                    <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                  ) : (
+                    <AlertCircle className="h-5 w-5 text-red-500" />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="text-sm font-black text-zinc-900 dark:text-white tracking-tight font-sans">
@@ -552,7 +576,7 @@ export default function BreakerGame({ onClose, monthKey, currentHighScore }: Bre
               {isSubmitSuccess && isNewHigh && (
                 <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/20 p-2.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold font-sans">
                   <Trophy className="h-4 w-4 animate-bounce shrink-0" />
-                  <span>Skor Terbaik Baru Anda Tercapai! 🏆</span>
+                  <span>Skor Terbaik Baru Anda Tercapai!</span>
                 </div>
               )}
 

@@ -3,7 +3,7 @@ import HistoryPembukuan from "./HistoryPembukuan";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Activity, Clock, Monitor, Gamepad2, CheckCircle, Settings2, ShieldCheck, Smartphone, Sparkles, Zap, Brain, Target, BarChart3 } from "lucide-react";
 import { doc, setDoc, onSnapshot, query, collection, addDoc, deleteDoc, updateDoc, where, orderBy } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { db, auth } from "../lib/firebase";
 import { HistoryItem, RowSewa } from "../lib/types";
 import { rupiah, formatDateShort } from "../lib/format";
 import RekapPemasukan from "./RekapPemasukan";
@@ -107,6 +107,155 @@ const PageOwner: React.FC<PageOwnerProps> = ({
 
   const [expandedExpenseCats, setExpandedExpenseCats] = useState<string[]>([]);
   const toggleExpenseCat = (key: string) => setExpandedExpenseCats(p => p.includes(key) ? p.filter(x => x !== key) : [...p, key]);
+
+  // States for Analitik Sub-tabs and Logging
+  const [analitikSubTab, setAnalitikSubTab] = useState<"PEMBUKUAN" | "LOGGING">("PEMBUKUAN");
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(true);
+  const [filterEmail, setFilterEmail] = useState<string>("Semua");
+  const [filterAction, setFilterAction] = useState<string>("Semua");
+
+  // States for Pegawai Sub-tabs and Requests
+  const [pegawaiSubTab, setPegawaiSubTab] = useState<"DASHBOARD" | "REQUEST">("DASHBOARD");
+  const [editRequests, setEditRequests] = useState<any[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(true);
+  const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
+  useBodyScrollLock(!!selectedRequest);
+
+  const [expandedMonths, setExpandedMonths] = useState<string[]>([]);
+  const [expandedWeeks, setExpandedWeeks] = useState<string[]>([]);
+  const [expandedDays, setExpandedDays] = useState<string[]>([]);
+  const [expandedLogDetails, setExpandedLogDetails] = useState<string[]>([]);
+
+  const toggleMonth = (m: string) => setExpandedMonths(p => p.includes(m) ? p.filter(x => x !== m) : [...p, m]);
+  const toggleWeek = (w: string) => setExpandedWeeks(p => p.includes(w) ? p.filter(x => x !== w) : [...p, w]);
+  const toggleDay = (d: string) => setExpandedDays(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d]);
+  const toggleLogDetails = (id: string) => setExpandedLogDetails(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+
+  // Helpers for log date calculations
+  const getWeekOfMonth = (date: Date) => {
+    const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+    const firstDayOfWeek = firstDayOfMonth.getDay();
+    const startDayOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+    const dateNum = date.getDate();
+    return Math.ceil((dateNum + startDayOffset) / 7);
+  };
+
+  const getWeekRangeString = (year: number, monthIndex: number, weekNum: number) => {
+    const firstDayOfMonth = new Date(year, monthIndex, 1);
+    const firstDayOfWeek = firstDayOfMonth.getDay();
+    const startDayOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+    
+    const startOffset = (weekNum - 1) * 7 - startDayOffset;
+    const startDate = new Date(year, monthIndex, 1 + startOffset);
+    const endDate = new Date(year, monthIndex, 1 + startOffset + 6);
+    
+    const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
+    return `${startDate.getDate()} ${months[startDate.getMonth()]} - ${endDate.getDate()} ${months[endDate.getMonth()]}`;
+  };
+
+  const logActivity = async (action: "CREATE" | "UPDATE" | "DELETE", targetDate: string, targetDay: string, recordData: any) => {
+    const email = auth.currentUser?.email || "owner@gmail.com";
+    const uniqueLogId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
+      ? crypto.randomUUID() 
+      : Date.now().toString() + Math.random().toString(36).slice(2);
+    
+    const totalHarian = recordData.totalHarian || 0;
+    const totalJajanan = recordData.totalJajanan || 0;
+    const totalJasaAks = recordData.totalJasaAks || 0;
+    const totalSewa = recordData.totalSewa || 0;
+    const totalIncome = totalHarian + totalJajanan + totalJasaAks + totalSewa;
+    const totalCash = recordData.totalCash || 0;
+    const totalTransfer = recordData.totalTransfer || 0;
+    const totalPengeluaran = (recordData.rowsPengeluaran || []).reduce((sum: number, r: any) => sum + (Number(r.harga) || 0), 0);
+
+    const logDoc = {
+      id: uniqueLogId,
+      email,
+      action,
+      targetDate,
+      targetDay,
+      timestamp: new Date().toISOString(),
+      details: {
+        totalIncome,
+        totalCash,
+        totalTransfer,
+        totalPengeluaran
+      }
+    };
+
+    await setDoc(doc(db, "pembukuan_logs", uniqueLogId), logDoc).catch(console.error);
+  };
+
+  const handleApproveRequest = async (req: any) => {
+    if (!confirm(`Setujui request edit pembukuan tanggal ${req.tanggal}?`)) return;
+    try {
+      // 1. Update history_pembukuan
+      await setDoc(doc(db, "history_pembukuan", req.historyId), req.proposedData, { merge: true });
+      
+      // 2. Update edit_request status
+      await updateDoc(doc(db, "edit_requests", req.id), { status: "approved" });
+      
+      // 3. Log activity
+      await logActivity("UPDATE", req.tanggal, req.hari, req.proposedData);
+      
+      alert("Request edit berhasil disetujui! ✅");
+      setSelectedRequest(null);
+    } catch (error) {
+      console.error("Error approving request:", error);
+      alert("Gagal menyetujui request ❌");
+    }
+  };
+
+  const handleRejectRequest = async (req: any) => {
+    if (!confirm(`Tolak request edit pembukuan tanggal ${req.tanggal}?`)) return;
+    try {
+      await updateDoc(doc(db, "edit_requests", req.id), { status: "rejected" });
+      alert("Request edit ditolak! ❌");
+      setSelectedRequest(null);
+    } catch (error) {
+      console.error("Error rejecting request:", error);
+      alert("Gagal menolak request ❌");
+    }
+  };
+
+  useEffect(() => {
+    if (activeTabOwner !== "PEGAWAI" || pegawaiSubTab !== "REQUEST") return;
+    
+    setLoadingRequests(true);
+    const q = query(collection(db, "edit_requests"), orderBy("requestedAt", "desc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setEditRequests(list);
+      setLoadingRequests(false);
+    }, (err) => {
+      console.error("Error fetching edit requests:", err);
+      setLoadingRequests(false);
+    });
+    return () => unsub();
+  }, [activeTabOwner, pegawaiSubTab]);
+
+  const formatDayLabel = (date: Date) => {
+    const days = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+    return `${days[date.getDay()]}, ${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+  };
+
+  useEffect(() => {
+    if (activeTabOwner !== "ANALITIK" || analitikSubTab !== "LOGGING") return;
+    
+    setLoadingLogs(true);
+    const q = query(collection(db, "pembukuan_logs"), orderBy("timestamp", "desc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setLogs(list);
+      setLoadingLogs(false);
+    }, (err) => {
+      console.error("Error fetching logs:", err);
+      setLoadingLogs(false);
+    });
+    return () => unsub();
+  }, [activeTabOwner, analitikSubTab]);
 
   useEffect(() => {
     let q = collection(db, "owner_expenses") as any;
@@ -300,6 +449,101 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     if (!selectedCategory) return [];
     return combinedExpensesBulanIni.filter(x => x.kategori === selectedCategory);
   }, [selectedCategory, combinedExpensesBulanIni]);
+
+  // --- AUDIT LOGS DATA ---
+  const adminEmails = useMemo(() => {
+    const emails = new Set<string>();
+    logs.forEach(l => { if (l.email) emails.add(l.email); });
+    return Array.from(emails);
+  }, [logs]);
+
+  const filteredLogs = useMemo(() => {
+    return logs.filter(log => {
+      const matchEmail = filterEmail === "Semua" || log.email === filterEmail;
+      const matchAction = filterAction === "Semua" || log.action === filterAction;
+      return matchEmail && matchAction;
+    });
+  }, [logs, filterEmail, filterAction]);
+
+  const groupedLogs = useMemo(() => {
+    const monthsMap = new Map<string, {
+      key: string;
+      weeksMap: Map<string, {
+        key: string;
+        weekLabel: string;
+        daysMap: Map<string, {
+          key: string;
+          dayLabel: string;
+          logs: any[];
+        }>;
+      }>;
+    }>();
+
+    const indonesianMonths = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+    
+    filteredLogs.forEach((log) => {
+      const date = new Date(log.timestamp);
+      if (isNaN(date.getTime())) return;
+      
+      const year = date.getFullYear();
+      const monthIdx = date.getMonth();
+      const monthLabel = `${indonesianMonths[monthIdx]} ${year}`;
+      
+      const weekNum = getWeekOfMonth(date);
+      const weekLabel = `Minggu ${weekNum} (${getWeekRangeString(year, monthIdx, weekNum)})`;
+      const weekKey = `${monthLabel}-Week-${weekNum}`;
+      
+      const dayLabel = formatDayLabel(date);
+      const dayKey = date.toISOString().split("T")[0]; // YYYY-MM-DD
+      
+      if (!monthsMap.has(monthLabel)) {
+        monthsMap.set(monthLabel, { key: monthLabel, weeksMap: new Map() });
+      }
+      const monthEntry = monthsMap.get(monthLabel)!;
+      
+      if (!monthEntry.weeksMap.has(weekKey)) {
+        monthEntry.weeksMap.set(weekKey, { key: weekKey, weekLabel, daysMap: new Map() });
+      }
+      const weekEntry = monthEntry.weeksMap.get(weekKey)!;
+      
+      if (!weekEntry.daysMap.has(dayKey)) {
+        weekEntry.daysMap.set(dayKey, { key: dayKey, dayLabel, logs: [] });
+      }
+      const dayEntry = weekEntry.daysMap.get(dayKey)!;
+      
+      dayEntry.logs.push(log);
+    });
+    
+    const sortedMonths = Array.from(monthsMap.values()).map(month => {
+      const sortedWeeks = Array.from(month.weeksMap.values()).map(week => {
+        const sortedDays = Array.from(week.daysMap.values()).map(day => {
+          const sortedLogsInDay = [...day.logs].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+          return { ...day, logs: sortedLogsInDay };
+        }).sort((a, b) => b.key.localeCompare(a.key)); // Day desc
+        return { ...week, days: sortedDays };
+      }).sort((a, b) => b.key.localeCompare(a.key)); // Week desc
+      return { ...month, weeks: sortedWeeks };
+    }).sort((a, b) => {
+      const parseMonthYear = (str: string) => {
+        const parts = str.split(" ");
+        const mIdx = indonesianMonths.indexOf(parts[0]);
+        const y = parseInt(parts[1], 10);
+        return new Date(y, mIdx, 1).getTime();
+      };
+      return parseMonthYear(b.key) - parseMonthYear(a.key);
+    });
+    
+    return sortedMonths;
+  }, [filteredLogs]);
+
+  const formatLogTime = (isoString: string) => {
+    try {
+      const d = new Date(isoString);
+      return d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) + " WIB";
+    } catch (e) {
+      return "";
+    }
+  };
 
   // --- INCOME DATA ---
   type IncomeEntry = { nama: string; harga: number; tanggal: string; hari: string; kategori: string; bayar: string };
@@ -1014,7 +1258,35 @@ const PageOwner: React.FC<PageOwnerProps> = ({
       )}
 
       {activeTabOwner === "ANALITIK" && (
-        <>
+        <div className="space-y-6">
+          {/* Segmented Pill Switcher for Analitik Subpages */}
+          <div className="flex justify-center z-30 relative">
+            <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-2xl border border-zinc-200/50 dark:border-white/5 shadow-inner">
+              <button
+                onClick={() => setAnalitikSubTab("PEMBUKUAN")}
+                className={`px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-xl transition-all ${
+                  analitikSubTab === "PEMBUKUAN"
+                    ? "bg-white dark:bg-[#2C2C2E] text-emerald-600 dark:text-emerald-400 shadow-sm"
+                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+                }`}
+              >
+                Analitik Pembukuan
+              </button>
+              <button
+                onClick={() => setAnalitikSubTab("LOGGING")}
+                className={`px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-xl transition-all ${
+                  analitikSubTab === "LOGGING"
+                    ? "bg-white dark:bg-[#2C2C2E] text-emerald-600 dark:text-emerald-400 shadow-sm"
+                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+                }`}
+              >
+                Analitik Logging
+              </button>
+            </div>
+          </div>
+
+          {analitikSubTab === "PEMBUKUAN" ? (
+            <>
           {/* 1. REKAP PEMASUKAN HARI INI */}
           <RekapPemasukan
             totalHarian={totalHarian}
@@ -1342,11 +1614,372 @@ const PageOwner: React.FC<PageOwnerProps> = ({
 
           {/* HISTORY PEMBUKUAN */}
           <HistoryPembukuan items={filteredHistory} isOwner={true} />
-        </>
+            </>
+          ) : (
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-4">
+              <div className="bg-white dark:bg-black text-zinc-800 dark:text-zinc-300 font-mono text-[13px] border border-zinc-200 dark:border-white/5 rounded-3xl p-5 shadow-2xl relative overflow-hidden ring-1 ring-black/5 dark:ring-white/10">
+                 {/* Console Header Bar */}
+                 <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-900 pb-3 mb-4 select-none">
+                    <div className="flex items-center gap-2">
+                       <div className="w-2.5 h-2.5 rounded-full bg-[#FF5F56]" />
+                       <div className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E]" />
+                       <div className="w-2.5 h-2.5 rounded-full bg-[#27C93F]" />
+                       <span className="ml-2 text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-wider text-[10px]">System Audit Terminal v1.0</span>
+                    </div>
+                    <div className="text-emerald-600 dark:text-emerald-500 text-[10px] font-bold flex items-center gap-1.5">
+                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                       STATUS: ONLINE
+                    </div>
+                 </div>
+
+                 {/* Filter Controls (Console Style) */}
+                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5 border-b border-zinc-200 dark:border-zinc-900/60 pb-4">
+                    <div className="flex flex-col gap-1.5">
+                       <label className="text-[9px] text-zinc-400 dark:text-zinc-500 uppercase font-black tracking-widest">&gt; Filter Operator</label>
+                       <select 
+                         value={filterEmail} 
+                         onChange={(e) => setFilterEmail(e.target.value)}
+                         className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-zinc-800 dark:text-zinc-300 outline-none focus:border-emerald-500 transition-colors text-xs font-mono"
+                       >
+                          <option value="Semua" className="bg-white dark:bg-[#1C1C1E] text-zinc-800 dark:text-zinc-300">Semua Operator (Admin/Owner)</option>
+                          {adminEmails.map(email => (
+                             <option key={email} value={email} className="bg-white dark:bg-[#1C1C1E] text-zinc-800 dark:text-zinc-300">{email}</option>
+                          ))}
+                       </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                       <label className="text-[9px] text-zinc-400 dark:text-zinc-500 uppercase font-black tracking-widest">&gt; Filter Action</label>
+                       <select 
+                         value={filterAction} 
+                         onChange={(e) => setFilterAction(e.target.value)}
+                         className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-zinc-800 dark:text-zinc-300 outline-none focus:border-emerald-500 transition-colors text-xs font-mono"
+                       >
+                          <option value="Semua" className="bg-white dark:bg-[#1C1C1E] text-zinc-800 dark:text-zinc-300">Semua Aktivitas</option>
+                          <option value="CREATE" className="bg-white dark:bg-[#1C1C1E] text-zinc-800 dark:text-zinc-300">CREATE / TAMBAH</option>
+                          <option value="UPDATE" className="bg-white dark:bg-[#1C1C1E] text-zinc-800 dark:text-zinc-300">UPDATE / EDIT</option>
+                          <option value="DELETE" className="bg-white dark:bg-[#1C1C1E] text-zinc-800 dark:text-zinc-300">DELETE / HAPUS</option>
+                       </select>
+                    </div>
+                 </div>
+
+                 {/* Main Console Output */}
+                 {loadingLogs ? (
+                    <div className="py-12 text-center text-zinc-450 dark:text-zinc-500 italic space-y-1.5">
+                       <div className="animate-pulse">&gt; Initializing secure database connection ...</div>
+                       <div className="animate-pulse" style={{ animationDelay: '200ms' }}>&gt; Fetching live stream activity logs ...</div>
+                    </div>
+                 ) : groupedLogs.length === 0 ? (
+                    <div className="py-12 text-center text-zinc-450 dark:text-zinc-500 italic">
+                       &gt; Connection established. No activity logs found matching the selected filters.
+                    </div>
+                 ) : (
+                    <div className="space-y-4">
+                       {groupedLogs.map(monthGroup => {
+                          const isMonthExpanded = expandedMonths.includes(monthGroup.key);
+                          return (
+                             <div key={monthGroup.key} className="border border-zinc-200 dark:border-zinc-900/60 rounded-2xl overflow-hidden bg-zinc-100/50 dark:bg-zinc-900/10">
+                                <div 
+                                  onClick={() => toggleMonth(monthGroup.key)}
+                                  className="flex items-center justify-between p-3.5 bg-zinc-50 dark:bg-zinc-900/30 hover:bg-zinc-100 dark:hover:bg-zinc-900/60 cursor-pointer transition-colors border-b border-zinc-200 dark:border-zinc-900/40 select-none"
+                                >
+                                   <div className="flex items-center gap-2">
+                                      <span className="text-zinc-455 dark:text-zinc-600 transition-transform duration-200 inline-block font-bold" style={{ transform: isMonthExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                                      <span className="text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider">{monthGroup.key}</span>
+                                   </div>
+                                   <span className="text-[9px] text-zinc-400 dark:text-zinc-600 uppercase font-black tracking-widest">Month Group</span>
+                                </div>
+
+                                {isMonthExpanded && (
+                                   <div className="p-3 bg-black/[0.03] dark:bg-black/10 space-y-3">
+                                      {monthGroup.weeks.map(weekGroup => {
+                                         const isWeekExpanded = expandedWeeks.includes(weekGroup.key);
+                                         return (
+                                            <div key={weekGroup.key} className="border border-zinc-200 dark:border-zinc-900/40 rounded-xl overflow-hidden ml-3 bg-zinc-100/40 dark:bg-zinc-900/5">
+                                               <div 
+                                                 onClick={() => toggleWeek(weekGroup.key)}
+                                                 className="flex items-center justify-between p-3 bg-zinc-100/50 dark:bg-zinc-900/20 hover:bg-zinc-200/55 dark:hover:bg-zinc-900/40 cursor-pointer transition-colors border-b border-zinc-200 dark:border-zinc-900/30 select-none"
+                                               >
+                                                  <div className="flex items-center gap-2">
+                                                     <span className="text-zinc-400 dark:text-zinc-600 transition-transform duration-200 inline-block font-bold" style={{ transform: isWeekExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                                                     <span className="text-sky-600 dark:text-sky-400 font-bold">{weekGroup.weekLabel}</span>
+                                                  </div>
+                                                  <span className="text-[9px] text-zinc-400 dark:text-zinc-600 uppercase font-black tracking-widest">Week Group</span>
+                                               </div>
+
+                                               {isWeekExpanded && (
+                                                  <div className="p-2 bg-black/[0.02] dark:bg-black/5 space-y-2">
+                                                     {weekGroup.days.map(dayGroup => {
+                                                        const isDayExpanded = expandedDays.includes(dayGroup.key);
+                                                        return (
+                                                           <div key={dayGroup.key} className="border border-zinc-200 dark:border-zinc-900/30 rounded-lg overflow-hidden ml-3">
+                                                              <div 
+                                                                onClick={() => toggleDay(dayGroup.key)}
+                                                                className="flex items-center justify-between p-2.5 bg-zinc-100/60 dark:bg-zinc-900/10 hover:bg-zinc-200/50 dark:hover:bg-zinc-900/30 cursor-pointer transition-colors border-b border-zinc-200 dark:border-zinc-900/20 select-none"
+                                                              >
+                                                                 <div className="flex items-center gap-2">
+                                                                    <span className="text-zinc-400 dark:text-zinc-600 transition-transform duration-200 inline-block font-bold" style={{ transform: isDayExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                                                                    <span className="text-zinc-800 dark:text-zinc-300 font-bold">{dayGroup.dayLabel}</span>
+                                                                 </div>
+                                                                 <span className="text-[9px] text-zinc-500 dark:text-zinc-600 font-bold uppercase tracking-wider">({dayGroup.logs.length} logs)</span>
+                                                              </div>
+
+                                                              {isDayExpanded && (
+                                                                 <div className="p-2 space-y-2 bg-black/[0.03] dark:bg-black/10">
+                                                                    {dayGroup.logs.map(log => {
+                                                                       const isDetailsExpanded = expandedLogDetails.includes(log.id);
+                                                                       
+                                                                       let actionColor = "text-emerald-600 dark:text-emerald-400";
+                                                                       let actionBg = "bg-emerald-500/10 border-emerald-500/20";
+                                                                       let actionLabel = "TAMBAH";
+                                                                       if (log.action === "UPDATE") {
+                                                                         actionColor = "text-amber-600 dark:text-amber-400";
+                                                                         actionBg = "bg-amber-500/10 border-amber-500/20";
+                                                                         actionLabel = " EDIT ";
+                                                                       } else if (log.action === "DELETE") {
+                                                                         actionColor = "text-red-600 dark:text-red-400";
+                                                                         actionBg = "bg-red-500/10 border-red-500/20";
+                                                                         actionLabel = "HAPUS ";
+                                                                       }
+
+                                                                       return (
+                                                                          <div key={log.id} className="p-3 border border-zinc-200 dark:border-zinc-900/60 rounded-lg bg-zinc-50 dark:bg-black/20 hover:bg-zinc-100 dark:hover:bg-zinc-900/5 transition-colors">
+                                                                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                                                                                <div className="flex items-center flex-wrap gap-2 text-xs">
+                                                                                   <span className="text-zinc-400 dark:text-zinc-500 font-bold">[{formatLogTime(log.timestamp)}]</span>
+                                                                                   <span className={`px-1.5 py-0.5 rounded border text-[9px] font-black tracking-wider ${actionColor} ${actionBg}`}>{actionLabel}</span>
+                                                                                   <span className="text-sky-600 dark:text-sky-400/90 font-bold">{log.email}</span>
+                                                                                   <span className="text-zinc-550 dark:text-zinc-400 font-medium">melakukan CRUD:</span>
+                                                                                   <span className="text-zinc-700 dark:text-zinc-350 underline underline-offset-2 decoration-zinc-300 dark:decoration-zinc-700 decoration-dashed">{log.targetDay}, {log.targetDate}</span>
+                                                                                </div>
+                                                                                <button 
+                                                                                  onClick={() => toggleLogDetails(log.id)}
+                                                                                  className="text-[9px] bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white px-2.5 py-1 rounded-md font-bold transition-all active:scale-95 uppercase tracking-wider"
+                                                                                >
+                                                                                   {isDetailsExpanded ? "Hide Detail" : "Show Detail"}
+                                                                                </button>
+                                                                             </div>
+
+                                                                             {isDetailsExpanded && (
+                                                                                <div className="mt-3 border-t border-dashed border-zinc-200 dark:border-zinc-900/80 pt-3 text-[11px] text-zinc-500 dark:text-zinc-400 space-y-1 max-w-sm animate-in fade-in slide-in-from-top-1 duration-200">
+                                                                                   <div className="text-zinc-400 dark:text-zinc-650 font-black">+------------------------------------------+</div>
+                                                                                   <div className="flex justify-between px-2">
+                                                                                      <span>| TOTAL PENDAPATAN</span>
+                                                                                      <span className="text-zinc-800 dark:text-zinc-300 font-bold">: {rupiah(log.details?.totalIncome || 0)}</span>
+                                                                                   </div>
+                                                                                   <div className="flex justify-between px-2">
+                                                                                      <span>| CASH</span>
+                                                                                      <span className="text-zinc-800 dark:text-zinc-300 font-bold">: {rupiah(log.details?.totalCash || 0)}</span>
+                                                                                   </div>
+                                                                                   <div className="flex justify-between px-2">
+                                                                                      <span>| TRANSFER</span>
+                                                                                      <span className="text-zinc-800 dark:text-zinc-300 font-bold">: {rupiah(log.details?.totalTransfer || 0)}</span>
+                                                                                   </div>
+                                                                                   <div className="flex justify-between px-2">
+                                                                                      <span>| PENGELUARAN</span>
+                                                                                      <span className="text-zinc-800 dark:text-zinc-300 font-bold">: {rupiah(log.details?.totalPengeluaran || 0)}</span>
+                                                                                   </div>
+                                                                                   <div className="text-zinc-400 dark:text-zinc-650 font-black">+------------------------------------------+</div>
+                                                                                </div>
+                                                                             )}
+                                                                          </div>
+                                                                       );
+                                                                    })}
+                                                                 </div>
+                                                              )}
+                                                           </div>
+                                                        );
+                                                     })}
+                                                  </div>
+                                               )}
+                                            </div>
+                                         );
+                                      })}
+                                   </div>
+                                )}
+                             </div>
+                          );
+                       })}
+                    </div>
+                 )}
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {activeTabOwner === "PEGAWAI" && (
-        <TabPegawai history={history} isOwner={true} />
+        <div className="space-y-6">
+          {/* Segmented Pill Switcher for Pegawai Subpages */}
+          <div className="flex justify-center z-10 relative">
+            <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-2xl border border-zinc-200/50 dark:border-white/5 shadow-inner">
+              <button
+                onClick={() => setPegawaiSubTab("DASHBOARD")}
+                className={`px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-xl transition-all ${
+                  pegawaiSubTab === "DASHBOARD"
+                    ? "bg-white dark:bg-[#2C2C2E] text-pink-600 dark:text-pink-400 shadow-sm"
+                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+                }`}
+              >
+                Dashboard Pegawai
+              </button>
+              <button
+                onClick={() => setPegawaiSubTab("REQUEST")}
+                className={`px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-xl transition-all ${
+                  pegawaiSubTab === "REQUEST"
+                    ? "bg-white dark:bg-[#2C2C2E] text-pink-600 dark:text-pink-400 shadow-sm"
+                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+                }`}
+              >
+                Request Pegawai
+              </button>
+            </div>
+          </div>
+
+          {pegawaiSubTab === "DASHBOARD" ? (
+            <div className="animate-in fade-in duration-200">
+              <TabPegawai history={history} isOwner={true} />
+            </div>
+          ) : (
+            <div className="animate-in fade-in duration-200 space-y-6">
+              <Section title="Permintaan Edit Pembukuan Karyawan">
+                {loadingRequests ? (
+                  <div className="flex justify-center items-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500"></div>
+                  </div>
+                ) : editRequests.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center p-8 bg-white dark:bg-[#1C1C1E] border border-zinc-200/50 dark:border-white/5 rounded-2xl text-center">
+                    <AlertCircle className="w-10 h-10 text-zinc-400 dark:text-zinc-600 mb-2" />
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400 font-bold">Tidak ada request edit dari pegawai.</p>
+                  </div>
+                ) : (
+                  <div className="grid gap-4">
+                    {editRequests.map((req) => {
+                      const isPending = req.status === "pending";
+                      const isApproved = req.status === "approved";
+                      const isRejected = req.status === "rejected";
+
+                      const getTotals = (data: any) => {
+                        if (!data) return { income: 0, cash: 0, transfer: 0, expense: 0 };
+                        const harian = toNum(data.totalHarian);
+                        const jajanan = toNum(data.totalJajanan);
+                        const jasa = toNum(data.totalJasaAks);
+                        const sewa = toNum(data.totalSewa);
+                        const cash = toNum(data.totalCash);
+                        const transfer = toNum(data.totalTransfer);
+                        const expense = (data.rowsPengeluaran || []).reduce((sum: number, r: any) => sum + toNum(r.harga), 0);
+                        return {
+                          income: harian + jajanan + jasa + sewa,
+                          cash,
+                          transfer,
+                          expense
+                        };
+                      };
+
+                      const orig = getTotals(req.originalData);
+                      const prop = getTotals(req.proposedData);
+
+                      return (
+                        <div key={req.id} className="p-5 bg-white dark:bg-[#1C1C1E] border border-zinc-200/50 dark:border-white/5 rounded-2xl shadow-sm hover:shadow-md transition-all">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-zinc-100 dark:border-zinc-800/80">
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-black text-zinc-900 dark:text-white">{req.requestedBy}</span>
+                                {isPending && (
+                                  <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-full">
+                                    Pending
+                                  </span>
+                                )}
+                                {isApproved && (
+                                  <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full">
+                                    Approved
+                                  </span>
+                                )}
+                                {isRejected && (
+                                  <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-full">
+                                    Rejected
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[10px] text-zinc-400 dark:text-zinc-555 mt-1 font-medium">
+                                Dikirim: {new Date(req.requestedAt).toLocaleString("id-ID")}
+                              </p>
+                            </div>
+                            <div className="text-left sm:text-right">
+                              <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-0.5">Target Pembukuan</span>
+                              <span className="text-sm font-black text-rose-500 dark:text-rose-400">{req.hari}, {req.tanggal}</span>
+                            </div>
+                          </div>
+
+                          {/* Quick Comparison Card */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-4">
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-555 uppercase tracking-wider">Pendapatan Kotor</span>
+                              <div className="flex flex-col text-xs font-bold">
+                                <span className="text-zinc-400 dark:text-zinc-650 line-through">{rupiah(orig.income)}</span>
+                                <span className={`text-xs sm:text-sm font-black ${prop.income !== orig.income ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-700 dark:text-zinc-300"}`}>{rupiah(prop.income)}</span>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-555 uppercase tracking-wider">Total Cash</span>
+                              <div className="flex flex-col text-xs font-bold">
+                                <span className="text-zinc-400 dark:text-zinc-650 line-through">{rupiah(orig.cash)}</span>
+                                <span className={`text-xs sm:text-sm font-black ${prop.cash !== orig.cash ? "text-amber-600 dark:text-amber-400" : "text-zinc-700 dark:text-zinc-300"}`}>{rupiah(prop.cash)}</span>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-555 uppercase tracking-wider">Total Transfer</span>
+                              <div className="flex flex-col text-xs font-bold">
+                                <span className="text-zinc-400 dark:text-zinc-650 line-through">{rupiah(orig.transfer)}</span>
+                                <span className={`text-xs sm:text-sm font-black ${prop.transfer !== orig.transfer ? "text-sky-600 dark:text-sky-400" : "text-zinc-700 dark:text-zinc-300"}`}>{rupiah(prop.transfer)}</span>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-555 uppercase tracking-wider">Pengeluaran</span>
+                              <div className="flex flex-col text-xs font-bold">
+                                <span className="text-zinc-400 dark:text-zinc-650 line-through">{rupiah(orig.expense)}</span>
+                                <span className={`text-xs sm:text-sm font-black ${prop.expense !== orig.expense ? "text-rose-600 dark:text-rose-400" : "text-zinc-700 dark:text-zinc-300"}`}>{rupiah(prop.expense)}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/80">
+                            <button
+                              onClick={() => setSelectedRequest(req)}
+                              className="text-xs font-bold text-zinc-500 hover:text-zinc-850 dark:text-zinc-400 dark:hover:text-white px-3 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 transition-colors flex items-center gap-1.5 active:scale-95"
+                            >
+                              <Activity className="w-3.5 h-3.5" />
+                              Bandingkan Detail
+                            </button>
+
+                            {isPending && (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleRejectRequest(req)}
+                                  className="px-4 py-2 text-xs font-black text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 rounded-xl transition-all active:scale-95"
+                                >
+                                  Tolak
+                                </button>
+                                <button
+                                  onClick={() => handleApproveRequest(req)}
+                                  className="px-4 py-2 text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 rounded-xl transition-all active:scale-95"
+                                >
+                                  ACC
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Section>
+            </div>
+          )}
+        </div>
       )}
 
       {activeTabOwner === "STOK" && (
@@ -1815,6 +2448,213 @@ const PageOwner: React.FC<PageOwnerProps> = ({
         </div>
       )}
 
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* MODAL: BANDINGKAN DETAIL REQUEST EDIT */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {selectedRequest && (() => {
+        const req = selectedRequest;
+        const isPending = req.status === "pending";
+        return (
+          <div className="fixed inset-0 z-[600] flex items-end sm:items-center justify-center">
+            <div className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-xl" onClick={() => setSelectedRequest(null)} />
+            <div className="relative w-full sm:w-[95%] sm:max-w-[850px] max-h-[92vh] sm:max-h-[85vh] bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-2xl sm:rounded-2xl rounded-t-[20px] overflow-hidden flex flex-col shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.6)] ring-1 ring-black/5 dark:ring-white/10 animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-300 z-10">
+              
+              {/* Drag Handle */}
+              <div className="sm:hidden flex justify-center pt-2 pb-1">
+                <div className="w-9 h-[5px] rounded-full bg-zinc-300 dark:bg-zinc-600" />
+              </div>
+
+              {/* Header */}
+              <div className="px-5 sm:px-6 py-4 flex justify-between items-center shrink-0">
+                <div>
+                  <h2 className="text-[17px] sm:text-[20px] font-bold tracking-tight text-zinc-900 dark:text-white">Detail Perbandingan Edit</h2>
+                  <p className="text-[12px] font-medium text-zinc-400 dark:text-zinc-500 mt-0.5">
+                    Pengirim: <span className="font-bold">{req.requestedBy}</span> · Target: <span className="font-bold text-rose-500">{req.hari}, {req.tanggal}</span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedRequest(null)}
+                  className="w-[30px] h-[30px] flex items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-[13px] font-bold"
+                >✕</button>
+              </div>
+
+              <div className="h-px bg-zinc-200/60 dark:bg-white/5 mx-5 sm:mx-6" />
+
+              {/* Scrollable Content */}
+              <div className="overflow-y-auto flex-1 p-5 sm:p-6 space-y-6" style={{ WebkitOverflowScrolling: 'touch' }}>
+                
+                {/* General Info Comparison */}
+                <div className="bg-zinc-50 dark:bg-black/20 border border-zinc-250/40 dark:border-white/5 p-4 rounded-xl space-y-3">
+                  <h3 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Informasi Umum</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Absen Pagi</span>
+                      <span className="text-[12px] font-bold text-red-500 line-through truncate">{req.originalData?.absenPagi || "-"}</span>
+                      <span className="text-[12px] font-black text-emerald-600 dark:text-emerald-400 truncate">{req.proposedData?.absenPagi || "-"}</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Absen Siang</span>
+                      <span className="text-[12px] font-bold text-red-500 line-through truncate">{req.originalData?.absenSiang || "-"}</span>
+                      <span className="text-[12px] font-black text-emerald-600 dark:text-emerald-400 truncate">{req.proposedData?.absenSiang || "-"}</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Ruko Buka</span>
+                      <span className="text-[12px] font-bold text-red-500 line-through truncate">{req.originalData?.rukoBuka || "-"}</span>
+                      <span className="text-[12px] font-black text-emerald-600 dark:text-emerald-400 truncate">{req.proposedData?.rukoBuka || "-"}</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Ruko Tutup</span>
+                      <span className="text-[12px] font-bold text-red-500 line-through truncate">{req.originalData?.rukoTutup || "-"}</span>
+                      <span className="text-[12px] font-black text-emerald-600 dark:text-emerald-400 truncate">{req.proposedData?.rukoTutup || "-"}</span>
+                    </div>
+                    <div className="col-span-2 sm:col-span-1 flex flex-col">
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Shift</span>
+                      <span className="text-[12px] font-bold text-red-500 line-through truncate">{req.originalData?.shiftPegawai || "-"}</span>
+                      <span className="text-[12px] font-black text-emerald-600 dark:text-emerald-400 truncate">{req.proposedData?.shiftPegawai || "-"}</span>
+                    </div>
+                  </div>
+                  <div className="border-t border-zinc-200 dark:border-zinc-800 pt-2">
+                    <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Catatan</span>
+                    <p className="text-[11px] text-red-500 line-through">{req.originalData?.catatan || "-"}</p>
+                    <p className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">{req.proposedData?.catatan || "-"}</p>
+                  </div>
+                </div>
+
+                {/* Categories Tabbed Comparison */}
+                <div className="space-y-4">
+                  {(["harian", "jajanan", "jasaAks", "sewa", "setoran", "pengeluaran"] as const).map((cat) => {
+                    let title = "";
+                    let originalRows: any[] = [];
+                    let proposedRows: any[] = [];
+                    let renderRow = (row: any) => "";
+
+                    if (cat === "harian") {
+                      title = "Transaksi Harian (PS Main)";
+                      originalRows = req.originalData?.rowsHarian || [];
+                      proposedRows = req.proposedData?.rowsHarian || [];
+                      renderRow = (row) => `${row.jenisPS} · ${row.jumlahJam} jam · ${rupiah(row.harga)} · ${row.bayar || "Cash"}`;
+                    } else if (cat === "jajanan") {
+                      title = "Penjualan Jajanan";
+                      originalRows = req.originalData?.rowsJajanan || [];
+                      proposedRows = req.proposedData?.rowsJajanan || [];
+                      renderRow = (row) => `${row.jenisJajanan} · ${row.qtyJam} qty · ${rupiah(row.harga)} · ${row.bayar || "Cash"}`;
+                    } else if (cat === "jasaAks") {
+                      title = "Jasa & Aksesoris";
+                      originalRows = req.originalData?.rowsJasaAks || [];
+                      proposedRows = req.proposedData?.rowsJasaAks || [];
+                      renderRow = (row) => `${row.tipe} (${row.ket}) · ${rupiah(row.harga)} · ${row.bayar || "Cash"}`;
+                    } else if (cat === "sewa") {
+                      title = "Rental Sewa PS Luar";
+                      originalRows = req.originalData?.rowsSewa || [];
+                      proposedRows = req.proposedData?.rowsSewa || [];
+                      renderRow = (row) => `${row.jenisPS} · ${row.lamaSewa} · ${rupiah(row.harga)} · ${row.bayar || "Cash"}${row.isOngkir === "YA" ? ` (+ Ongkir ${rupiah(row._ongkir)})` : ""}`;
+                    } else if (cat === "setoran") {
+                      title = "Setoran";
+                      originalRows = req.originalData?.rowsSetoran || [];
+                      proposedRows = req.proposedData?.rowsSetoran || [];
+                      renderRow = (row) => `${row.ket} · ${rupiah(row.harga || row.nominal)} · ${row.bayar || "Cash"}`;
+                    } else if (cat === "pengeluaran") {
+                      title = "Pengeluaran";
+                      originalRows = req.originalData?.rowsPengeluaran || [];
+                      proposedRows = req.proposedData?.rowsPengeluaran || [];
+                      renderRow = (row) => `${row.ket} · ${rupiah(row.harga || row.nominal)} · ${row.bayar || "Cash"}`;
+                    }
+
+                    const isIdentical = JSON.stringify(originalRows) === JSON.stringify(proposedRows);
+                    if (originalRows.length === 0 && proposedRows.length === 0) return null;
+
+                    return (
+                      <div key={cat} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">{title}</h4>
+                          {isIdentical ? (
+                            <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-550 uppercase tracking-wide bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-2 py-0.5 rounded-full">
+                              Tidak Ada Perubahan
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                              Ada Perubahan
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {/* Original Column */}
+                          <div className={`p-3 border rounded-xl ${isIdentical ? 'bg-zinc-50/50 dark:bg-zinc-900/10 border-zinc-150 dark:border-zinc-800' : 'bg-red-500/5 border-red-500/15 dark:border-red-500/10'}`}>
+                            <span className="text-[9px] font-bold text-red-500/80 uppercase tracking-wider block mb-2">Original</span>
+                            {originalRows.length === 0 ? (
+                              <p className="text-[11px] text-zinc-400 italic">Tidak ada transaksi</p>
+                            ) : (
+                              <div className="space-y-1">
+                                {originalRows.map((row, rIdx) => (
+                                  <div key={rIdx} className="text-[11px] text-zinc-500 dark:text-zinc-400 line-through py-0.5 border-b border-zinc-100 dark:border-white/5 last:border-0 truncate">
+                                    {rIdx + 1}. {renderRow(row)}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Proposed Column */}
+                          <div className={`p-3 border rounded-xl ${isIdentical ? 'bg-zinc-50/50 dark:bg-zinc-900/10 border-zinc-150 dark:border-zinc-800' : 'bg-emerald-500/5 border-emerald-500/15 dark:border-emerald-500/10'}`}>
+                            <span className="text-[9px] font-bold text-emerald-500/85 uppercase tracking-wider block mb-2">Proposed</span>
+                            {proposedRows.length === 0 ? (
+                              <p className="text-[11px] text-zinc-400 italic">Tidak ada transaksi</p>
+                            ) : (
+                              <div className="space-y-1">
+                                {proposedRows.map((row, rIdx) => (
+                                  <div key={rIdx} className="text-[11px] text-zinc-800 dark:text-zinc-200 font-medium py-0.5 border-b border-zinc-100 dark:border-white/5 last:border-0 truncate">
+                                    {rIdx + 1}. {renderRow(row)}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Footer Actions */}
+              {isPending ? (
+                <div className="px-5 sm:px-6 py-4 bg-zinc-50 dark:bg-zinc-900/40 border-t border-zinc-150 dark:border-zinc-850 flex justify-end gap-3 shrink-0">
+                  <button
+                    onClick={() => handleRejectRequest(req)}
+                    className="px-5 py-2.5 text-xs font-black text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/25 rounded-xl transition-all active:scale-95"
+                  >
+                    Tolak Request
+                  </button>
+                  <button
+                    onClick={() => handleApproveRequest(req)}
+                    className="px-5 py-2.5 text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/25 rounded-xl transition-all active:scale-95"
+                  >
+                    Setujui (ACC)
+                  </button>
+                </div>
+              ) : (
+                <div className="px-5 sm:px-6 py-4 bg-zinc-50 dark:bg-zinc-900/40 border-t border-zinc-150 dark:border-zinc-850 flex justify-between items-center shrink-0">
+                  <div className="text-xs">
+                    Status:{" "}
+                    <span className={`font-black uppercase tracking-wider ${req.status === "approved" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                      {req.status}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setSelectedRequest(null)}
+                    className="px-5 py-2.5 text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded-xl transition-all active:scale-95"
+                  >
+                    Tutup
+                  </button>
+                </div>
+              )}
+
+            </div>
+          </div>
+        );
+      })()}
+
     </div>
   );
 };
@@ -1904,9 +2744,9 @@ const UnitStatusWidget = ({ rowsSewa, history, activeDate, onVerifyActiveRental,
         <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-2xl border border-zinc-200/50 dark:border-white/5 shadow-inner">
           <button
             onClick={() => setActiveSlide("status")}
-            className={`px-5 py-2.5 text-xs font-black tracking-wider uppercase rounded-xl transition-all ${
+            className={`px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-xl transition-all ${
               activeSlide === "status"
-                ? "bg-white dark:bg-black text-emerald-600 dark:text-emerald-400 shadow-sm"
+                ? "bg-white dark:bg-[#2C2C2E] text-emerald-600 dark:text-emerald-400 shadow-sm"
                 : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
             }`}
           >
@@ -1914,9 +2754,9 @@ const UnitStatusWidget = ({ rowsSewa, history, activeDate, onVerifyActiveRental,
           </button>
           <button
             onClick={() => setActiveSlide("device")}
-            className={`px-5 py-2.5 text-xs font-black tracking-wider uppercase rounded-xl transition-all ${
+            className={`px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-xl transition-all ${
               activeSlide === "device"
-                ? "bg-white dark:bg-black text-emerald-600 dark:text-emerald-400 shadow-sm"
+                ? "bg-white dark:bg-[#2C2C2E] text-emerald-600 dark:text-emerald-400 shadow-sm"
                 : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
             }`}
           >
@@ -1925,13 +2765,10 @@ const UnitStatusWidget = ({ rowsSewa, history, activeDate, onVerifyActiveRental,
         </div>
       </div>
 
-      {/* Carousel Container */}
-      <div className="w-full overflow-hidden relative">
-        <div 
-          className="flex transition-transform duration-500 ease-out"
-          style={{ transform: activeSlide === "status" ? "translateX(0%)" : "translateX(-100%)" }}
-        >
-          <div className="w-full shrink-0 px-1">
+      {/* Widget Container with fast fade transition */}
+      <div className="w-full">
+        {activeSlide === "status" ? (
+          <div className="animate-in fade-in duration-200">
             <WidgetMonitoringStatus 
               history={history || []} 
               rowsSewa={rowsSewa} 
@@ -1942,10 +2779,11 @@ const UnitStatusWidget = ({ rowsSewa, history, activeDate, onVerifyActiveRental,
               isVerifyingPayment={isVerifyingPayment}
             />
           </div>
-          <div className="w-full shrink-0 px-1">
+        ) : (
+          <div className="animate-in fade-in duration-200">
             <WidgetMonitoringDevice isOwner={true} />
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

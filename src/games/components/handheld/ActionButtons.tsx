@@ -10,7 +10,7 @@ interface ActionButtonsProps {
  * ActionButtons renders tactile primary A and secondary B buttons,
  * triggering brief vibrations if supported by device hardware.
  */
-export default function ActionButtons({ onPress, pressedState }: ActionButtonsProps) {
+function ActionButtons({ onPress, pressedState }: ActionButtonsProps) {
   const triggerVibration = () => {
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       // Trigger a brief 25ms haptic rumble
@@ -71,3 +71,5 @@ export default function ActionButtons({ onPress, pressedState }: ActionButtonsPr
     </div>
   );
 }
+
+export default React.memo(ActionButtons);

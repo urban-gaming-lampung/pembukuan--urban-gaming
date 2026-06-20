@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Trophy, Gamepad2, Target, Coins, Lock } from 'lucide-react';
 import { doc, setDoc } from 'firebase/firestore';
 import { useGameConfig } from '../hooks/useGameConfig';
 import { useLeaderboard } from '../hooks/useLeaderboard';
@@ -266,11 +266,10 @@ export default function ChallengeModal({ isOpen, onClose }: ChallengeModalProps)
                   <CurrentLeaderboard monthKey={monthKey} />
                 )}
 
-                {/* 1.5. Total Hadiah (Repositioned below Leaderboard as a compact row) */}
                 {config && (
-                  <div className="flex items-center justify-between p-3.5 rounded-2xl bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/20 text-amber-705 dark:text-amber-400 font-sans">
+                  <div className="flex items-center justify-between p-3.5 rounded-2xl bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/20 text-amber-700 dark:text-amber-400 font-sans">
                     <div className="flex items-center gap-2">
-                      <span className="text-lg">🏆</span>
+                      <Trophy className="h-4.5 w-4.5 text-amber-500 dark:text-amber-400" />
                       <span className="text-xs font-bold">Total Hadiah Bulan Ini</span>
                     </div>
                     <span className="font-pixel text-[11px] font-black text-amber-600 dark:text-amber-400">
@@ -303,8 +302,9 @@ export default function ChallengeModal({ isOpen, onClose }: ChallengeModalProps)
                 {isOwner && (
                   <div className="p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 space-y-3 mt-4 font-sans">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">
-                        🕹️ Game Config (Owner Only)
+                      <h3 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <Gamepad2 className="h-4 w-4 text-zinc-400 dark:text-zinc-500" />
+                        <span>Game Config (Owner Only)</span>
                       </h3>
                       {updatingConfig && (
                         <span className="text-[10px] text-emerald-500 font-semibold animate-pulse">
@@ -340,8 +340,9 @@ export default function ChallengeModal({ isOpen, onClose }: ChallengeModalProps)
                       <div className="flex gap-4">
                         {/* Batas Percobaan */}
                         <div className="flex-1 flex flex-col space-y-1">
-                          <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                            🎯 Batas Percobaan Harian
+                          <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <Target className="h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500" />
+                            <span>Batas Percobaan Harian</span>
                           </label>
                           <input
                             type="number"
@@ -377,8 +378,9 @@ export default function ChallengeModal({ isOpen, onClose }: ChallengeModalProps)
 
                         {/* Nominal Hadiah (Rupiah) */}
                         <div className="flex-1 flex flex-col space-y-1">
-                          <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                            💰 Nominal Hadiah (Rp)
+                          <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <Coins className="h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500" />
+                            <span>Nominal Hadiah (Rp)</span>
                           </label>
                           <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400 dark:text-zinc-500 font-sans">

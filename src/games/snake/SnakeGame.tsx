@@ -1,5 +1,5 @@
 import React, { useEffect, useReducer, useRef, useState } from 'react';
-import { Play, RotateCcw, Volume2, VolumeX, ArrowLeft, RefreshCw, Trophy } from 'lucide-react';
+import { Play, RotateCcw, Volume2, VolumeX, ArrowLeft, RefreshCw, Trophy, AlertTriangle, AlertCircle, CheckCircle2 } from 'lucide-react';
 import HandheldFrame from '../components/handheld/HandheldFrame';
 import GameScreen from '../components/handheld/GameScreen';
 import DPad from '../components/handheld/DPad';
@@ -261,7 +261,7 @@ export default function SnakeGame({ onClose, monthKey, currentHighScore }: Snake
   const handleStartPause = () => {
     if (gameStatus === 'IDLE' || gameStatus === 'GAME_OVER') {
       if (!canPlay) {
-        alert('Maaf, batas bermain harian Anda hari ini sudah habis! Kembali besok ya. 🎮');
+        alert('Maaf, batas bermain harian Anda hari ini sudah habis! Kembali besok ya.');
         return;
       }
       // Start game
@@ -420,8 +420,9 @@ export default function SnakeGame({ onClose, monthKey, currentHighScore }: Snake
 
           {/* Cheated warning */}
           {isCheated && (
-            <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-500 font-medium font-sans">
-              ⚠️ Aktivitas tidak wajar terdeteksi. Sesi dibatalkan.
+            <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-500 font-medium font-sans flex items-center justify-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>Aktivitas tidak wajar terdeteksi. Sesi dibatalkan.</span>
             </div>
           )}
 
@@ -429,8 +430,12 @@ export default function SnakeGame({ onClose, monthKey, currentHighScore }: Snake
           {gameStatus === 'GAME_OVER' && submitResultMsg && (
             <div className="p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 animate-in fade-in slide-in-from-bottom-2 duration-300 text-left space-y-3 font-sans">
               <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 text-base">
-                  {isSubmitSuccess ? '🎉' : '⚠️'}
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
+                  {isSubmitSuccess ? (
+                    <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                  ) : (
+                    <AlertCircle className="h-5 w-5 text-red-500" />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="text-sm font-black text-zinc-900 dark:text-white tracking-tight font-sans">
@@ -446,7 +451,7 @@ export default function SnakeGame({ onClose, monthKey, currentHighScore }: Snake
               {isSubmitSuccess && isNewHigh && (
                 <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/20 p-2.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold font-sans">
                   <Trophy className="h-4 w-4 animate-bounce shrink-0" />
-                  <span>Skor Terbaik Baru Anda Tercapai! 🏆</span>
+                  <span>Skor Terbaik Baru Anda Tercapai!</span>
                 </div>
               )}
 

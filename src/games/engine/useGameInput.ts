@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 
 export type GameAction = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'A' | 'B' | 'START';
 
@@ -25,7 +25,7 @@ export function useGameInput(onAction?: (action: GameAction, isPressed: boolean)
     onActionRef.current = onAction;
   }, [onAction]);
 
-  const triggerAction = (action: GameAction, isPressed: boolean) => {
+  const triggerAction = useCallback((action: GameAction, isPressed: boolean) => {
     setPressed((prev) => {
       if (prev[action] === isPressed) return prev;
       return { ...prev, [action]: isPressed };
@@ -34,7 +34,7 @@ export function useGameInput(onAction?: (action: GameAction, isPressed: boolean)
     if (onActionRef.current) {
       onActionRef.current(action, isPressed);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

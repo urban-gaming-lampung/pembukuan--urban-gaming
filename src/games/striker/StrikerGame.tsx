@@ -1,5 +1,5 @@
 import React, { useEffect, useReducer, useRef, useState } from 'react';
-import { ArrowLeft, Play, RefreshCw, Trophy } from 'lucide-react';
+import { ArrowLeft, Play, RefreshCw, Trophy, AlertTriangle, AlertCircle, CheckCircle2 } from 'lucide-react';
 import HandheldFrame from '../components/handheld/HandheldFrame';
 import GameScreen from '../components/handheld/GameScreen';
 import DPad from '../components/handheld/DPad';
@@ -145,27 +145,43 @@ export default function StrikerGame({
     };
   }, [gameStatus, isMuted]);
 
-  // Sound Synth Helpers
-  const playBeep = (freq: number, type: OscillatorType, duration: number, vol = 0.05) => {
+  // Immersive sound play chiptune helper with dual-detuned oscillators and panning
+  const playBeep = (freq: number, type: OscillatorType, duration: number, vol = 0.18) => {
     if (isMuted) return;
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+      const now = ctx.currentTime;
+      
+      const mainGain = ctx.createGain();
+      mainGain.gain.setValueAtTime(vol, now);
+      mainGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      let outputNode: AudioNode = mainGain;
+      if (ctx.createStereoPanner) {
+        const panner = ctx.createStereoPanner();
+        const randomPan = Math.random() * 0.4 - 0.2;
+        panner.pan.setValueAtTime(randomPan, now);
+        mainGain.connect(panner);
+        outputNode = panner;
+      }
+      outputNode.connect(ctx.destination);
 
-      gain.gain.setValueAtTime(vol, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+      const osc1 = ctx.createOscillator();
+      osc1.type = type;
+      osc1.frequency.setValueAtTime(freq, now);
+      osc1.connect(mainGain);
+      osc1.start(now);
+      osc1.stop(now + duration);
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.start();
-      osc.stop(ctx.currentTime + duration);
+      const osc2 = ctx.createOscillator();
+      osc2.type = type === 'sine' ? 'square' : type;
+      osc2.detune.setValueAtTime(10, now);
+      osc2.frequency.setValueAtTime(freq, now);
+      osc2.connect(mainGain);
+      osc2.start(now);
+      osc2.stop(now + duration);
     } catch (e) {}
   };
 
@@ -175,21 +191,38 @@ export default function StrikerGame({
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+      const now = ctx.currentTime;
+      const duration = 0.12;
 
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(450, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.12);
+      const mainGain = ctx.createGain();
+      mainGain.gain.setValueAtTime(0.12, now); // Boosted from 0.03
+      mainGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
-      gain.gain.setValueAtTime(0.03, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+      let outputNode: AudioNode = mainGain;
+      if (ctx.createStereoPanner) {
+        const panner = ctx.createStereoPanner();
+        panner.pan.setValueAtTime(Math.random() * 0.4 - 0.2, now);
+        mainGain.connect(panner);
+        outputNode = panner;
+      }
+      outputNode.connect(ctx.destination);
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
+      const osc1 = ctx.createOscillator();
+      osc1.type = 'sawtooth';
+      osc1.frequency.setValueAtTime(450, now);
+      osc1.frequency.exponentialRampToValueAtTime(100, now + duration);
+      osc1.connect(mainGain);
+      osc1.start(now);
+      osc1.stop(now + duration);
 
-      osc.start();
-      osc.stop(ctx.currentTime + 0.12);
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'square';
+      osc2.detune.setValueAtTime(10, now);
+      osc2.frequency.setValueAtTime(450, now);
+      osc2.frequency.exponentialRampToValueAtTime(100, now + duration);
+      osc2.connect(mainGain);
+      osc2.start(now);
+      osc2.stop(now + duration);
     } catch (e) {}
   };
 
@@ -199,22 +232,40 @@ export default function StrikerGame({
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+      const now = ctx.currentTime;
+      const duration = 0.8;
 
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(160, ctx.currentTime);
-      osc.frequency.linearRampToValueAtTime(650, ctx.currentTime + 0.4);
-      osc.frequency.linearRampToValueAtTime(160, ctx.currentTime + 0.8);
+      const mainGain = ctx.createGain();
+      mainGain.gain.setValueAtTime(0.18, now); // Boosted from 0.05
+      mainGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
-      gain.gain.setValueAtTime(0.05, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+      let outputNode: AudioNode = mainGain;
+      if (ctx.createStereoPanner) {
+        const panner = ctx.createStereoPanner();
+        panner.pan.setValueAtTime(0.15, now);
+        mainGain.connect(panner);
+        outputNode = panner;
+      }
+      outputNode.connect(ctx.destination);
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
+      const osc1 = ctx.createOscillator();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(160, now);
+      osc1.frequency.linearRampToValueAtTime(650, now + 0.4);
+      osc1.frequency.linearRampToValueAtTime(160, now + duration);
+      osc1.connect(mainGain);
+      osc1.start(now);
+      osc1.stop(now + duration);
 
-      osc.start();
-      osc.stop(ctx.currentTime + 0.8);
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'triangle';
+      osc2.detune.setValueAtTime(12, now);
+      osc2.frequency.setValueAtTime(160, now);
+      osc2.frequency.linearRampToValueAtTime(650, now + 0.4);
+      osc2.frequency.linearRampToValueAtTime(160, now + duration);
+      osc2.connect(mainGain);
+      osc2.start(now);
+      osc2.stop(now + duration);
     } catch (e) {}
   };
 
@@ -224,21 +275,38 @@ export default function StrikerGame({
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+      const now = ctx.currentTime;
+      const duration = 0.35;
 
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(220, ctx.currentTime);
-      osc.frequency.setValueAtTime(110, ctx.currentTime + 0.18);
+      const mainGain = ctx.createGain();
+      mainGain.gain.setValueAtTime(0.24, now); // Boosted from 0.08
+      mainGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
-      gain.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      let outputNode: AudioNode = mainGain;
+      if (ctx.createStereoPanner) {
+        const panner = ctx.createStereoPanner();
+        panner.pan.setValueAtTime(-0.1, now);
+        mainGain.connect(panner);
+        outputNode = panner;
+      }
+      outputNode.connect(ctx.destination);
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
+      const osc1 = ctx.createOscillator();
+      osc1.type = 'sawtooth';
+      osc1.frequency.setValueAtTime(220, now);
+      osc1.frequency.setValueAtTime(110, now + 0.18);
+      osc1.connect(mainGain);
+      osc1.start(now);
+      osc1.stop(now + duration);
 
-      osc.start();
-      osc.stop(ctx.currentTime + 0.35);
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'square';
+      osc2.detune.setValueAtTime(10, now);
+      osc2.frequency.setValueAtTime(220, now);
+      osc2.frequency.setValueAtTime(110, now + 0.18);
+      osc2.connect(mainGain);
+      osc2.start(now);
+      osc2.stop(now + duration);
     } catch (e) {}
   };
 
@@ -345,11 +413,11 @@ export default function StrikerGame({
         dt,
         onHitEnemy: () => {
           vibrate(10);
-          playBeep(280, 'triangle', 0.05, 0.03); // light hit sound
+          playBeep(280, 'triangle', 0.05, 0.10); // light hit sound
         },
         onBossHit: () => {
           vibrate(12);
-          playBeep(180, 'sawtooth', 0.06, 0.04);
+          playBeep(180, 'sawtooth', 0.06, 0.15);
         },
         onScoreItem: () => {
           vibrate([30, 30]);
@@ -357,7 +425,7 @@ export default function StrikerGame({
         },
         onHitPlayer: () => {
           vibrate(250);
-          playBeep(80, 'sawtooth', 0.45, 0.1); // heavy explosion sound
+          playBeep(80, 'sawtooth', 0.45, 0.30); // heavy explosion sound
           shakeRef.current.trigger(8, 15);
         },
         onBossSpawn: () => {
@@ -504,7 +572,7 @@ export default function StrikerGame({
       setGameStatus('IDLE');
     } else if (gameStatus === 'IDLE') {
       if (!canPlay) {
-        alert('Maaf, batas bermain harian Anda hari ini sudah habis! Kembali besok ya. 🎮');
+        alert('Maaf, batas bermain harian Anda hari ini sudah habis! Kembali besok ya.');
         return;
       }
       initSession();
@@ -649,8 +717,9 @@ export default function StrikerGame({
 
           {/* Cheated warning */}
           {isCheated && (
-            <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-500 font-medium">
-              ⚠️ Aktivitas tidak wajar terdeteksi. Sesi dibatalkan.
+            <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-500 font-medium flex items-center justify-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
+              <span>Aktivitas tidak wajar terdeteksi. Sesi dibatalkan.</span>
             </div>
           )}
 

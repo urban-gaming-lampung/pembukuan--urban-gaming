@@ -144,8 +144,9 @@ export function renderBreakerGame(
   ctx.textBaseline = 'bottom';
   
   // Draw lives hearts
-  const heartString = '❤️'.repeat(state.lives);
-  ctx.fillText(heartString, 12, CANVAS_HEIGHT - 6);
+  for (let i = 0; i < state.lives; i++) {
+    drawHeart(ctx, 16 + i * 11, CANVAS_HEIGHT - 13, 7);
+  }
 
   // Draw Level text
   ctx.textAlign = 'right';
@@ -159,4 +160,27 @@ export function renderBreakerGame(
     ctx.textBaseline = 'middle';
     ctx.fillText('TEKAN [A] UNTUK MULAI', CANVAS_WIDTH / 2, CANVAS_HEIGHT * 0.65);
   }
+}
+
+function drawHeart(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
+  ctx.save();
+  ctx.beginPath();
+  const topCurveHeight = size * 0.3;
+  ctx.moveTo(x, y + topCurveHeight);
+  // top left curve
+  ctx.bezierCurveTo(
+    x - size / 2, y - topCurveHeight / 2,
+    x - size / 2, y + size / 2,
+    x, y + size
+  );
+  // top right curve
+  ctx.bezierCurveTo(
+    x + size / 2, y + size / 2,
+    x + size / 2, y - topCurveHeight / 2,
+    x, y + topCurveHeight
+  );
+  ctx.closePath();
+  ctx.fillStyle = '#FF453A'; // Apple Red
+  ctx.fill();
+  ctx.restore();
 }

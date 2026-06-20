@@ -24,7 +24,7 @@ import POSModal from "./components/POSModal";
 import WidgetMonitoringStatus from "./components/WidgetMonitoringStatus";
 import WidgetMonitoringDevice from "./components/WidgetMonitoringDevice";
 import { Package, AlertCircle } from "lucide-react";
-import { collection, doc, setDoc, deleteDoc, onSnapshot, addDoc, updateDoc, query, getDocs, getDoc, where, limit, orderBy, serverTimestamp, arrayUnion } from "firebase/firestore";
+import { collection, doc, setDoc, deleteDoc, onSnapshot, addDoc, updateDoc, query, getDocs, getDoc, where, limit, orderBy, serverTimestamp, arrayUnion, deleteField } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth, listGameDb } from "./lib/firebase";
 import { usePresence } from "./hooks/usePresence";
@@ -71,56 +71,108 @@ interface SavedCatalogState {
   games: Record<string, CatalogItem>;
 }
 
-function getCatalogChanges(
+async function checkCatalogBaselineAndLogUpdates(
   currentProducts: any[],
   currentGames: any[],
-  savedStateStr: string | null
-): Record<string, "baru" | "update harga"> {
-  const changes: Record<string, "baru" | "update harga"> = {};
-  if (!savedStateStr) return changes;
-  try {
-    const saved: SavedCatalogState = JSON.parse(savedStateStr);
-    const savedProds = saved.products || {};
-    const savedGames = saved.games || {};
+  baseline: SavedCatalogState | null
+) {
+  // If baseline is not loaded yet (undefined), do nothing
+  if (baseline === undefined) return;
 
-    // 1. Check products
-    for (const p of currentProducts) {
-      const savedP = savedProds[p.id];
-      if (!savedP) {
-        changes[p.id] = "baru";
-      } else if (savedP.price !== p.price) {
-        changes[p.id] = "update harga";
-      }
-    }
-
-    // 2. Check games
-    for (const g of currentGames) {
-      const savedG = savedGames[g.id];
-      if (!savedG) {
-        changes[g.id] = "baru";
-      } else if (savedG.price !== g.price) {
-        changes[g.id] = "update harga";
-      }
-    }
-  } catch (e) {
-    console.error("Error parsing catalog state for changes:", e);
+  // If baseline is null, initialize it with current products/games
+  if (baseline === null) {
+    const initialBaseline: SavedCatalogState = { products: {}, games: {} };
+    currentProducts.forEach(p => {
+      initialBaseline.products[p.id] = { price: p.price, name: p.name || "" };
+    });
+    currentGames.forEach(g => {
+      initialBaseline.games[g.id] = { price: g.price, name: g.name || "" };
+    });
+    await setDoc(doc(db, "data", "pos_baseline"), initialBaseline).catch(console.error);
+    return;
   }
-  return changes;
-}
 
-async function saveCatalogStateDb(currentProducts: any[], currentGames: any[], email: string) {
-  const state: SavedCatalogState = { products: {}, games: {} };
+  const newUpdates: Record<string, { type: "baru" | "update harga" | "update", timestamp: string }> = {};
+  let baselineChanged = false;
+  const updatedBaselineProducts = { ...baseline.products };
+  const updatedBaselineGames = { ...baseline.games };
+
+  // 1. Check products
   currentProducts.forEach(p => {
-    state.products[p.id] = { price: p.price, name: p.name || "" };
+    const savedP = updatedBaselineProducts[p.id];
+    if (!savedP) {
+      newUpdates[p.id] = { type: "baru", timestamp: new Date().toISOString() };
+      updatedBaselineProducts[p.id] = { price: p.price, name: p.name || "" };
+      baselineChanged = true;
+    } else if (savedP.price !== p.price || savedP.name !== p.name) {
+      const type = savedP.price !== p.price ? "update harga" : "update";
+      newUpdates[p.id] = { type, timestamp: new Date().toISOString() };
+      updatedBaselineProducts[p.id] = { price: p.price, name: p.name || "" };
+      baselineChanged = true;
+    }
   });
+
+  // 2. Check games
   currentGames.forEach(g => {
-    state.games[g.id] = { price: g.price, name: g.name || "" };
+    const savedG = updatedBaselineGames[g.id];
+    if (!savedG) {
+      newUpdates[g.id] = { type: "baru", timestamp: new Date().toISOString() };
+      updatedBaselineGames[g.id] = { price: g.price, name: g.name || "" };
+      baselineChanged = true;
+    } else if (savedG.price !== g.price || savedG.name !== g.name) {
+      const type = savedG.price !== g.price ? "update harga" : "update";
+      newUpdates[g.id] = { type, timestamp: new Date().toISOString() };
+      updatedBaselineGames[g.id] = { price: g.price, name: g.name || "" };
+      baselineChanged = true;
+    }
   });
-  try {
-    const userRef = doc(db, "users", email.toLowerCase().trim());
-    await setDoc(userRef, { posCatalogState: state }, { merge: true });
-  } catch (e) {
-    console.error("Error saving catalog state to Firestore:", e);
+
+  // 3. Clean up deleted products
+  const currentProductIds = new Set(currentProducts.map(p => p.id));
+  const updatesToDelete: Record<string, any> = {};
+
+  Object.keys(updatedBaselineProducts).forEach(id => {
+    if (!currentProductIds.has(id)) {
+      delete updatedBaselineProducts[id];
+      updatesToDelete[`updates.${id}`] = deleteField();
+      baselineChanged = true;
+    }
+  });
+
+  // 4. Clean up deleted games
+  const currentGameIds = new Set(currentGames.map(g => g.id));
+  Object.keys(updatedBaselineGames).forEach(id => {
+    if (!currentGameIds.has(id)) {
+      delete updatedBaselineGames[id];
+      updatesToDelete[`updates.${id}`] = deleteField();
+      baselineChanged = true;
+    }
+  });
+
+  if (baselineChanged) {
+    await setDoc(doc(db, "data", "pos_baseline"), {
+      products: updatedBaselineProducts,
+      games: updatedBaselineGames
+    }).catch(console.error);
+  }
+
+  if (Object.keys(newUpdates).length > 0) {
+    const updatesPayload: Record<string, any> = {};
+    Object.entries(newUpdates).forEach(([id, val]) => {
+      updatesPayload[`updates.${id}`] = val;
+    });
+    await updateDoc(doc(db, "data", "pos_updates"), updatesPayload).catch(async (err) => {
+      if (err.code === "not-found") {
+        await setDoc(doc(db, "data", "pos_updates"), { updates: newUpdates });
+      } else {
+        console.error("Error updating pos_updates:", err);
+      }
+    });
+  }
+
+  if (Object.keys(updatesToDelete).length > 0) {
+    await updateDoc(doc(db, "data", "pos_updates"), updatesToDelete).catch(() => {});
+    await setDoc(doc(db, "data", "pos_updates"), updatesToDelete, { merge: true }).catch(() => {});
   }
 }
 
@@ -243,12 +295,19 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    setIsDeactivated(false);
+    setUserProfileLoaded(false);
     if (user?.email) {
       const email = user.email.toLowerCase().trim();
       const profileRef = doc(db, "users", email);
       const unsub = onSnapshot(profileRef, (snap) => {
           if (snap.exists()) {
              const data = snap.data();
+             if (data.status === "nonaktif" && email !== "owner@gmail.com") {
+                setIsDeactivated(true);
+                signOut(auth).catch(console.error);
+                return;
+             }
              setUserProfilePic(data.photoUrl || null);
              if (data.role) {
                 setUserRole(data.role);
@@ -286,11 +345,11 @@ export default function App() {
              setUserProfilePic(null);
              setUserRole("admin");
              setDbCatalogState(null);
-             setUserProfileLoaded(true);
              if (email !== "owner@gmail.com") {
-                signOut(auth).then(() => {
-                   alert("Akun Anda telah dinonaktifkan atau dihapus.");
-                }).catch(console.error);
+                setIsDeactivated(true);
+                signOut(auth).catch(console.error);
+             } else {
+                setUserProfileLoaded(true);
              }
           }
       }, (err) => {
@@ -413,10 +472,34 @@ export default function App() {
   const [shiftPegawai, _setShiftPegawai] = useState("");
   const [openSettings, setOpenSettings] = useState(false);
   const [openPOS, setOpenPOS] = useState(false);
-  const [hasPOSUpdate, setHasPOSUpdate] = useState(false);
-  const [catalogChanges, setCatalogChanges] = useState<Record<string, "baru" | "update harga">>({});
+  const [hasVersionUpdate, setHasVersionUpdate] = useState(false);
+  const [posUpdates, setPosUpdates] = useState<Record<string, { type: "baru" | "update harga" | "update", timestamp: string }>>({});
+  const [posBaseline, setPosBaseline] = useState<SavedCatalogState | null>(null);
+  const posBaselineRef = useRef<SavedCatalogState | null>(null);
+  const [posBaselineLoaded, setPosBaselineLoaded] = useState(false);
+
+  useEffect(() => {
+    posBaselineRef.current = posBaseline;
+  }, [posBaseline]);
+
+  const catalogChanges = useMemo(() => {
+    const activeChanges: Record<string, "baru" | "update harga" | "update"> = {};
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+    Object.entries(posUpdates).forEach(([id, upd]) => {
+      if (upd && upd.timestamp) {
+        const time = new Date(upd.timestamp).getTime();
+        if (time > sevenDaysAgo) {
+          activeChanges[id] = upd.type;
+        }
+      }
+    });
+    return activeChanges;
+  }, [posUpdates]);
+
+  const hasPOSUpdate = useMemo(() => Object.keys(catalogChanges).length > 0 || hasVersionUpdate, [catalogChanges, hasVersionUpdate]);
+
   const openPOSRef = useRef(openPOS);
-  const wasOpenRef = useRef(false);
   const productsListRef = useRef<any[]>([]);
   const gamesListRef = useRef<any[]>([]);
   const [dbCatalogState, setDbCatalogState] = useState<SavedCatalogState | null>(null);
@@ -425,55 +508,15 @@ export default function App() {
     dbCatalogStateRef.current = dbCatalogState;
   }, [dbCatalogState]);
   const [userProfileLoaded, setUserProfileLoaded] = useState(false);
+  const [isDeactivated, setIsDeactivated] = useState(false);
 
-  const handleClearProductChange = useCallback(async (id: string) => {
-    setCatalogChanges(prev => {
-      const copy = { ...prev };
-      delete copy[id];
-      return copy;
-    });
-    
-    if (!user?.email) return;
-    try {
-      const userRef = doc(db, "users", user.email.toLowerCase().trim());
-      const currentBaseline = dbCatalogStateRef.current;
-      if (currentBaseline) {
-        const saved = { ...currentBaseline };
-        const savedProds = { ...(saved.products || {}) };
-        const savedGames = { ...(saved.games || {}) };
-
-        const prod = productsListRef.current.find(p => p.id === id);
-        if (prod) {
-          savedProds[id] = { price: prod.price, name: prod.name || "" };
-        } else {
-          const game = gamesListRef.current.find(g => g.id === id);
-          if (game) {
-            savedGames[id] = { price: game.price, name: game.name || "" };
-          }
-        }
-        
-        saved.products = savedProds;
-        saved.games = savedGames;
-        await setDoc(userRef, { posCatalogState: saved }, { merge: true });
-      }
-    } catch (e) {
-      console.error("Error updating single product baseline in Firestore:", e);
-    }
-  }, [user?.email]);
+  const handleClearProductChange = useCallback(() => {
+    // No-op: we persist catalog changes for 7 days globally
+  }, []);
 
   useEffect(() => {
     openPOSRef.current = openPOS;
-    if (openPOS) {
-      setHasPOSUpdate(false);
-      wasOpenRef.current = true;
-    } else if (wasOpenRef.current) {
-      setCatalogChanges({});
-      if (user?.email) {
-        saveCatalogStateDb(productsListRef.current, gamesListRef.current, user.email);
-      }
-      wasOpenRef.current = false;
-    }
-  }, [openPOS, user?.email]);
+  }, [openPOS]);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const setShiftPegawai = useCallback((val: string) => {
@@ -582,12 +625,69 @@ export default function App() {
     }
   }, [editingId, tanggal, rukoStatusDbTanggal]);
 
+  // Real-time Firestore sync for global POS updates and baseline
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubUpdates = onSnapshot(doc(db, "data", "pos_updates"), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() || {};
+        const parsedUpdates: Record<string, any> = {};
+        if (data.updates) {
+          Object.assign(parsedUpdates, data.updates);
+        }
+        Object.entries(data).forEach(([key, val]) => {
+          if (key.startsWith("updates.")) {
+            const id = key.substring(8);
+            parsedUpdates[id] = val;
+          }
+        });
+        setPosUpdates(parsedUpdates);
+      } else {
+        setPosUpdates({});
+      }
+    }, (err) => {
+      console.error("Error listening to pos_updates:", err);
+    });
+
+    const unsubBaseline = onSnapshot(doc(db, "data", "pos_baseline"), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setPosBaseline({
+          products: data.products || {},
+          games: data.games || {}
+        });
+      } else {
+        setPosBaseline(null);
+      }
+      setPosBaselineLoaded(true);
+    }, (err) => {
+      console.error("Error listening to pos_baseline:", err);
+      setPosBaselineLoaded(true);
+    });
+
+    return () => {
+      unsubUpdates();
+      unsubBaseline();
+    };
+  }, [user]);
+
   // Real-time Firestore sync listeners to detect POS updates (products & games) and code changes
   useEffect(() => {
     if (!user) return;
 
     let productsLoaded = false;
     let gamesLoaded = false;
+
+    const triggerBaselineCheck = () => {
+      if (productsLoaded && gamesLoaded && posBaselineLoaded) {
+        checkCatalogBaselineAndLogUpdates(
+          productsListRef.current,
+          gamesListRef.current,
+          posBaselineRef.current
+        );
+      }
+    };
 
     // 1. Listen to products changes
     const qProducts = query(collection(db, "products"));
@@ -598,20 +698,7 @@ export default function App() {
       });
       productsListRef.current = currentList;
       productsLoaded = true;
-
-      if (productsLoaded && gamesLoaded && userProfileLoaded) {
-        const currentBaseline = dbCatalogStateRef.current;
-        if (currentBaseline) {
-          const changes = getCatalogChanges(productsListRef.current, gamesListRef.current, JSON.stringify(currentBaseline));
-          setCatalogChanges(changes);
-          const hasChanges = Object.keys(changes).length > 0;
-          if (hasChanges && !openPOSRef.current) {
-            setHasPOSUpdate(true);
-          }
-        } else {
-          saveCatalogStateDb(productsListRef.current, gamesListRef.current, user.email);
-        }
-      }
+      triggerBaselineCheck();
     }, (err) => {
       console.error("Firestore onSnapshot error (products notification):", err);
     });
@@ -630,20 +717,7 @@ export default function App() {
       });
       gamesListRef.current = currentList;
       gamesLoaded = true;
-
-      if (productsLoaded && gamesLoaded && userProfileLoaded) {
-        const currentBaseline = dbCatalogStateRef.current;
-        if (currentBaseline) {
-          const changes = getCatalogChanges(productsListRef.current, gamesListRef.current, JSON.stringify(currentBaseline));
-          setCatalogChanges(changes);
-          const hasChanges = Object.keys(changes).length > 0;
-          if (hasChanges && !openPOSRef.current) {
-            setHasPOSUpdate(true);
-          }
-        } else {
-          saveCatalogStateDb(productsListRef.current, gamesListRef.current, user.email);
-        }
-      }
+      triggerBaselineCheck();
     }, (err) => {
       console.error("Firestore onSnapshot error (games notification):", err);
     });
@@ -658,7 +732,7 @@ export default function App() {
         if (dbVersion !== clientVersion) {
           if (isVersionLower(clientVersion, dbVersion)) {
             // Client is outdated! Show red dot.
-            setHasPOSUpdate(true);
+            setHasVersionUpdate(true);
           } else {
             // Client is newer (just deployed). Publish new version.
             setDoc(doc(db, "data", "app_version"), {
@@ -685,26 +759,18 @@ export default function App() {
       unsubGames();
       unsubVersion();
     };
-  }, [user, userProfileLoaded]);
+  }, [user, posBaselineLoaded]);
 
-  // Reactive effect to calculate catalog changes when baseline or profile loaded state changes
+  // Trigger baseline check on mount or when baseline/products/games load
   useEffect(() => {
-    if (!userProfileLoaded || !productsListRef.current.length) return;
-    if (dbCatalogState) {
-      const changes = getCatalogChanges(productsListRef.current, gamesListRef.current, JSON.stringify(dbCatalogState));
-      setCatalogChanges(changes);
-      const hasChanges = Object.keys(changes).length > 0;
-      if (hasChanges && !openPOSRef.current) {
-        setHasPOSUpdate(true);
-      } else {
-        setHasPOSUpdate(false);
-      }
-    } else {
-      if (user?.email) {
-        saveCatalogStateDb(productsListRef.current, gamesListRef.current, user.email);
-      }
+    if (productsListRef.current.length > 0 && gamesListRef.current.length > 0 && posBaselineLoaded) {
+      checkCatalogBaselineAndLogUpdates(
+        productsListRef.current,
+        gamesListRef.current,
+        posBaselineRef.current
+      );
     }
-  }, [dbCatalogState, userProfileLoaded]);
+  }, [posBaseline, posBaselineLoaded]);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "data", "ruko_status"), (snap) => {
@@ -1559,6 +1625,39 @@ export default function App() {
   };
 
   // ===== CRUD ACTIONS =====
+  const logActivity = async (action: "CREATE" | "UPDATE" | "DELETE", targetDate: string, targetDay: string, recordData: any) => {
+    if (!user?.email) return;
+    const uniqueLogId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
+      ? crypto.randomUUID() 
+      : Date.now().toString() + Math.random().toString(36).slice(2);
+    
+    const totalHarian = recordData.totalHarian || 0;
+    const totalJajanan = recordData.totalJajanan || 0;
+    const totalJasaAks = recordData.totalJasaAks || 0;
+    const totalSewa = recordData.totalSewa || 0;
+    const totalIncome = totalHarian + totalJajanan + totalJasaAks + totalSewa;
+    const totalCash = recordData.totalCash || 0;
+    const totalTransfer = recordData.totalTransfer || 0;
+    const totalPengeluaran = (recordData.rowsPengeluaran || []).reduce((sum: number, r: any) => sum + (Number(r.harga) || 0), 0);
+
+    const logDoc = {
+      id: uniqueLogId,
+      email: user.email,
+      action,
+      targetDate,
+      targetDay,
+      timestamp: new Date().toISOString(),
+      details: {
+        totalIncome,
+        totalCash,
+        totalTransfer,
+        totalPengeluaran
+      }
+    };
+
+    await setDoc(doc(db, "pembukuan_logs", uniqueLogId), logDoc).catch(console.error);
+  };
+
   const addPencatatan = async () => {
     if (!tanggal) return;
     const isDuplicate = history.some((item) => item.tanggal === tanggal);
@@ -1607,6 +1706,7 @@ export default function App() {
     };
 
     setDoc(doc(db, "history_pembukuan", newItem.id), newItem).catch(console.error);
+    logActivity("CREATE", tanggal, hari, newItem);
     
     // APPLY DENDA TIDAK FULL ABSEN
     if (!editingId && shiftPegawai !== "Libur" && user?.email) {
@@ -1726,7 +1826,7 @@ export default function App() {
     }
 
     if (!confirm("Simpan perubahan?")) return;
-    setDoc(doc(db, "history_pembukuan", editingId), {
+    const updatedData = {
         tanggal, hari, absenPagi, absenSiang, shiftPegawai, rukoBuka, rukoTutup, catatan,
         totalHarian, totalJajanan, totalJasaAks, totalSewa, totalCash, totalTransfer,
         rowsHarian: JSON.parse(JSON.stringify(rowsHarian)),
@@ -1752,7 +1852,42 @@ export default function App() {
         }))),
         rowsSetoran: JSON.parse(JSON.stringify(rowsSetoran)),
         rowsPengeluaran: JSON.parse(JSON.stringify(rowsPengeluaran)),
-    }, { merge: true }).catch(console.error);
+    };
+    
+    if (!isSuperAdminOrOwner) {
+      const requestId = Date.now().toString() + Math.random().toString(36).substring(2, 6);
+      const originalData = history.find(h => h.id === editingId) || null;
+      
+      const requestDoc = {
+        id: requestId,
+        historyId: editingId,
+        tanggal,
+        hari,
+        requestedBy: user?.email || "unknown",
+        requestedAt: new Date().toISOString(),
+        status: "pending",
+        originalData: originalData ? JSON.parse(JSON.stringify(originalData)) : null,
+        proposedData: updatedData
+      };
+
+      setDoc(doc(db, "edit_requests", requestId), requestDoc)
+        .then(() => {
+          setSavedSignature(currentFormSignature);
+          isJustSavedOrLoaded.current = false;
+          setEditingId(null);
+          setSuccessMessage("Request edit telah dikirim, menunggu persetujuan owner.");
+          setShowSuccessAlert(true);
+          setTimeout(() => window.location.reload(), 2000);
+        })
+        .catch((err) => {
+          console.error("Gagal mengirim request edit:", err);
+          alert("Gagal mengirim request edit ke server ❌");
+        });
+      return;
+    }
+    
+    setDoc(doc(db, "history_pembukuan", editingId), updatedData, { merge: true }).catch(console.error);
+    logActivity("UPDATE", tanggal, hari, updatedData);
     
     // MARK AS SAVED
     setSavedSignature(currentFormSignature);
@@ -1802,7 +1937,11 @@ export default function App() {
   };
 
   const deleteHistoryItem = (id: string) => {
+    const itemToDelete = history.find((h) => h.id === id);
     deleteDoc(doc(db, "history_pembukuan", id)).catch(console.error);
+    if (itemToDelete) {
+      logActivity("DELETE", itemToDelete.tanggal, itemToDelete.hari, itemToDelete);
+    }
     if (id === editingId) {
       // Reload untuk memastikan state kembali murni ke draf server hari ini
       setTimeout(() => window.location.reload(), 500);
@@ -2071,7 +2210,7 @@ export default function App() {
     setShowSuccessAlert(true);
   };
 
-  if (authLoading) {
+  if (authLoading || (user && !userProfileLoaded && !isDeactivated)) {
     return (
       <div className={`min-h-screen flex items-center justify-center ${dark ? 'bg-[#1C1C1E]' : 'bg-zinc-100'}`}>
          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent flex items-center justify-center rounded-full animate-spin"></div>
@@ -2079,8 +2218,8 @@ export default function App() {
     );
   }
 
-  if (!user) {
-    return <Login />;
+  if (!user || isDeactivated) {
+    return <Login deactivatedError={isDeactivated ? "Email atau Password salah." : ""} />;
   }
 
   return (
@@ -2218,9 +2357,9 @@ export default function App() {
                   <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-2xl border border-zinc-200/50 dark:border-white/5 shadow-inner">
                     <button
                       onClick={() => setAdminMonitoringTab("status")}
-                      className={`px-5 py-2.5 text-xs font-black tracking-wider uppercase rounded-xl transition-all ${
+                      className={`px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-xl transition-all ${
                         adminMonitoringTab === "status"
-                          ? "bg-white dark:bg-black text-emerald-600 dark:text-emerald-400 shadow-sm"
+                          ? "bg-white dark:bg-[#2C2C2E] text-emerald-600 dark:text-emerald-400 shadow-sm"
                           : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
                       }`}
                     >
@@ -2228,9 +2367,9 @@ export default function App() {
                     </button>
                     <button
                       onClick={() => setAdminMonitoringTab("device")}
-                      className={`px-5 py-2.5 text-xs font-black tracking-wider uppercase rounded-xl transition-all ${
+                      className={`px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-xl transition-all ${
                         adminMonitoringTab === "device"
-                          ? "bg-white dark:bg-black text-emerald-600 dark:text-emerald-400 shadow-sm"
+                          ? "bg-white dark:bg-[#2C2C2E] text-emerald-600 dark:text-emerald-400 shadow-sm"
                           : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
                       }`}
                     >
@@ -2240,17 +2379,21 @@ export default function App() {
                 </div>
 
                 {adminMonitoringTab === "status" ? (
-                  <WidgetMonitoringStatus 
-                    history={history || []} 
-                    rowsSewa={rowsSewa} 
-                    activeDate={tanggal} 
-                    onVerifyActiveRental={handleVerifyReturn} 
-                    isOwner={false} 
-                    hargaItems={hargaSewa}
-                    isVerifyingPayment={!!paymentVerifyPrompt}
-                  />
+                  <div className="animate-in fade-in duration-200">
+                    <WidgetMonitoringStatus 
+                      history={history || []} 
+                      rowsSewa={rowsSewa} 
+                      activeDate={tanggal} 
+                      onVerifyActiveRental={handleVerifyReturn} 
+                      isOwner={false} 
+                      hargaItems={hargaSewa}
+                      isVerifyingPayment={!!paymentVerifyPrompt}
+                    />
+                  </div>
                 ) : (
-                  <WidgetMonitoringDevice isOwner={false} />
+                  <div className="animate-in fade-in duration-200">
+                    <WidgetMonitoringDevice isOwner={false} />
+                  </div>
                 )}
               </div>
             ) : activeTab === "UPDATE STOK" ? (

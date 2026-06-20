@@ -103,6 +103,24 @@ service cloud.firestore {
     }
 
     // ==========================================
+    // Aturan Logging Pembukuan (pembukuan_logs)
+    // ==========================================
+    match /pembukuan_logs/{docId} {
+      allow read: if request.auth != null && (request.auth.token.email == "owner@gmail.com"
+                    || (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin"));
+      allow write: if request.auth != null;
+    }
+
+    // ==========================================
+    // Aturan Request Edit (edit_requests)
+    // ==========================================
+    match /edit_requests/{docId} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if request.auth != null && (request.auth.token.email == "owner@gmail.com"
+                    || (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin"));
+    }
+
+    // ==========================================
     // Aturan Fitur Game (Challenge & Leaderboard)
     // ==========================================
     

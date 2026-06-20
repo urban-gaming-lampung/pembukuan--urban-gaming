@@ -6,7 +6,7 @@ import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie
 } from "recharts";
-import { Users, Activity, Banknote, Save, Plus, ChevronDown, ChevronUp, Trash2, X, Camera, UserPlus, Shield, UserCheck, AlertTriangle } from "lucide-react";
+import { Users, Activity, Banknote, Save, Plus, ChevronDown, ChevronUp, Trash2, X, Camera, UserPlus, Shield, UserCheck, AlertTriangle, CalendarDays, CalendarRange } from "lucide-react";
 import Section from "./common/Section";
 
 // === KONSTANTA ABSENSI ===
@@ -89,6 +89,20 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   const [createSuccess, setCreateSuccess] = useState("");
   const [isDeletingEmail, setIsDeletingEmail] = useState<string | null>(null);
 
+  // States for Delivery Fee (Ongkir) Report Range Filter
+  const [ongkirStart, setOngkirStart] = useState(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}-01`;
+  });
+  const [ongkirEnd, setOngkirEnd] = useState(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateError("");
@@ -117,6 +131,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
       await setDoc(doc(db, "users", emailTrimmed), {
         role: newRole,
+        status: "aktif",
         createdAt: serverTimestamp(),
         profileColor: "#3b82f6",
         photoUrl: null
@@ -163,6 +178,16 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
     } catch (err: any) {
       console.error(err);
       alert(err.message || "Gagal mengubah role.");
+    }
+  };
+
+  const handleChangeStatus = async (email: string, status: string) => {
+    if (email.toLowerCase().trim() === "owner@gmail.com") return;
+    try {
+      await setDoc(doc(db, "users", email), { status }, { merge: true });
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Gagal mengubah status akun.");
     }
   };
 
@@ -590,6 +615,62 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
       });
   }, [pegawaiData]);
 
+  // Memoized delivery fee (ongkir) report by date range
+  const ongkirReport = useMemo(() => {
+     const map = new Map<string, number>();
+     history.forEach((h) => {
+        if (!h.tanggal) return;
+        if (h.tanggal < ongkirStart || h.tanggal > ongkirEnd) return;
+
+        if (Array.isArray(h.rowsSewa)) {
+            h.rowsSewa.forEach((r: any) => {
+                if (r.isOngkir === "YA" && r._ongkir && r.diantarOleh) {
+                    const email = r.diantarOleh.toLowerCase().trim();
+                    const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
+                    
+                    let amount = nominalAsli;
+                    if (r._isNewOngkirSystem) {
+                        const fallbackPersen = r._ongkirPegawaiPersen ?? 70;
+                        const fallbackNominal = Math.round((nominalAsli * fallbackPersen) / 100);
+                        amount = r._ongkirPegawaiNominal ?? fallbackNominal;
+                    }
+                    map.set(email, (map.get(email) || 0) + amount);
+                }
+            });
+        }
+
+        if (Array.isArray(h.rowsHarian)) {
+            h.rowsHarian.forEach((r: any) => {
+                if (r._ongkir && r.diantarOleh) {
+                    const email = r.diantarOleh.toLowerCase().trim();
+                    const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
+                    
+                    if (nominalAsli > 0) {
+                        let amount = nominalAsli;
+                        if (r._isNewOngkirSystem) {
+                            const fallbackPersen = r._ongkirPegawaiPersen ?? 70;
+                            const fallbackNominal = Math.round((nominalAsli * fallbackPersen) / 100);
+                            amount = r._ongkirPegawaiNominal ?? fallbackNominal;
+                        }
+                        map.set(email, (map.get(email) || 0) + amount);
+                    }
+                }
+            });
+        }
+     });
+
+     return Array.from(map.entries()).map(([email, total]) => {
+         const profile = usersProfile.find(u => u.id.toLowerCase().trim() === email);
+         return {
+             email,
+             name: email.split("@")[0],
+             total,
+             photoUrl: profile?.photoUrl || null,
+             profileColor: profile?.profileColor || "#3b82f6"
+         };
+     }).sort((a, b) => b.total - a.total);
+  }, [history, ongkirStart, ongkirEnd, usersProfile]);
+
   // Auto-persist ongkir stub records to Firestore when detected
   const autoPersistedRef = React.useRef<Set<string>>(new Set());
   
@@ -823,8 +904,17 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                           </div>
                         )}
                         <div className="min-w-0 flex flex-col">
-                          <span className="font-bold text-sm text-zinc-800 dark:text-zinc-200 truncate">{u.id}</span>
-                          <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">Role: {roleLabel}</span>
+                          <span className={`font-bold text-sm truncate ${u.status === "nonaktif" ? "text-zinc-400 dark:text-zinc-500 line-through decoration-red-500/80 decoration-2" : "text-zinc-800 dark:text-zinc-200"}`}>
+                            {u.id}
+                          </span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">Role: {roleLabel}</span>
+                            {u.status === "nonaktif" && (
+                              <span className="text-[9px] font-black text-red-500 dark:text-red-400 bg-red-100 dark:bg-red-900/30 px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0">
+                                Nonaktif
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                       
@@ -835,14 +925,25 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                             Root Owner
                           </span>
                         ) : (
-                          <select
-                            value={u.role || "admin"}
-                            onChange={(e) => handleChangeRole(u.id, e.target.value)}
-                            className="text-[11px] font-bold bg-white dark:bg-[#2C2C2E] border border-zinc-200 dark:border-white/10 text-zinc-700 dark:text-zinc-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
-                          >
-                            <option value="admin">Admin</option>
-                            <option value="super admin">Super Admin</option>
-                          </select>
+                          <>
+                            <select
+                              value={u.role || "admin"}
+                              onChange={(e) => handleChangeRole(u.id, e.target.value)}
+                              className="text-[11px] font-bold bg-white dark:bg-[#2C2C2E] border border-zinc-200 dark:border-white/10 text-zinc-700 dark:text-zinc-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                            >
+                              <option value="admin">Admin</option>
+                              <option value="super admin">Super Admin</option>
+                            </select>
+
+                            <select
+                              value={u.status || "aktif"}
+                              onChange={(e) => handleChangeStatus(u.id, e.target.value)}
+                              className="text-[11px] font-bold bg-white dark:bg-[#2C2C2E] border border-zinc-200 dark:border-white/10 text-zinc-700 dark:text-zinc-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                            >
+                              <option value="aktif">Aktif</option>
+                              <option value="nonaktif">Nonaktif</option>
+                            </select>
+                          </>
                         )}
 
                         {/* DELETE BUTTON */}
@@ -1226,6 +1327,87 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
             {groupedByMonth.map(([bulan, records]) => (
                 <RangkumanBulanItem key={bulan} bulan={bulan} records={records} />
             ))}
+         </div>
+      </Section>
+
+      {/* WIDGET RANGKUMAN ONGKIR PEGAWAI */}
+      <Section title="Rangkuman Ongkir Pegawai (Berdasarkan Tanggal)">
+         <div className="flex flex-col gap-6 w-full animate-in fade-in duration-300">
+            {/* Date Pickers - Apple style layout */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full bg-zinc-50 dark:bg-zinc-900/30 p-4 rounded-2xl border border-zinc-200/50 dark:border-white/5">
+               <div className="flex items-center gap-3 bg-white dark:bg-zinc-900 px-4 py-3 rounded-xl border border-zinc-200 dark:border-white/5 transition-all focus-within:ring-2 focus-within:ring-blue-500/20">
+                  <CalendarDays className="text-zinc-400 dark:text-zinc-500" size={18} />
+                  <div className="flex flex-col flex-1">
+                     <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Dari Tanggal</span>
+                     <input
+                        type="date"
+                        value={ongkirStart}
+                        onChange={(e) => setOngkirStart(e.target.value)}
+                        className="w-full bg-transparent text-sm font-semibold text-zinc-900 outline-none dark:text-zinc-100 min-h-[20px] font-mono p-0 border-none focus:ring-0"
+                     />
+                  </div>
+               </div>
+
+               <div className="flex items-center gap-3 bg-white dark:bg-zinc-900 px-4 py-3 rounded-xl border border-zinc-200 dark:border-white/5 transition-all focus-within:ring-2 focus-within:ring-blue-500/20">
+                  <CalendarRange className="text-zinc-400 dark:text-zinc-500" size={18} />
+                  <div className="flex flex-col flex-1">
+                     <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Sampai Tanggal</span>
+                     <input
+                        type="date"
+                        value={ongkirEnd}
+                        onChange={(e) => setOngkirEnd(e.target.value)}
+                        className="w-full bg-transparent text-sm font-semibold text-zinc-900 outline-none dark:text-zinc-100 min-h-[20px] font-mono p-0 border-none focus:ring-0"
+                     />
+                  </div>
+               </div>
+            </div>
+
+             {/* Total Delivery Fees Report List */}
+             {ongkirReport.length === 0 ? (
+                <div className="text-center py-8 bg-zinc-50 dark:bg-zinc-900/10 rounded-2xl border border-dashed border-zinc-200 dark:border-white/5">
+                   <p className="text-zinc-500 dark:text-zinc-400 text-sm font-medium">Tidak ada data ongkir pegawai dalam rentang tanggal ini.</p>
+                </div>
+             ) : (
+                <div className="flex flex-col gap-3">
+                   <div className="flex items-center justify-between px-2 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                      <span>Pegawai</span>
+                      <span>Total Ongkir</span>
+                   </div>
+                   
+                   <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] border border-zinc-200 dark:border-white/10 overflow-hidden divide-y divide-zinc-200 dark:divide-white/5">
+                      {ongkirReport.map((item) => (
+                         <div key={item.email} className="flex items-center justify-between px-6 py-4 hover:bg-zinc-50 dark:hover:bg-zinc-900/30 transition-colors">
+                            <div className="flex items-center gap-3">
+                               <div className="w-10 h-10 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-800 shrink-0 border border-zinc-200/50 dark:border-white/5 flex items-center justify-center">
+                                  {item.photoUrl ? (
+                                     <img src={item.photoUrl} alt={item.email} className="w-full h-full object-cover" />
+                                  ) : (
+                                     <span className="text-zinc-600 dark:text-zinc-300 font-black text-sm uppercase">{item.name.charAt(0)}</span>
+                                  )}
+                               </div>
+                               <div className="flex flex-col">
+                                  <span className="text-sm font-black text-zinc-900 dark:text-zinc-100 capitalize">{item.name}</span>
+                                  <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">{item.email}</span>
+                               </div>
+                            </div>
+                            <div className="text-right flex flex-col">
+                               <span className="text-sm font-black text-purple-600 dark:text-purple-400">{rupiah(item.total)}</span>
+                            </div>
+                         </div>
+                      ))}
+                   </div>
+
+                   <div className="bg-gradient-to-r from-purple-500/10 to-indigo-500/10 border border-purple-200 dark:border-purple-500/20 rounded-2xl px-6 py-4 flex items-center justify-between mt-2">
+                      <div className="flex flex-col">
+                         <span className="text-xs font-bold text-purple-700 dark:text-purple-400 uppercase tracking-widest">Total Ongkir Keseluruhan</span>
+                         <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-300/80 mt-0.5">Dari {new Date(ongkirStart).toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' })} s/d {new Date(ongkirEnd).toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                      </div>
+                      <span className="text-lg font-black text-purple-700 dark:text-purple-400">
+                         {rupiah(ongkirReport.reduce((acc, item) => acc + item.total, 0))}
+                      </span>
+                   </div>
+                </div>
+             )}
          </div>
       </Section>
 

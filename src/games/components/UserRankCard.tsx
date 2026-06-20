@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Gamepad2 } from 'lucide-react';
 import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
 import { db, auth } from '../../lib/firebase';
 import RankBadge from './RankBadge';
@@ -94,8 +95,8 @@ export default function UserRankCard({ monthKey }: UserRankCardProps) {
             <RankBadge rank={personalRank} size="sm" />
           </div>
         ) : (
-          <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-zinc-200 dark:bg-zinc-800 text-[10px] font-bold text-zinc-500 dark:text-zinc-400">
-            🎮
+          <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-zinc-200 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
+            <Gamepad2 className="h-4 w-4" />
           </div>
         )}
 

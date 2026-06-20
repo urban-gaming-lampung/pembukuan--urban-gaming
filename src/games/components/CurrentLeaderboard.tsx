@@ -93,7 +93,7 @@ export default function CurrentLeaderboard({ monthKey }: CurrentLeaderboardProps
       {entries.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-zinc-200 dark:border-zinc-800 p-8 text-center bg-zinc-50/50 dark:bg-black/5">
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Belum ada yang bermain bulan ini. 🎮
+            Belum ada yang bermain bulan ini.
           </p>
           <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">
             Jadilah yang pertama untuk memimpin klasemen!

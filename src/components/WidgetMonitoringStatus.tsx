@@ -270,10 +270,10 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
   }, [rowsSewa, history, activeDate, now, masterUnit]);
 
   useEffect(() => {
-    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    if (!("Notification" in window) || Notification.permission !== "granted" || !currentUserEmail) return;
 
     activeRentals.forEach(r => {
-      if (r.isDone && !r.isVerified && !notifiedRefs.current.has(r.id)) {
+      if (r.isDone && !r.isVerified && r.addedBy === currentUserEmail && !notifiedRefs.current.has(r.id)) {
         try {
           new Notification(`Waktu Sewa Habis!`, {
             body: `BILING ${r.id}: PS ${r.jenis} a.n ${r.namaPenyewa} telah habis durasinya. Mohon konfirmasi pengembalian.`,
@@ -283,7 +283,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
         notifiedRefs.current.add(r.id);
       }
     });
-  }, [activeRentals]);
+  }, [activeRentals, currentUserEmail]);
 
   const [unverifiedAdminRentals, setUnverifiedAdminRentals] = useState<any[]>([]);
 

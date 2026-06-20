@@ -49,7 +49,11 @@ export default function AttractScreen({
 
   // Prepare top 3 entries
   const top3 = leaderboard.slice(0, 3);
-  const medalEmojis = ['🥇', '🥈', '🥉'];
+  const medalIcons = [
+    <svg className="w-4 h-4 text-[#FFD60A] shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2-6.3-4.6-6.3 4.6 2.3-7.2-6-4.4h7.6z"/></svg>,
+    <svg className="w-4 h-4 text-[#E5E5EA] shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2-6.3-4.6-6.3 4.6 2.3-7.2-6-4.4h7.6z"/></svg>,
+    <svg className="w-4 h-4 text-[#FF9500] shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2-6.3-4.6-6.3 4.6 2.3-7.2-6-4.4h7.6z"/></svg>
+  ];
 
   return (
     <div
@@ -137,7 +141,7 @@ export default function AttractScreen({
                         className="flex items-center justify-between text-[11px] crt-body-text"
                       >
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="text-[12px] shrink-0">{medalEmojis[idx]}</span>
+                          {medalIcons[idx]}
                           <span
                             className={`truncate uppercase font-black ${
                               isMe ? 'text-white' : 'text-zinc-300'
@@ -164,7 +168,7 @@ export default function AttractScreen({
                       className="flex items-center justify-between text-[11px] crt-body-text opacity-30 text-emerald-500/40"
                     >
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[12px]">{medalEmojis[top3.length + i]}</span>
+                        {medalIcons[top3.length + i]}
                         <span>— — — — —</span>
                       </div>
                       <span>-</span>
@@ -179,7 +183,10 @@ export default function AttractScreen({
               {userRank > 3 ? (
                 <span>YOUR RANK: #{userRank} / {totalPlayers} PLAYERS</span>
               ) : userRank > 0 ? (
-                <span>TOP PERFORMER! 🏆</span>
+                <span className="flex items-center justify-center gap-1 text-[#FFD60A]">
+                  TOP PERFORMER!
+                  <svg className="w-3.5 h-3.5 text-[#FFD60A] animate-bounce shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.45 1-1 1H4v2h16v-2h-5c-.55 0-1-.45-1-1v-2.34"/><path d="M12 2a6 6 0 0 0-6 6v5a6 6 0 0 0 6 6 6 6 0 0 0 6-6V8a6 6 0 0 0-6-6z"/></svg>
+                </span>
               ) : totalPlayers > 0 ? (
                 <span>RANK: UNRANKED / {totalPlayers} PLAYERS</span>
               ) : (
@@ -220,11 +227,11 @@ export default function AttractScreen({
               {/* Warning guidelines */}
               <div className="pt-1.5 space-y-1 border-t border-emerald-500/10 mt-1">
                 <div className="flex items-center gap-1.5 text-[8px] text-[#FF9F0A]">
-                  <span className="shrink-0">⚠️</span>
+                  <svg className="w-3.5 h-3.5 text-[#FF9F0A] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                   <span className="font-bold">AVOID ENEMY FIRE</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-[8px] text-[#FF9F0A]">
-                  <span className="shrink-0">⚠️</span>
+                  <svg className="w-3.5 h-3.5 text-[#FF9F0A] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                   <span className="font-bold">SURVIVE WAVES → BOSS</span>
                 </div>
               </div>

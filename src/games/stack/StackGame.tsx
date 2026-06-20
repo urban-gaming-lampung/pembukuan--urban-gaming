@@ -1,5 +1,5 @@
 import React, { useEffect, useReducer, useRef, useState } from 'react';
-import { ArrowLeft, Play, RefreshCw, Trophy } from 'lucide-react';
+import { ArrowLeft, Play, RefreshCw, Trophy, AlertTriangle, AlertCircle, CheckCircle2 } from 'lucide-react';
 import HandheldFrame from '../components/handheld/HandheldFrame';
 import GameScreen from '../components/handheld/GameScreen';
 import DPad from '../components/handheld/DPad';
@@ -116,27 +116,43 @@ export default function StackGame({ onClose, monthKey, currentHighScore }: Stack
     };
   }, [gameStatus, isMuted]);
 
-  // Audio syntheziser helper
-  const playBeep = (freq: number, type: OscillatorType, duration: number, vol = 0.05) => {
+  // Immersive sound play chiptune helper with dual-detuned oscillators and panning
+  const playBeep = (freq: number, type: OscillatorType, duration: number, vol = 0.18) => {
     if (isMuted) return;
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+      const now = ctx.currentTime;
+      
+      const mainGain = ctx.createGain();
+      mainGain.gain.setValueAtTime(vol, now);
+      mainGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      let outputNode: AudioNode = mainGain;
+      if (ctx.createStereoPanner) {
+        const panner = ctx.createStereoPanner();
+        const randomPan = Math.random() * 0.4 - 0.2;
+        panner.pan.setValueAtTime(randomPan, now);
+        mainGain.connect(panner);
+        outputNode = panner;
+      }
+      outputNode.connect(ctx.destination);
 
-      gain.gain.setValueAtTime(vol, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+      const osc1 = ctx.createOscillator();
+      osc1.type = type;
+      osc1.frequency.setValueAtTime(freq, now);
+      osc1.connect(mainGain);
+      osc1.start(now);
+      osc1.stop(now + duration);
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.start();
-      osc.stop(ctx.currentTime + duration);
+      const osc2 = ctx.createOscillator();
+      osc2.type = type === 'sine' ? 'square' : type;
+      osc2.detune.setValueAtTime(10, now);
+      osc2.frequency.setValueAtTime(freq, now);
+      osc2.connect(mainGain);
+      osc2.start(now);
+      osc2.stop(now + duration);
     } catch (e) {}
   };
 
@@ -170,39 +186,39 @@ export default function StackGame({ onClose, monthKey, currentHighScore }: Stack
       switch (action) {
         case 'LEFT':
           dispatch({ type: 'MOVE_LEFT' });
-          playBeep(261.63, 'sine', 0.05, 0.02); // C4 short shift sound
+          playBeep(261.63, 'sine', 0.05, 0.08); // C4 short shift sound
           break;
         case 'RIGHT':
           dispatch({ type: 'MOVE_RIGHT' });
-          playBeep(261.63, 'sine', 0.05, 0.02); // C4 short shift sound
+          playBeep(261.63, 'sine', 0.05, 0.08); // C4 short shift sound
           break;
         case 'UP':
           dispatch({ type: 'ROTATE' });
-          playBeep(329.63, 'triangle', 0.08, 0.03); // E4 rotation sound
+          playBeep(329.63, 'triangle', 0.08, 0.10); // E4 rotation sound
           break;
         case 'A':
           dispatch({
             type: 'HARD_DROP',
             onLock: () => {
               vibrate(15);
-              playBeep(180, 'triangle', 0.1, 0.05);
+              playBeep(180, 'triangle', 0.1, 0.18);
             },
             onLineClear: (count) => {
               vibrate(50);
               // Clear chimes
-              playBeep(587.33, 'sine', 0.1, 0.05); // D5
-              setTimeout(() => playBeep(880, 'sine', 0.2, 0.05), 80); // A5
+              playBeep(587.33, 'sine', 0.1, 0.18); // D5
+              setTimeout(() => playBeep(880, 'sine', 0.2, 0.18), 80); // A5
             },
             onGameOver: () => {
               vibrate(200);
-              playBeep(120, 'sawtooth', 0.4, 0.08);
+              playBeep(120, 'sawtooth', 0.4, 0.28);
               handleGameOver();
             },
           });
           break;
         case 'B':
           dispatch({ type: 'HOLD' });
-          playBeep(440, 'sine', 0.1, 0.04); // A4 hold sound
+          playBeep(440, 'sine', 0.1, 0.15); // A4 hold sound
           break;
       }
     }
@@ -231,16 +247,16 @@ export default function StackGame({ onClose, monthKey, currentHighScore }: Stack
         dispatch({
           type: 'MOVE_DOWN',
           onLock: () => {
-            playBeep(180, 'triangle', 0.1, 0.05);
+            playBeep(180, 'triangle', 0.1, 0.18);
           },
           onLineClear: (count) => {
             vibrate(50);
-            playBeep(587.33, 'sine', 0.1, 0.05);
-            setTimeout(() => playBeep(880, 'sine', 0.2, 0.05), 80);
+            playBeep(587.33, 'sine', 0.1, 0.18);
+            setTimeout(() => playBeep(880, 'sine', 0.2, 0.18), 80);
           },
           onGameOver: () => {
             vibrate(200);
-            playBeep(120, 'sawtooth', 0.4, 0.08);
+            playBeep(120, 'sawtooth', 0.4, 0.28);
             handleGameOver();
           },
         });
@@ -325,7 +341,7 @@ export default function StackGame({ onClose, monthKey, currentHighScore }: Stack
   const handleStartPause = () => {
     if (gameStatus === 'IDLE' || gameStatus === 'GAME_OVER') {
       if (!canPlay) {
-        alert('Maaf, batas bermain harian Anda hari ini sudah habis! Kembali besok ya. 🎮');
+        alert('Maaf, batas bermain harian Anda hari ini sudah habis! Kembali besok ya.');
         return;
       }
       initSession();
@@ -485,8 +501,9 @@ export default function StackGame({ onClose, monthKey, currentHighScore }: Stack
 
           {/* Cheated warning */}
           {isCheated && (
-            <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-500 font-medium font-sans">
-              ⚠️ Aktivitas tidak wajar terdeteksi. Sesi dibatalkan.
+            <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-500 font-medium font-sans flex items-center justify-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>Aktivitas tidak wajar terdeteksi. Sesi dibatalkan.</span>
             </div>
           )}
 
@@ -494,8 +511,12 @@ export default function StackGame({ onClose, monthKey, currentHighScore }: Stack
           {gameStatus === 'GAME_OVER' && submitResultMsg && (
             <div className="p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 animate-in fade-in slide-in-from-bottom-2 duration-300 text-left space-y-3 font-sans">
               <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 text-base">
-                  {isSubmitSuccess ? '🎉' : '⚠️'}
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800">
+                  {isSubmitSuccess ? (
+                    <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                  ) : (
+                    <AlertCircle className="h-5 w-5 text-red-500" />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0 font-sans">
                   <h4 className="text-sm font-black text-zinc-900 dark:text-white tracking-tight font-sans">
@@ -511,7 +532,7 @@ export default function StackGame({ onClose, monthKey, currentHighScore }: Stack
               {isSubmitSuccess && isNewHigh && (
                 <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/20 p-2.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold font-sans">
                   <Trophy className="h-4 w-4 animate-bounce shrink-0" />
-                  <span>Skor Terbaik Baru Anda Tercapai! 🏆</span>
+                  <span>Skor Terbaik Baru Anda Tercapai!</span>
                 </div>
               )}
 

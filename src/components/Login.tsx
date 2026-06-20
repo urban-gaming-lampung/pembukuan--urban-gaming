@@ -1,14 +1,20 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
 import { Package } from "lucide-react";
 
-export default function Login() {
+export default function Login({ deactivatedError }: { deactivatedError?: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(deactivatedError || "");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (deactivatedError) {
+      setError(deactivatedError);
+    }
+  }, [deactivatedError]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,15 +25,16 @@ export default function Login() {
       const userEmail = userCred.user?.email;
       if (userEmail && userEmail.toLowerCase().trim() !== "owner@gmail.com") {
         const userDoc = await getDoc(doc(db, "users", userEmail.toLowerCase().trim()));
-        if (!userDoc.exists()) {
+        if (!userDoc.exists() || userDoc.data()?.status === "nonaktif") {
           await signOut(auth);
-          setError("Akun Anda telah dinonaktifkan atau dihapus.");
+          setError("Email atau Password salah.");
           setLoading(false);
           return;
         }
       }
     } catch (err: any) {
-      setError("Email atau Password salah. Pastikan akun admin sudah dibuat di Firebase Console.");
+      console.error("Login error:", err);
+      setError("Email atau Password salah.");
       setLoading(false);
     }
   };

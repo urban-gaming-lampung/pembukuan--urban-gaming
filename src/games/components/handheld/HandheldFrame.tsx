@@ -11,7 +11,7 @@ interface HandheldFrameProps {
  * and controls. Uses a clean aesthetic (Apple HIG style) but mimics a retro
  * Game Boy.
  */
-export default function HandheldFrame({
+function HandheldFrame({
   children,
   variant = 'gray',
   isPowerOn = true,
@@ -50,3 +50,5 @@ export default function HandheldFrame({
     </div>
   );
 }
+
+export default React.memo(HandheldFrame);

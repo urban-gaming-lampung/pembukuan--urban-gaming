@@ -51,7 +51,7 @@ function CountingScore({ targetScore }: { targetScore: number }) {
  * GameScreen wraps the HTML5 canvas with a retro LCD green screen bezel,
  * CRT scanline textures, and dynamic overlay screens for game states.
  */
-export default function GameScreen({
+function GameScreen({
   canvasRef,
   score,
   highScore,
@@ -266,4 +266,6 @@ export default function GameScreen({
     </div>
   );
 }
+
+export default React.memo(GameScreen);
 

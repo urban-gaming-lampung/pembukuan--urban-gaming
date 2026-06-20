@@ -41,8 +41,9 @@ export default function ChallengeButton({
           </div>
         </div>
 
-        <div className="flex h-8 items-center justify-center rounded-xl bg-white/20 px-3 text-xs font-bold backdrop-blur-md relative z-20">
-          Mainkan 🎮
+        <div className="flex h-8 items-center gap-1.5 justify-center rounded-xl bg-white/20 px-3 text-xs font-bold backdrop-blur-md relative z-20">
+          <span>Mainkan</span>
+          <Gamepad2 className="h-3.5 w-3.5" />
         </div>
       </button>
     );
@@ -53,7 +54,7 @@ export default function ChallengeButton({
     <div
       className="relative flex w-full items-center justify-between rounded-3xl border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/50 p-5 text-zinc-400 dark:text-zinc-500 cursor-not-allowed select-none font-sans"
       aria-disabled="true"
-      title="Absen masuk dulu untuk unlock 🎮"
+      title="Absen masuk dulu untuk unlock"
     >
       <div className="flex items-center gap-4">
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-600">
@@ -64,13 +65,14 @@ export default function ChallengeButton({
             CHALLENGE TERKUNCI
           </span>
           <span className="text-[14px] font-bold tracking-tight mt-1 text-zinc-500 dark:text-zinc-400 leading-tight">
-            Absen masuk dulu untuk unlock 🎮
+            Absen masuk dulu untuk unlock
           </span>
         </div>
       </div>
 
-      <div className="flex h-8 items-center justify-center rounded-xl bg-zinc-200 dark:bg-zinc-800 px-3 text-[11px] font-bold text-zinc-400 dark:text-zinc-600">
-        Kunci 🔒
+      <div className="flex h-8 items-center gap-1.5 justify-center rounded-xl bg-zinc-200 dark:bg-zinc-800 px-3 text-[11px] font-bold text-zinc-400 dark:text-zinc-600">
+        <span>Terkunci</span>
+        <Lock className="h-3 w-3" />
       </div>
     </div>
   );

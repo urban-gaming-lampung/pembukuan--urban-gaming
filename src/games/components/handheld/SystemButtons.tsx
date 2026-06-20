@@ -13,7 +13,7 @@ interface SystemButtonsProps {
  * SystemButtons displays administrative game controllers such as Start/Pause,
  * Resetting states, and Muting synthesizer sounds.
  */
-export default function SystemButtons({
+function SystemButtons({
   onStartPause,
   onReset,
   isMuted,
@@ -74,3 +74,5 @@ export default function SystemButtons({
     </div>
   );
 }
+
+export default React.memo(SystemButtons);
