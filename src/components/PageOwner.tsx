@@ -155,36 +155,41 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   };
 
   const logActivity = async (action: "CREATE" | "UPDATE" | "DELETE", targetDate: string, targetDay: string, recordData: any) => {
-    const email = auth.currentUser?.email || "owner@gmail.com";
-    const uniqueLogId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
-      ? crypto.randomUUID() 
-      : Date.now().toString() + Math.random().toString(36).slice(2);
-    
-    const totalHarian = recordData.totalHarian || 0;
-    const totalJajanan = recordData.totalJajanan || 0;
-    const totalJasaAks = recordData.totalJasaAks || 0;
-    const totalSewa = recordData.totalSewa || 0;
-    const totalIncome = totalHarian + totalJajanan + totalJasaAks + totalSewa;
-    const totalCash = recordData.totalCash || 0;
-    const totalTransfer = recordData.totalTransfer || 0;
-    const totalPengeluaran = (recordData.rowsPengeluaran || []).reduce((sum: number, r: any) => sum + (Number(r.harga) || 0), 0);
+    try {
+      const email = auth.currentUser?.email || "owner@gmail.com";
+      const uniqueLogId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
+        ? crypto.randomUUID() 
+        : Date.now().toString() + Math.random().toString(36).slice(2);
+      
+      const data = recordData || {};
+      const totalHarian = data.totalHarian || 0;
+      const totalJajanan = data.totalJajanan || 0;
+      const totalJasaAks = data.totalJasaAks || 0;
+      const totalSewa = data.totalSewa || 0;
+      const totalIncome = totalHarian + totalJajanan + totalJasaAks + totalSewa;
+      const totalCash = data.totalCash || 0;
+      const totalTransfer = data.totalTransfer || 0;
+      const totalPengeluaran = (data.rowsPengeluaran || []).reduce((sum: number, r: any) => sum + (Number(r.harga) || 0), 0);
 
-    const logDoc = {
-      id: uniqueLogId,
-      email,
-      action,
-      targetDate,
-      targetDay,
-      timestamp: new Date().toISOString(),
-      details: {
-        totalIncome,
-        totalCash,
-        totalTransfer,
-        totalPengeluaran
-      }
-    };
+      const logDoc = {
+        id: uniqueLogId,
+        email,
+        action,
+        targetDate,
+        targetDay,
+        timestamp: new Date().toISOString(),
+        details: {
+          totalIncome,
+          totalCash,
+          totalTransfer,
+          totalPengeluaran
+        }
+      };
 
-    await setDoc(doc(db, "pembukuan_logs", uniqueLogId), logDoc).catch(console.error);
+      await setDoc(doc(db, "pembukuan_logs", uniqueLogId), logDoc);
+    } catch (err) {
+      console.error("logActivity error:", err);
+    }
   };
 
   const handleApproveRequest = async (req: any) => {
