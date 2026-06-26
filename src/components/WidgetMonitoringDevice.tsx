@@ -13,26 +13,7 @@ import { Html5Qrcode } from "html5-qrcode";
 import Section from "./common/Section";
 import jsPDF from "jspdf";
 
-type DeviceType = "ps3" | "ps4" | "stik_ps3" | "stik_ps4" | "tv" | "playbox";
-
-interface RegisteredDevice {
-  id: string; // type_number e.g. ps4_03
-  type: DeviceType;
-  number: number;
-  stikType: "OP" | "OM" | "";
-  status: "baik" | "rusak";
-  keterangan: string;
-  stickerColor: string;
-  fontColor: string;
-  updatedAt: number;
-  updatedBy: string;
-  history?: Array<{
-    updatedAt: number;
-    status: "baik" | "rusak";
-    keterangan: string;
-    updatedBy: string;
-  }>;
-}
+import useStokData, { RegisteredDevice, DeviceType } from "../hooks/useStokData";
 
 interface WidgetMonitoringDeviceProps {
   isOwner?: boolean;
@@ -117,9 +98,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
   });
   const [isEditingMaster, setIsEditingMaster] = useState(false);
 
-  // Registered Devices from Firestore
-  const [devices, setDevices] = useState<RegisteredDevice[]>([]);
-  const [devicesLoaded, setDevicesLoaded] = useState(false);
+  // Registered Devices from global store
+  const { devices, devicesLoaded } = useStokData();
 
   // Scanner state
   const [showScanner, setShowScanner] = useState(false);
@@ -228,18 +208,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
     return () => unsub();
   }, []);
 
-  // Listen to Registered Devices
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, "monitoring_devices"), (snap) => {
-      const list: RegisteredDevice[] = [];
-      snap.forEach((docSnap) => {
-        list.push({ id: docSnap.id, ...docSnap.data() } as RegisteredDevice);
-      });
-      setDevices(list);
-      setDevicesLoaded(true);
-    });
-    return () => unsub();
-  }, []);
+
 
   // Save Master Capacities
   const handleSaveMaster = async () => {

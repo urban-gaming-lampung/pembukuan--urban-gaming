@@ -146,14 +146,25 @@ import { db } from "../lib/firebase";
 
 type Listener = () => void;
 
-type DeviceType = "ps3" | "ps4" | "stik_ps3" | "stik_ps4" | "tv" | "playbox";
+export type DeviceType = "ps3" | "ps4" | "stik_ps3" | "stik_ps4" | "tv" | "playbox";
 
-interface RegisteredDevice {
-  id: string;
+export interface RegisteredDevice {
+  id: string; // type_number e.g. ps4_03
   type: DeviceType;
   number: number;
   stikType: "OP" | "OM" | "";
   status: "baik" | "rusak";
+  keterangan: string;
+  stickerColor: string;
+  fontColor: string;
+  updatedAt: number;
+  updatedBy: string;
+  history?: Array<{
+    updatedAt: number;
+    status: "baik" | "rusak";
+    keterangan: string;
+    updatedBy: string;
+  }>;
 }
 
 let _stokState: StokData = { rental: {}, jualan: {} };
@@ -180,12 +191,16 @@ let _unsubCapacities: (() => void) | null = null;
 
 const _stokListeners = new Set<Listener>();
 const _masterListeners = new Set<Listener>();
+const _devicesListeners = new Set<Listener>();
 
 function notifyStokListeners() {
   _stokListeners.forEach(fn => fn());
 }
 function notifyMasterListeners() {
   _masterListeners.forEach(fn => fn());
+}
+function notifyDevicesListeners() {
+  _devicesListeners.forEach(fn => fn());
 }
 
 function subscribeStok(listener: Listener) {
@@ -196,8 +211,14 @@ function subscribeMaster(listener: Listener) {
   _masterListeners.add(listener);
   return () => { _masterListeners.delete(listener); };
 }
+function subscribeDevices(listener: Listener) {
+  _devicesListeners.add(listener);
+  return () => { _devicesListeners.delete(listener); };
+}
 function getStokSnapshot() { return _stokState; }
 function getMasterSnapshot() { return _masterCategories; }
+function getDevicesSnapshot() { return _devicesState; }
+function getDevicesLoadedSnapshot() { return _devicesLoaded; }
 
 function getItemKey(items: string[], type: "bagus" | "rusak") {
   return items.find(item => item.toLowerCase() === type) || (type === "bagus" ? "Bagus" : "Rusak");
@@ -449,6 +470,7 @@ function initStokListeners() {
     });
     _devicesState = list;
     _devicesLoaded = true;
+    notifyDevicesListeners();
     checkAndSyncIntegratedCounts();
   }, (err) => {
     console.error("Firestore onSnapshot error (monitoring_devices):", err);
@@ -564,6 +586,8 @@ async function addStokItemToMaster(tipe: "rental" | "jualan", kategoriName: stri
 export default function useStokData() {
   const stokState = useSyncExternalStore(subscribeStok, getStokSnapshot, getStokSnapshot);
   const masterCategories = useSyncExternalStore(subscribeMaster, getMasterSnapshot, getMasterSnapshot);
+  const devices = useSyncExternalStore(subscribeDevices, getDevicesSnapshot, getDevicesSnapshot);
+  const devicesLoaded = useSyncExternalStore(subscribeDevices, getDevicesLoadedSnapshot, getDevicesLoadedSnapshot);
 
   useEffect(() => {
     _subscriberCount++;
@@ -592,5 +616,5 @@ export default function useStokData() {
     []
   );
 
-  return { stokState, updateStok, masterCategories, addStokItem };
+  return { stokState, updateStok, masterCategories, addStokItem, devices, devicesLoaded };
 }
