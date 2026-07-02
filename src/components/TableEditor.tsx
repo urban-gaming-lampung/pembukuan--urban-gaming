@@ -10,8 +10,14 @@ import {
   Circle,
   AlertCircle,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Camera,
+  Loader2,
+  Eye,
+  ExternalLink
 } from "lucide-react";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { storage } from "../lib/firebase";
 
 // --- TYPES & UTILS ---
 
@@ -147,6 +153,193 @@ const SwipeableRow = ({ isMobile, className, style, children, onSwipe, disabled,
     >
       {children}
     </tr>
+  );
+};
+
+// --- UPLOAD TRANSFER PROOF COMPONENT ---
+
+interface UploadTransferProofProps {
+  value?: string;
+  onChange: (url: string) => void;
+  disabled?: boolean;
+}
+
+export const UploadTransferProof: React.FC<UploadTransferProofProps> = ({ value, onChange, disabled }) => {
+  const [uploading, setUploading] = React.useState(false);
+  const [showPreview, setShowPreview] = React.useState(false);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      alert("Format berkas harus berupa gambar (JPEG/PNG/dsb)!");
+      return;
+    }
+
+    try {
+      setUploading(true);
+
+      const dateStr = new Date().toISOString().split("T")[0];
+      const timeStr = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
+      const path = `bukti_transfer/${dateStr}/${timeStr}_${safeName}`;
+
+      const downloadUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+          const img = new Image();
+          img.src = event.target?.result as string;
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const MAX_WIDTH = 1000;
+            const MAX_HEIGHT = 1000;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+              if (width > MAX_WIDTH) {
+                height *= MAX_WIDTH / width;
+                width = MAX_WIDTH;
+              }
+            } else {
+              if (height > MAX_HEIGHT) {
+                width *= MAX_HEIGHT / height;
+                height = MAX_HEIGHT;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx?.drawImage(img, 0, 0, width, height);
+
+            canvas.toBlob(
+              async (blob) => {
+                if (!blob) {
+                  reject(new Error("Canvas compression failed"));
+                  return;
+                }
+                try {
+                  const fileRef = ref(storage, path);
+                  await uploadBytes(fileRef, blob);
+                  const url = await getDownloadURL(fileRef);
+                  resolve(url);
+                } catch (err) {
+                  reject(err);
+                }
+              },
+              "image/jpeg",
+              0.7
+            );
+          };
+          img.onerror = (err) => reject(err);
+        };
+        reader.onerror = (err) => reject(err);
+      });
+
+      onChange(downloadUrl);
+    } catch (err) {
+      console.error("Upload error:", err);
+      alert("Gagal mengunggah bukti transfer ❌");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  if (uploading) {
+    return (
+      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-500 flex-shrink-0 shadow-sm animate-pulse">
+        <Loader2 className="h-4 w-4 animate-spin" />
+      </div>
+    );
+  }
+
+  if (value) {
+    return (
+      <>
+        <div 
+          onClick={() => setShowPreview(true)}
+          className="relative h-9 w-9 rounded-full overflow-hidden border-2 border-blue-500 hover:border-blue-600 shadow-md active:scale-95 transition-all cursor-pointer flex-shrink-0"
+        >
+          <img src={value} alt="Bukti" className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-black/10 hover:bg-black/30 flex items-center justify-center transition-colors">
+            <Eye size={12} className="text-white drop-shadow-sm opacity-0 hover:opacity-100 transition-opacity" />
+          </div>
+        </div>
+
+        {showPreview && (
+          <div 
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4" 
+            onClick={() => setShowPreview(false)}
+          >
+            <div 
+              className="relative w-full max-w-md bg-white dark:bg-[#1C1C1E] p-4 rounded-2xl shadow-2xl flex flex-col items-center animate-in zoom-in-95 duration-200" 
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-full flex justify-between items-center mb-3 pb-2 border-b border-zinc-100 dark:border-white/5">
+                <span className="text-sm font-bold text-zinc-800 dark:text-zinc-200">Pratinjau Bukti Transfer</span>
+                <button 
+                  onClick={() => setShowPreview(false)}
+                  className="p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-700 transition-colors"
+                >
+                  <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+              </div>
+
+              <img 
+                src={value} 
+                alt="Bukti Transfer" 
+                className="w-full max-h-[50vh] rounded-xl object-contain bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-white/5" 
+              />
+              
+              <div className="flex gap-2.5 mt-4 w-full justify-between">
+                <a 
+                  href={value} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex-1 py-2 px-3 text-center bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-[11px] font-bold rounded-xl transition-all flex items-center justify-center gap-1.5"
+                >
+                  <ExternalLink size={12} />
+                  Buka Penuh
+                </a>
+                <button 
+                  disabled={disabled}
+                  onClick={() => {
+                    if (disabled) return;
+                    if (confirm("Hapus bukti transfer ini?")) {
+                      onChange("");
+                      setShowPreview(false);
+                    }
+                  }} 
+                  className={`flex-1 py-2 px-3 bg-red-500 hover:bg-red-600 text-white text-[11px] font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+                >
+                  <Trash2 size={12} />
+                  Hapus Bukti
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <label 
+      className={`flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-500/10 dark:text-blue-400 dark:hover:bg-blue-500/20 active:scale-95 transition-all cursor-pointer flex-shrink-0 ${disabled ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
+      title="Upload Bukti Transfer"
+    >
+      <input 
+        type="file" 
+        accept="image/*" 
+        className="hidden" 
+        disabled={disabled}
+        onChange={handleFileChange} 
+      />
+      <Camera size={18} />
+    </label>
   );
 };
 
@@ -595,27 +788,39 @@ export default function TableEditor<T extends AnyRow>(props: {
                             </td>
                             
                             {/* Transfer Toggle */}
-                            <td className={isMobile ? `flex justify-between items-center px-4 py-3.5 animate-in fade-in bg-zinc-50/50 dark:bg-black/5` : `table-cell w-[80px] text-center align-middle px-2 py-1.5`}>
+                            <td className={isMobile ? `flex justify-between items-center px-4 py-3.5 animate-in fade-in bg-zinc-50/50 dark:bg-black/5` : `table-cell w-[100px] text-center align-middle px-2 py-1.5`}>
                                {isMobile && <span className="text-[12px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-widest">Metode TRF/QRIS</span>}
-                               <button
-                                 type="button"
-                                 disabled={rowAny.isPaid === "TIDAK"}
-                                 onClick={() => {
-                                   if (rowAny.isPaid === "TIDAK") return;
-                                   updateRow(i, { bayar: bayarSet.has("Transfer") ? "" : "Transfer" } as any)
-                                 }}
-                                 className={`inline-flex items-center justify-center transition-all duration-200 active:scale-95 ${
-                                   isMobile 
-                                    ? `h-[42px] w-[80px] rounded-xl font-bold text-[13px] ${rowAny.isPaid === "TIDAK" ? "bg-zinc-100 dark:bg-zinc-800/80 text-zinc-400 opacity-50 cursor-not-allowed" : bayarSet.has("Transfer") ? "bg-blue-500 text-white shadow-md shadow-blue-500/40" : "bg-zinc-100 dark:bg-zinc-800/80 text-zinc-400"}`
-                                    : `h-9 w-9 rounded-full ${rowAny.isPaid === "TIDAK" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 opacity-50 cursor-not-allowed" : bayarSet.has("Transfer") ? "bg-blue-500 text-white shadow-md shadow-blue-500/40" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-zinc-500 dark:hover:text-zinc-400"}`
-                                 }`}
-                               >
-                                 {bayarSet.has("Transfer") ? (
-                                   isMobile ? "TF/QRIS" : <Check size={20} strokeWidth={3} />
-                                 ) : (
-                                   isMobile ? "---" : <Circle size={20} strokeWidth={2} />
+                               <div className="flex items-center justify-center gap-2 w-full">
+                                 <button
+                                   type="button"
+                                   disabled={rowAny.isPaid === "TIDAK"}
+                                   onClick={() => {
+                                     if (rowAny.isPaid === "TIDAK") return;
+                                     const nextVal = bayarSet.has("Transfer") ? "" : "Transfer";
+                                     updateRow(i, { 
+                                       bayar: nextVal,
+                                       ...(nextVal === "" ? { buktiTransfer: "" } : {})
+                                     } as any);
+                                   }}
+                                   className={`inline-flex items-center justify-center transition-all duration-200 active:scale-95 ${
+                                     isMobile 
+                                      ? `h-[42px] w-[80px] rounded-xl font-bold text-[13px] ${rowAny.isPaid === "TIDAK" ? "bg-zinc-100 dark:bg-zinc-800/80 text-zinc-400 opacity-50 cursor-not-allowed" : bayarSet.has("Transfer") ? "bg-blue-500 text-white shadow-md shadow-blue-500/40" : "bg-zinc-100 dark:bg-zinc-800/80 text-zinc-400"}`
+                                      : `h-9 w-9 rounded-full ${rowAny.isPaid === "TIDAK" ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 opacity-50 cursor-not-allowed" : bayarSet.has("Transfer") ? "bg-blue-500 text-white shadow-md shadow-blue-500/40" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-zinc-500 dark:hover:text-zinc-400"}`
+                                   }`}
+                                 >
+                                   {bayarSet.has("Transfer") ? (
+                                     isMobile ? "TF/QRIS" : <Check size={20} strokeWidth={3} />
+                                   ) : (
+                                     isMobile ? "---" : <Circle size={20} strokeWidth={2} />
+                                   )}
+                                 </button>
+                                 {bayarSet.has("Transfer") && (
+                                   <UploadTransferProof
+                                     value={rowAny.buktiTransfer}
+                                     onChange={(url) => updateRow(i, { buktiTransfer: url } as any)}
+                                   />
                                  )}
-                               </button>
+                               </div>
                             </td>
 
                             {/* Per-Row Action Buttons (Card Mode) */}

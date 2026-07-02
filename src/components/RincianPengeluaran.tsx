@@ -7,6 +7,7 @@ import {
   Zap,
   RotateCcw,
 } from "lucide-react";
+import { UploadTransferProof } from "./TableEditor";
 
 interface Props {
   rows: any[];
@@ -28,7 +29,7 @@ export default function RincianPengeluaran({
   isOwner: isOwnerProp,
 }: Props) {
   const minRows = 1;
-  const blank = { ket: "", harga: "", bayar: "" };
+  const blank = { ket: "", harga: "", bayar: "", buktiTransfer: "" };
 
   const isAutoRow = (r: any) => !!r._autoOngkirKey;
 
@@ -226,49 +227,63 @@ export default function RincianPengeluaran({
                         </div>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-2 gap-2.5 pt-3 border-t border-zinc-100 dark:border-white/5">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateRow(i, {
-                              bayar: r.bayar === "Cash" ? "" : "Cash",
-                            })
-                          }
-                          className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border transition-all ${r.bayar === "Cash" ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-600 dark:text-emerald-500 shadow-sm" : "bg-zinc-50 dark:bg-black/30 border-zinc-200 dark:border-white/5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-black/50"}`}
-                        >
-                          {r.bayar === "Cash" ? (
-                            <CheckCircle2
-                              size={15}
-                              className="fill-emerald-500 stroke-white dark:stroke-black"
+                      <div className="pt-3 border-t border-zinc-100 dark:border-white/5 space-y-2.5">
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateRow(i, {
+                                bayar: r.bayar === "Cash" ? "" : "Cash",
+                                buktiTransfer: ""
+                              })
+                            }
+                            className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border transition-all ${r.bayar === "Cash" ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-600 dark:text-emerald-500 shadow-sm" : "bg-zinc-50 dark:bg-black/30 border-zinc-200 dark:border-white/5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-black/50"}`}
+                          >
+                            {r.bayar === "Cash" ? (
+                              <CheckCircle2
+                                size={15}
+                                className="fill-emerald-500 stroke-white dark:stroke-black"
+                              />
+                            ) : (
+                              <Circle size={15} />
+                            )}
+                            <span className="text-[11px] font-bold tracking-widest uppercase">
+                              Cash
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextVal = r.bayar === "Transfer" ? "" : "Transfer";
+                              updateRow(i, {
+                                bayar: nextVal,
+                                ...(nextVal === "" ? { buktiTransfer: "" } : {})
+                              });
+                            }}
+                            className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border transition-all ${r.bayar === "Transfer" ? "bg-blue-500/10 border-blue-500/50 text-blue-600 dark:text-blue-500 shadow-sm" : "bg-zinc-50 dark:bg-black/30 border-zinc-200 dark:border-white/5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-black/50"}`}
+                          >
+                            {r.bayar === "Transfer" ? (
+                              <CheckCircle2
+                                size={15}
+                                className="fill-blue-500 stroke-white dark:stroke-black"
+                              />
+                            ) : (
+                              <Circle size={15} />
+                            )}
+                            <span className="text-[11px] font-bold tracking-widest uppercase">
+                              Transfer
+                            </span>
+                          </button>
+                        </div>
+                        {r.bayar === "Transfer" && (
+                          <div className="flex items-center justify-between p-2 rounded-xl bg-blue-50/50 dark:bg-blue-500/5 border border-blue-100/50 dark:border-blue-500/10">
+                            <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 pl-1">Bukti Transfer:</span>
+                            <UploadTransferProof 
+                              value={r.buktiTransfer}
+                              onChange={(url) => updateRow(i, { buktiTransfer: url })}
                             />
-                          ) : (
-                            <Circle size={15} />
-                          )}
-                          <span className="text-[11px] font-bold tracking-widest uppercase">
-                            Cash
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateRow(i, {
-                              bayar: r.bayar === "Transfer" ? "" : "Transfer",
-                            })
-                          }
-                          className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border transition-all ${r.bayar === "Transfer" ? "bg-blue-500/10 border-blue-500/50 text-blue-600 dark:text-blue-500 shadow-sm" : "bg-zinc-50 dark:bg-black/30 border-zinc-200 dark:border-white/5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-black/50"}`}
-                        >
-                          {r.bayar === "Transfer" ? (
-                            <CheckCircle2
-                              size={15}
-                              className="fill-blue-500 stroke-white dark:stroke-black"
-                            />
-                          ) : (
-                            <Circle size={15} />
-                          )}
-                          <span className="text-[11px] font-bold tracking-widest uppercase">
-                            Transfer
-                          </span>
-                        </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -415,6 +430,7 @@ export default function RincianPengeluaran({
                             onClick={() =>
                               updateRow(i, {
                                 bayar: r.bayar === "Cash" ? "" : "Cash",
+                                buktiTransfer: ""
                               })
                             }
                             className="active:scale-90 transition-transform flex items-center justify-center p-1 w-full text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
@@ -431,39 +447,50 @@ export default function RincianPengeluaran({
                         )}
                       </td>
                       <td className="py-3 px-4 text-center">
-                        {isAuto ? (
-                          r.bayar === "Transfer" ? (
-                            <CheckCircle2
-                              size={20}
-                              className="fill-blue-500 stroke-white dark:stroke-black drop-shadow-sm mx-auto"
-                            />
-                          ) : (
-                            <Circle
-                              size={20}
-                              strokeWidth={2}
-                              className="text-zinc-300 dark:text-zinc-600 mx-auto"
-                            />
-                          )
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              updateRow(i, {
-                                bayar: r.bayar === "Transfer" ? "" : "Transfer",
-                              })
-                            }
-                            className="active:scale-90 transition-transform flex items-center justify-center p-1 w-full text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                          >
-                            {r.bayar === "Transfer" ? (
+                        <div className="flex items-center justify-center gap-2">
+                          {isAuto ? (
+                            r.bayar === "Transfer" ? (
                               <CheckCircle2
                                 size={20}
                                 className="fill-blue-500 stroke-white dark:stroke-black drop-shadow-sm"
                               />
                             ) : (
-                              <Circle size={20} strokeWidth={2} />
-                            )}
-                          </button>
-                        )}
+                              <Circle
+                                size={20}
+                                strokeWidth={2}
+                                className="text-zinc-300 dark:text-zinc-600"
+                              />
+                            )
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextVal = r.bayar === "Transfer" ? "" : "Transfer";
+                                updateRow(i, {
+                                  bayar: nextVal,
+                                  ...(nextVal === "" ? { buktiTransfer: "" } : {})
+                                });
+                              }}
+                              className="active:scale-90 transition-transform flex items-center justify-center p-1 text-zinc-400 dark:text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                            >
+                              {r.bayar === "Transfer" ? (
+                                <CheckCircle2
+                                  size={20}
+                                  className="fill-blue-500 stroke-white dark:stroke-black drop-shadow-sm"
+                                />
+                              ) : (
+                                <Circle size={20} strokeWidth={2} />
+                              )}
+                            </button>
+                          )}
+                          {r.bayar === "Transfer" && (
+                            <UploadTransferProof 
+                              value={r.buktiTransfer}
+                              onChange={(url) => updateRow(i, { buktiTransfer: url })}
+                              disabled={isAuto}
+                            />
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4 relative group/input">
                         {isAuto ? (

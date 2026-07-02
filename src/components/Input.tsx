@@ -27,6 +27,7 @@ interface InputProps {
   setRukoTutup: (v: string, d?: string) => void;
   catatan: string;
   setCatatan: (v: string) => void;
+  onCatatanFocus?: (e: React.FocusEvent<HTMLInputElement>) => void;
   onReset?: () => void;
   onResetRukoBuka?: () => void;
   onResetRukoTutup?: () => void;
@@ -87,6 +88,7 @@ const Input: React.FC<InputProps> = ({
   setRukoTutup,
   catatan,
   setCatatan,
+  onCatatanFocus,
   onReset,
   onResetRukoBuka,
   onResetRukoTutup,
@@ -506,6 +508,7 @@ const Input: React.FC<InputProps> = ({
             type="text"
             value={catatan}
             onChange={(e) => setCatatan(e.target.value)}
+            onFocus={onCatatanFocus}
             placeholder="Keterangan (misal: ada yang bon, kendala teknis, dll)"
             className={`${inputStyle} mt-1`}
           />

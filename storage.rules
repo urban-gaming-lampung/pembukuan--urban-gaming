@@ -13,6 +13,18 @@ service firebase.storage {
       // 3. Karyawan DILARANG update / delete fotonya (Untuk menghindari Kecurangan)
       allow update, delete: if false; 
     }
+
+    // Aturan Folder Bukti Transfer Pemasukan & Pengeluaran
+    match /bukti_transfer/{dateStr}/{fileName} {
+      // 1. Semua karyawan ter-autentikasi diizinkan Upload (CREATE)
+      allow create: if request.auth != null;
+      
+      // 2. Semua karyawan ter-autentikasi diizinkan melihat (READ)
+      allow read: if request.auth != null;
+      
+      // 3. Dilarang update / delete
+      allow update, delete: if false;
+    }
     
     // Akses Super Administrator (Owner)
     match /{allPaths=**} {
