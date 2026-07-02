@@ -34,7 +34,12 @@ export default function RincianPengeluaran({
   const isAutoRow = (r: any) => !!r._autoOngkirKey;
 
   const updateRow = (i: number, patch: any) => {
-    if (isAutoRow(rows[i])) return; // Cegah edit auto entry
+    if (isAutoRow(rows[i])) {
+      if (patch && "buktiTransfer" in patch) {
+        setRows((p) => p.map((r, idx) => (idx === i ? { ...r, buktiTransfer: patch.buktiTransfer } : r)));
+      }
+      return; // Cegah edit auto entry lainnya
+    }
     setRows((p) => p.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   };
 
@@ -487,7 +492,7 @@ export default function RincianPengeluaran({
                             <UploadTransferProof 
                               value={r.buktiTransfer}
                               onChange={(url) => updateRow(i, { buktiTransfer: url })}
-                              disabled={isAuto}
+                              disabled={false}
                             />
                           )}
                         </div>
