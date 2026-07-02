@@ -1518,12 +1518,14 @@ export default function useAppController() {
                           const gajiPengurangan = Array.isArray(currentMonth.gajiPengurangan) ? currentMonth.gajiPengurangan : [];
                           records[monthIndex] = { ...currentMonth, gajiPengurangan: [...gajiPengurangan, newDenda] };
                       } else {
-                          records = [{ id: `rec-${Date.now()}`, bulanTahun: currentBulanTahun, gajiPokok: 0, gajiTambahan: [], gajiPengurangan: [newDenda] }, ...records];
+                          const basePokok = Number(data.gajiPokok) || 0;
+                          records = [{ id: `rec-${Date.now()}`, bulanTahun: currentBulanTahun, gajiPokok: basePokok, gajiTambahan: [], gajiPengurangan: [newDenda] }, ...records];
                       }
                       await setDoc(docRef, { records, lastUpdated: new Date().toISOString() }, { merge: true });
                  }
              } else {
-                 const newMonth = { id: `rec-${Date.now()}`, bulanTahun: currentBulanTahun, gajiPokok: 0, gajiTambahan: [], gajiPengurangan: [newDenda] };
+                 const basePokok = Number(docSnap.data()?.gajiPokok) || 0;
+                 const newMonth = { id: `rec-${Date.now()}`, bulanTahun: currentBulanTahun, gajiPokok: basePokok, gajiTambahan: [], gajiPengurangan: [newDenda] };
                  await setDoc(docRef, { records: [newMonth], lastUpdated: new Date().toISOString() }, { merge: true });
              }
           } catch (err) {

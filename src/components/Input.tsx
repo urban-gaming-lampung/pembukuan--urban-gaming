@@ -240,20 +240,22 @@ const Input: React.FC<InputProps> = ({
                     const gajiPengurangan = Array.isArray(currentMonth.gajiPengurangan) ? currentMonth.gajiPengurangan : [];
                     records[monthIndex] = { ...currentMonth, gajiPengurangan: [...gajiPengurangan, newDenda] };
                  } else {
+                    const basePokok = Number(data.gajiPokok) || 0;
                     records = [{
                         id: `rec-${Date.now()}`,
                         bulanTahun: currentBulanTahun,
-                        gajiPokok: 0,
+                        gajiPokok: basePokok,
                         gajiTambahan: [],
                         gajiPengurangan: [newDenda]
                     }, ...records];
                  }
                  await setDoc(docRef, { records, lastUpdated: new Date().toISOString() }, { merge: true });
               } else {
+                 const basePokok = Number(docSnap.data()?.gajiPokok) || 0;
                  const newMonth = {
                      id: `rec-${Date.now()}`,
                      bulanTahun: currentBulanTahun,
-                     gajiPokok: 0,
+                     gajiPokok: basePokok,
                      gajiTambahan: [],
                      gajiPengurangan: [newDenda]
                  };
