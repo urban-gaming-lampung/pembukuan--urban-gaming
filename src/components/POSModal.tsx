@@ -18,7 +18,7 @@ interface Product {
   platform?: string;
   size?: string;
   available?: boolean;
-  subcategory?: "Unit PS" | "Stik" | "Hardisk" | "Aksesoris";
+  subcategory?: "Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD";
 }
 
 interface CartItem extends Product {
@@ -159,8 +159,12 @@ function buildEscPosBytes(cart: CartItem[], buyerName: string, total: number, ad
   return new Uint8Array(commands);
 }
 
-function getProductSubCategory(name: string): "Unit PS" | "Stik" | "Hardisk" | "Aksesoris" {
+function getProductSubCategory(name: string): "Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD" {
   const lower = name.toLowerCase();
+  
+  if (lower.startsWith("bd ") || lower.includes(" bd ") || lower.includes("kaset") || lower.includes("blu-ray") || lower.startsWith("kaset bd")) {
+    return "BD";
+  }
   
   if (lower.includes("hdd") || lower.includes("hardisk") || lower.includes("hard disk") || lower.includes("external")) {
     return "Hardisk";
@@ -180,7 +184,7 @@ function getProductSubCategory(name: string): "Unit PS" | "Stik" | "Hardisk" | "
   return "Aksesoris";
 }
 
-function getSubCategory(p: Product): "Unit PS" | "Stik" | "Hardisk" | "Aksesoris" {
+function getSubCategory(p: Product): "Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD" {
   return p.subcategory || getProductSubCategory(p.name);
 }
 
@@ -189,7 +193,7 @@ const getGameDisplayName = (name: string) => (name || "").replace(/^\s*\//, "").
 
 export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName, catalogChanges = {}, onClearProductChange }: POSModalProps) {
   const [activeSub, setActiveSub] = useState<"JUALAN" | "RENTAL" | "SERVIS" | "ISI GAME">("JUALAN");
-  const [activeJualanSub, setActiveJualanSub] = useState<"SEMUA" | "Unit PS" | "Stik" | "Hardisk" | "Aksesoris">("SEMUA");
+  const [activeJualanSub, setActiveJualanSub] = useState<"SEMUA" | "Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD">("SEMUA");
   const [activeIsiGameSub, setActiveIsiGameSub] = useState<"PS3 CFW/HEN" | "PS4 HEN" | "PS5 HEN" | "Switch CFW" | "PC">("PS4 HEN");
   const [searchQuery, setSearchQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
@@ -207,7 +211,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   const [newProdName, setNewProdName] = useState("");
   const [newProdPrice, setNewProdPrice] = useState<number | "">("");
   const [newProdCategory, setNewProdCategory] = useState<"JUALAN" | "RENTAL" | "SERVIS">("JUALAN");
-  const [newProdSubCategory, setNewProdSubCategory] = useState<"Unit PS" | "Stik" | "Hardisk" | "Aksesoris">("Aksesoris");
+  const [newProdSubCategory, setNewProdSubCategory] = useState<"Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD">("Aksesoris");
   const [newProdImage, setNewProdImage] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -217,7 +221,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   const [editProdName, setEditProdName] = useState("");
   const [editProdPrice, setEditProdPrice] = useState<number | "">("");
   const [editProdCategory, setEditProdCategory] = useState<"JUALAN" | "RENTAL" | "SERVIS">("JUALAN");
-  const [editProdSubCategory, setEditProdSubCategory] = useState<"Unit PS" | "Stik" | "Hardisk" | "Aksesoris">("Aksesoris");
+  const [editProdSubCategory, setEditProdSubCategory] = useState<"Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD">("Aksesoris");
   const [editProdImage, setEditProdImage] = useState<File | null>(null);
   const [editProdImageUrl, setEditProdImageUrl] = useState("");
 
@@ -854,7 +858,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             {/* Sub-Category Pills for JUALAN */}
             {activeSub === "JUALAN" && (
               <div className="px-4 py-3 border-b border-zinc-200/50 dark:border-white/5 bg-zinc-50/50 dark:bg-black/10 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
-                {(["SEMUA", "Unit PS", "Stik", "Hardisk", "Aksesoris"] as const).map((subJualan) => {
+                {(["SEMUA", "Unit PS", "Stik", "Hardisk", "Aksesoris", "BD"] as const).map((subJualan) => {
                   const count = subJualan === "SEMUA" 
                     ? products.filter(p => p.category === "JUALAN").length 
                     : products.filter(p => p.category === "JUALAN" && getSubCategory(p) === subJualan).length;
@@ -1511,6 +1515,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     <option value="Stik">Stik</option>
                     <option value="Hardisk">Hardisk</option>
                     <option value="Aksesoris">Aksesoris</option>
+                    <option value="BD">BD</option>
                   </select>
                 </div>
               )}
@@ -1636,6 +1641,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     <option value="Stik">Stik</option>
                     <option value="Hardisk">Hardisk</option>
                     <option value="Aksesoris">Aksesoris</option>
+                    <option value="BD">BD</option>
                   </select>
                 </div>
               )}
