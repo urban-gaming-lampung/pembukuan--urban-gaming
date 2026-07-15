@@ -193,7 +193,7 @@ const getGameDisplayName = (name: string) => (name || "").replace(/^\s*\//, "").
 
 export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName, catalogChanges = {}, onClearProductChange }: POSModalProps) {
   const [activeSub, setActiveSub] = useState<"JUALAN" | "RENTAL" | "SERVIS" | "ISI GAME">("JUALAN");
-  const [activeJualanSub, setActiveJualanSub] = useState<"SEMUA" | "Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD">("SEMUA");
+  const [activeJualanSub, setActiveJualanSub] = useState<"Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD">("Unit PS");
   const [activeIsiGameSub, setActiveIsiGameSub] = useState<"PS3 CFW/HEN" | "PS4 HEN" | "PS5 HEN" | "Switch CFW" | "PC">("PS4 HEN");
   const [searchQuery, setSearchQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
@@ -201,7 +201,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   const [cart, setCart] = useState<CartItem[]>([]);
 
   useEffect(() => {
-    setActiveJualanSub("SEMUA");
+    setActiveJualanSub("Unit PS");
     setActiveIsiGameSub("PS4 HEN");
     setSearchQuery("");
   }, [activeSub]);
@@ -227,14 +227,22 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
   // Autofill subcategory when name changes in Add Product Form
   useEffect(() => {
-    if (newProdCategory === "JUALAN") {
+    const lower = newProdName.toLowerCase();
+    if (lower.startsWith("bd ") || lower.includes(" bd ") || lower.includes("kaset") || lower.includes("blu-ray") || lower.startsWith("kaset bd")) {
+      setNewProdCategory("JUALAN");
+      setNewProdSubCategory("BD");
+    } else if (newProdCategory === "JUALAN") {
       setNewProdSubCategory(getProductSubCategory(newProdName));
     }
   }, [newProdName, newProdCategory]);
 
   // Autofill subcategory when name changes in Edit Product Form
   useEffect(() => {
-    if (editProdCategory === "JUALAN") {
+    const lower = editProdName.toLowerCase();
+    if (lower.startsWith("bd ") || lower.includes(" bd ") || lower.includes("kaset") || lower.includes("blu-ray") || lower.startsWith("kaset bd")) {
+      setEditProdCategory("JUALAN");
+      setEditProdSubCategory("BD");
+    } else if (editProdCategory === "JUALAN") {
       setEditProdSubCategory(getProductSubCategory(editProdName));
     }
   }, [editProdName, editProdCategory]);
@@ -653,8 +661,8 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       result = result.filter((p) => p.name.toLowerCase().includes(q));
     }
     
-    // If activeSub is JUALAN and a specific sub-category is selected, filter by it
-    if (activeSub === "JUALAN" && activeJualanSub !== "SEMUA") {
+    // If activeSub is JUALAN, filter by activeJualanSub
+    if (activeSub === "JUALAN") {
       result = result.filter((p) => getSubCategory(p) === activeJualanSub);
     }
     
@@ -858,14 +866,10 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             {/* Sub-Category Pills for JUALAN */}
             {activeSub === "JUALAN" && (
               <div className="px-4 py-3 border-b border-zinc-200/50 dark:border-white/5 bg-zinc-50/50 dark:bg-black/10 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
-                {(["SEMUA", "Unit PS", "Stik", "Hardisk", "Aksesoris", "BD"] as const).map((subJualan) => {
-                  const count = subJualan === "SEMUA" 
-                    ? products.filter(p => p.category === "JUALAN").length 
-                    : products.filter(p => p.category === "JUALAN" && getSubCategory(p) === subJualan).length;
+                {(["Unit PS", "Stik", "Hardisk", "Aksesoris", "BD"] as const).map((subJualan) => {
+                  const count = products.filter(p => p.category === "JUALAN" && getSubCategory(p) === subJualan).length;
                   
-                  const hasSubUpdate = subJualan === "SEMUA"
-                    ? products.some(p => p.category === "JUALAN" && catalogChanges[p.id] !== undefined)
-                    : products.some(p => p.category === "JUALAN" && getSubCategory(p) === subJualan && catalogChanges[p.id] !== undefined);
+                  const hasSubUpdate = products.some(p => p.category === "JUALAN" && getSubCategory(p) === subJualan && catalogChanges[p.id] !== undefined);
 
                   return (
                     <button
