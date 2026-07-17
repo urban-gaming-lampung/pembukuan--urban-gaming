@@ -26,7 +26,7 @@ import LiveCursors from "./components/LiveCursors";
 import Login from "./components/Login";
 import versionData from "./version.json";
 import ChallengeButton from "./games/components/ChallengeButton";
-import { Package, AlertCircle } from "lucide-react";
+import { Package, AlertCircle, Bot } from "lucide-react";
 import { GAME_NAMES_ID } from "./games/constants";
 import useAppController from "./hooks/useAppController";
 
@@ -559,6 +559,50 @@ export default function App() {
           />
 
           {/* === POPUPS: APPLE UI STYLE === */}
+          {triggeredAssistants.length > 0 && (
+            <div className="fixed inset-0 z-[501] flex items-center justify-center p-6 font-sans">
+              <div className="absolute inset-0 bg-black/70 backdrop-blur-[6px] pointer-events-auto" />
+              <div className="relative w-full max-w-[320px] overflow-hidden rounded-[24px] bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-xl shadow-2xl ring-1 ring-black/10 dark:ring-white/10 animate-in zoom-in-90 duration-300">
+                <div className="p-6 text-center flex flex-col items-center w-full">
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-cyan-100 text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-400 ring-4 ring-cyan-500/10">
+                     <Bot className="w-8 h-8 animate-bounce" />
+                  </div>
+                  <h3 className="text-[19px] font-black text-zinc-900 dark:text-white mb-2 leading-tight tracking-tight">Rekomendasi Asisten</h3>
+                  <p className="text-[13px] leading-relaxed text-zinc-600 dark:text-zinc-400 mb-4">
+                    Hari ini tanggal <strong className="text-zinc-900 dark:text-white">{triggeredAssistants[0].tanggal}</strong>, asisten mendeteksi jadwal pengeluaran rutin Anda:
+                  </p>
+                  <div className="w-full bg-zinc-50 dark:bg-zinc-800/40 p-4 rounded-2xl text-left border border-zinc-200/50 dark:border-white/5 space-y-1">
+                    <div className="font-bold text-[15px] text-zinc-900 dark:text-white leading-tight">
+                      {triggeredAssistants[0].nama_pengeluaran}
+                    </div>
+                    <div className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                      Kategori: {triggeredAssistants[0].kategori || "Lainnya"}
+                    </div>
+                    {triggeredAssistants[0].nominal ? (
+                      <div className="text-[16px] font-black text-cyan-600 dark:text-cyan-400 pt-1">
+                        Rp {Number(triggeredAssistants[0].nominal).toLocaleString("id-ID")}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="flex border-t border-gray-200/50 dark:border-white/10 divide-x divide-gray-200/50 dark:divide-white/10">
+                  <button 
+                    onClick={() => handleDismissAssistant(triggeredAssistants[0].id)} 
+                    className="flex-1 py-4 text-[14px] font-bold text-zinc-500 dark:text-zinc-400 bg-white/50 dark:bg-black/20 hover:bg-zinc-50 dark:hover:bg-white/5 transition-colors"
+                  >
+                    LEWATI
+                  </button>
+                  <button 
+                    onClick={() => handleRunAssistant(triggeredAssistants[0])} 
+                    className="flex-1 py-4 text-[14px] font-bold text-cyan-600 dark:text-cyan-400 bg-white/50 dark:bg-black/20 hover:bg-cyan-50 dark:hover:bg-cyan-500/10 transition-colors"
+                  >
+                    SIMPAN
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {showUnsavedAlert && (
             <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 font-sans">
               <div className="absolute inset-0 bg-black/20 dark:bg-black/50 backdrop-blur-[2px] transition-opacity" onClick={() => setShowUnsavedAlert(false)} />

@@ -103,8 +103,15 @@ export default function useAppController() {
     }
   };
 
-  const handleDismissAssistant = (id: string) => {
-    setTriggeredAssistants(prev => prev.filter(x => x.id !== id));
+  const handleDismissAssistant = async (id: string) => {
+    try {
+      await updateDoc(doc(db, "owner_assistants", id), {
+        last_triggered: Date.now()
+      });
+      setTriggeredAssistants(prev => prev.filter(x => x.id !== id));
+    } catch(e: any) {
+      console.error("Gagal melewati asisten:", e);
+    }
   };
 
   useEffect(() => {
