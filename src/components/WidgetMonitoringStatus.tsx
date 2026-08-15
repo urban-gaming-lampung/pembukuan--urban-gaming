@@ -24,9 +24,10 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
   hargaItems,
   isVerifyingPayment = false,
 }) => {
-  const [masterUnit, setMasterUnit] = useState({ ps3: 0, ps4: 0, tv: 0, portabel: 0 });
+  const [masterUnit, setMasterUnit] = useState({ ps3: 0, ps4: 0, ps5: 0, tv: 0, portabel: 0 });
   const [tempPs3, setTempPs3] = useState("0");
   const [tempPs4, setTempPs4] = useState("0");
+  const [tempPs5, setTempPs5] = useState("0");
   const [tempTv, setTempTv] = useState("0");
   const [tempPortabel, setTempPortabel] = useState("0");
   const [isEditingMaster, setIsEditingMaster] = useState(false);
@@ -50,9 +51,10 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
     const unsub = onSnapshot(doc(db, "data", "master_unit"), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
-        setMasterUnit({ ps3: data.ps3 || 0, ps4: data.ps4 || 0, tv: data.tv || 0, portabel: data.portabel || 0 });
+        setMasterUnit({ ps3: data.ps3 || 0, ps4: data.ps4 || 0, ps5: data.ps5 || 0, tv: data.tv || 0, portabel: data.portabel || 0 });
         setTempPs3(String(data.ps3 || 0));
         setTempPs4(String(data.ps4 || 0));
+        setTempPs5(String(data.ps5 || 0));
         setTempTv(String(data.tv || 0));
         setTempPortabel(String(data.portabel || 0));
         setMasterUnitLoaded(true);
@@ -77,15 +79,17 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
     if (!isOwner) return;
     const ps3 = parseInt(tempPs3) || 0;
     const ps4 = parseInt(tempPs4) || 0;
+    const ps5 = parseInt(tempPs5) || 0;
     const tv = parseInt(tempTv) || 0;
     const portabel = parseInt(tempPortabel) || 0;
-    setDoc(doc(db, "data", "master_unit"), { ps3, ps4, tv, portabel }, { merge: true });
+    setDoc(doc(db, "data", "master_unit"), { ps3, ps4, ps5, tv, portabel }, { merge: true });
     setIsEditingMaster(false);
   };
 
-  const { activeRentals, rentedPS3, rentedPS4, rentedPortabel, rentedTV, readyPS3, readyPS4, readyPortabel, readyTV } = useMemo(() => {
+  const { activeRentals, rentedPS3, rentedPS4, rentedPS5, rentedPortabel, rentedTV, readyPS3, readyPS4, readyPS5, readyPortabel, readyTV } = useMemo(() => {
     let rPS3 = 0;
     let rPS4 = 0;
+    let rPS5 = 0;
     let rPortabel = 0;
     let rTV = 0;
     const rentals: any[] = [];
@@ -201,19 +205,20 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
 
           const hasTV = s.includes("tv");
           const hasPortabel = s.includes("portabel") || s.includes("portable") || s.includes("switch") || s.includes("rog") || s.includes("steam");
-          const hasPS3 = s.includes("ps3") || s.includes("ps 3");
-          const hasPS4 = s.includes("ps4") || s.includes("ps 4") || s.includes("pro") || s.includes("fat") || s.includes("slim") || s.includes("ps5") || s.includes("ps 5");
+          const hasPS5 = s.includes("ps5") || s.includes("ps 5");
+          const hasPS4 = !hasPS5 && (s.includes("ps4") || s.includes("ps 4") || s.includes("pro") || s.includes("fat") || s.includes("slim"));
+          const hasPS3 = !hasPS5 && (s.includes("ps3") || s.includes("ps 3"));
 
-          const hasGenericPS = s.includes("ps") && !hasPS3 && !hasPS4;
+          const hasGenericPS = s.includes("ps") && !hasPS3 && !hasPS4 && !hasPS5;
           const isOnlyTV = (s === "tv" || s === "hanya tv" || s === "tv only") || (hasTV && !hasPortabel && !s.includes("ps"));
 
           if (hasTV) rTV++;
           if (hasPortabel) rPortabel++;
 
-          if (hasPS3) rPS3++;
-          if (hasPS4) rPS4++;
-
-          if (hasGenericPS && !isOnlyTV) {
+          if (hasPS5) rPS5++;
+          else if (hasPS4) rPS4++;
+          else if (hasPS3) rPS3++;
+          else if (hasGenericPS && !isOnlyTV) {
             rPS3++;
           }
           let nominalBelumBayar = 0;
@@ -260,10 +265,12 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
       activeRentals: rentals,
       rentedPS3: rPS3,
       rentedPS4: rPS4,
+      rentedPS5: rPS5,
       rentedPortabel: rPortabel,
       rentedTV: rTV,
       readyPS3: Math.max(0, masterUnit.ps3 - rPS3),
       readyPS4: Math.max(0, masterUnit.ps4 - rPS4),
+      readyPS5: Math.max(0, masterUnit.ps5 - rPS5),
       readyPortabel: Math.max(0, masterUnit.portabel - rPortabel),
       readyTV: Math.max(0, masterUnit.tv - rTV)
     };
@@ -362,7 +369,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 dark:bg-purple-500/5 blur-3xl rounded-full translate-y-1/2 -translate-x-1/2 pointer-events-none" />
 
           <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 z-10 w-full">
-            <div className="lg:w-1/3 flex flex-col gap-4">
+            <div className="lg:w-5/12 flex flex-col gap-4">
               <div className="bg-zinc-50 dark:bg-[#1C1C1E] p-5 rounded-[24px] border border-zinc-200 dark:border-white/5 shadow-inner">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-bold tracking-widest uppercase text-zinc-900 dark:text-white flex items-center gap-2">
@@ -381,87 +388,106 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
                   )}
                 </div>
 
-                <div className="flex gap-2 sm:gap-4">
-                  <div className="flex flex-col gap-1.5 flex-1 w-1/4">
-                    <label className="text-[10px] sm:text-[11px] font-bold text-zinc-500 uppercase tracking-widest text-center truncate">PS3</label>
+                <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+                  <div className="flex flex-col gap-1.5 min-w-0">
+                    <label className="text-[9px] sm:text-[11px] font-bold text-zinc-500 uppercase tracking-wider text-center truncate">PS3</label>
                     {isEditingMaster && isOwner ? (
-                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={tempPs3} onChange={e => setTempPs3(e.target.value)} className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1.5 py-2 text-zinc-900 dark:text-white font-mono font-bold text-base sm:text-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={tempPs3} onChange={e => setTempPs3(e.target.value)} className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-bold text-sm sm:text-base text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     ) : (
-                      <div className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1.5 py-2 text-zinc-900 dark:text-white font-mono font-black text-base sm:text-lg shadow-sm flex items-center justify-center gap-1.5">
-                        <Gamepad2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500 shrink-0" /> {masterUnit.ps3}
+                      <div className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-black text-sm sm:text-base shadow-sm flex items-center justify-center gap-1">
+                        <Gamepad2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-500 shrink-0" /> {masterUnit.ps3}
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-col gap-1.5 flex-1 w-1/4">
-                    <label className="text-[10px] sm:text-[11px] font-bold text-zinc-500 uppercase tracking-widest text-center truncate">PS4</label>
+                  <div className="flex flex-col gap-1.5 min-w-0">
+                    <label className="text-[9px] sm:text-[11px] font-bold text-zinc-500 uppercase tracking-wider text-center truncate">PS4</label>
                     {isEditingMaster && isOwner ? (
-                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={tempPs4} onChange={e => setTempPs4(e.target.value)} className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1.5 py-2 text-zinc-900 dark:text-white font-mono font-bold text-base sm:text-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={tempPs4} onChange={e => setTempPs4(e.target.value)} className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-bold text-sm sm:text-base text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     ) : (
-                      <div className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1.5 py-2 text-zinc-900 dark:text-white font-mono font-black text-base sm:text-lg shadow-sm flex items-center justify-center gap-1.5">
-                        <Gamepad2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500 shrink-0" /> {masterUnit.ps4}
+                      <div className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-black text-sm sm:text-base shadow-sm flex items-center justify-center gap-1">
+                        <Gamepad2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-500 shrink-0" /> {masterUnit.ps4}
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-col gap-1.5 flex-1 w-1/4">
-                    <label className="text-[10px] sm:text-[11px] font-bold text-zinc-500 uppercase tracking-widest text-center truncate">PTB</label>
+                  <div className="flex flex-col gap-1.5 min-w-0">
+                    <label className="text-[9px] sm:text-[11px] font-bold text-zinc-500 uppercase tracking-wider text-center truncate">PS5</label>
                     {isEditingMaster && isOwner ? (
-                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={tempPortabel} onChange={e => setTempPortabel(e.target.value)} className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1.5 py-2 text-zinc-900 dark:text-white font-mono font-bold text-base sm:text-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={tempPs5} onChange={e => setTempPs5(e.target.value)} className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-bold text-sm sm:text-base text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     ) : (
-                      <div className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1.5 py-2 text-zinc-900 dark:text-white font-mono font-black text-base sm:text-lg shadow-sm flex items-center justify-center gap-1.5">
-                        <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500 shrink-0" /> {masterUnit.portabel}
+                      <div className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-black text-sm sm:text-base shadow-sm flex items-center justify-center gap-1">
+                        <Gamepad2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-purple-500 shrink-0" /> {masterUnit.ps5}
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-col gap-1.5 flex-1 w-1/4">
-                    <label className="text-[10px] sm:text-[11px] font-bold text-zinc-500 uppercase tracking-widest text-center truncate">TV</label>
+                  <div className="flex flex-col gap-1.5 min-w-0">
+                    <label className="text-[9px] sm:text-[11px] font-bold text-zinc-500 uppercase tracking-wider text-center truncate">PTB</label>
                     {isEditingMaster && isOwner ? (
-                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={tempTv} onChange={e => setTempTv(e.target.value)} className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1.5 py-2 text-zinc-900 dark:text-white font-mono font-bold text-base sm:text-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={tempPortabel} onChange={e => setTempPortabel(e.target.value)} className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-bold text-sm sm:text-base text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     ) : (
-                      <div className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1.5 py-2 text-zinc-900 dark:text-white font-mono font-black text-base sm:text-lg shadow-sm flex items-center justify-center gap-1.5">
-                        <Monitor className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500 shrink-0" /> {masterUnit.tv}
+                      <div className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-black text-sm sm:text-base shadow-sm flex items-center justify-center gap-1">
+                        <Smartphone className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 shrink-0" /> {masterUnit.portabel}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1.5 min-w-0">
+                    <label className="text-[9px] sm:text-[11px] font-bold text-zinc-500 uppercase tracking-wider text-center truncate">TV</label>
+                    {isEditingMaster && isOwner ? (
+                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={tempTv} onChange={e => setTempTv(e.target.value)} className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-bold text-sm sm:text-base text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    ) : (
+                      <div className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-black text-sm sm:text-base shadow-sm flex items-center justify-center gap-1">
+                        <Monitor className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-cyan-500 shrink-0" /> {masterUnit.tv}
                       </div>
                     )}
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 min-[400px]:grid-cols-4 gap-2 mt-1 w-full">
-                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 p-2 sm:p-3 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-widest text-emerald-600 dark:text-emerald-400 uppercase text-center leading-tight">PS3 Ready</span>
-                  <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">{readyPS3}</span>
+              <div className="grid grid-cols-2 min-[480px]:grid-cols-5 gap-2 mt-1 w-full">
+                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
+                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-emerald-600 dark:text-emerald-400 uppercase text-center leading-tight">PS3 Ready</span>
+                  <span className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400">{readyPS3}</span>
                 </div>
-                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 p-2 sm:p-3 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-widest text-emerald-600 dark:text-emerald-400 uppercase text-center leading-tight">PS4 Ready</span>
-                  <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">{readyPS4}</span>
+                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
+                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-emerald-600 dark:text-emerald-400 uppercase text-center leading-tight">PS4 Ready</span>
+                  <span className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400">{readyPS4}</span>
                 </div>
-                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 p-2 sm:p-3 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-widest text-emerald-600 dark:text-emerald-400 uppercase text-center leading-tight">PTB Ready</span>
-                  <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">{readyPortabel}</span>
+                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
+                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-emerald-600 dark:text-emerald-400 uppercase text-center leading-tight">PS5 Ready</span>
+                  <span className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400">{readyPS5}</span>
                 </div>
-                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 p-2 sm:p-3 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-widest text-emerald-600 dark:text-emerald-400 uppercase text-center leading-tight">TV Ready</span>
-                  <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">{readyTV}</span>
+                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
+                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-emerald-600 dark:text-emerald-400 uppercase text-center leading-tight">PTB Ready</span>
+                  <span className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400">{readyPortabel}</span>
                 </div>
-                <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-2 sm:p-3 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-widest text-red-600 dark:text-red-400 uppercase text-center leading-tight whitespace-nowrap">PS3 Jalan</span>
-                  <span className="text-xl sm:text-2xl font-black text-red-600 dark:text-red-400">{rentedPS3}</span>
+                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
+                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-emerald-600 dark:text-emerald-400 uppercase text-center leading-tight">TV Ready</span>
+                  <span className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400">{readyTV}</span>
                 </div>
-                <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-2 sm:p-3 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-widest text-red-600 dark:text-red-400 uppercase text-center leading-tight whitespace-nowrap">PS4 Jalan</span>
-                  <span className="text-xl sm:text-2xl font-black text-red-600 dark:text-red-400">{rentedPS4}</span>
+
+                <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
+                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-red-600 dark:text-red-400 uppercase text-center leading-tight whitespace-nowrap">PS3 Jalan</span>
+                  <span className="text-lg sm:text-xl font-black text-red-600 dark:text-red-400">{rentedPS3}</span>
                 </div>
-                <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-2 sm:p-3 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-widest text-red-600 dark:text-red-400 uppercase text-center leading-tight whitespace-nowrap">PTB Jalan</span>
-                  <span className="text-xl sm:text-2xl font-black text-red-600 dark:text-red-400">{rentedPortabel}</span>
+                <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
+                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-red-600 dark:text-red-400 uppercase text-center leading-tight whitespace-nowrap">PS4 Jalan</span>
+                  <span className="text-lg sm:text-xl font-black text-red-600 dark:text-red-400">{rentedPS4}</span>
                 </div>
-                <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-2 sm:p-3 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-widest text-red-600 dark:text-red-400 uppercase text-center leading-tight whitespace-nowrap">TV Jalan</span>
-                  <span className="text-xl sm:text-2xl font-black text-red-600 dark:text-red-400">{rentedTV}</span>
+                <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
+                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-red-600 dark:text-red-400 uppercase text-center leading-tight whitespace-nowrap">PS5 Jalan</span>
+                  <span className="text-lg sm:text-xl font-black text-red-600 dark:text-red-400">{rentedPS5}</span>
+                </div>
+                <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
+                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-red-600 dark:text-red-400 uppercase text-center leading-tight whitespace-nowrap">PTB Jalan</span>
+                  <span className="text-lg sm:text-xl font-black text-red-600 dark:text-red-400">{rentedPortabel}</span>
+                </div>
+                <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
+                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-red-600 dark:text-red-400 uppercase text-center leading-tight whitespace-nowrap">TV Jalan</span>
+                  <span className="text-lg sm:text-xl font-black text-red-600 dark:text-red-400">{rentedTV}</span>
                 </div>
               </div>
             </div>
 
-            <div className="lg:w-2/3 bg-zinc-50 dark:bg-[#1C1C1E] p-5 rounded-[24px] border border-zinc-200 dark:border-white/5 shadow-inner w-full">
+            <div className="lg:w-7/12 bg-zinc-50 dark:bg-[#1C1C1E] p-5 rounded-[24px] border border-zinc-200 dark:border-white/5 shadow-inner w-full">
               <div className="flex items-center justify-between mb-4 w-full">
                 <h3 className="text-sm font-bold tracking-widest uppercase text-zinc-900 dark:text-white flex items-center gap-2">
                   <Monitor className="w-4 h-4 text-purple-500" /> Status Unit
@@ -534,7 +560,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
                         )}
                       </div>
                     </div>
-                  )
+                  );
                 })}
 
                 {Array.from({ length: readyPS3 }).map((_, i) => (
@@ -547,6 +573,12 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
                   <div key={`ready4-${i}`} className="bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-[18px] p-3 shadow-sm flex flex-col justify-center items-center min-w-[140px] max-w-full opacity-80 hover:opacity-100 transition-opacity min-h-[110px]">
                     <ShieldCheck className="w-8 h-8 text-emerald-400 dark:text-emerald-500 mb-2" />
                     <h4 className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest text-center">PS4 READY</h4>
+                  </div>
+                ))}
+                {Array.from({ length: readyPS5 }).map((_, i) => (
+                  <div key={`ready5-${i}`} className="bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-[18px] p-3 shadow-sm flex flex-col justify-center items-center min-w-[140px] max-w-full opacity-80 hover:opacity-100 transition-opacity min-h-[110px]">
+                    <ShieldCheck className="w-8 h-8 text-emerald-400 dark:text-emerald-500 mb-2" />
+                    <h4 className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest text-center">PS5 READY</h4>
                   </div>
                 ))}
                 {Array.from({ length: readyPortabel }).map((_, i) => (

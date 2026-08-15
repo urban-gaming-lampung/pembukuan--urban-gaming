@@ -385,14 +385,14 @@ export default function App() {
                       rowsSewa={rowsSewa} 
                       activeDate={tanggal} 
                       onVerifyActiveRental={handleVerifyReturn} 
-                      isOwner={false} 
+                      isOwner={isSuperAdminOrOwner} 
                       hargaItems={hargaSewa}
                       isVerifyingPayment={!!paymentVerifyPrompt}
                     />
                   </div>
                 ) : (
                   <div className="animate-in fade-in duration-200">
-                    <WidgetMonitoringDevice isOwner={false} />
+                    <WidgetMonitoringDevice isOwner={isSuperAdminOrOwner} />
                   </div>
                 )}
               </div>

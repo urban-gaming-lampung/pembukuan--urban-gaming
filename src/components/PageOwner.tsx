@@ -695,12 +695,12 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     return data.sort((a, b) => a.jumlah - b.jumlah).slice(0, 15);
   }, [stokState]);
 
-  const [masterUnit, setMasterUnit] = useState({ ps3: 0, ps4: 0, tv: 0, portabel: 0 });
+  const [masterUnit, setMasterUnit] = useState({ ps3: 0, ps4: 0, ps5: 0, tv: 0, portabel: 0 });
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "data", "master_unit"), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
-        setMasterUnit({ ps3: data.ps3 || 0, ps4: data.ps4 || 0, tv: data.tv || 0, portabel: data.portabel || 0 });
+        setMasterUnit({ ps3: data.ps3 || 0, ps4: data.ps4 || 0, ps5: data.ps5 || 0, tv: data.tv || 0, portabel: data.portabel || 0 });
       }
     });
     return () => unsub();
@@ -766,11 +766,12 @@ const PageOwner: React.FC<PageOwnerProps> = ({
              
              if (r.lamaSewa === "PELUNASAN" || price <= 0) return;
 
-             let isPS3 = type.includes("PS3") || type.includes("PS 3") || (type.includes("PS") && !type.includes("PS4") && !type.includes("PS 4") && !type.includes("PS5"));
-             let isPS4 = type.includes("PS4") || type.includes("PS 4") || type.includes("PRO") || type.includes("FAT") || type.includes("SLIM") || type.includes("PS5");
+             let isPS5 = type.includes("PS5") || type.includes("PS 5");
+             let isPS4 = !isPS5 && (type.includes("PS4") || type.includes("PS 4") || type.includes("PRO") || type.includes("FAT") || type.includes("SLIM"));
+             let isPS3 = !isPS5 && (type.includes("PS3") || type.includes("PS 3") || (type.includes("PS") && !isPS4));
              
-             if (isPS3 || isPS4) {
-                 const rate = isPS4 ? 7000 : 5000;
+             if (isPS3 || isPS4 || isPS5) {
+                 const rate = isPS5 ? 10000 : (isPS4 ? 7000 : 5000);
                  const calcHours = price / rate;
                  totalUsedHours += calcHours;
              }
@@ -784,7 +785,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
         }
     });
 
-    const totalMachines = (masterUnit.ps3 || 0) + (masterUnit.ps4 || 0);
+    const totalMachines = (masterUnit.ps3 || 0) + (masterUnit.ps4 || 0) + (masterUnit.ps5 || 0);
     const safeMachines = totalMachines > 0 ? totalMachines : 10;
     const daysCount = uniqueDays.size > 0 ? uniqueDays.size : 1;
     const maxCapacityHours = safeMachines * 14 * daysCount;
@@ -1381,7 +1382,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                   <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 text-center leading-relaxed relative z-10">
                     {filterMode === "Hari Ini" ? "Hari ini" : filterMode === "Bulan Ini" ? "Bulan ini" : filterMode === "7 Hari Terakhir" ? "7 hari terakhir" : filterMode === "Kustom" ? "Periode kustom ini" : "Bulan ini"} dirental <strong className="text-blue-500">{occupancyData.totalUsedHours}</strong> jam dari kapasitas puncak <strong className="text-zinc-900 dark:text-white">{occupancyData.maxCapacityHours}</strong> jam.
                     <br/>
-                    <span className="text-[9px] text-zinc-400">(Estimasi berdasar {occupancyData.totalMachines} unit (PS3 & PS4) x 14 jam {(filterMode === "Hari Ini" || filterMode === "Semua Hari") ? "" : "x Hari Aktif"})</span>
+                    <span className="text-[9px] text-zinc-400">(Estimasi berdasar {occupancyData.totalMachines} unit (PS3, PS4 & PS5) x 14 jam {(filterMode === "Hari Ini" || filterMode === "Semua Hari") ? "" : "x Hari Aktif"})</span>
                   </p>
                </div>
 

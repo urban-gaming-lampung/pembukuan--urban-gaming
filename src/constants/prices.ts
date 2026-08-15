@@ -6,6 +6,7 @@ export type Price = { label: string; price: number };
 export const DEFAULT_HARGA_HARIAN: Price[] = [
   { label: "PS3 per jam", price: 5000 },
   { label: "PS4 per jam", price: 7000 },
+  { label: "PS5 per jam", price: 10000 },
 ];
 
 export const DEFAULT_HARGA_JAJANAN: Price[] = [
@@ -35,33 +36,45 @@ export const DEFAULT_HARGA_JASA_AKS: Price[] = [
 export const DEFAULT_HARGA_SEWA: Price[] = [
   { label: "PS3 12 Jam", price: 40000 },
   { label: "PS4 12 Jam", price: 80000 },
+  { label: "PS5 12 Jam", price: 120000 },
   { label: "PS3+TV 12 Jam", price: 60000 },
   { label: "PS4+TV 12 Jam", price: 100000 },
+  { label: "PS5+TV 12 Jam", price: 150000 },
   { label: "PS3 Portable 12 Jam", price: 60000 },
   { label: "PS4 Portable 12 Jam", price: 100000 },
+  { label: "PS5 Portable 12 Jam", price: 150000 },
   { label: "Hanya TV 12 Jam", price: 30000 },
 
   { label: "PS3 1 Hari", price: 70000 },
   { label: "PS4 1 Hari", price: 140000 },
+  { label: "PS5 1 Hari", price: 200000 },
   { label: "PS3+TV 1 Hari", price: 100000 },
   { label: "PS4+TV 1 Hari", price: 170000 },
+  { label: "PS5+TV 1 Hari", price: 240000 },
   { label: "PS3 Portable 1 Hari", price: 100000 },
   { label: "PS4 Portable 1 Hari", price: 170000 },
+  { label: "PS5 Portable 1 Hari", price: 240000 },
   { label: "Hanya TV 1 Hari", price: 50000 },
 
   { label: "PS3 2 Hari", price: 140000 },
   { label: "PS4 2 Hari", price: 280000 },
+  { label: "PS5 2 Hari", price: 400000 },
   { label: "PS3+TV 2 Hari", price: 200000 },
   { label: "PS4+TV 2 Hari", price: 340000 },
+  { label: "PS5+TV 2 Hari", price: 480000 },
   { label: "PS3 Portable 2 Hari", price: 200000 },
   { label: "PS4 Portable 2 Hari", price: 340000 },
+  { label: "PS5 Portable 2 Hari", price: 480000 },
   { label: "Hanya TV 2 Hari", price: 100000 },
 
   { label: "PS3 3 Hari", price: 210000 },
   { label: "PS4 3 Hari", price: 420000 },
+  { label: "PS5 3 Hari", price: 600000 },
   { label: "PS3+TV 3 Hari", price: 300000 },
   { label: "PS4+TV 3 Hari", price: 510000 },
+  { label: "PS5+TV 3 Hari", price: 720000 },
   { label: "PS3 Portable 3 Hari", price: 300000 },
   { label: "PS4 Portable 3 Hari", price: 510000 },
+  { label: "PS5 Portable 3 Hari", price: 720000 },
   { label: "Hanya TV 3 Hari", price: 150000 },
 ];
