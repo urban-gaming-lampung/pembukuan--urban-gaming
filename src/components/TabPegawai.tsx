@@ -8,6 +8,7 @@ import {
 } from "recharts";
 import { Users, Activity, Banknote, Save, Plus, ChevronDown, ChevronUp, Trash2, X, Camera, UserPlus, Shield, UserCheck, AlertTriangle, CalendarDays, CalendarRange } from "lucide-react";
 import Section from "./common/Section";
+import UserAvatar from "./common/UserAvatar";
 
 // === KONSTANTA ABSENSI ===
 
@@ -42,13 +43,18 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   }, []);
 
   const [absenConfig, setAbsenConfig] = useState<any>({ dendaTidakAbsenPulang: 40000 });
-  const [ongkirConfig, setOngkirConfig] = useState<any>({ pegawaiPersen: 70, masukGaji: true });
+  const [ongkirConfig, setOngkirConfig] = useState<any>({ pegawaiPersen: 70, masukGaji: false });
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "data", "settings"), (docSnap) => {
       if (docSnap.exists()) {
         const d = docSnap.data();
         if (d.absenConfig) setAbsenConfig(d.absenConfig);
-        if (d.ongkirConfig) setOngkirConfig(d.ongkirConfig);
+        if (d.ongkirConfig) {
+          setOngkirConfig({
+            pegawaiPersen: typeof d.ongkirConfig.pegawaiPersen === "number" ? d.ongkirConfig.pegawaiPersen : 70,
+            masukGaji: Boolean(d.ongkirConfig.masukGaji)
+          });
+        }
       }
     });
     return () => unsub();
@@ -394,15 +400,17 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
     // Inisialisasi dari profil
     usersProfile.forEach(u => {
       if (!isSuperAdminOrOwnerEmail(u.id)) {
-         mergedMap.set(u.id, { email: u.id, photoUrl: u.photoUrl, profileColor: u.profileColor, loginsCount: 0, records: [] });
+         const k = u.id.toLowerCase().trim();
+         mergedMap.set(k, { email: u.id, photoUrl: u.photoUrl || null, profileColor: u.profileColor || "#3b82f6", loginsCount: 0, records: [] });
       }
     });
 
     logs.forEach(l => {
       if (!isSuperAdminOrOwnerEmail(l.id)) {
-        const p = mergedMap.get(l.id) || { email: l.id, photoUrl: null, loginsCount: 0, records: [] };
+        const k = l.id.toLowerCase().trim();
+        const p = mergedMap.get(k) || { email: l.id, photoUrl: null, profileColor: "#3b82f6", loginsCount: 0, records: [] };
         p.loginsCount = Array.isArray(l.logins) ? l.logins.length : 0;
-        mergedMap.set(l.id, p);
+        mergedMap.set(k, p);
       }
     });
 
@@ -433,7 +441,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                        ongkirMap.set(key, (ongkirMap.get(key) || 0) + pegawaiNominal);
                        
                        // Jika toggle aktif, tambahkan ke yang wajib dibayar
-                       const isMasukGaji = ongkirConfig ? ongkirConfig.masukGaji : r._ongkirMasukGaji;
+                        const isMasukGaji = typeof ongkirConfig?.masukGaji === "boolean" ? ongkirConfig.masukGaji : Boolean(r._ongkirMasukGaji);
                        if (isMasukGaji) {
                            ongkirMasukGajiMap.set(key, (ongkirMasukGajiMap.get(key) || 0) + pegawaiNominal);
                        }
@@ -461,7 +469,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                            
                            ongkirMap.set(key, (ongkirMap.get(key) || 0) + pegawaiNominal);
                            
-                           const isMasukGaji = ongkirConfig ? ongkirConfig.masukGaji : r._ongkirMasukGaji;
+                           const isMasukGaji = typeof ongkirConfig?.masukGaji === "boolean" ? ongkirConfig.masukGaji : Boolean(r._ongkirMasukGaji);
                            if (isMasukGaji) {
                                ongkirMasukGajiMap.set(key, (ongkirMasukGajiMap.get(key) || 0) + pegawaiNominal);
                            }
@@ -523,16 +531,34 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
           });
       }
 
-      if (mergedMap.has(g.id)) {
-        mergedMap.get(g.id).records = records;
-        mergedMap.get(g.id).gajiPokok = Number(g.gajiPokok) || 0;
+      const k = g.id.toLowerCase().trim();
+      if (mergedMap.has(k)) {
+        mergedMap.get(k).records = records;
+        mergedMap.get(k).gajiPokok = Number(g.gajiPokok) || 0;
       } else if (!isSuperAdminOrOwnerEmail(g.id)) {
-        mergedMap.set(g.id, { email: g.id, photoUrl: null, loginsCount: 0, records, gajiPokok: Number(g.gajiPokok) || 0 });
+        const up = usersProfile.find(u => u.id?.toLowerCase().trim() === k);
+        mergedMap.set(k, { email: g.id, photoUrl: up?.photoUrl || null, profileColor: up?.profileColor || "#3b82f6", loginsCount: 0, records, gajiPokok: Number(g.gajiPokok) || 0 });
       }
     });
     // Attach ongkir yang belum tercover di records, dan rekap total
     Array.from(mergedMap.values()).forEach((p: any) => {
+        const up = usersProfile.find(u => u.id?.toLowerCase().trim() === p.email?.toLowerCase().trim());
+        if (up) {
+            p.photoUrl = up.photoUrl || p.photoUrl || null;
+            p.profileColor = up.profileColor || p.profileColor || "#3b82f6";
+        }
         if (!p.records) p.records = [];
+
+        // Resolusi Gaji Pokok Dasar Pegawai yang cerdas dan konsisten
+        let resolvedBasePokok = 0;
+        for (const r of p.records) {
+            const v = Number(r.gajiPokok) || 0;
+            if (v > 0) { resolvedBasePokok = v; break; }
+        }
+        if (resolvedBasePokok === 0) {
+            resolvedBasePokok = Number(p.gajiPokok) || 1500000;
+        }
+        p.gajiPokok = resolvedBasePokok;
         
         let totalOngkir = 0;
         
@@ -542,6 +568,10 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
            rec.ongkirBulanIni = ongkirMap.get(k) || 0;
            rec.ongkirMasukGajiBulanIni = ongkirMasukGajiMap.get(k) || 0;
            rec.dendaAbsen = penaltyMap.get(k) || 0;
+           // Jika record auto-generated sebelumnya sempat tersimpan 0, perbaiki ke gaji pokok pegawai
+           if ((Number(rec.gajiPokok) || 0) === 0 && rec.isAutoGenerated) {
+               rec.gajiPokok = resolvedBasePokok;
+           }
            totalOngkir += rec.ongkirBulanIni;
            ongkirMap.delete(k); // remove processed keys
            ongkirMasukGajiMap.delete(k);
@@ -558,7 +588,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                p.records.push({
                    id: `auto-ongkir-${bTahun}`,
                    bulanTahun: bTahun,
-                   gajiPokok: 0,
+                   gajiPokok: resolvedBasePokok,
                    gajiTambahan: [],
                    gajiPengurangan: [],
                    buktiTransfer: "",
@@ -604,7 +634,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
       pegawaiData.forEach((p: any) => {
          p.records?.forEach((r: any) => {
              if (!map.has(r.bulanTahun)) map.set(r.bulanTahun, []);
-             map.get(r.bulanTahun)!.push({ email: p.email, photoUrl: p.photoUrl, ...r });
+             map.get(r.bulanTahun)!.push({ email: p.email, photoUrl: p.photoUrl, profileColor: p.profileColor, ...r });
          });
       });
       return Array.from(map.entries()).sort((a,b) => {
@@ -690,9 +720,25 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
       const existingGajiDoc = gaji.find(g => g.id === p.email);
       const existingRecords: any[] = existingGajiDoc?.records || [];
 
-      // Only add stubs for months that have NO existing record at all
+      // Determine robust base salary
+      let basePokok = Number(p.gajiPokok) || 0;
+      if (basePokok === 0) {
+        for (const r of existingRecords) {
+          const v = Number(r.gajiPokok) || 0;
+          if (v > 0) { basePokok = v; break; }
+        }
+      }
+      if (basePokok === 0) basePokok = Number(existingGajiDoc?.gajiPokok) || 1500000;
+
+      // Only add stubs for months that have NO existing record at all, and repair 0 gajiPokok
       let needsUpdate = false;
-      const updatedRecords = [...existingRecords];
+      const updatedRecords = existingRecords.map((r: any) => {
+        if ((Number(r.gajiPokok) || 0) === 0 && r.isAutoGenerated) {
+          needsUpdate = true;
+          return { ...r, gajiPokok: basePokok };
+        }
+        return r;
+      });
 
       autoRecords.forEach((autoRec: any) => {
         const alreadyExists = updatedRecords.some((r: any) => r.bulanTahun === autoRec.bulanTahun);
@@ -700,7 +746,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
           updatedRecords.push({
             id: autoRec.id,
             bulanTahun: autoRec.bulanTahun,
-            gajiPokok: Number(existingGajiDoc?.gajiPokok) || 0,
+            gajiPokok: basePokok,
             gajiTambahan: [],
             gajiPengurangan: [],
             buktiTransfer: "",
@@ -715,6 +761,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         autoPersistedRef.current.add(persistKey);
         await setDoc(doc(db, "gaji_pegawai", p.email), {
           records: updatedRecords,
+          gajiPokok: basePokok,
           updatedAt: Date.now()
         }, { merge: true });
       }
@@ -777,13 +824,23 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         };
 
         let records: any[] = [];
+        let basePokok = 0;
         if (docSnap.exists()) {
-          records = Array.isArray(docSnap.data().records) ? docSnap.data().records : [];
+          const dData = docSnap.data();
+          records = Array.isArray(dData.records) ? dData.records : [];
           // Check if this penalty was already injected before
           const alreadyInjected = records.some((r: any) => 
             r.gajiPengurangan?.some((pg: any) => pg._idempKey === idempKey)
           );
           if (alreadyInjected) return;
+
+          for (const r of records) {
+            const v = Number(r.gajiPokok) || 0;
+            if (v > 0) { basePokok = v; break; }
+          }
+          if (basePokok === 0) basePokok = Number(dData.gajiPokok) || 1500000;
+        } else {
+          basePokok = 1500000;
         }
 
         const monthIndex = records.findIndex((r: any) => r.bulanTahun === currentBulanTahun);
@@ -794,14 +851,14 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
           records.push({
             id: `rec-auto-${Date.now()}`,
             bulanTahun: currentBulanTahun,
-            gajiPokok: Number(docSnap.data()?.gajiPokok) || 0,
+            gajiPokok: basePokok,
             gajiTambahan: [],
             gajiPengurangan: [dendaItem],
             isAutoGenerated: true
           });
         }
 
-        await setDoc(docRef, { records, updatedAt: Date.now() }, { merge: true });
+        await setDoc(docRef, { records, gajiPokok: basePokok, updatedAt: Date.now() }, { merge: true });
         console.log(`[Auto-Penalty] Tidak absen pulang: ${entry.email} tanggal ${entry.tanggal}`);
       } catch (e) {
         console.error("Auto penalty pulang error:", e);
@@ -811,11 +868,69 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   }, [logAbsensi, isLogAbsensiLoaded, isGajiLoaded]);
 
   const handleSaveGaji = async (email: string, records: any[]) => {
-      await setDoc(doc(db, "gaji_pegawai", email), {
-          records: records,
+      try {
+        const docRef = doc(db, "gaji_pegawai", email);
+        const docSnap = await getDoc(docRef);
+        
+        let mergedRecords = [...records];
+        let latestGajiPokok = 0;
+
+        // Find latest non-zero gajiPokok in the records being saved
+        for (const r of records) {
+          const v = Number(r.gajiPokok) || 0;
+          if (v > 0) { latestGajiPokok = v; break; }
+        }
+
+        if (docSnap.exists()) {
+          const dbRecords = Array.isArray(docSnap.data().records) ? docSnap.data().records : [];
+          
+          if (latestGajiPokok === 0) {
+            latestGajiPokok = Number(docSnap.data().gajiPokok) || 1500000;
+          }
+
+          // Smart merge: ensure auto-deductions from db are preserved if not explicitly deleted
+          mergedRecords = mergedRecords.map(localRec => {
+            const dbRec = dbRecords.find((dr: any) => dr.bulanTahun === localRec.bulanTahun);
+            if (!dbRec) return localRec;
+
+            const localPg = Array.isArray(localRec.gajiPengurangan) ? localRec.gajiPengurangan : [];
+            const dbPg = Array.isArray(dbRec.gajiPengurangan) ? dbRec.gajiPengurangan : [];
+
+            // Find auto-system items in DB that might have been added in real-time
+            const localIds = new Set(localPg.map((p: any) => p.id || p._idempKey));
+            const missingAutoItems = dbPg.filter((p: any) => p._isAutoSistem && p._idempKey && !localIds.has(p._idempKey) && !localIds.has(p.id));
+
+            // Merge any missing auto items that were added after local snapshot
+            const combinedPg = [...localPg, ...missingAutoItems];
+
+            return {
+              ...localRec,
+              gajiPokok: Number(localRec.gajiPokok) || latestGajiPokok,
+              gajiPengurangan: combinedPg
+            };
+          });
+        }
+
+        // Sanitize numbers
+        const sanitizedRecords = mergedRecords.map(r => ({
+          ...r,
+          gajiPokok: Number(r.gajiPokok) || latestGajiPokok,
+          gajiTambahan: (r.gajiTambahan || []).map((t: any) => ({ ...t, nominal: Number(t.nominal) || 0 })),
+          gajiPengurangan: (r.gajiPengurangan || []).map((p: any) => ({ ...p, nominal: Number(p.nominal) || 0 })),
           updatedAt: Date.now()
-      }, { merge: true });
-      alert(`Gaji ${email.split("@")[0]} berhasil disimpan!`);
+        }));
+
+        await setDoc(docRef, {
+          records: sanitizedRecords,
+          gajiPokok: latestGajiPokok,
+          updatedAt: Date.now()
+        }, { merge: true });
+
+        alert(`Gaji ${email.split("@")[0]} berhasil disimpan!`);
+      } catch (err) {
+        console.error("Gagal menyimpan gaji pegawai:", err);
+        alert("Gagal menyimpan gaji. Silakan coba lagi.");
+      }
   };
 
   return (
@@ -892,16 +1007,14 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                   return (
                     <div key={u.id} className="flex items-center justify-between p-3.5 bg-zinc-50 dark:bg-black/30 border border-zinc-100 dark:border-white/5 rounded-xl shadow-sm hover:scale-[1.01] transition-transform">
                       <div className="flex items-center gap-3 min-w-0">
-                        {u.photoUrl ? (
-                          <img src={u.photoUrl} alt={u.id} className="w-9 h-9 rounded-full object-cover border border-zinc-200 dark:border-zinc-700" />
-                        ) : (
-                          <div 
-                            className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs text-white"
-                            style={{ backgroundColor: u.profileColor || "#3b82f6" }}
-                          >
-                            {initialName}
-                          </div>
-                        )}
+                        <UserAvatar
+                          photoUrl={u.photoUrl}
+                          email={u.id}
+                          profileColor={u.profileColor}
+                          size="md"
+                          showStatusBadge={true}
+                          statusBadgeActive={u.status !== "nonaktif"}
+                        />
                         <div className="min-w-0 flex flex-col">
                           <span className={`font-bold text-sm truncate ${u.status === "nonaktif" ? "text-zinc-400 dark:text-zinc-500 line-through decoration-red-500/80 decoration-2" : "text-zinc-800 dark:text-zinc-200"}`}>
                             {u.id}
@@ -1377,14 +1490,14 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                       {ongkirReport.map((item) => (
                          <div key={item.email} className="flex items-center justify-between px-6 py-4 hover:bg-zinc-50 dark:hover:bg-zinc-900/30 transition-colors">
                             <div className="flex items-center gap-3">
-                               <div className="w-10 h-10 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-800 shrink-0 border border-zinc-200/50 dark:border-white/5 flex items-center justify-center">
-                                  {item.photoUrl ? (
-                                     <img src={item.photoUrl} alt={item.email} className="w-full h-full object-cover" />
-                                  ) : (
-                                     <span className="text-zinc-600 dark:text-zinc-300 font-black text-sm uppercase">{item.name.charAt(0)}</span>
-                                  )}
-                               </div>
-                               <div className="flex flex-col">
+                                <UserAvatar
+                                  photoUrl={item.photoUrl}
+                                  email={item.email}
+                                  name={item.name}
+                                  profileColor={item.profileColor}
+                                  size="lg"
+                                />
+                                <div className="flex flex-col">
                                   <span className="text-sm font-black text-zinc-900 dark:text-zinc-100 capitalize">{item.name}</span>
                                   <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">{item.email}</span>
                                </div>
@@ -1448,12 +1561,24 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false }: any) => {
         const mm = String(d.getMonth() + 1).padStart(2, '0');
         const yy = String(d.getFullYear()).slice(-2);
         const newId = `rec-${Date.now()}`;
+
+        let defaultPokok = Number(pegawai.gajiPokok) || 0;
+        if (defaultPokok === 0 && records.length > 0) {
+            for (const r of records) {
+                const v = Number(r.gajiPokok) || 0;
+                if (v > 0) { defaultPokok = v; break; }
+            }
+        }
+        if (defaultPokok === 0) defaultPokok = 1500000;
+
         const newRecord = {
              id: newId,
              bulanTahun: `${mm}/${yy}`,
-             gajiPokok: Number(pegawai.gajiPokok) || 0,
+             gajiPokok: defaultPokok,
              bonus: 0,
              potongan: 0,
+             gajiTambahan: [],
+             gajiPengurangan: [],
              ketPemasukan: "",
              ketPengeluaran: "",
              buktiTransfer: ""
@@ -1493,13 +1618,12 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false }: any) => {
             {/* Header User */}
             <div className="flex items-center justify-between pb-3">
                 <div className="flex items-center gap-3 w-full">
-                    <div className="w-12 h-12 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-800 shrink-0">
-                        {pegawai.photoUrl ? (
-                             <img src={pegawai.photoUrl} alt={pegawai.email} className="w-full h-full object-cover" />
-                        ) : (
-                             <div className="w-full h-full flex items-center justify-center text-zinc-500 font-bold text-lg">{pegawai.email.charAt(0).toUpperCase()}</div>
-                        )}
-                    </div>
+                    <UserAvatar
+                      photoUrl={pegawai.photoUrl}
+                      email={pegawai.email}
+                      profileColor={pegawai.profileColor}
+                      size="xl"
+                    />
                     <div className="flex-1 min-w-0">
                        <h3 className="text-sm font-bold text-zinc-900 dark:text-white truncate">{pegawai.email.split("@")[0].toUpperCase()}</h3>
                        <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">{pegawai.email}</p>
@@ -1782,19 +1906,18 @@ const RangkumanBulanItem = ({ bulan, records }: { bulan: string, records: any[] 
                              { name: 'Gaji Tambahan', value: tambahan },
                              { name: 'Total Ongkir', value: ongkirDisplay },
                            ];
-                           const chartDataPie = pieData.reduce((acc, curr) => acc + curr.value, 0) > 0 ? pieData : [{ name: 'Belum Ada', value: 1 }];
+                                   const chartDataPie = pieData.reduce((acc, curr) => acc + curr.value, 0) > 0 ? pieData : [{ name: 'Belum Ada', value: 1 }];
                            const PIE_COLORS = ['#3b82f6', '#10b981', '#8b5cf6'];
 
                            return (
                               <div key={i} className="bg-zinc-50 dark:bg-[#202022] p-5 rounded-[20px] border border-zinc-200/50 dark:border-white/5 flex flex-col items-center relative overflow-hidden group">
                                   <div className="flex items-center gap-4 w-full mb-6">
-                                     <div className="w-12 h-12 rounded-full overflow-hidden bg-zinc-200 dark:bg-zinc-800 shrink-0 border-2 border-zinc-200 dark:border-zinc-800">
-                                         {r.photoUrl ? (
-                                            <img src={r.photoUrl} alt={r.email} className="w-full h-full object-cover" />
-                                         ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-zinc-500 font-bold text-lg">{r.email.charAt(0).toUpperCase()}</div>
-                                         )}
-                                      </div>
+                                      <UserAvatar
+                                        photoUrl={r.photoUrl}
+                                        email={r.email}
+                                        profileColor={r.profileColor}
+                                        size="xl"
+                                      />
                                      <div className="flex flex-col flex-1 min-w-0">
                                         <span className="text-base font-bold text-zinc-900 dark:text-zinc-100 truncate capitalize">{r.email.split("@")[0]}</span>
                                         <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 truncate">{r.email}</span>

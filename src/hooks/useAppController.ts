@@ -718,7 +718,7 @@ export default function useAppController() {
   const [hargaJasaAks, setHargaJasaAks] = useState<Price[]>(DEFAULT_HARGA_JASA_AKS as Price[]);
   const [hargaSewa, setHargaSewa] = useState<Price[]>(DEFAULT_HARGA_SEWA as Price[]);
   
-  const [ongkirConfig, setOngkirConfig] = useState({ pegawaiPersen: 70, masukGaji: true });
+  const [ongkirConfig, setOngkirConfig] = useState({ pegawaiPersen: 70, masukGaji: false });
   const [absenConfig, setAbsenConfig] = useState({ durasiWaktuPotongan: 15, waktuToleransi: 15, nominalDenda: 1500, dendaTidakAbsenPulang: 40000 });
 
   const [openEditRincian, setOpenEditRincian] = useState<PriceListKey | null>(null);
@@ -1510,6 +1510,7 @@ export default function useAppController() {
              const yy = String(d.getFullYear()).slice(-2);
              const currentBulanTahun = `${mm}/${yy}`;
 
+             let basePokok = 0;
              if (docSnap.exists()) {
                  const data = docSnap.data();
                  let records = Array.isArray(data.records) ? data.records : [];
@@ -1519,21 +1520,26 @@ export default function useAppController() {
                  );
                  
                  if (!alreadyInjected) {
+                      for (const r of records) {
+                          const v = Number(r.gajiPokok) || 0;
+                          if (v > 0) { basePokok = v; break; }
+                      }
+                      if (basePokok === 0) basePokok = Number(data.gajiPokok) || 1500000;
+
                       const monthIndex = records.findIndex((r: any) => r.bulanTahun === currentBulanTahun);
                       if (monthIndex >= 0) {
                           const currentMonth = records[monthIndex];
                           const gajiPengurangan = Array.isArray(currentMonth.gajiPengurangan) ? currentMonth.gajiPengurangan : [];
                           records[monthIndex] = { ...currentMonth, gajiPengurangan: [...gajiPengurangan, newDenda] };
                       } else {
-                          const basePokok = Number(data.gajiPokok) || 0;
                           records = [{ id: `rec-${Date.now()}`, bulanTahun: currentBulanTahun, gajiPokok: basePokok, gajiTambahan: [], gajiPengurangan: [newDenda] }, ...records];
                       }
-                      await setDoc(docRef, { records, lastUpdated: new Date().toISOString() }, { merge: true });
+                      await setDoc(docRef, { records, gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
                  }
              } else {
-                 const basePokok = Number(docSnap.data()?.gajiPokok) || 0;
+                 basePokok = 1500000;
                  const newMonth = { id: `rec-${Date.now()}`, bulanTahun: currentBulanTahun, gajiPokok: basePokok, gajiTambahan: [], gajiPengurangan: [newDenda] };
-                 await setDoc(docRef, { records: [newMonth], lastUpdated: new Date().toISOString() }, { merge: true });
+                 await setDoc(docRef, { records: [newMonth], gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
              }
           } catch (err) {
               console.error("Gagal menerapkan denda bolos/lupa absen:", err);
@@ -1751,7 +1757,10 @@ export default function useAppController() {
            if (Array.isArray(pl.hargaSewa)) setHargaSewa(pl.hargaSewa);
         }
         if (data.ongkirConfig) {
-           setOngkirConfig(data.ongkirConfig);
+           setOngkirConfig({
+             pegawaiPersen: typeof data.ongkirConfig.pegawaiPersen === "number" ? data.ongkirConfig.pegawaiPersen : 70,
+             masukGaji: Boolean(data.ongkirConfig.masukGaji)
+           });
         }
         if (data.absenConfig) {
            setAbsenConfig(data.absenConfig);
@@ -1761,7 +1770,7 @@ export default function useAppController() {
             settings: { 
                 priceLists: { hargaHarian: DEFAULT_HARGA_HARIAN, hargaJajanan: DEFAULT_HARGA_JAJANAN, hargaJasaAks: DEFAULT_HARGA_JASA_AKS, hargaSewa: DEFAULT_HARGA_SEWA }
             },
-            ongkirConfig: { pegawaiPersen: 70, masukGaji: true },
+            ongkirConfig: { pegawaiPersen: 70, masukGaji: false },
             absenConfig: { durasiWaktuPotongan: 15, waktuToleransi: 15, nominalDenda: 1500, dendaTidakAbsenPulang: 40000 }
         }, { merge: true });
         try {
@@ -1961,14 +1970,24 @@ export default function useAppController() {
   }, [dark, setThemeMode, user]);
 
   const handleUpdateOngkirConfig = useCallback((cfg: any) => {
-    setOngkirConfig(cfg);
-    setDoc(doc(db, "data", "settings"), { ongkirConfig: cfg }, { merge: true }).catch(console.error);
-  }, [setOngkirConfig]);
+    const sanitizedCfg = {
+      pegawaiPersen: typeof cfg?.pegawaiPersen === "number" ? cfg.pegawaiPersen : 70,
+      masukGaji: Boolean(cfg?.masukGaji)
+    };
+    setOngkirConfig(sanitizedCfg);
+    setDoc(doc(db, "data", "settings"), { ongkirConfig: sanitizedCfg }, { merge: true }).catch(console.error);
+  }, []);
 
   const handleUpdateAbsenConfig = useCallback((cfg: any) => {
-    setAbsenConfig(cfg);
-    setDoc(doc(db, "data", "settings"), { absenConfig: cfg }, { merge: true }).catch(console.error);
-  }, [setAbsenConfig]);
+    const sanitizedCfg = {
+      nominalDenda: typeof cfg?.nominalDenda === "number" ? cfg.nominalDenda : 1500,
+      waktuToleransi: typeof cfg?.waktuToleransi === "number" ? cfg.waktuToleransi : 15,
+      durasiWaktuPotongan: typeof cfg?.durasiWaktuPotongan === "number" ? cfg.durasiWaktuPotongan : 15,
+      dendaTidakAbsenPulang: typeof cfg?.dendaTidakAbsenPulang === "number" ? cfg.dendaTidakAbsenPulang : 40000
+    };
+    setAbsenConfig(sanitizedCfg);
+    setDoc(doc(db, "data", "settings"), { absenConfig: sanitizedCfg }, { merge: true }).catch(console.error);
+  }, []);
 
   const handleUpdateThemeMode = useCallback((mode: string) => {
     setThemeMode(mode as any);

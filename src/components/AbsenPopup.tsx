@@ -50,6 +50,7 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
   const [isLocationMatched, setIsLocationMatched] = useState<boolean>(false);
   const [locationError, setLocationError] = useState("");
   const [fotoBase64, setFotoBase64] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -71,6 +72,7 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
       setIsLocationMatched(false);
       setLocationError("");
       setFotoBase64(null);
+      setSubmitting(false);
     }
   }, [isOpen]);
 
@@ -245,15 +247,20 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
     }
   };
 
-  const handleSubmit = () => {
-    if (!isLocationMatched || !fotoBase64 || !userCoord) return;
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2, '0');
-    const mm = String(now.getMinutes()).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    const mo = String(now.getMonth() + 1).padStart(2, '0');
-    const yyyy = now.getFullYear();
-    onSubmit(`${hh}:${mm} - ${dd}/${mo}/${yyyy}`, fotoBase64, userCoord);
+  const handleSubmit = async () => {
+    if (submitting || !isLocationMatched || !fotoBase64 || !userCoord) return;
+    setSubmitting(true);
+    try {
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const mo = String(now.getMonth() + 1).padStart(2, '0');
+      const yyyy = now.getFullYear();
+      await onSubmit(`${hh}:${mm} - ${dd}/${mo}/${yyyy}`, fotoBase64, userCoord);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -362,13 +369,13 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
         <div className="p-5 border-t border-gray-200/50 dark:border-white/10 bg-zinc-50/80 dark:bg-[#1C1C1E]/80 backdrop-blur-xl">
            <button 
              onClick={handleSubmit}
-             disabled={!isLocationMatched || !fotoBase64}
-             className={`w-full py-3.5 text-[16px] font-semibold rounded-[14px] transition-all
-               ${(isLocationMatched && fotoBase64) 
+             disabled={submitting || !isLocationMatched || !fotoBase64}
+             className={`w-full py-3.5 text-[16px] font-semibold rounded-[14px] transition-all flex items-center justify-center gap-2
+               ${(!submitting && isLocationMatched && fotoBase64) 
                  ? "bg-blue-500 text-white hover:bg-blue-600 shadow-md shadow-blue-500/20 active:scale-[0.98]" 
                  : "bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500 cursor-not-allowed"}`}
            >
-             Submit
+             {submitting ? "Memproses Absensi..." : `Kirim Absen ${jenisAbsen || ''}`}
            </button>
         </div>
 

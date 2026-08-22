@@ -212,57 +212,76 @@ const Input: React.FC<InputProps> = ({
            const blockDenda = Math.ceil(effectiveLate / absenConfig.durasiWaktuPotongan);
            const denda = blockDenda * absenConfig.nominalDenda;
            
-           if (denda > 0) {
-              const docRef = doc(db, "gaji_pegawai", currentUserEmail);
-              const docSnap = await getDoc(docRef);
-              
-              const newDenda = {
-                 id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
-                 nominal: denda,
-                 ket: `[Auto-Sistem] Telat absen masuk (${waktuAbsen}) - Telat ${lateMinutes}m (efektif ${effectiveLate}m). Shift: ${shiftPegawai}`,
-                 photoUrl: imageUrl,
-                 dateStr: new Date().toISOString(),
-                 _isAutoSistem: true
-              };
+            if (denda > 0) {
+               const docRef = doc(db, "gaji_pegawai", currentUserEmail);
+               const docSnap = await getDoc(docRef);
 
-              const d = new Date();
-              const mm = String(d.getMonth() + 1).padStart(2, '0');
-              const yy = String(d.getFullYear()).slice(-2);
-              const currentBulanTahun = `${mm}/${yy}`;
+               const dateStrToday = new Date().toISOString().split("T")[0];
+               const idempKey = `lateCheckin_${currentUserEmail.toLowerCase().trim()}_${dateStrToday}_${shiftPegawai.replace(/\s+/g, '')}`;
 
-              if (docSnap.exists()) {
-                 const data = docSnap.data();
-                 let records = Array.isArray(data.records) ? data.records : [];
-                 
-                 const monthIndex = records.findIndex((r: any) => r.bulanTahun === currentBulanTahun);
-                 if (monthIndex >= 0) {
-                    const currentMonth = records[monthIndex];
-                    const gajiPengurangan = Array.isArray(currentMonth.gajiPengurangan) ? currentMonth.gajiPengurangan : [];
-                    records[monthIndex] = { ...currentMonth, gajiPengurangan: [...gajiPengurangan, newDenda] };
-                 } else {
-                    const basePokok = Number(data.gajiPokok) || 0;
-                    records = [{
-                        id: `rec-${Date.now()}`,
-                        bulanTahun: currentBulanTahun,
-                        gajiPokok: basePokok,
-                        gajiTambahan: [],
-                        gajiPengurangan: [newDenda]
-                    }, ...records];
-                 }
-                 await setDoc(docRef, { records, lastUpdated: new Date().toISOString() }, { merge: true });
-              } else {
-                 const basePokok = Number(docSnap.data()?.gajiPokok) || 0;
-                 const newMonth = {
-                     id: `rec-${Date.now()}`,
-                     bulanTahun: currentBulanTahun,
-                     gajiPokok: basePokok,
-                     gajiTambahan: [],
-                     gajiPengurangan: [newDenda]
-                 };
-                 await setDoc(docRef, { records: [newMonth], lastUpdated: new Date().toISOString() }, { merge: true });
-              }
-              alert(`🚨 PERINGATAN SISTEM\nAnda telat absen ${lateMinutes} menit (toleransi ${absenConfig.waktuToleransi}m, efektif telat ${effectiveLate}m)!\nGaji Anda otomatis dipotong Rp ${denda.toLocaleString("id-ID")}`);
-           }
+               const newDenda = {
+                  id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
+                  nominal: denda,
+                  ket: `[Auto-Sistem] Telat absen masuk (${waktuAbsen}) - Telat ${lateMinutes}m (efektif ${effectiveLate}m). Shift: ${shiftPegawai}`,
+                  photoUrl: imageUrl,
+                  dateStr: new Date().toISOString(),
+                  _isAutoSistem: true,
+                  _idempKey: idempKey
+               };
+
+               const d = new Date();
+               const mm = String(d.getMonth() + 1).padStart(2, '0');
+               const yy = String(d.getFullYear()).slice(-2);
+               const currentBulanTahun = `${mm}/${yy}`;
+
+               let basePokok = 0;
+               if (docSnap.exists()) {
+                  const data = docSnap.data();
+                  let records = Array.isArray(data.records) ? data.records : [];
+
+                  // Check if already injected
+                  const alreadyInjected = records.some((r: any) => 
+                     r.gajiPengurangan?.some((pg: any) => pg._idempKey === idempKey)
+                  );
+                  if (alreadyInjected) {
+                     console.log("Denda telat sudah pernah masuk:", idempKey);
+                     return;
+                  }
+
+                  for (const r of records) {
+                     const v = Number(r.gajiPokok) || 0;
+                     if (v > 0) { basePokok = v; break; }
+                  }
+                  if (basePokok === 0) basePokok = Number(data.gajiPokok) || 1500000;
+                  
+                  const monthIndex = records.findIndex((r: any) => r.bulanTahun === currentBulanTahun);
+                  if (monthIndex >= 0) {
+                     const currentMonth = records[monthIndex];
+                     const gajiPengurangan = Array.isArray(currentMonth.gajiPengurangan) ? currentMonth.gajiPengurangan : [];
+                     records[monthIndex] = { ...currentMonth, gajiPengurangan: [...gajiPengurangan, newDenda] };
+                  } else {
+                     records = [{
+                         id: `rec-${Date.now()}`,
+                         bulanTahun: currentBulanTahun,
+                         gajiPokok: basePokok,
+                         gajiTambahan: [],
+                         gajiPengurangan: [newDenda]
+                     }, ...records];
+                  }
+                  await setDoc(docRef, { records, gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
+               } else {
+                  basePokok = 1500000;
+                  const newMonth = {
+                      id: `rec-${Date.now()}`,
+                      bulanTahun: currentBulanTahun,
+                      gajiPokok: basePokok,
+                      gajiTambahan: [],
+                      gajiPengurangan: [newDenda]
+                  };
+                  await setDoc(docRef, { records: [newMonth], gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
+               }
+               alert(`🚨 PERINGATAN SISTEM\nAnda telat absen ${lateMinutes} menit (toleransi ${absenConfig.waktuToleransi}m, efektif telat ${effectiveLate}m)!\nGaji Anda otomatis dipotong Rp ${denda.toLocaleString("id-ID")}`);
+            }
         }
       }
       
