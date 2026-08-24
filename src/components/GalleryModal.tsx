@@ -1,9 +1,4 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { 
-  X, Image as ImageIcon, Plus, Trash2, Download, Share2, Copy, Check, 
-  Sparkles, Pin, Search, ExternalLink, Play, Eye, Filter, 
-  Smartphone, Upload, Layers, MessageCircle, AlertCircle, RefreshCw, Edit3
-} from "lucide-react";
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, setDoc, deleteDoc, updateDoc, orderBy } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { db, storage } from "../lib/firebase";
@@ -118,46 +113,242 @@ Chat WhatsApp kami sekarang 📲
     caption: `🏆 TURNAMEN PLAYSTATION URBAN GAMING 🏆
 
 Siapkan tim terbaikmu dan buktikan siapa raja lapangan hijau!
-Total hadiah jutaan rupiah + trophy! 🥇🥈🥉
+Turnamen seru berhadiah jutaan rupiah & trophy eksklusif.
 
-Pendaftaran dibuka sekarang. Slot terbatas!
-Hubungi admin untuk syarat & formulir registrasi.
-#TurnamenPS #KompetisiPES #TurnamenEAFC #UrbanGamingEvent`,
+Pendaftaran dibuka terbatas! Hubungi admin sekarang!
+#TurnamenPSLampung #UrbanGamingTournament`,
+  },
+  {
+    title: "🌟 Logo & Branding URBAN Gaming",
+    category: "Branding" as const,
+    aspectRatio: "1:1" as const,
+    caption: `🎮 URBAN GAMING LAMPUNG 🎮
+Pusat Rental PlayStation & Konsol Game Terlengkap, Terpercaya, dan Tercepat di Lampung!
+
+Hubungi Admin: 0822-8949-0123
+Follow IG: @urbangaming.lampung
+#UrbanGamingLampung #RentalPS`,
   },
 ];
 
-const DEFAULT_MEDIA_ITEMS: Omit<MediaItem, "id">[] = [
+const INITIAL_MEDIA_SEEDS: Omit<MediaItem, "id">[] = [
   {
-    title: "Promo Weekend Gaming Urban",
-    category: "Promo & Diskon",
-    aspectRatio: "9:16",
+    title: "Story Promo Weekend PS5",
+    caption: `🔥 WEEKEND VIBES BARENG URBAN GAMING! 🔥\n\nBooking sekarang unit PS5 Disc / Digital siap antar ke rumah kamu! 🚚💨\n\nWhatsApp: 0822-8949-0123`,
+    mediaUrl: "https://images.unsplash.com/photo-1606813907291-d86efa9b94db?auto=format&fit=crop&w=1080&q=80",
     mediaType: "image",
-    mediaUrl: "/images/logo.png",
-    caption: CAPTION_PRESETS[0].caption,
-    uploadedBy: "owner@gmail.com",
+    aspectRatio: "9:16",
+    category: "Promo & Diskon",
     pinned: true,
   },
   {
-    title: "Update Game Sepakbola Musim Baru",
-    category: "Game Baru",
-    aspectRatio: "9:16",
+    title: "Update Game EA FC 25",
+    caption: `⚽ SQUAD TERBARU & UPDATE TRANSFER READY! ⚽\n\neFootball & EA FC 25 siap dimainkan dengan grafis memukau 4K 60FPS!`,
+    mediaUrl: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=1080&q=80",
     mediaType: "image",
-    mediaUrl: "/images/QRIS.jpeg",
-    caption: CAPTION_PRESETS[1].caption,
-    uploadedBy: "owner@gmail.com",
+    aspectRatio: "9:16",
+    category: "Game Baru",
     pinned: false,
   },
   {
-    title: "Pricelist Resmi Sewa Konsol",
-    category: "Daftar Harga & Sewa",
-    aspectRatio: "9:16",
+    title: "Pricelist Resmi Rental PS",
+    caption: `📋 DAFTAR HARGA SEWA RESMI URBAN GAMING 📋\n\nPS3, PS4, dan PS5 dengan harga bersahabat & stik original!`,
+    mediaUrl: "https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=800&q=80",
     mediaType: "image",
-    mediaUrl: "/images/logo.png",
-    caption: CAPTION_PRESETS[2].caption,
-    uploadedBy: "owner@gmail.com",
+    aspectRatio: "1:1",
+    category: "Daftar Harga & Sewa",
     pinned: true,
-  }
+  },
+  {
+    title: "Unit Ready Hari Ini",
+    caption: `✨ Siap antar langsung ke rumah kamu hari ini! Hubungi admin untuk booking slot sekarang.`,
+    mediaUrl: "https://images.unsplash.com/photo-1592840496073-b50f607b36f7?auto=format&fit=crop&w=1080&q=80",
+    mediaType: "image",
+    aspectRatio: "9:16",
+    category: "Story Harian",
+    pinned: false,
+  },
 ];
+
+/* ============================================================
+   PURE SVG SF-SYMBOLS & SOCIAL MEDIA ICONS (APPLE DESIGN)
+   ============================================================ */
+const Icons = {
+  // Apple SF Symbols: Photos / Gallery Stack
+  Gallery: ({ className = "w-5 h-5" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect width="18" height="18" x="3" y="3" rx="4" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+    </svg>
+  ),
+
+  // Apple SF Symbols: Share (Arrow up from squircle)
+  Share: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M4 12v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6" />
+      <polyline points="16 6 12 2 8 6" />
+      <line x1="12" y1="2" x2="12" y2="15" />
+    </svg>
+  ),
+
+  // Apple SF Symbols: Copy / Duplicate
+  Copy: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect width="13" height="13" x="9" y="9" rx="3" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  ),
+
+  // Apple SF Symbols: Download / Arrow down into tray
+  Download: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  ),
+
+  // Apple SF Symbols: Arrow up into tray / Upload
+  Upload: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
+  ),
+
+  // Apple SF Symbols: Pin
+  Pin: ({ className = "w-4 h-4", filled = false }: { className?: string; filled?: boolean }) => (
+    <svg viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <line x1="12" y1="17" x2="12" y2="22" />
+      <path d="M5 17h14l-1.5-6H17l1-6H6l1 6H6.5z" />
+    </svg>
+  ),
+
+  // Apple SF Symbols: Trash
+  Trash: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M3 6h18" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+  ),
+
+  // Apple SF Symbols: Pencil / Edit
+  Edit: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+    </svg>
+  ),
+
+  // Apple SF Symbols: Magnifying Glass / Search
+  Search: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  ),
+
+  // Apple SF Symbols: Close / X
+  X: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  ),
+
+  // Apple SF Symbols: Checkmark
+  Check: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  ),
+
+  // Apple SF Symbols: Eye / Preview
+  Eye: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  ),
+
+  // Apple SF Symbols: iPhone / Smartphone
+  Smartphone: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect width="14" height="20" x="5" y="2" rx="4" />
+      <line x1="12" y1="18" x2="12.01" y2="18" strokeWidth="3" />
+    </svg>
+  ),
+
+  // Apple SF Symbols: Sparkles / Magic
+  Sparkles: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z" />
+    </svg>
+  ),
+
+  // Apple SF Symbols: Plus
+  Plus: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  ),
+
+  // Apple SF Symbols: Arrow Clockwise / Refresh
+  Refresh: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+      <path d="M16 21h5v-5" />
+    </svg>
+  ),
+
+  // Apple SF Symbols: External Link Arrow
+  External: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+      <polyline points="15 3 21 3 21 9" />
+      <line x1="10" y1="14" x2="21" y2="3" />
+    </svg>
+  ),
+
+  // Play icon
+  Play: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <polygon points="6 3 20 12 6 21 6 3" />
+    </svg>
+  ),
+
+  // ================= SOCIAL MEDIA VECTOR LOGOS =================
+  WhatsApp: ({ className = "w-5 h-5" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2zm5.79 14.07c-.24.67-1.39 1.29-1.92 1.37-.49.08-1.12.11-3.23-.76-2.69-1.12-4.42-3.84-4.55-4.02-.13-.18-1.09-1.45-1.09-2.77 0-1.32.69-1.97.94-2.23.24-.26.53-.32.71-.32.18 0 .35 0 .51.01.16.01.39-.06.6.46.24.57.81 1.98.88 2.13.07.15.12.32.02.52-.09.2-.14.32-.28.48-.14.16-.3.35-.43.47-.14.14-.29.29-.12.58.17.29.74 1.22 1.6 1.98 1.1 1 2.03 1.31 2.32 1.45.29.14.46.12.63-.07.17-.2.74-.86.94-1.16.2-.29.4-.24.67-.14.27.1 1.73.81 2.03.96.3.15.49.22.56.34.07.12.07.72-.17 1.39z"/>
+    </svg>
+  ),
+
+  Instagram: ({ className = "w-5 h-5" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+    </svg>
+  ),
+
+  Facebook: ({ className = "w-5 h-5" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+    </svg>
+  ),
+
+  TikTok: ({ className = "w-5 h-5" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 2.89 3.46 2.79 1.25-.01 2.45-.78 2.87-1.96.22-.57.25-1.2.24-1.81V.02h.67z"/>
+    </svg>
+  ),
+};
 
 export default function GalleryModal({
   open,
@@ -165,38 +356,40 @@ export default function GalleryModal({
   isSuperAdminOrOwner,
   adminName,
 }: GalleryModalProps) {
+  // Lock body scroll when modal is active
   useBodyScrollLock(open);
 
+  // Core States
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>("Semua");
   const [activeRatio, setActiveRatio] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  
+
   // Modals & Drawers
   const [openUpload, setOpenUpload] = useState(false);
   const [openPreview, setOpenPreview] = useState<MediaItem | null>(null);
   const [openEdit, setOpenEdit] = useState<MediaItem | null>(null);
+  const [shareTargetItem, setShareTargetItem] = useState<MediaItem | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   // Upload Form State
   const [uploadTitle, setUploadTitle] = useState("");
-  const [uploadCategory, setUploadCategory] = useState<MediaItem["category"]>("Story Harian");
+  const [uploadCaption, setUploadCaption] = useState(CAPTION_PRESETS[0].caption);
+  const [uploadCategory, setUploadCategory] = useState<MediaItem["category"]>("Promo & Diskon");
   const [uploadAspectRatio, setUploadAspectRatio] = useState<MediaItem["aspectRatio"]>("9:16");
-  const [uploadCaption, setUploadCaption] = useState(CAPTION_PRESETS[3].caption);
-  const [uploadPinned, setUploadPinned] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string | null>(null);
+  const [directUrlInput, setDirectUrlInput] = useState("");
+  const [uploadPinned, setUploadPinned] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [directUrlInput, setDirectUrlInput] = useState("");
 
-  // Toast Timer
+  // Toast Auto-Dismiss
   useEffect(() => {
-    if (toastMsg) {
-      const timer = setTimeout(() => setToastMsg(null), 3000);
-      return () => clearTimeout(timer);
-    }
+    if (!toastMsg) return;
+    const timer = setTimeout(() => setToastMsg(null), 3200);
+    return () => clearTimeout(timer);
   }, [toastMsg]);
 
   const showToast = (msg: string) => {
@@ -221,7 +414,6 @@ export default function GalleryModal({
         setLoading(false);
       }, (err) => {
         console.warn("Firestore gallery query fallback to simple collection:", err);
-        // Fallback without orderBy if index is building
         const unsubFallback = onSnapshot(galleryRef, (snapshot) => {
           const items: MediaItem[] = [];
           snapshot.forEach((d) => {
@@ -258,31 +450,30 @@ export default function GalleryModal({
         setUploadAspectRatio("9:16");
       } else if (ratio >= 0.85 && ratio <= 1.15) {
         setUploadAspectRatio("1:1");
-      } else if (ratio < 0.85) {
+      } else if (ratio <= 0.7) {
         setUploadAspectRatio("16:9");
       }
     };
     img.src = objectUrl;
 
     if (!uploadTitle) {
-      const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
-      setUploadTitle(cleanName);
+      setUploadTitle(file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "));
     }
   };
 
-  // Initialize Default Templates
-  const handleInitializeDefaults = async () => {
-    if (!confirm("Inisialisasi template media bawaan URBAN Gaming ke galeri?")) return;
+  // Seed Default Templates if empty
+  const handleSeedDefaults = async () => {
+    if (!confirm("Inisialisasi template bawaan promosi URBAN Gaming ke database?")) return;
     try {
       setLoading(true);
-      const galleryRef = collection(db, "media_gallery");
-      for (const item of DEFAULT_MEDIA_ITEMS) {
-        await addDoc(galleryRef, {
+      for (const item of INITIAL_MEDIA_SEEDS) {
+        await addDoc(collection(db, "media_gallery"), {
           ...item,
           createdAt: Date.now(),
+          uploadedBy: adminName,
         });
       }
-      showToast("Template media bawaan berhasil ditambahkan!");
+      showToast("Template bawaan berhasil ditambahkan! ✨");
     } catch (e: any) {
       alert("Gagal inisialisasi: " + e.message);
     } finally {
@@ -290,7 +481,7 @@ export default function GalleryModal({
     }
   };
 
-  // Image compressor helper
+  // Compress & Upload Image
   const compressImage = async (file: File): Promise<Blob> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -302,39 +493,41 @@ export default function GalleryModal({
           const canvas = document.createElement("canvas");
           let width = img.width;
           let height = img.height;
-          
-          // Max dimension 1440px for super crisp social media stories without bloat
-          const MAX_SIZE = 1440;
-          if (width > height && width > MAX_SIZE) {
-            height = Math.round((height * MAX_SIZE) / width);
-            width = MAX_SIZE;
-          } else if (height > MAX_SIZE) {
-            width = Math.round((width * MAX_SIZE) / height);
-            height = MAX_SIZE;
+          const maxDim = 1920;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
           }
-
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext("2d");
           ctx?.drawImage(img, 0, 0, width, height);
-
-          canvas.toBlob((blob) => {
-            resolve(blob || file);
-          }, "image/jpeg", 0.88);
+          canvas.toBlob(
+            (blob) => {
+              resolve(blob || file);
+            },
+            "image/jpeg",
+            0.88
+          );
         };
       };
     });
   };
 
-  // Submit Upload to Firebase
-  const handleUploadSubmit = async (e: React.FormEvent) => {
+  // Submit Upload Form
+  const handleSubmitUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uploadTitle.trim()) {
-      alert("Harap masukkan judul konten.");
+    if (!uploadFile && !directUrlInput.trim()) {
+      alert("Pilih file gambar atau masukkan URL gambar langsung.");
       return;
     }
-    if (!uploadFile && !directUrlInput.trim()) {
-      alert("Harap pilih file gambar/video atau masukkan URL media.");
+    if (!uploadTitle.trim()) {
+      alert("Masukkan judul media promosi.");
       return;
     }
 
@@ -343,40 +536,36 @@ export default function GalleryModal({
       setUploadProgress(20);
 
       let finalMediaUrl = directUrlInput.trim();
-      let storagePath: string | undefined = undefined;
+      let storagePath = "";
 
       if (uploadFile) {
         setUploadProgress(40);
-        let blobToUpload: Blob = uploadFile;
-        if (uploadFile.type.startsWith("image/")) {
-          blobToUpload = await compressImage(uploadFile);
-        }
-        
-        setUploadProgress(60);
-        const fileName = `${Date.now()}_${uploadFile.name.replace(/[^a-zA-Z0-9._-]/g, "")}`;
-        storagePath = `gallery_media/${fileName}`;
+        const compressedBlob = await compressImage(uploadFile);
+        const timestamp = Date.now();
+        const cleanName = uploadFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
+        storagePath = `gallery_media/${timestamp}_${cleanName}`;
         const storageRef = ref(storage, storagePath);
 
-        const uploadResult = await uploadBytes(storageRef, blobToUpload);
-        finalMediaUrl = await getDownloadURL(uploadResult.ref);
+        setUploadProgress(60);
+        await uploadBytes(storageRef, compressedBlob);
         setUploadProgress(85);
+        finalMediaUrl = await getDownloadURL(storageRef);
       }
 
-      // Save metadata to Firestore
+      setUploadProgress(95);
       await addDoc(collection(db, "media_gallery"), {
         title: uploadTitle.trim(),
         caption: uploadCaption.trim(),
         mediaUrl: finalMediaUrl,
         storagePath: storagePath || null,
-        mediaType: uploadFile?.type.startsWith("video/") ? "video" : "image",
+        mediaType: "image",
         aspectRatio: uploadAspectRatio,
         category: uploadCategory,
         createdAt: Date.now(),
-        uploadedBy: adminName || "Super Admin",
+        uploadedBy: adminName,
         pinned: uploadPinned,
       });
 
-      setUploadProgress(100);
       showToast("Media berhasil diunggah ke Galeri!");
       
       // Reset Form & Close
@@ -451,9 +640,8 @@ export default function GalleryModal({
   const handleCopyCaption = async (caption: string) => {
     try {
       await navigator.clipboard.writeText(caption);
-      showToast("Caption promosi berhasil disalin ke Clipboard! 📋");
+      showToast("Caption promosi berhasil disalin! 📋");
     } catch {
-      // Fallback
       const ta = document.createElement("textarea");
       ta.value = caption;
       document.body.appendChild(ta);
@@ -480,65 +668,100 @@ export default function GalleryModal({
       window.URL.revokeObjectURL(url);
       showToast("Media berhasil diunduh! ⬇️");
     } catch (e) {
-      // Fallback direct open
       window.open(item.mediaUrl, "_blank");
     }
   };
 
-  // Native Web Share or WhatsApp Share
-  const handleShareMedia = async (item: MediaItem) => {
-    // 1. Try Native Web Share API with File (Supported on Android/iOS WhatsApp, Instagram Story, FB)
-    if (navigator.share) {
+  // Trigger Web Share API Native
+  const triggerWebShareAPI = async (item: MediaItem) => {
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
       try {
+        showToast("Mempersiapkan Web Share API...");
         const response = await fetch(item.mediaUrl);
         const blob = await response.blob();
-        const file = new File([blob], `${item.title.replace(/\s+/g, "_")}.jpg`, { type: blob.type || "image/jpeg" });
+        const ext = item.mediaType === "video" ? "mp4" : "jpg";
+        const file = new File([blob], `${item.title.replace(/\s+/g, "_")}.${ext}`, { 
+          type: blob.type || (item.mediaType === "video" ? "video/mp4" : "image/jpeg") 
+        });
 
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
           await navigator.share({
             title: item.title,
             text: item.caption,
             files: [file],
           });
-          showToast("Berhasil dibagikan! 🚀");
+          showToast("Berhasil dibagikan via Web Share! 🚀");
+          setShareTargetItem(null);
           return;
         } else {
-          // Fallback share text + url
           await navigator.share({
             title: item.title,
-            text: item.caption + "\n\n" + item.mediaUrl,
+            text: `${item.caption}\n\n📸 Media: ${item.mediaUrl}`,
           });
-          showToast("Berhasil dibagikan! 🚀");
+          showToast("Berhasil dibagikan via Web Share! 🚀");
+          setShareTargetItem(null);
           return;
         }
       } catch (err: any) {
         if (err.name !== "AbortError") {
-          console.warn("Web Share API failed, fallback to direct WhatsApp:", err);
-        } else {
-          return;
+          console.warn("Web Share API error:", err);
+          showToast("Pilih salah satu aplikasi sosial media di bawah 👇");
         }
       }
+    } else {
+      showToast("Web Share API tidak didukung di browser ini. Gunakan tombol aplikasi di bawah!");
     }
+  };
 
-    // 2. Direct WhatsApp Share fallback
-    const fullText = `${item.caption}\n\n📸 Media: ${item.mediaUrl}`;
-    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(fullText)}`;
-    window.open(waUrl, "_blank");
-    showToast("Membuka WhatsApp... 🟢");
+  // Prioritas 1: WhatsApp Business / WA Standard
+  const shareToWhatsApp = async (item: MediaItem) => {
+    await handleCopyCaption(item.caption);
+    const text = encodeURIComponent(`${item.caption}\n\n📸 Media: ${item.mediaUrl}`);
+    window.open(`https://api.whatsapp.com/send?text=${text}`, "_blank");
+    showToast("Caption disalin! Membuka WhatsApp... 🟢");
+  };
+
+  // Prioritas 2: Instagram Story & Feed
+  const shareToInstagram = async (item: MediaItem) => {
+    await handleCopyCaption(item.caption);
+    await handleDownloadMedia(item);
+    window.open("https://instagram.com", "_blank");
+    showToast("Media diunduh & caption disalin! Buka Instagram Story 📸");
+  };
+
+  // Prioritas 3: Facebook Story & Post
+  const shareToFacebook = async (item: MediaItem) => {
+    await handleCopyCaption(item.caption);
+    const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(item.mediaUrl)}&quote=${encodeURIComponent(item.caption)}`;
+    window.open(fbUrl, "_blank");
+    showToast("Caption disalin! Membuka Facebook Story / Post... 🔵");
+  };
+
+  // Prioritas 4: TikTok Video & Photo Slide
+  const shareToTikTok = async (item: MediaItem) => {
+    await handleCopyCaption(item.caption);
+    await handleDownloadMedia(item);
+    window.open("https://www.tiktok.com/upload", "_blank");
+    showToast("Media diunduh & caption disalin! Buka TikTok 🎵");
+  };
+
+  // Open Share Hub & Trigger Web Share API
+  const handleShareClick = (item: MediaItem) => {
+    setShareTargetItem(item);
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      triggerWebShareAPI(item);
+    }
   };
 
   // Filtered & Sorted Media List
   const filteredMedia = useMemo(() => {
     return mediaList.filter((item) => {
-      // Category filter
       if (activeCategory !== "Semua" && item.category !== activeCategory) {
         return false;
       }
-      // Aspect ratio filter
       if (activeRatio !== "all" && item.aspectRatio !== activeRatio) {
         return false;
       }
-      // Search filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchTitle = item.title?.toLowerCase().includes(q);
@@ -548,7 +771,6 @@ export default function GalleryModal({
       }
       return true;
     }).sort((a, b) => {
-      // Pinned items always on top
       if (a.pinned && !b.pinned) return -1;
       if (!a.pinned && b.pinned) return 1;
       return (b.createdAt || 0) - (a.createdAt || 0);
@@ -558,263 +780,293 @@ export default function GalleryModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-md transition-opacity duration-300 font-sans">
+    <div className="fixed inset-0 z-[100] flex flex-col bg-[#F2F2F7]/95 dark:bg-black/95 backdrop-blur-3xl overflow-hidden font-sans text-zinc-900 dark:text-white transition-all duration-300">
       
       {/* ============================================================
-          MAIN CONTAINER (iOS 18 Glassmorphism Style)
+          TOP CUPERTINO NAVIGATION BAR (APPLE DESIGN)
           ============================================================ */}
-      <div className="relative w-full h-full bg-zinc-50 dark:bg-[#121214] text-zinc-900 dark:text-zinc-100 overflow-hidden flex flex-col animate-in fade-in duration-300">
-        
-        {/* Top Header Bar */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-zinc-200/60 dark:border-white/10 bg-white/80 dark:bg-[#1C1C1E]/80 backdrop-blur-2xl z-20 shrink-0 shadow-sm">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-500 via-rose-500 to-amber-500 text-white flex items-center justify-center shadow-lg shadow-pink-500/20 shrink-0">
-              <ImageIcon size={20} className="stroke-[2.2]" />
+      <header className="sticky top-0 z-30 flex flex-col bg-white/80 dark:bg-[#1C1C1E]/80 backdrop-blur-2xl border-b border-black/5 dark:border-white/10 px-4 sm:px-6 py-3 transition-colors">
+        <div className="flex items-center justify-between gap-3 max-w-7xl mx-auto w-full">
+          
+          {/* Brand & Large Title */}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-[12px] bg-gradient-to-tr from-pink-500 via-purple-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-pink-500/20">
+              <Icons.Gallery className="w-5 h-5 stroke-[2.2]" />
             </div>
-            <div className="min-w-0">
+            <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-black tracking-tight text-zinc-900 dark:text-white uppercase truncate">
+                <h1 className="text-base sm:text-lg font-black tracking-tight text-zinc-900 dark:text-white">
                   Galeri Media Sosial
-                </h2>
-                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-pink-500/10 text-pink-600 dark:text-pink-400 border border-pink-500/20">
-                  Story & Promo Hub
+                </h1>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-xs">
+                  Super Admin
                 </span>
               </div>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
-                Pusat materi postingan WhatsApp Business, Instagram & Facebook Story URBAN Gaming
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium">
+                Pusat Story & Konten Promosi URBAN Gaming
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Action Hub */}
+          <div className="flex items-center gap-2">
             {isSuperAdminOrOwner && (
-              <button
-                onClick={() => setOpenUpload(true)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white font-bold text-xs shadow-md shadow-pink-500/25 active:scale-95 transition-all"
-              >
-                <Plus size={16} className="stroke-[2.5]" />
-                <span className="hidden sm:inline">Upload Konten</span>
-                <span className="sm:hidden">Upload</span>
-              </button>
+              <>
+                <button
+                  onClick={() => setOpenUpload(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#007AFF] hover:bg-[#0066D6] active:bg-[#0055B3] text-white text-xs font-semibold shadow-md shadow-blue-500/20 active:scale-95 transition-all"
+                >
+                  <Icons.Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span className="hidden sm:inline">Unggah Media</span>
+                  <span className="sm:hidden">Unggah</span>
+                </button>
+
+                {mediaList.length === 0 && (
+                  <button
+                    onClick={handleSeedDefaults}
+                    className="hidden sm:flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-zinc-800 dark:text-zinc-200 text-xs font-medium active:scale-95 transition-all"
+                  >
+                    <Icons.Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Template Awal</span>
+                  </button>
+                )}
+              </>
             )}
 
+            {/* Close Button */}
             <button
               onClick={onClose}
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-zinc-200/70 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 active:scale-90 transition-all"
-              aria-label="Tutup Galeri"
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all active:scale-95"
+              aria-label="Tutup"
             >
-              <X size={18} />
+              <Icons.X className="w-4 h-4 stroke-[2.5]" />
             </button>
           </div>
         </div>
 
-        {/* Filter & Search Bar */}
-        <div className="px-4 sm:px-6 py-3 border-b border-zinc-200/50 dark:border-white/5 bg-white/40 dark:bg-[#18181A]/40 backdrop-blur-xl shrink-0 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
-          {/* Category Tabs (Scrollable) */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-            {CATEGORIES.map((cat) => (
+        {/* Search & Segmented Filter Bar */}
+        <div className="max-w-7xl mx-auto w-full pt-3 flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
+          
+          {/* iOS Search Bar */}
+          <div className="relative flex-1 max-w-md">
+            <Icons.Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari konten promosi, game, atau promo..."
+              className="w-full pl-9 pr-8 py-2 rounded-[12px] bg-black/5 dark:bg-white/10 border-none text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#007AFF] transition-all"
+            />
+            {searchQuery && (
               <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                  activeCategory === cat
-                    ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-sm shadow-black/10"
-                    : "bg-zinc-100 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700/80"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+              >
+                <Icons.X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Aspect Ratio Filter Pills */}
+          <div className="flex items-center gap-1 bg-black/5 dark:bg-white/10 p-1 rounded-[12px] self-start sm:self-auto overflow-x-auto max-w-full">
+            {ASPECT_RATIOS.map((r) => (
+              <button
+                key={r.key}
+                onClick={() => setActiveRatio(r.key)}
+                className={`px-3 py-1 rounded-[9px] text-[11px] font-semibold transition-all whitespace-nowrap ${
+                  activeRatio === r.key
+                    ? "bg-white dark:bg-[#2C2C2E] text-zinc-900 dark:text-white shadow-xs"
+                    : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
                 }`}
               >
-                {cat}
+                {r.label}
               </button>
             ))}
           </div>
-
-          {/* Aspect Ratio & Search */}
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-xl border border-zinc-200/40 dark:border-white/5">
-              {ASPECT_RATIOS.map((r) => (
-                <button
-                  key={r.key}
-                  onClick={() => setActiveRatio(r.key)}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all ${
-                    activeRatio === r.key
-                      ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs"
-                      : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-white"
-                  }`}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="relative flex-1 sm:w-56">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-              <input
-                type="text"
-                placeholder="Cari konten & caption..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-xs bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200/60 dark:border-white/5 rounded-xl text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-pink-500/40"
-              />
-            </div>
-          </div>
         </div>
 
-        {/* Content Body / Media Cards Grid */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 scrollbar-ios">
+        {/* Category iOS Segmented Scroll */}
+        <div className="max-w-7xl mx-auto w-full pt-2.5 pb-0.5 overflow-x-auto scrollbar-none flex items-center gap-1.5">
+          {CATEGORIES.map((cat) => {
+            const count = cat === "Semua" ? mediaList.length : mediaList.filter((m) => m.category === cat).length;
+            const active = activeCategory === cat;
+            return (
+              <button
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                  active
+                    ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-sm"
+                    : "bg-black/5 dark:bg-white/10 text-zinc-600 dark:text-zinc-300 hover:bg-black/10 dark:hover:bg-white/15"
+                }`}
+              >
+                <span>{cat}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  active
+                    ? "bg-white/20 dark:bg-black/20 text-current"
+                    : "bg-black/10 dark:bg-white/10 text-zinc-500 dark:text-zinc-400"
+                }`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </header>
+
+      {/* ============================================================
+          MAIN CONTENT AREA & MASONRY-STYLE GRID
+          ============================================================ */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 scrollbar-ios">
+        <div className="max-w-7xl mx-auto">
+          
           {loading ? (
-            <div className="flex flex-col items-center justify-center h-64 gap-3">
-              <RefreshCw className="w-8 h-8 text-pink-500 animate-spin" />
-              <p className="text-sm font-medium text-zinc-500">Memuat galeri media sosial...</p>
+            <div className="flex flex-col items-center justify-center py-24 text-zinc-400">
+              <div className="w-10 h-10 border-3 border-[#007AFF] border-t-transparent rounded-full animate-spin mb-3" />
+              <p className="text-xs font-semibold">Memuat galeri media sosial...</p>
             </div>
           ) : filteredMedia.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto">
-              <div className="w-20 h-20 rounded-3xl bg-pink-500/10 dark:bg-pink-500/20 text-pink-500 flex items-center justify-center mb-4">
-                <ImageIcon size={36} />
+            <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+              <div className="w-16 h-16 rounded-[20px] bg-black/5 dark:bg-white/10 flex items-center justify-center text-zinc-400 mb-4 shadow-inner">
+                <Icons.Gallery className="w-8 h-8 stroke-[1.8]" />
               </div>
-              <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-1">
-                Belum Ada Media Konten
+              <h3 className="text-base font-bold text-zinc-900 dark:text-white mb-1">
+                Belum Ada Media di Kategori Ini
               </h3>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-6">
-                Mulai unggah foto/video promosi untuk di-share ke WhatsApp Story, Instagram, dan media sosial lainnya.
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mb-6">
+                Unggah poster promosi, update game baru, atau daftar harga untuk dibagikan ke Story sosial media.
               </p>
               {isSuperAdminOrOwner && (
-                <div className="flex flex-wrap items-center justify-center gap-3">
+                <div className="flex items-center gap-3">
                   <button
                     onClick={() => setOpenUpload(true)}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-pink-500 hover:bg-pink-600 text-white font-bold text-xs shadow-md shadow-pink-500/25 active:scale-95 transition-all"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#007AFF] text-white text-xs font-semibold shadow-md shadow-blue-500/20 active:scale-95 transition-all"
                   >
-                    <Plus size={15} />
-                    Upload Media Baru
+                    <Icons.Plus className="w-4 h-4 stroke-[2.5]" />
+                    <span>Unggah Media Baru</span>
                   </button>
                   <button
-                    onClick={handleInitializeDefaults}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-bold text-xs active:scale-95 transition-all"
+                    onClick={handleSeedDefaults}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-black/5 dark:bg-white/10 text-zinc-700 dark:text-zinc-300 text-xs font-semibold active:scale-95 transition-all"
                   >
-                    <Sparkles size={15} className="text-amber-500" />
-                    Inisialisasi Template Bawaan
+                    <Icons.Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Pakai Template Bawaan</span>
                   </button>
                 </div>
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
               {filteredMedia.map((item) => (
                 <div
                   key={item.id}
-                  className={`group relative bg-white dark:bg-[#1C1C1E] border rounded-[22px] overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col ${
-                    item.pinned 
-                      ? "border-pink-500/50 dark:border-pink-500/40 ring-1 ring-pink-500/20" 
-                      : "border-zinc-200/70 dark:border-white/10"
-                  }`}
+                  className="group relative bg-white dark:bg-[#1C1C1E] rounded-[24px] border border-black/5 dark:border-white/10 overflow-hidden shadow-xs hover:shadow-xl hover:scale-[1.01] transition-all duration-300 flex flex-col"
                 >
-                  {/* Media Visual Container */}
-                  <div 
+                  {/* Thumbnail & Aspect Ratio Container */}
+                  <div
                     onClick={() => setOpenPreview(item)}
-                    className={`relative w-full overflow-hidden bg-zinc-950 flex items-center justify-center cursor-pointer ${
-                      item.aspectRatio === "9:16" ? "aspect-[9/16]" : item.aspectRatio === "16:9" ? "aspect-video" : "aspect-square"
+                    className={`relative w-full cursor-pointer overflow-hidden bg-black/5 dark:bg-black/40 ${
+                      item.aspectRatio === "9:16"
+                        ? "aspect-[9/16]"
+                        : item.aspectRatio === "16:9"
+                        ? "aspect-[16/9]"
+                        : "aspect-square"
                     }`}
                   >
-                    {item.mediaType === "video" ? (
-                      <video 
-                        src={item.mediaUrl} 
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        muted 
-                        playsInline
-                      />
-                    ) : (
-                      <img
-                        src={item.mediaUrl}
-                        alt={item.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        loading="lazy"
-                      />
-                    )}
+                    <img
+                      src={item.mediaUrl}
+                      alt={item.title}
+                      loading="lazy"
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
 
-                    {/* Gradient Overlay on Hover */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
+                    {/* Dark Vignette Gradient */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20 pointer-events-none" />
 
                     {/* Top Badges */}
-                    <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
-                      <div className="flex items-center gap-1.5">
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-black/60 backdrop-blur-md text-white border border-white/10">
-                          {item.aspectRatio === "9:16" ? "Story 9:16" : item.aspectRatio === "1:1" ? "Feed 1:1" : "Wide 16:9"}
-                        </span>
-                        {item.pinned && (
-                          <span className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500 text-black shadow-xs">
-                            <Pin size={10} className="fill-black" />
-                            Pinned
-                          </span>
-                        )}
-                      </div>
-
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-pink-500/90 text-white backdrop-blur-sm">
+                    <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none">
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-black/40 text-white backdrop-blur-md border border-white/10 shadow-xs">
                         {item.category}
                       </span>
-                    </div>
 
-                    {/* Center Preview Button icon */}
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                      <div className="w-12 h-12 rounded-full bg-white/25 backdrop-blur-md text-white flex items-center justify-center border border-white/40 shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
-                        <Eye size={20} />
+                      <div className="flex items-center gap-1.5">
+                        {item.pinned && (
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-500 text-white shadow-xs flex items-center gap-1">
+                            <Icons.Pin className="w-2.5 h-2.5" filled />
+                            <span>PIN</span>
+                          </span>
+                        )}
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-white/20 text-white backdrop-blur-md">
+                          {item.aspectRatio}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Bottom Quick Title on Image */}
-                    <div className="absolute bottom-2.5 left-2.5 right-2.5 pointer-events-none">
+                    {/* Center Hover Magnifying Glass */}
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                      <div className="w-11 h-11 rounded-full bg-white/30 backdrop-blur-md text-white flex items-center justify-center border border-white/40 shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
+                        <Icons.Eye className="w-5 h-5 stroke-[2.2]" />
+                      </div>
+                    </div>
+
+                    {/* Bottom Title on Image */}
+                    <div className="absolute bottom-3 left-3 right-3 pointer-events-none">
                       <h4 className="text-white font-black text-sm tracking-tight drop-shadow-md truncate">
                         {item.title}
                       </h4>
                     </div>
                   </div>
 
-                  {/* Card Content & Action Bar */}
-                  <div className="p-3.5 flex flex-col gap-2.5 flex-1 justify-between bg-white dark:bg-[#1C1C1E]">
-                    {/* Caption Preview */}
-                    <div className="relative bg-zinc-50 dark:bg-zinc-900/60 rounded-xl p-2.5 border border-zinc-100 dark:border-white/5">
-                      <p className="text-[11px] text-zinc-600 dark:text-zinc-300 line-clamp-2 leading-relaxed">
+                  {/* Card Actions & Caption */}
+                  <div className="p-3.5 flex flex-col gap-2.5 flex-1 justify-between">
+                    
+                    {/* Caption Preview Box */}
+                    <div className="bg-black/5 dark:bg-white/5 rounded-[12px] p-2.5 border border-black/5 dark:border-white/5">
+                      <p className="text-[11px] text-zinc-600 dark:text-zinc-300 font-mono line-clamp-2 leading-relaxed">
                         {item.caption || "Tidak ada caption"}
                       </p>
                     </div>
 
-                    {/* Primary Action Buttons */}
+                    {/* Primary Cupertino Buttons */}
                     <div className="grid grid-cols-2 gap-2">
                       <button
-                        onClick={() => handleShareMedia(item)}
-                        className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs shadow-sm shadow-emerald-600/20 active:scale-95 transition-all"
-                        title="Share ke WhatsApp / Story"
+                        onClick={() => handleShareClick(item)}
+                        className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-[12px] bg-[#34C759] hover:bg-[#2EB84F] active:bg-[#28A745] text-white font-bold text-xs shadow-xs active:scale-95 transition-all"
+                        title="Share ke WhatsApp, Instagram, FB, TikTok"
                       >
-                        <Share2 size={13} className="stroke-[2.5]" />
+                        <Icons.Share className="w-3.5 h-3.5 stroke-[2.5]" />
                         <span>Share Story</span>
                       </button>
 
                       <button
                         onClick={() => handleCopyCaption(item.caption)}
-                        className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-bold text-xs active:scale-95 transition-all"
+                        className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-[12px] bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-zinc-800 dark:text-zinc-200 font-bold text-xs active:scale-95 transition-all"
                         title="Salin Teks Caption"
                       >
-                        <Copy size={13} />
+                        <Icons.Copy className="w-3.5 h-3.5" />
                         <span>Salin Teks</span>
                       </button>
                     </div>
 
-                    {/* Secondary Utility Row */}
-                    <div className="flex items-center justify-between pt-1 border-t border-zinc-100 dark:border-white/5 text-zinc-400">
+                    {/* Secondary Tool Row */}
+                    <div className="flex items-center justify-between pt-1 border-t border-black/5 dark:border-white/5 text-zinc-400">
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => handleDownloadMedia(item)}
-                          className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors"
-                          title="Download Gambar"
+                          className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                          title="Download Media"
                         >
-                          <Download size={14} />
+                          <Icons.Download className="w-4 h-4" />
                         </button>
                         {isSuperAdminOrOwner && (
                           <button
                             onClick={() => handleTogglePin(item)}
-                            className={`p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${
+                            className={`p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors ${
                               item.pinned ? "text-amber-500" : "text-zinc-400 hover:text-amber-500"
                             }`}
                             title={item.pinned ? "Lepas Pin" : "Sematkan ke atas"}
                           >
-                            <Pin size={14} className={item.pinned ? "fill-amber-500" : ""} />
+                            <Icons.Pin className="w-4 h-4" filled={item.pinned} />
                           </button>
                         )}
                       </div>
@@ -823,339 +1075,119 @@ export default function GalleryModal({
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => setOpenEdit(item)}
-                            className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-blue-500 transition-colors"
+                            className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-zinc-400 hover:text-[#007AFF] transition-colors"
                             title="Edit Konten"
                           >
-                            <Edit3 size={14} />
+                            <Icons.Edit className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleDeleteItem(item)}
-                            className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-zinc-400 hover:text-red-500 transition-colors"
+                            className="p-1.5 rounded-lg hover:bg-red-500/10 text-zinc-400 hover:text-[#FF3B30] transition-colors"
                             title="Hapus Media"
                           >
-                            <Trash2 size={14} />
+                            <Icons.Trash className="w-4 h-4" />
                           </button>
                         </div>
                       )}
                     </div>
+
                   </div>
                 </div>
               ))}
             </div>
           )}
+
         </div>
       </div>
 
       {/* ============================================================
-          UPLOAD MEDIA DRAWER / MODAL
-          ============================================================ */}
-      {openUpload && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200 font-sans">
-          <div className="relative w-full max-w-xl bg-white dark:bg-[#1C1C1E] border border-zinc-200 dark:border-white/10 rounded-[28px] overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 dark:border-white/5 bg-zinc-50/50 dark:bg-black/20">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-pink-500/10 text-pink-500 flex items-center justify-center">
-                  <Upload size={16} />
-                </div>
-                <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-                  Upload Media Konten Baru
-                </h3>
-              </div>
-              <button
-                onClick={() => setOpenUpload(false)}
-                className="w-8 h-8 rounded-full bg-zinc-200/70 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-all"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Form */}
-            <form onSubmit={handleUploadSubmit} className="p-6 overflow-y-auto space-y-4 flex-1 scrollbar-ios">
-              
-              {/* File Dropzone */}
-              <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">
-                  File Media (Gambar / Video)
-                </label>
-                
-                {uploadPreviewUrl ? (
-                  <div className="relative rounded-2xl overflow-hidden bg-black/90 aspect-video flex items-center justify-center border border-zinc-200 dark:border-white/10">
-                    <img src={uploadPreviewUrl} alt="Preview" className="h-full w-full object-contain" />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUploadFile(null);
-                        setUploadPreviewUrl(null);
-                      }}
-                      className="absolute top-3 right-3 p-1.5 rounded-full bg-black/70 text-white hover:bg-red-600 transition-colors"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                ) : (
-                  <label className="flex flex-col items-center justify-center border-2 border-dashed border-zinc-300 dark:border-zinc-700 hover:border-pink-500 dark:hover:border-pink-500 rounded-2xl p-6 cursor-pointer bg-zinc-50 dark:bg-zinc-900/40 hover:bg-pink-50/20 dark:hover:bg-pink-500/5 transition-all">
-                    <Upload className="w-8 h-8 text-zinc-400 group-hover:text-pink-500 mb-2" />
-                    <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                      Klik untuk pilih gambar/video
-                    </span>
-                    <span className="text-[10px] text-zinc-400 mt-1">
-                      Mendukung format JPG, PNG, WEBP, MP4 (Optimal untuk Story 9:16)
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*,video/*"
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
-                  </label>
-                )}
-
-                {/* Direct URL input option */}
-                <div className="mt-2">
-                  <input
-                    type="text"
-                    placeholder="Atau tempel URL gambar langsung (opsional)..."
-                    value={directUrlInput}
-                    onChange={(e) => setDirectUrlInput(e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-800 dark:text-zinc-200"
-                  />
-                </div>
-              </div>
-
-              {/* Judul & Kategori */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
-                    Judul Konten
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: Promo Weekend PS4 & PS5"
-                    value={uploadTitle}
-                    onChange={(e) => setUploadTitle(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-white font-medium focus:ring-2 focus:ring-pink-500/40"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
-                    Kategori
-                  </label>
-                  <select
-                    value={uploadCategory}
-                    onChange={(e) => setUploadCategory(e.target.value as any)}
-                    className="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-white font-medium focus:ring-2 focus:ring-pink-500/40"
-                  >
-                    {CATEGORIES.filter(c => c !== "Semua").map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Aspek Rasio & Pin */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
-                <div>
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
-                    Format Tampilan
-                  </label>
-                  <select
-                    value={uploadAspectRatio}
-                    onChange={(e) => setUploadAspectRatio(e.target.value as any)}
-                    className="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-white font-medium focus:ring-2 focus:ring-pink-500/40"
-                  >
-                    <option value="9:16">📱 Story (9:16 - WhatsApp / IG Story)</option>
-                    <option value="1:1">🟦 Feed Persegi (1:1 - Postingan IG/FB)</option>
-                    <option value="16:9">🖥️ Landscape (16:9 - Banner / Web)</option>
-                  </select>
-                </div>
-
-                <div className="pt-4">
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={uploadPinned}
-                      onChange={(e) => setUploadPinned(e.target.checked)}
-                      className="w-4 h-4 rounded text-pink-500 focus:ring-pink-500"
-                    />
-                    <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                      Sematkan ke Paling Atas (Pin ⭐)
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Caption & Preset Helper */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                    Teks Caption Siap Kirim
-                  </label>
-                  
-                  {/* Preset Magic Selector */}
-                  <div className="flex items-center gap-1">
-                    <span className="text-[10px] text-zinc-400 font-bold mr-1">Preset:</span>
-                    {CAPTION_PRESETS.slice(0, 3).map((p, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          setUploadCaption(p.caption);
-                          if (!uploadTitle) setUploadTitle(p.title.replace(/^[^\s]+\s/, ""));
-                          setUploadCategory(p.category);
-                        }}
-                        className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-pink-50 dark:bg-pink-500/10 text-pink-600 dark:text-pink-400 hover:bg-pink-100 transition-colors"
-                      >
-                        {idx === 0 ? "Promo" : idx === 1 ? "Game" : "Pricelist"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <textarea
-                  rows={6}
-                  value={uploadCaption}
-                  onChange={(e) => setUploadCaption(e.target.value)}
-                  placeholder="Tulis caption promosi di sini..."
-                  className="w-full p-3 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-white font-mono leading-relaxed focus:ring-2 focus:ring-pink-500/40"
-                />
-              </div>
-
-              {/* Upload Progress Bar */}
-              {uploading && (
-                <div className="w-full space-y-1">
-                  <div className="flex justify-between text-[10px] font-bold text-pink-500">
-                    <span>Mengunggah ke Firebase Storage...</span>
-                    <span>{uploadProgress}%</span>
-                  </div>
-                  <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-pink-500 to-rose-500 transition-all duration-300"
-                      style={{ width: `${uploadProgress}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Submit Buttons */}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-white/5">
-                <button
-                  type="button"
-                  disabled={uploading}
-                  onClick={() => setOpenUpload(false)}
-                  className="px-4 py-2 text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-white transition-colors"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={uploading}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-pink-500 hover:bg-pink-600 active:bg-pink-700 text-white font-bold text-xs shadow-md shadow-pink-500/25 active:scale-95 transition-all disabled:opacity-50"
-                >
-                  {uploading ? (
-                    <>
-                      <RefreshCw size={14} className="animate-spin" />
-                      <span>Mengunggah...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Upload size={14} />
-                      <span>Simpan ke Galeri</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ============================================================
-          STORY PREVIEW & DETAIL SIMULATOR MODAL
+          STORY PREVIEW SIMULATOR (IPHONE 16 PRO STYLE)
           ============================================================ */}
       {openPreview && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-xl animate-in fade-in duration-200 font-sans">
-          <div className="relative w-full max-w-4xl max-h-[95vh] bg-zinc-900 border border-white/10 rounded-[32px] overflow-hidden shadow-2xl flex flex-col md:flex-row">
+        <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-200">
+          <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col md:flex-row bg-[#1C1C1E] border border-white/10 rounded-[32px] overflow-hidden shadow-2xl">
             
-            {/* Close Overlay */}
-            <button
-              onClick={() => setOpenPreview(null)}
-              className="absolute top-4 right-4 z-30 w-9 h-9 rounded-full bg-black/60 text-white/80 hover:text-white flex items-center justify-center backdrop-blur-md transition-all"
-            >
-              <X size={18} />
-            </button>
-
-            {/* Left: Smartphone Story Frame Simulator */}
-            <div className="flex-1 bg-black flex items-center justify-center p-4 relative overflow-hidden min-h-[350px] md:min-h-[550px]">
-              <div className="relative w-full max-w-[320px] aspect-[9/16] rounded-[24px] overflow-hidden border-2 border-white/20 shadow-2xl bg-zinc-950 flex items-center justify-center">
+            {/* Left: Smartphone Simulator */}
+            <div className="flex-1 bg-black flex items-center justify-center p-4 sm:p-6">
+              <div className="relative w-full max-w-[310px] aspect-[9/16] rounded-[36px] overflow-hidden ring-4 ring-white/15 shadow-2xl bg-zinc-900 flex flex-col justify-between">
                 
-                {/* Story Top Progress Bar (Simulated) */}
-                <div className="absolute top-3 left-3 right-3 z-20 flex gap-1">
-                  <div className="h-1 flex-1 bg-white/40 rounded-full overflow-hidden">
-                    <div className="h-full bg-white animate-pulse" />
-                  </div>
-                </div>
+                {/* Background Image */}
+                <img
+                  src={openPreview.mediaUrl}
+                  alt={openPreview.title}
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
 
-                {/* Story Account Header */}
-                <div className="absolute top-6 left-3 right-3 z-20 flex items-center justify-between text-white pointer-events-none">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500 via-pink-500 to-purple-500 p-0.5">
-                      <div className="w-full h-full rounded-full bg-zinc-900 flex items-center justify-center font-bold text-[10px]">
+                {/* Top Overlay: Progress Bars & Dynamic Island */}
+                <div className="relative z-10 p-3 bg-gradient-to-b from-black/70 to-transparent">
+                  
+                  {/* Dynamic Island */}
+                  <div className="w-20 h-5 bg-black rounded-full mx-auto mb-2 flex items-center justify-center shadow-inner" />
+                  
+                  {/* Progress Bars */}
+                  <div className="flex items-center gap-1 mb-2">
+                    <div className="flex-1 h-1 rounded-full bg-white/40 overflow-hidden">
+                      <div className="h-full bg-white rounded-full w-3/4 animate-pulse" />
+                    </div>
+                    <div className="flex-1 h-1 rounded-full bg-white/20" />
+                  </div>
+
+                  {/* Brand Profile in Simulator */}
+                  <div className="flex items-center justify-between text-white">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-pink-500 to-indigo-600 flex items-center justify-center text-[10px] font-black border border-white/40">
                         UG
                       </div>
-                    </div>
-                    <div>
-                      <h5 className="font-bold text-xs leading-none drop-shadow">URBAN GAMING</h5>
-                      <span className="text-[9px] text-white/70">Story Promosi</span>
+                      <div>
+                        <p className="text-[11px] font-bold tracking-tight leading-none">URBAN Gaming</p>
+                        <p className="text-[9px] text-white/70 leading-none mt-0.5">{openPreview.category}</p>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Media Image / Video */}
-                {openPreview.mediaType === "video" ? (
-                  <video 
-                    src={openPreview.mediaUrl} 
-                    className="w-full h-full object-cover" 
-                    controls 
-                    autoPlay 
-                    playsInline 
-                  />
-                ) : (
-                  <img
-                    src={openPreview.mediaUrl}
-                    alt={openPreview.title}
-                    className="w-full h-full object-cover"
-                  />
-                )}
+                {/* Bottom Story Gradient */}
+                <div className="relative z-10 p-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
+                  <p className="text-white text-xs font-semibold line-clamp-2 drop-shadow-md">
+                    {openPreview.caption}
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* Right: Caption & Sharing Hub */}
-            <div className="w-full md:w-[380px] bg-zinc-900 p-6 flex flex-col justify-between border-t md:border-t-0 md:border-l border-white/10 text-white overflow-y-auto">
+            {/* Right: Metadata & Social Share Action Hub */}
+            <div className="w-full md:w-[380px] p-6 flex flex-col justify-between bg-zinc-900 border-t md:border-t-0 md:border-l border-white/10 text-white">
               <div className="space-y-4">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-pink-500/20 text-pink-400 border border-pink-500/30">
+                
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-pink-500/20 text-pink-400 border border-pink-500/30">
                       {openPreview.category}
                     </span>
-                    <span className="text-[10px] text-zinc-400">
-                      Format: {openPreview.aspectRatio}
+                    <span className="text-[10px] text-zinc-400 font-medium">
+                      Rasio: {openPreview.aspectRatio}
                     </span>
                   </div>
-                  <h3 className="text-lg font-black text-white tracking-tight">
-                    {openPreview.title}
-                  </h3>
+
+                  <button
+                    onClick={() => setOpenPreview(null)}
+                    className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
+                  >
+                    <Icons.X className="w-4 h-4" />
+                  </button>
                 </div>
+
+                <h3 className="text-base font-black tracking-tight">
+                  {openPreview.title}
+                </h3>
 
                 {/* Full Caption Box */}
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
                     Teks Caption Promosi
                   </label>
-                  <div className="p-3 bg-zinc-950/80 border border-white/10 rounded-2xl max-h-56 overflow-y-auto scrollbar-ios">
+                  <div className="p-3 bg-black/60 border border-white/10 rounded-2xl max-h-56 overflow-y-auto scrollbar-ios">
                     <p className="text-xs text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed">
                       {openPreview.caption}
                     </p>
@@ -1166,77 +1198,540 @@ export default function GalleryModal({
               {/* Action Buttons Hub */}
               <div className="space-y-2.5 pt-4 mt-4 border-t border-white/10">
                 <button
-                  onClick={() => handleShareMedia(openPreview)}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold text-xs shadow-lg shadow-emerald-600/30 active:scale-95 transition-all"
+                  onClick={() => handleShareClick(openPreview)}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-[#34C759] hover:bg-[#2EB84F] active:bg-[#28A745] text-white font-bold text-xs shadow-lg shadow-green-500/20 active:scale-95 transition-all"
                 >
-                  <Share2 size={16} />
-                  <span>Share Langsung ke WhatsApp / Story</span>
+                  <Icons.Share className="w-4 h-4 stroke-[2.5]" />
+                  <span>Bagikan ke Sosial Media (WA, IG, FB, TikTok)</span>
                 </button>
 
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => handleCopyCaption(openPreview.caption)}
-                    className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs transition-all"
+                    className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs transition-all active:scale-95"
                   >
-                    <Copy size={14} />
+                    <Icons.Copy className="w-3.5 h-3.5" />
                     <span>Salin Caption</span>
                   </button>
 
                   <button
                     onClick={() => handleDownloadMedia(openPreview)}
-                    className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs transition-all"
+                    className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs transition-all active:scale-95"
                   >
-                    <Download size={14} />
+                    <Icons.Download className="w-3.5 h-3.5" />
                     <span>Download Media</span>
                   </button>
                 </div>
-
-                {isSuperAdminOrOwner && (
-                  <div className="flex items-center justify-between pt-2">
-                    <button
-                      onClick={() => {
-                        setOpenEdit(openPreview);
-                        setOpenPreview(null);
-                      }}
-                      className="text-xs text-blue-400 hover:underline flex items-center gap-1"
-                    >
-                      <Edit3 size={13} />
-                      <span>Edit Info</span>
-                    </button>
-                    <button
-                      onClick={() => handleDeleteItem(openPreview)}
-                      className="text-xs text-red-400 hover:underline flex items-center gap-1"
-                    >
-                      <Trash2 size={13} />
-                      <span>Hapus dari Galeri</span>
-                    </button>
-                  </div>
-                )}
               </div>
+
             </div>
           </div>
         </div>
       )}
 
       {/* ============================================================
-          EDIT METADATA MODAL
+          SHARE HUB (APPLE ACTION SHEET + PRIORITIZED CHANNELS)
+          ============================================================ */}
+      {shareTargetItem && (
+        <div className="fixed inset-0 z-[145] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 font-sans">
+          <div className="relative w-full max-w-lg bg-white dark:bg-[#1C1C1E] border border-black/10 dark:border-white/10 rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[92vh] text-zinc-900 dark:text-white">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-black/5 dark:border-white/5 bg-black/5 dark:bg-black/30">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-[10px] bg-gradient-to-tr from-emerald-500 to-teal-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/20">
+                  <Icons.Share className="w-4 h-4 stroke-[2.2]" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black tracking-tight uppercase">
+                    Bagikan ke Sosial Media
+                  </h3>
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                    Pilih saluran tujuan atau buka Web Share API
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShareTargetItem(null)}
+                className="w-8 h-8 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:bg-black/10 dark:hover:bg-white/20 transition-all"
+              >
+                <Icons.X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div className="p-5 sm:p-6 overflow-y-auto space-y-4 flex-1 scrollbar-ios">
+              
+              {/* Media Summary Box */}
+              <div className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/5">
+                <div className="w-14 h-14 rounded-xl overflow-hidden bg-black shrink-0 border border-black/10 dark:border-white/10">
+                  <img src={shareTargetItem.mediaUrl} alt={shareTargetItem.title} className="w-full h-full object-cover" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-pink-500/10 text-pink-600 dark:text-pink-400">
+                      {shareTargetItem.category}
+                    </span>
+                    <span className="text-[10px] text-zinc-400 font-medium">
+                      {shareTargetItem.aspectRatio}
+                    </span>
+                  </div>
+                  <h4 className="font-bold text-xs truncate text-zinc-900 dark:text-white">
+                    {shareTargetItem.title}
+                  </h4>
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
+                    {shareTargetItem.caption}
+                  </p>
+                </div>
+              </div>
+
+              {/* Top Hero: Web Share API Trigger */}
+              <button
+                onClick={() => triggerWebShareAPI(shareTargetItem)}
+                className="w-full flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-[#007AFF] via-[#5856D6] to-[#AF52DE] hover:opacity-95 text-white shadow-lg shadow-blue-500/25 active:scale-[0.98] transition-all group"
+              >
+                <div className="flex items-center gap-3 text-left min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0">
+                    <Icons.Smartphone className="w-5 h-5 stroke-[2.5]" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-black text-sm tracking-tight">Buka Web Share API Sistem</span>
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-white/25 uppercase">Semua App</span>
+                    </div>
+                    <p className="text-[11px] text-white/80 truncate">
+                      Buka menu share bawaan HP dengan file & caption
+                    </p>
+                  </div>
+                </div>
+                <Icons.External className="w-4 h-4 text-white/70 group-hover:text-white transition-colors shrink-0 ml-2" />
+              </button>
+
+              {/* Priority Channels Section Header */}
+              <div className="pt-2">
+                <div className="flex items-center justify-between mb-2.5 px-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                    Saluran Favorit (Urutan Prioritas)
+                  </span>
+                  <span className="text-[10px] font-bold text-zinc-400">1-Tap Direct Action</span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2.5">
+                  {/* Prioritas 1: WhatsApp Business */}
+                  <button
+                    onClick={() => shareToWhatsApp(shareTargetItem)}
+                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 text-left transition-all active:scale-[0.99] group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/20">
+                        <Icons.WhatsApp className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs text-zinc-900 dark:text-white">
+                            WhatsApp / WA Business
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-[#25D366] text-white uppercase tracking-wider">
+                            Prioritas #1
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                          Kirim ke Story WA & Chat Pelanggan (Auto-salin caption)
+                        </p>
+                      </div>
+                    </div>
+                    <Icons.External className="w-3.5 h-3.5 text-emerald-500 shrink-0 ml-2" />
+                  </button>
+
+                  {/* Prioritas 2: Instagram */}
+                  <button
+                    onClick={() => shareToInstagram(shareTargetItem)}
+                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-pink-500/10 hover:bg-pink-500/15 border border-pink-500/20 text-left transition-all active:scale-[0.99] group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-pink-500/20">
+                        <Icons.Instagram className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs text-zinc-900 dark:text-white">
+                            Instagram Story & Feed
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-pink-500 text-white uppercase tracking-wider">
+                            Prioritas #2
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                          Auto-download media & salin caption untuk Instagram
+                        </p>
+                      </div>
+                    </div>
+                    <Icons.External className="w-3.5 h-3.5 text-pink-500 shrink-0 ml-2" />
+                  </button>
+
+                  {/* Prioritas 3: Facebook */}
+                  <button
+                    onClick={() => shareToFacebook(shareTargetItem)}
+                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-blue-500/10 hover:bg-blue-500/15 border border-blue-500/20 text-left transition-all active:scale-[0.99] group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-[#1877F2] text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-600/20">
+                        <Icons.Facebook className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs text-zinc-900 dark:text-white">
+                            Facebook Story & Beranda
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-[#1877F2] text-white uppercase tracking-wider">
+                            Prioritas #3
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                          Bagikan postingan & story promosi ke Facebook
+                        </p>
+                      </div>
+                    </div>
+                    <Icons.External className="w-3.5 h-3.5 text-blue-500 shrink-0 ml-2" />
+                  </button>
+
+                  {/* Prioritas 4: TikTok */}
+                  <button
+                    onClick={() => shareToTikTok(shareTargetItem)}
+                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 border border-black/5 dark:border-white/10 text-left transition-all active:scale-[0.99] group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-black dark:bg-white text-white dark:text-black flex items-center justify-center shrink-0 shadow-md">
+                        <Icons.TikTok className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs text-zinc-900 dark:text-white">
+                            TikTok Video & Foto Slide
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-zinc-700 dark:bg-zinc-300 text-white dark:text-black uppercase tracking-wider">
+                            Prioritas #4
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                          Auto-download media & salin caption untuk TikTok
+                        </p>
+                      </div>
+                    </div>
+                    <Icons.External className="w-3.5 h-3.5 text-zinc-500 shrink-0 ml-2" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Fast Tools Toolbar */}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-black/5 dark:border-white/5">
+                <button
+                  onClick={() => handleCopyCaption(shareTargetItem.caption)}
+                  className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-zinc-800 dark:text-zinc-200 font-bold text-xs transition-all active:scale-95"
+                >
+                  <Icons.Copy className="w-3.5 h-3.5" />
+                  <span>Salin Caption</span>
+                </button>
+
+                <button
+                  onClick={() => handleDownloadMedia(shareTargetItem)}
+                  className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-zinc-800 dark:text-zinc-200 font-bold text-xs transition-all active:scale-95"
+                >
+                  <Icons.Download className="w-3.5 h-3.5" />
+                  <span>Download Media</span>
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================
+          UPLOAD MEDIA MODAL (APPLE IOS FORM STYLE)
+          ============================================================ */}
+      {openUpload && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 font-sans">
+          <div className="relative w-full max-w-xl bg-white dark:bg-[#1C1C1E] border border-black/10 dark:border-white/10 rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[90vh] text-zinc-900 dark:text-white">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-black/5 dark:border-white/5 bg-black/5 dark:bg-black/30">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#007AFF]/10 text-[#007AFF] flex items-center justify-center">
+                  <Icons.Upload className="w-4 h-4 stroke-[2.2]" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black uppercase tracking-tight">
+                    Unggah Media Baru ke Galeri
+                  </h3>
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                    File akan disimpan di Firebase Storage & siap dibagikan
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setOpenUpload(false)}
+                className="w-8 h-8 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:bg-black/10 dark:hover:bg-white/20 transition-all"
+              >
+                <Icons.X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Form Body */}
+            <form onSubmit={handleSubmitUpload} className="p-6 overflow-y-auto space-y-4 flex-1 scrollbar-ios">
+              
+              {/* File Dropzone */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                  File Gambar / Video
+                </label>
+                <div className="relative border-2 border-dashed border-black/10 dark:border-white/10 hover:border-[#007AFF] dark:hover:border-[#007AFF] rounded-2xl p-4 text-center bg-black/5 dark:bg-white/5 transition-colors cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    onChange={handleFileChange}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+
+                  {uploadPreviewUrl ? (
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={uploadPreviewUrl}
+                        alt="Preview"
+                        className="w-16 h-16 rounded-xl object-cover border border-black/10 dark:border-white/10"
+                      />
+                      <div className="text-left min-w-0 flex-1">
+                        <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                          {uploadFile?.name}
+                        </p>
+                        <p className="text-[10px] text-zinc-500">
+                          Format otomatis terdeteksi: <span className="font-bold text-[#007AFF]">{uploadAspectRatio}</span>
+                        </p>
+                        <p className="text-[10px] text-emerald-500 font-semibold mt-0.5">
+                          ✓ Klik untuk ganti file
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-4 flex flex-col items-center">
+                      <div className="w-12 h-12 rounded-2xl bg-black/5 dark:bg-white/10 flex items-center justify-center text-zinc-400 mb-2">
+                        <Icons.Upload className="w-6 h-6 stroke-[2]" />
+                      </div>
+                      <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                        Klik atau seret gambar ke sini
+                      </p>
+                      <p className="text-[10px] text-zinc-400 mt-0.5">
+                        JPG, PNG, WEBP (Otomatis dikompres kualitas tinggi)
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Direct URL Fallback */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
+                  Atau Masukkan URL Gambar (Opsional)
+                </label>
+                <input
+                  type="url"
+                  value={directUrlInput}
+                  onChange={(e) => setDirectUrlInput(e.target.value)}
+                  placeholder="https://images.unsplash.com/..."
+                  className="w-full px-3.5 py-2.5 text-xs bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                />
+              </div>
+
+              {/* Title & Category Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
+                    Judul Konten *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={uploadTitle}
+                    onChange={(e) => setUploadTitle(e.target.value)}
+                    placeholder="Contoh: Promo Weekend PS5"
+                    className="w-full px-3.5 py-2.5 text-xs bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
+                    Kategori
+                  </label>
+                  <select
+                    value={uploadCategory}
+                    onChange={(e) => setUploadCategory(e.target.value as any)}
+                    className="w-full px-3.5 py-2.5 text-xs bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                  >
+                    {CATEGORIES.filter((c) => c !== "Semua").map((c) => (
+                      <option key={c} value={c} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Aspect Ratio Selector */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                  Format Aspek Rasio
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: "9:16", label: "📱 Story (9:16)", desc: "Status WA / IG / TikTok" },
+                    { id: "1:1", label: "🟦 Feed (1:1)", desc: "Postingan Persegi" },
+                    { id: "16:9", label: "🖥️ Wide (16:9)", desc: "Banner Horizontal" },
+                  ].map((r) => (
+                    <button
+                      type="button"
+                      key={r.id}
+                      onClick={() => setUploadAspectRatio(r.id as any)}
+                      className={`p-2.5 rounded-xl border text-left transition-all ${
+                        uploadAspectRatio === r.id
+                          ? "bg-[#007AFF]/10 border-[#007AFF] text-[#007AFF] font-bold shadow-xs"
+                          : "bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/10 text-zinc-600 dark:text-zinc-400"
+                      }`}
+                    >
+                      <div className="text-xs">{r.label}</div>
+                      <div className="text-[9px] opacity-75">{r.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preset Caption Selector */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                    Template Caption Siap Pakai
+                  </label>
+                  <span className="text-[10px] text-zinc-400">1-Klik untuk ganti</span>
+                </div>
+                <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                  {CAPTION_PRESETS.map((preset, idx) => (
+                    <button
+                      type="button"
+                      key={idx}
+                      onClick={() => {
+                        setUploadCaption(preset.caption);
+                        setUploadCategory(preset.category);
+                        setUploadAspectRatio(preset.aspectRatio);
+                        if (!uploadTitle) setUploadTitle(preset.title.replace(/[^a-zA-Z0-9 ]/g, "").trim());
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/15 text-[11px] font-medium whitespace-nowrap text-zinc-700 dark:text-zinc-300 border border-black/5 dark:border-white/5 transition-colors"
+                    >
+                      {preset.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Caption Textarea */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
+                  Teks Caption Promosi (Otomatis siap disalin ke Story)
+                </label>
+                <textarea
+                  rows={4}
+                  value={uploadCaption}
+                  onChange={(e) => setUploadCaption(e.target.value)}
+                  placeholder="Tulis caption promosi menarik..."
+                  className="w-full p-3 text-xs bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl text-zinc-900 dark:text-white font-mono leading-relaxed placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                />
+              </div>
+
+              {/* Pin Switch */}
+              <div className="flex items-center justify-between p-3 bg-black/5 dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5">
+                <div>
+                  <div className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                    <Icons.Pin className="w-3.5 h-3.5 text-amber-500" filled />
+                    <span>Sematkan ke Paling Atas (Pin)</span>
+                  </div>
+                  <p className="text-[10px] text-zinc-500">
+                    Konten ini akan selalu muncul di urutan pertama galeri
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={uploadPinned}
+                  onChange={(e) => setUploadPinned(e.target.checked)}
+                  className="w-5 h-5 rounded text-[#007AFF] focus:ring-[#007AFF] cursor-pointer"
+                />
+              </div>
+
+              {/* Progress Bar */}
+              {uploading && (
+                <div className="space-y-1.5 pt-2">
+                  <div className="flex justify-between text-xs font-bold text-[#007AFF]">
+                    <span>Mengunggah ke Firebase Storage...</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-black/10 dark:bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-[#007AFF] to-[#5856D6] transition-all duration-300 rounded-full"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-black/5 dark:border-white/5">
+                <button
+                  type="button"
+                  onClick={() => setOpenUpload(false)}
+                  disabled={uploading}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploading}
+                  className="px-6 py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0066D6] text-white font-bold text-xs shadow-md shadow-blue-500/20 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {uploading ? "Sedang Mengunggah..." : "Simpan ke Galeri"}
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================
+          EDIT METADATA MODAL (APPLE DESIGN)
           ============================================================ */}
       {openEdit && (
-        <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200 font-sans">
-          <div className="relative w-full max-w-lg bg-white dark:bg-[#1C1C1E] border border-zinc-200 dark:border-white/10 rounded-[28px] overflow-hidden shadow-2xl p-6">
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white mb-4">
-              Edit Konten Galeri
-            </h3>
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 font-sans">
+          <div className="relative w-full max-w-md bg-white dark:bg-[#1C1C1E] border border-black/10 dark:border-white/10 rounded-[32px] overflow-hidden shadow-2xl flex flex-col text-zinc-900 dark:text-white">
             
-            <form onSubmit={handleUpdateItem} className="space-y-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-black/5 dark:border-white/5 bg-black/5 dark:bg-black/30">
+              <h3 className="text-sm font-black uppercase tracking-tight">
+                Edit Informasi Media
+              </h3>
+              <button
+                onClick={() => setOpenEdit(null)}
+                className="w-8 h-8 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center text-zinc-500 dark:text-zinc-400"
+              >
+                <Icons.X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateItem} className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Judul</label>
                 <input
                   type="text"
+                  required
                   value={openEdit.title}
                   onChange={(e) => setOpenEdit({ ...openEdit, title: e.target.value })}
-                  className="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-white"
-                  required
+                  className="w-full px-3.5 py-2.5 text-xs bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
                 />
               </div>
 
@@ -1246,10 +1741,12 @@ export default function GalleryModal({
                   <select
                     value={openEdit.category}
                     onChange={(e) => setOpenEdit({ ...openEdit, category: e.target.value as any })}
-                    className="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-white"
+                    className="w-full px-3.5 py-2.5 text-xs bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl text-zinc-900 dark:text-white"
                   >
-                    {CATEGORIES.filter(c => c !== "Semua").map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                    {CATEGORIES.filter((c) => c !== "Semua").map((c) => (
+                      <option key={c} value={c} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">
+                        {c}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -1259,7 +1756,7 @@ export default function GalleryModal({
                   <select
                     value={openEdit.aspectRatio}
                     onChange={(e) => setOpenEdit({ ...openEdit, aspectRatio: e.target.value as any })}
-                    className="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-white"
+                    className="w-full px-3.5 py-2.5 text-xs bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl text-zinc-900 dark:text-white"
                   >
                     <option value="9:16">📱 Story (9:16)</option>
                     <option value="1:1">🟦 Feed Persegi (1:1)</option>
@@ -1274,11 +1771,11 @@ export default function GalleryModal({
                   rows={5}
                   value={openEdit.caption}
                   onChange={(e) => setOpenEdit({ ...openEdit, caption: e.target.value })}
-                  className="w-full p-3 text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-white font-mono"
+                  className="w-full p-3 text-xs bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl text-zinc-900 dark:text-white font-mono leading-relaxed"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-black/5 dark:border-white/5">
                 <button
                   type="button"
                   onClick={() => setOpenEdit(null)}
@@ -1288,7 +1785,7 @@ export default function GalleryModal({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs"
+                  className="px-5 py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0066D6] text-white font-bold text-xs"
                 >
                   Simpan Perubahan
                 </button>
@@ -1299,11 +1796,11 @@ export default function GalleryModal({
       )}
 
       {/* ============================================================
-          FLOATING TOAST NOTIFICATION
+          FLOATING TOAST NOTIFICATION (APPLE CAPSULE STYLE)
           ============================================================ */}
       {toastMsg && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[150] px-4 py-2.5 rounded-full bg-zinc-900/90 dark:bg-white/90 text-white dark:text-zinc-900 text-xs font-bold shadow-2xl backdrop-blur-md flex items-center gap-2 animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <Check size={14} className="text-emerald-500 stroke-[3]" />
+          <Icons.Check className="w-3.5 h-3.5 text-[#34C759] stroke-[3]" />
           <span>{toastMsg}</span>
         </div>
       )}
