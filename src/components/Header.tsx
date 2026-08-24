@@ -13,6 +13,8 @@ type HeaderProps = {
   onOpenSettings: () => void;
   onOpenScan: () => void;
   onOpenPOS: () => void;
+  onOpenGallery?: () => void;
+  isSuperAdminOrOwner?: boolean;
 
   hasData: boolean;
   mandatoryFilled: boolean;
@@ -40,6 +42,13 @@ const Icons = {
   CogActive: () => <svg className="w-5 h-5 animate-spin-slow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>,
   Calendar: () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>,
   QrCode: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><path d="M7 17h.01M17 7h.01M17 17h.01M17 21h.01M21 17h.01M17 14h.01" /></svg>,
+  Gallery: () => (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <polyline points="21 15 16 10 5 21" />
+    </svg>
+  ),
   POS: () => (
     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="9" cy="21" r="1" />
@@ -94,6 +103,8 @@ export default function Header({
   activeUsers,
   onHeightChange,
   onOpenPOS,
+  onOpenGallery,
+  isSuperAdminOrOwner,
   hasPOSUpdate,
 }: HeaderProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -270,6 +281,9 @@ export default function Header({
 
               {/* Mobile Icons (Hidden on Desktop) */}
               <div className="flex md:hidden items-center gap-1">
+                {isSuperAdminOrOwner && onOpenGallery && (
+                  <IconButton onClick={onOpenGallery} icon={<Icons.Gallery />} title="Galeri Media (Story & Promo)" />
+                )}
                 <IconButton onClick={onOpenPOS} icon={<Icons.POS />} title="POS (Kasir)" hasBadge={hasPOSUpdate} />
                 <IconButton onClick={onOpenScan} icon={<Icons.QrCode />} title="Scan QR Code" />
                 <IconButton onClick={onOpenSettings} icon={<Icons.Cog />} title="Pengaturan" />
@@ -305,6 +319,9 @@ export default function Header({
 
               {/* Desktop Icons (Hidden on Mobile) */}
               <div className="hidden md:flex items-center gap-2 md:ml-1">
+                {isSuperAdminOrOwner && onOpenGallery && (
+                  <IconButton onClick={onOpenGallery} icon={<Icons.Gallery />} title="Galeri Media (Story & Promo)" />
+                )}
                 <IconButton onClick={onOpenPOS} icon={<Icons.POS />} title="POS (Kasir)" hasBadge={hasPOSUpdate} />
                 <IconButton onClick={onOpenScan} icon={<Icons.QrCode />} title="Scan QR Code" />
                 <IconButton onClick={onOpenSettings} icon={<Icons.Cog />} title="Pengaturan" />

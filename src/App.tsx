@@ -20,6 +20,7 @@ import EditRincian from "./components/EditRincian";
 import UpdateStok from "./components/UpdateStok"; 
 import PageOwner from "./components/PageOwner";
 import POSModal from "./components/POSModal";
+import GalleryModal from "./components/GalleryModal";
 import WidgetMonitoringStatus from "./components/WidgetMonitoringStatus";
 import WidgetMonitoringDevice from "./components/WidgetMonitoringDevice";
 import LiveCursors from "./components/LiveCursors";
@@ -85,6 +86,8 @@ export default function App() {
     setOpenSettings,
     openPOS,
     setOpenPOS,
+    openGallery,
+    setOpenGallery,
     hasVersionUpdate,
     posUpdates,
     posBaseline,
@@ -261,6 +264,8 @@ export default function App() {
               onOpenSettings={() => setOpenSettings(true)}
               onOpenScan={handleOpenScan}
               onOpenPOS={() => setOpenPOS(true)}
+              onOpenGallery={() => setOpenGallery(true)}
+              isSuperAdminOrOwner={isSuperAdminOrOwner}
               hasData={hasData} mandatoryFilled={mandatoryFilled}
               isEditing={!!editingId}
               hasUnsavedChanges={currentFormSignature !== savedSignature}
@@ -556,6 +561,13 @@ export default function App() {
             adminName={user?.email ? user.email.split('@')[0] : "Admin"}
             catalogChanges={catalogChanges}
             onClearProductChange={handleClearProductChange}
+          />
+
+          <GalleryModal
+            open={openGallery}
+            onClose={() => setOpenGallery(false)}
+            isSuperAdminOrOwner={isSuperAdminOrOwner}
+            adminName={user?.email ? user.email.split('@')[0] : "Super Admin"}
           />
 
           {/* === POPUPS: APPLE UI STYLE === */}

@@ -300,6 +300,7 @@ export default function useAppController() {
   const [shiftPegawai, _setShiftPegawai] = useState("");
   const [openSettings, setOpenSettings] = useState(false);
   const [openPOS, setOpenPOS] = useState(false);
+  const [openGallery, setOpenGallery] = useState(false);
   const [hasVersionUpdate, setHasVersionUpdate] = useState(false);
   const [posUpdates, setPosUpdates] = useState<Record<string, { type: "baru" | "update harga" | "update", timestamp: string }>>({});
   const [posBaseline, setPosBaseline] = useState<SavedCatalogState | null>(null);
@@ -1226,6 +1227,7 @@ export default function useAppController() {
 
   // Lock body scroll on active modals/popups
   useBodyScrollLock(openPOS);
+  useBodyScrollLock(openGallery);
   useBodyScrollLock(openSettings);
   useBodyScrollLock(showChallenge);
   useBodyScrollLock(showDownloadAlert);
@@ -2289,6 +2291,8 @@ export default function useAppController() {
     setOpenSettings,
     openPOS,
     setOpenPOS,
+    openGallery,
+    setOpenGallery,
     hasVersionUpdate,
     posUpdates,
     posBaseline,
