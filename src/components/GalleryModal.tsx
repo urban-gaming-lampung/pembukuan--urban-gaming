@@ -859,32 +859,33 @@ export default function GalleryModal({
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-      showToast(`Media ${ext.toUpperCase()} berhasil diunduh! ⬇️`);
+      showToast(`Media ${ext.toUpperCase()} berhasil diunduh ke HP! ⬇️`);
     } catch (e) {
       window.open(item.mediaUrl, "_blank");
     }
   };
 
-  // Trigger Web Share API Native with Video / Image File
-  const triggerWebShareAPI = async (item: MediaItem) => {
+  // Universal Video/Image File Sharer via Web Share API
+  const triggerWebShareAPI = async (item: MediaItem): Promise<boolean> => {
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
       try {
-        showToast("Mempersiapkan Web Share API...");
+        showToast("Mempersiapkan file media & caption untuk dikirim... ⏳");
         const response = await fetch(item.mediaUrl);
         const blob = await response.blob();
         const ext = item.mediaType === "video" ? "mp4" : "jpg";
         const mime = blob.type || (item.mediaType === "video" ? "video/mp4" : "image/jpeg");
         const file = new File([blob], `${item.title.replace(/\s+/g, "_")}.${ext}`, { type: mime });
 
+        // Check if device supports sharing files
         if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
           await navigator.share({
             title: item.title,
             text: item.caption,
             files: [file],
           });
-          showToast("Berhasil dibagikan via Web Share! 🚀");
+          showToast("Berhasil dibagikan ke Story / Chat! 🚀");
           setShareTargetItem(null);
-          return;
+          return true;
         } else {
           await navigator.share({
             title: item.title,
@@ -892,7 +893,7 @@ export default function GalleryModal({
           });
           showToast("Berhasil dibagikan via Web Share! 🚀");
           setShareTargetItem(null);
-          return;
+          return true;
         }
       } catch (err: any) {
         if (err.name !== "AbortError") {
@@ -900,55 +901,66 @@ export default function GalleryModal({
           showToast("Pilih salah satu aplikasi sosial media di bawah 👇");
         }
       }
-    } else {
-      showToast("Web Share API tidak didukung di browser ini. Gunakan tombol aplikasi di bawah!");
     }
+    return false;
   };
 
-  // Prioritas 1: WhatsApp BUSINESS Khusus (Direct Intent com.whatsapp.w4b)
+  // Prioritas 1: WhatsApp Business (Kirim File Video/Foto Langsung ke Story & Chat)
   const shareToWhatsAppBusiness = async (item: MediaItem) => {
+    // Attempt 1: Native File Share (Brings actual video file + caption directly into WhatsApp Business Story/Status)
+    const success = await triggerWebShareAPI(item);
+    if (success) return;
+
+    // Attempt 2: Fallback for browsers that don't support file sharing
     await handleCopyCaption(item.caption);
-    const text = `${item.caption}\n\n📸 Media: ${item.mediaUrl}`;
-    const encoded = encodeURIComponent(text);
+    await handleDownloadMedia(item);
+    
     const isAndroid = /android/i.test(navigator.userAgent || "");
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent || "");
 
     if (isAndroid) {
-      // Direct Android Intent specifically targeted to WhatsApp Business package
-      window.location.href = `intent://send?text=${encoded}#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end`;
+      window.location.href = `intent://send?#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end`;
     } else if (isIOS) {
-      window.location.href = `whatsapp://send?text=${encoded}`;
+      window.location.href = `whatsapp://`;
     } else {
-      window.open(`https://web.whatsapp.com/send?text=${encoded}`, "_blank");
+      window.open(`https://web.whatsapp.com/`, "_blank");
     }
-    showToast("Caption disalin! Membuka WhatsApp Business... 🟢");
+    showToast("Video diunduh & caption disalin! Buka Status di WhatsApp Business 🟢");
   };
 
   // Opsi Tambahan: WhatsApp Personal / Reguler
   const shareToWhatsAppRegular = async (item: MediaItem) => {
+    const success = await triggerWebShareAPI(item);
+    if (success) return;
+
     await handleCopyCaption(item.caption);
-    const text = `${item.caption}\n\n📸 Media: ${item.mediaUrl}`;
-    const encoded = encodeURIComponent(text);
+    await handleDownloadMedia(item);
     const isAndroid = /android/i.test(navigator.userAgent || "");
 
     if (isAndroid) {
-      window.location.href = `intent://send?text=${encoded}#Intent;package=com.whatsapp;scheme=whatsapp;end`;
+      window.location.href = `intent://send?#Intent;package=com.whatsapp;scheme=whatsapp;end`;
     } else {
-      window.open(`https://api.whatsapp.com/send?text=${encoded}`, "_blank");
+      window.open(`https://api.whatsapp.com/`, "_blank");
     }
-    showToast("Caption disalin! Membuka WhatsApp Biasa... 💬");
+    showToast("Video diunduh & caption disalin! Buka Status di WhatsApp Biasa 💬");
   };
 
   // Prioritas 2: Instagram Story & Feed
   const shareToInstagram = async (item: MediaItem) => {
+    const success = await triggerWebShareAPI(item);
+    if (success) return;
+
     await handleCopyCaption(item.caption);
     await handleDownloadMedia(item);
     window.open("https://instagram.com", "_blank");
-    showToast("Media diunduh & caption disalin! Buka Instagram Story 📸");
+    showToast("Video diunduh & caption disalin! Buka Instagram Story 📸");
   };
 
   // Prioritas 3: Facebook Story & Post
   const shareToFacebook = async (item: MediaItem) => {
+    const success = await triggerWebShareAPI(item);
+    if (success) return;
+
     await handleCopyCaption(item.caption);
     const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(item.mediaUrl)}&quote=${encodeURIComponent(item.caption)}`;
     window.open(fbUrl, "_blank");
@@ -957,17 +969,20 @@ export default function GalleryModal({
 
   // Prioritas 4: TikTok Video & Photo Slide
   const shareToTikTok = async (item: MediaItem) => {
+    const success = await triggerWebShareAPI(item);
+    if (success) return;
+
     await handleCopyCaption(item.caption);
     await handleDownloadMedia(item);
     window.open("https://www.tiktok.com/upload", "_blank");
-    showToast("Media diunduh & caption disalin! Buka TikTok 🎵");
+    showToast("Video diunduh & caption disalin! Buka TikTok 🎵");
   };
 
-  // Open Share Hub & Trigger Web Share API
-  const handleShareClick = (item: MediaItem) => {
+  // Open Share Hub & Trigger Native Video/Image File Share
+  const handleShareClick = async (item: MediaItem) => {
     setShareTargetItem(item);
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-      triggerWebShareAPI(item);
+      await triggerWebShareAPI(item);
     }
   };
 
@@ -1279,7 +1294,7 @@ export default function GalleryModal({
                       <button
                         onClick={() => handleShareClick(item)}
                         className="flex items-center justify-center gap-1 py-1.5 sm:py-2 px-1.5 sm:px-2 rounded-[10px] bg-[#34C759] hover:bg-[#2EB84F] active:bg-[#28A745] text-white font-bold text-[10px] sm:text-xs shadow-xs active:scale-95 transition-all"
-                        title="Share ke WhatsApp Business, Instagram, FB, TikTok"
+                        title="Share File Video & Caption ke WhatsApp Business / Story"
                       >
                         <Icons.Share className="w-3 h-3 stroke-[2.5]" />
                         <span>Share</span>
@@ -1469,7 +1484,7 @@ export default function GalleryModal({
                   className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-[#34C759] hover:bg-[#2EB84F] active:bg-[#28A745] text-white font-bold text-xs shadow-lg shadow-green-500/20 active:scale-95 transition-all"
                 >
                   <Icons.Share className="w-4 h-4 stroke-[2.5]" />
-                  <span>Bagikan ke Sosial Media (WA Business, IG, FB, TikTok)</span>
+                  <span>Bagikan Video/Foto ke Story & Chat</span>
                 </button>
 
                 <div className="grid grid-cols-2 gap-2">
@@ -1514,7 +1529,7 @@ export default function GalleryModal({
                     Bagikan ke Sosial Media
                   </h3>
                   <p className="text-[9px] sm:text-[10px] text-zinc-500 dark:text-zinc-400">
-                    Pilih saluran tujuan atau buka Web Share API
+                    File media {shareTargetItem.mediaType === "video" ? "video" : "foto"} akan dikirim bersama caption
                   </p>
                 </div>
               </div>
@@ -1570,7 +1585,7 @@ export default function GalleryModal({
                 </div>
               </div>
 
-              {/* Top Hero: Web Share API Trigger */}
+              {/* Top Hero: Web Share API Trigger (Native Video File Sharing) */}
               <button
                 onClick={() => triggerWebShareAPI(shareTargetItem)}
                 className="w-full flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-[#007AFF] via-[#5856D6] to-[#AF52DE] hover:opacity-95 text-white shadow-lg shadow-blue-500/25 active:scale-[0.98] transition-all group"
@@ -1581,11 +1596,11 @@ export default function GalleryModal({
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-black text-xs sm:text-sm tracking-tight">Buka Web Share API Sistem</span>
-                      <span className="px-1.5 py-0.2 rounded text-[8px] sm:text-[9px] font-black bg-white/25 uppercase">Semua App</span>
+                      <span className="font-black text-xs sm:text-sm tracking-tight">Kirim File {shareTargetItem.mediaType === "video" ? "Video" : "Foto"} + Caption</span>
+                      <span className="px-1.5 py-0.2 rounded text-[8px] sm:text-[9px] font-black bg-white/25 uppercase">Story & WA</span>
                     </div>
                     <p className="text-[10px] sm:text-[11px] text-white/80 truncate">
-                      Buka menu share bawaan HP dengan file & caption
+                      Buka menu share HP dengan file {shareTargetItem.mediaType === "video" ? "video .MP4" : "gambar .JPG"} asli
                     </p>
                   </div>
                 </div>
@@ -1598,7 +1613,7 @@ export default function GalleryModal({
                   <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
                     Saluran Favorit (Urutan Prioritas)
                   </span>
-                  <span className="text-[9px] sm:text-[10px] font-bold text-zinc-400">1-Tap Direct Action</span>
+                  <span className="text-[9px] sm:text-[10px] font-bold text-zinc-400">1-Tap Direct File Share</span>
                 </div>
 
                 <div className="grid grid-cols-1 gap-2 sm:gap-2.5">
@@ -1614,14 +1629,14 @@ export default function GalleryModal({
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 sm:gap-2">
                           <span className="font-bold text-xs text-zinc-900 dark:text-white">
-                            WhatsApp Business (WA Bisnis)
+                            WhatsApp Business (Story & Chat)
                           </span>
                           <span className="px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[9px] font-black bg-[#25D366] text-white uppercase tracking-wider">
                             Prioritas #1
                           </span>
                         </div>
                         <p className="text-[9px] sm:text-[10px] text-zinc-600 dark:text-zinc-300 truncate mt-0.5">
-                          Khusus ke aplikasi WhatsApp Business (Auto-salin caption)
+                          Kirim file {shareTargetItem.mediaType === "video" ? "video .MP4" : "foto"} langsung ke WhatsApp Business Status
                         </p>
                       </div>
                     </div>
@@ -1640,14 +1655,14 @@ export default function GalleryModal({
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 sm:gap-2">
                           <span className="font-bold text-xs text-zinc-900 dark:text-white">
-                            Instagram Story & Feed
+                            Instagram Story & Reels
                           </span>
                           <span className="px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[9px] font-black bg-pink-500 text-white uppercase tracking-wider">
                             Prioritas #2
                           </span>
                         </div>
                         <p className="text-[9px] sm:text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                          Auto-download media & salin caption untuk Instagram
+                          Kirim file media & salin caption untuk Instagram
                         </p>
                       </div>
                     </div>
@@ -1699,7 +1714,7 @@ export default function GalleryModal({
                           </span>
                         </div>
                         <p className="text-[9px] sm:text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                          Auto-download media & salin caption untuk TikTok
+                          Kirim file video & salin caption untuk TikTok
                         </p>
                       </div>
                     </div>
