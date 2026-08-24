@@ -442,7 +442,7 @@ export default function GalleryModal({
     }
   }, [open]);
 
-  // Handle File Selection (Supports Images AND Videos with Auto Aspect-Ratio & Poster Frame)
+  // Handle File Selection (Supports Images AND Videos with Auto Aspect-Ratio & Robust Poster Frame Generation)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -456,14 +456,15 @@ export default function GalleryModal({
     if (isVideo) {
       setUploadMediaType("video");
       const video = document.createElement("video");
+      video.preload = "auto";
       video.src = objectUrl;
       video.muted = true;
       video.playsInline = true;
-      video.currentTime = 0.5;
+      video.crossOrigin = "anonymous";
 
-      video.onloadeddata = () => {
+      video.onloadedmetadata = () => {
         const ratio = video.videoHeight / video.videoWidth;
-        if (ratio >= 1.4) {
+        if (ratio >= 1.35) {
           setUploadAspectRatio("9:16");
         } else if (ratio >= 0.85 && ratio <= 1.15) {
           setUploadAspectRatio("1:1");
@@ -471,15 +472,32 @@ export default function GalleryModal({
           setUploadAspectRatio("16:9");
         }
 
-        // Generate Video Poster Thumbnail Frame
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.min(video.videoWidth || 720, 1080);
-        canvas.height = Math.round(canvas.width * (video.videoHeight / video.videoWidth));
-        const ctx = canvas.getContext("2d");
-        ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob((blob) => {
-          if (blob) setUploadThumbnailBlob(blob);
-        }, "image/jpeg", 0.85);
+        // Seek to 0.5s or midpoint to avoid blank initial frame
+        const seekTime = Math.min(1.0, Math.max(0.2, (video.duration || 2) / 2));
+        video.currentTime = seekTime;
+      };
+
+      video.onseeked = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          const width = Math.min(video.videoWidth || 720, 1080);
+          const height = Math.round(width * ((video.videoHeight || 1280) / (video.videoWidth || 720)));
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, width, height);
+            canvas.toBlob((blob) => {
+              if (blob) {
+                setUploadThumbnailBlob(blob);
+                const thumbUrl = URL.createObjectURL(blob);
+                setUploadPreviewUrl(thumbUrl);
+              }
+            }, "image/jpeg", 0.88);
+          }
+        } catch (err) {
+          console.warn("Video thumbnail capture warning:", err);
+        }
       };
     } else {
       setUploadMediaType("image");
@@ -599,7 +617,7 @@ export default function GalleryModal({
           await uploadBytes(storageRef, uploadFile);
           finalMediaUrl = await getDownloadURL(storageRef);
 
-          // Upload Video Thumbnail if generated
+          // Upload Video Thumbnail frame if available
           if (uploadThumbnailBlob) {
             thumbStoragePath = `gallery_media/${timestamp}_thumb.jpg`;
             const thumbRef = ref(storage, thumbStoragePath);
@@ -793,7 +811,7 @@ export default function GalleryModal({
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent || "");
 
     if (isAndroid) {
-      // Direct Android Intent to WhatsApp Business package
+      // Direct Android Intent specifically targeted to WhatsApp Business package
       window.location.href = `intent://send?text=${encoded}#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end`;
     } else if (isIOS) {
       window.location.href = `whatsapp://send?text=${encoded}`;
@@ -882,38 +900,38 @@ export default function GalleryModal({
       {/* ============================================================
           TOP CUPERTINO NAVIGATION BAR (APPLE DESIGN)
           ============================================================ */}
-      <header className="sticky top-0 z-30 flex flex-col bg-white/80 dark:bg-[#1C1C1E]/80 backdrop-blur-2xl border-b border-black/5 dark:border-white/10 px-4 sm:px-6 py-3 transition-colors">
-        <div className="flex items-center justify-between gap-3 max-w-7xl mx-auto w-full">
+      <header className="sticky top-0 z-30 flex flex-col bg-white/80 dark:bg-[#1C1C1E]/80 backdrop-blur-2xl border-b border-black/5 dark:border-white/10 px-3.5 sm:px-6 py-2.5 sm:py-3 transition-colors">
+        <div className="flex items-center justify-between gap-2.5 max-w-7xl mx-auto w-full">
           
-          {/* Brand & Large Title */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-[12px] bg-gradient-to-tr from-pink-500 via-purple-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-pink-500/20">
-              <Icons.Gallery className="w-5 h-5 stroke-[2.2]" />
+          {/* Brand & Title */}
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-[12px] bg-gradient-to-tr from-pink-500 via-purple-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-pink-500/20 shrink-0">
+              <Icons.Gallery className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.2]" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-black tracking-tight text-zinc-900 dark:text-white">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <h1 className="text-sm sm:text-lg font-black tracking-tight text-zinc-900 dark:text-white truncate">
                   Galeri Media Sosial
                 </h1>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-xs">
+                <span className="px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-xs shrink-0">
                   Super Admin
                 </span>
               </div>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium">
+              <p className="text-[10px] sm:text-[11px] text-zinc-500 dark:text-zinc-400 font-medium truncate">
                 Pusat Story & Konten Promosi URBAN Gaming
               </p>
             </div>
           </div>
 
           {/* Action Hub */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {isSuperAdminOrOwner && (
               <>
                 <button
                   onClick={() => setOpenUpload(true)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#007AFF] hover:bg-[#0066D6] active:bg-[#0055B3] text-white text-xs font-semibold shadow-md shadow-blue-500/20 active:scale-95 transition-all"
+                  className="flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-[#007AFF] hover:bg-[#0066D6] active:bg-[#0055B3] text-white text-xs font-semibold shadow-md shadow-blue-500/20 active:scale-95 transition-all"
                 >
-                  <Icons.Plus className="w-4 h-4 stroke-[2.5]" />
+                  <Icons.Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
                   <span className="hidden sm:inline">Unggah Media</span>
                   <span className="sm:hidden">Unggah</span>
                 </button>
@@ -942,22 +960,22 @@ export default function GalleryModal({
         </div>
 
         {/* Search & Segmented Filter Bar */}
-        <div className="max-w-7xl mx-auto w-full pt-3 flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
+        <div className="max-w-7xl mx-auto w-full pt-2.5 flex flex-col sm:flex-row gap-2 items-stretch sm:items-center justify-between">
           
           {/* iOS Search Bar */}
           <div className="relative flex-1 max-w-md">
-            <Icons.Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+            <Icons.Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Cari konten promosi, game, atau promo..."
-              className="w-full pl-9 pr-8 py-2 rounded-[12px] bg-black/5 dark:bg-white/10 border-none text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#007AFF] transition-all"
+              className="w-full pl-8 sm:pl-9 pr-7 py-1.5 sm:py-2 rounded-[12px] bg-black/5 dark:bg-white/10 border-none text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#007AFF] transition-all"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
               >
                 <Icons.X className="w-3.5 h-3.5" />
               </button>
@@ -965,12 +983,12 @@ export default function GalleryModal({
           </div>
 
           {/* Aspect Ratio Filter Pills */}
-          <div className="flex items-center gap-1 bg-black/5 dark:bg-white/10 p-1 rounded-[12px] self-start sm:self-auto overflow-x-auto max-w-full">
+          <div className="flex items-center gap-1 bg-black/5 dark:bg-white/10 p-0.5 sm:p-1 rounded-[12px] self-start sm:self-auto overflow-x-auto max-w-full">
             {ASPECT_RATIOS.map((r) => (
               <button
                 key={r.key}
                 onClick={() => setActiveRatio(r.key)}
-                className={`px-3 py-1 rounded-[9px] text-[11px] font-semibold transition-all whitespace-nowrap ${
+                className={`px-2.5 sm:px-3 py-1 rounded-[9px] text-[10px] sm:text-[11px] font-semibold transition-all whitespace-nowrap ${
                   activeRatio === r.key
                     ? "bg-white dark:bg-[#2C2C2E] text-zinc-900 dark:text-white shadow-xs"
                     : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
@@ -983,7 +1001,7 @@ export default function GalleryModal({
         </div>
 
         {/* Category iOS Segmented Scroll */}
-        <div className="max-w-7xl mx-auto w-full pt-2.5 pb-0.5 overflow-x-auto scrollbar-none flex items-center gap-1.5">
+        <div className="max-w-7xl mx-auto w-full pt-2 pb-0.5 overflow-x-auto scrollbar-none flex items-center gap-1.5">
           {CATEGORIES.map((cat) => {
             const count = cat === "Semua" ? mediaList.length : mediaList.filter((m) => m.category === cat).length;
             const active = activeCategory === cat;
@@ -991,14 +1009,14 @@ export default function GalleryModal({
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                className={`px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                   active
                     ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-sm"
                     : "bg-black/5 dark:bg-white/10 text-zinc-600 dark:text-zinc-300 hover:bg-black/10 dark:hover:bg-white/15"
                 }`}
               >
                 <span>{cat}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                   active
                     ? "bg-white/20 dark:bg-black/20 text-current"
                     : "bg-black/10 dark:bg-white/10 text-zinc-500 dark:text-zinc-400"
@@ -1012,9 +1030,9 @@ export default function GalleryModal({
       </header>
 
       {/* ============================================================
-          MAIN CONTENT AREA & MASONRY-STYLE GRID
+          MAIN CONTENT AREA (2-GRID MOBILE, RESPONSIVE DESKTOP)
           ============================================================ */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 scrollbar-ios">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-5 md:p-8 scrollbar-ios">
         <div className="max-w-7xl mx-auto">
           
           {loading ? (
@@ -1053,16 +1071,17 @@ export default function GalleryModal({
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+            /* ✅ 2 GRID PADA MOBILE / SCREEN KECIL, RESPONSIVE KE 3-5 GRID DI LAYAR LEBIH BESAR */
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5 sm:gap-4 md:gap-5">
               {filteredMedia.map((item) => (
                 <div
                   key={item.id}
-                  className="group relative bg-white dark:bg-[#1C1C1E] rounded-[24px] border border-black/5 dark:border-white/10 overflow-hidden shadow-xs hover:shadow-xl hover:scale-[1.01] transition-all duration-300 flex flex-col"
+                  className="group relative bg-white dark:bg-[#1C1C1E] rounded-[18px] sm:rounded-[24px] border border-black/5 dark:border-white/10 overflow-hidden shadow-xs hover:shadow-xl hover:scale-[1.01] transition-all duration-300 flex flex-col justify-between"
                 >
-                  {/* Thumbnail & Aspect Ratio Container (Handles Video & Images) */}
+                  {/* Thumbnail & Aspect Ratio Container (Video with Auto Poster Frame & Image) */}
                   <div
                     onClick={() => setOpenPreview(item)}
-                    className={`relative w-full cursor-pointer overflow-hidden bg-black/5 dark:bg-black/40 ${
+                    className={`relative w-full cursor-pointer overflow-hidden bg-zinc-950 ${
                       item.aspectRatio === "9:16"
                         ? "aspect-[9/16]"
                         : item.aspectRatio === "16:9"
@@ -1071,7 +1090,7 @@ export default function GalleryModal({
                     }`}
                   >
                     {item.mediaType === "video" ? (
-                      <div className="relative w-full h-full">
+                      <div className="relative w-full h-full bg-zinc-950 flex items-center justify-center">
                         {item.thumbnailUrl ? (
                           <img
                             src={item.thumbnailUrl}
@@ -1081,17 +1100,17 @@ export default function GalleryModal({
                           />
                         ) : (
                           <video
-                            src={item.mediaUrl}
+                            src={`${item.mediaUrl}#t=0.5`}
+                            preload="metadata"
                             muted
                             playsInline
-                            loop
                             className="w-full h-full object-cover"
                           />
                         )}
                         {/* Play Overlay Indicator */}
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center shadow-lg border border-white/20 group-hover:scale-110 transition-transform">
-                            <Icons.Play className="w-5 h-5 fill-white ml-0.5" />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/25 group-hover:bg-black/10 transition-colors">
+                          <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-full bg-black/60 backdrop-blur-md text-white flex items-center justify-center shadow-lg border border-white/20 group-hover:scale-110 transition-transform">
+                            <Icons.Play className="w-3.5 h-3.5 sm:w-5 sm:h-5 fill-white ml-0.5" />
                           </div>
                         </div>
                       </div>
@@ -1105,117 +1124,112 @@ export default function GalleryModal({
                     )}
 
                     {/* Dark Vignette Gradient */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20 pointer-events-none" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />
 
                     {/* Top Badges */}
-                    <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none">
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-black/40 text-white backdrop-blur-md border border-white/10 shadow-xs">
+                    <div className="absolute top-2 left-2 right-2 sm:top-2.5 sm:left-2.5 sm:right-2.5 flex items-center justify-between pointer-events-none gap-1">
+                      <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[8px] sm:text-[9px] font-bold bg-black/50 text-white backdrop-blur-md border border-white/10 shadow-xs truncate max-w-[65%]">
                         {item.category}
                       </span>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1 shrink-0">
                         {item.mediaType === "video" && (
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-purple-600 text-white shadow-xs flex items-center gap-1">
+                          <span className="px-1.5 py-0.5 rounded-full text-[8px] sm:text-[9px] font-black bg-purple-600 text-white shadow-xs flex items-center gap-0.5">
                             <Icons.Video className="w-2.5 h-2.5" />
-                            <span>VIDEO</span>
                           </span>
                         )}
                         {item.pinned && (
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-500 text-white shadow-xs flex items-center gap-1">
+                          <span className="px-1.5 py-0.5 rounded-full text-[8px] sm:text-[9px] font-black bg-amber-500 text-white shadow-xs flex items-center gap-0.5">
                             <Icons.Pin className="w-2.5 h-2.5" filled />
-                            <span>PIN</span>
                           </span>
                         )}
-                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-white/20 text-white backdrop-blur-md">
-                          {item.aspectRatio}
-                        </span>
                       </div>
                     </div>
 
-                    {/* Center Hover Magnifying Glass */}
+                    {/* Center Hover Eye */}
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                      <div className="w-11 h-11 rounded-full bg-white/30 backdrop-blur-md text-white flex items-center justify-center border border-white/40 shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
-                        <Icons.Eye className="w-5 h-5 stroke-[2.2]" />
+                      <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white/30 backdrop-blur-md text-white flex items-center justify-center border border-white/40 shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
+                        <Icons.Eye className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.2]" />
                       </div>
                     </div>
 
                     {/* Bottom Title on Image */}
-                    <div className="absolute bottom-3 left-3 right-3 pointer-events-none">
-                      <h4 className="text-white font-black text-sm tracking-tight drop-shadow-md truncate">
+                    <div className="absolute bottom-2 left-2 right-2 sm:bottom-2.5 sm:left-2.5 sm:right-2.5 pointer-events-none">
+                      <h4 className="text-white font-bold text-xs sm:text-sm tracking-tight drop-shadow-md truncate">
                         {item.title}
                       </h4>
                     </div>
                   </div>
 
                   {/* Card Actions & Caption */}
-                  <div className="p-3.5 flex flex-col gap-2.5 flex-1 justify-between">
+                  <div className="p-2 sm:p-3 flex flex-col gap-2 flex-1 justify-between">
                     
                     {/* Caption Preview Box */}
-                    <div className="bg-black/5 dark:bg-white/5 rounded-[12px] p-2.5 border border-black/5 dark:border-white/5">
-                      <p className="text-[11px] text-zinc-600 dark:text-zinc-300 font-mono line-clamp-2 leading-relaxed">
+                    <div className="bg-black/5 dark:bg-white/5 rounded-[10px] p-1.5 sm:p-2 border border-black/5 dark:border-white/5">
+                      <p className="text-[10px] sm:text-[11px] text-zinc-600 dark:text-zinc-300 font-mono line-clamp-2 leading-relaxed">
                         {item.caption || "Tidak ada caption"}
                       </p>
                     </div>
 
                     {/* Primary Cupertino Buttons */}
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-1.5">
                       <button
                         onClick={() => handleShareClick(item)}
-                        className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-[12px] bg-[#34C759] hover:bg-[#2EB84F] active:bg-[#28A745] text-white font-bold text-xs shadow-xs active:scale-95 transition-all"
+                        className="flex items-center justify-center gap-1 py-1.5 sm:py-2 px-1.5 sm:px-2 rounded-[10px] bg-[#34C759] hover:bg-[#2EB84F] active:bg-[#28A745] text-white font-bold text-[10px] sm:text-xs shadow-xs active:scale-95 transition-all"
                         title="Share ke WhatsApp Business, Instagram, FB, TikTok"
                       >
-                        <Icons.Share className="w-3.5 h-3.5 stroke-[2.5]" />
-                        <span>Share Story</span>
+                        <Icons.Share className="w-3 h-3 stroke-[2.5]" />
+                        <span>Share</span>
                       </button>
 
                       <button
                         onClick={() => handleCopyCaption(item.caption)}
-                        className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-[12px] bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-zinc-800 dark:text-zinc-200 font-bold text-xs active:scale-95 transition-all"
+                        className="flex items-center justify-center gap-1 py-1.5 sm:py-2 px-1.5 sm:px-2 rounded-[10px] bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-zinc-800 dark:text-zinc-200 font-bold text-[10px] sm:text-xs active:scale-95 transition-all"
                         title="Salin Teks Caption"
                       >
-                        <Icons.Copy className="w-3.5 h-3.5" />
-                        <span>Salin Teks</span>
+                        <Icons.Copy className="w-3 h-3" />
+                        <span>Salin</span>
                       </button>
                     </div>
 
                     {/* Secondary Tool Row */}
-                    <div className="flex items-center justify-between pt-1 border-t border-black/5 dark:border-white/5 text-zinc-400">
-                      <div className="flex items-center gap-1">
+                    <div className="flex items-center justify-between pt-1 border-t border-black/5 dark:border-white/5 text-zinc-400 text-xs">
+                      <div className="flex items-center gap-0.5 sm:gap-1">
                         <button
                           onClick={() => handleDownloadMedia(item)}
-                          className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                          className="p-1 sm:p-1.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
                           title="Download Media"
                         >
-                          <Icons.Download className="w-4 h-4" />
+                          <Icons.Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                         </button>
                         {isSuperAdminOrOwner && (
                           <button
                             onClick={() => handleTogglePin(item)}
-                            className={`p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors ${
+                            className={`p-1 sm:p-1.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition-colors ${
                               item.pinned ? "text-amber-500" : "text-zinc-400 hover:text-amber-500"
                             }`}
                             title={item.pinned ? "Lepas Pin" : "Sematkan ke atas"}
                           >
-                            <Icons.Pin className="w-4 h-4" filled={item.pinned} />
+                            <Icons.Pin className="w-3.5 h-3.5 sm:w-4 sm:h-4" filled={item.pinned} />
                           </button>
                         )}
                       </div>
 
                       {isSuperAdminOrOwner && (
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-0.5 sm:gap-1">
                           <button
                             onClick={() => setOpenEdit(item)}
-                            className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-zinc-400 hover:text-[#007AFF] transition-colors"
+                            className="p-1 sm:p-1.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-zinc-400 hover:text-[#007AFF] transition-colors"
                             title="Edit Konten"
                           >
-                            <Icons.Edit className="w-4 h-4" />
+                            <Icons.Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           </button>
                           <button
                             onClick={() => handleDeleteItem(item)}
-                            className="p-1.5 rounded-lg hover:bg-red-500/10 text-zinc-400 hover:text-[#FF3B30] transition-colors"
+                            className="p-1 sm:p-1.5 rounded-md hover:bg-red-500/10 text-zinc-400 hover:text-[#FF3B30] transition-colors"
                             title="Hapus Media"
                           >
-                            <Icons.Trash className="w-4 h-4" />
+                            <Icons.Trash className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           </button>
                         </div>
                       )}
@@ -1234,12 +1248,12 @@ export default function GalleryModal({
           STORY PREVIEW SIMULATOR (IPHONE 16 PRO STYLE)
           ============================================================ */}
       {openPreview && (
-        <div className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-200">
-          <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col md:flex-row bg-[#1C1C1E] border border-white/10 rounded-[32px] overflow-hidden shadow-2xl">
+        <div className="fixed inset-0 z-[140] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-200">
+          <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col md:flex-row bg-[#1C1C1E] border border-white/10 rounded-[28px] sm:rounded-[32px] overflow-hidden shadow-2xl">
             
             {/* Left: Smartphone Simulator */}
-            <div className="flex-1 bg-black flex items-center justify-center p-4 sm:p-6">
-              <div className="relative w-full max-w-[310px] aspect-[9/16] rounded-[36px] overflow-hidden ring-4 ring-white/15 shadow-2xl bg-zinc-900 flex flex-col justify-between">
+            <div className="flex-1 bg-black flex items-center justify-center p-3 sm:p-6">
+              <div className="relative w-full max-w-[280px] sm:max-w-[310px] aspect-[9/16] rounded-[32px] sm:rounded-[36px] overflow-hidden ring-4 ring-white/15 shadow-2xl bg-zinc-900 flex flex-col justify-between">
                 
                 {/* Background Image / Video Player */}
                 {openPreview.mediaType === "video" ? (
@@ -1297,7 +1311,7 @@ export default function GalleryModal({
             </div>
 
             {/* Right: Metadata & Social Share Action Hub */}
-            <div className="w-full md:w-[380px] p-6 flex flex-col justify-between bg-zinc-900 border-t md:border-t-0 md:border-l border-white/10 text-white">
+            <div className="w-full md:w-[380px] p-5 sm:p-6 flex flex-col justify-between bg-zinc-900 border-t md:border-t-0 md:border-l border-white/10 text-white">
               <div className="space-y-4">
                 
                 {/* Header */}
@@ -1324,7 +1338,7 @@ export default function GalleryModal({
                   </button>
                 </div>
 
-                <h3 className="text-base font-black tracking-tight">
+                <h3 className="text-sm sm:text-base font-black tracking-tight">
                   {openPreview.title}
                 </h3>
 
@@ -1333,7 +1347,7 @@ export default function GalleryModal({
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
                     Teks Caption Promosi
                   </label>
-                  <div className="p-3 bg-black/60 border border-white/10 rounded-2xl max-h-56 overflow-y-auto scrollbar-ios">
+                  <div className="p-3 bg-black/60 border border-white/10 rounded-2xl max-h-48 sm:max-h-56 overflow-y-auto scrollbar-ios">
                     <p className="text-xs text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed">
                       {openPreview.caption}
                     </p>
@@ -1379,20 +1393,20 @@ export default function GalleryModal({
           SHARE HUB (APPLE ACTION SHEET + PRIORITIZED CHANNELS)
           ============================================================ */}
       {shareTargetItem && (
-        <div className="fixed inset-0 z-[145] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 font-sans">
-          <div className="relative w-full max-w-lg bg-white dark:bg-[#1C1C1E] border border-black/10 dark:border-white/10 rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[92vh] text-zinc-900 dark:text-white">
+        <div className="fixed inset-0 z-[145] flex items-center justify-center p-3.5 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 font-sans">
+          <div className="relative w-full max-w-lg bg-white dark:bg-[#1C1C1E] border border-black/10 dark:border-white/10 rounded-[28px] sm:rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[92vh] text-zinc-900 dark:text-white">
             
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-black/5 dark:border-white/5 bg-black/5 dark:bg-black/30">
+            <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-black/5 dark:border-white/5 bg-black/5 dark:bg-black/30">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-[10px] bg-gradient-to-tr from-emerald-500 to-teal-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/20">
                   <Icons.Share className="w-4 h-4 stroke-[2.2]" />
                 </div>
                 <div>
-                  <h3 className="text-sm sm:text-base font-black tracking-tight uppercase">
+                  <h3 className="text-xs sm:text-base font-black tracking-tight uppercase">
                     Bagikan ke Sosial Media
                   </h3>
-                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                  <p className="text-[9px] sm:text-[10px] text-zinc-500 dark:text-zinc-400">
                     Pilih saluran tujuan atau buka Web Share API
                   </p>
                 </div>
@@ -1406,17 +1420,17 @@ export default function GalleryModal({
             </div>
 
             {/* Content Body */}
-            <div className="p-5 sm:p-6 overflow-y-auto space-y-4 flex-1 scrollbar-ios">
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-3.5 sm:space-y-4 flex-1 scrollbar-ios">
               
               {/* Media Summary Box */}
-              <div className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/5">
-                <div className="w-14 h-14 rounded-xl overflow-hidden bg-black shrink-0 border border-black/10 dark:border-white/10 relative">
+              <div className="flex items-center gap-3 p-2.5 sm:p-3 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/5">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl overflow-hidden bg-black shrink-0 border border-black/10 dark:border-white/10 relative">
                   {shareTargetItem.mediaType === "video" ? (
                     <div className="w-full h-full flex items-center justify-center bg-zinc-900">
                       {shareTargetItem.thumbnailUrl ? (
                         <img src={shareTargetItem.thumbnailUrl} alt={shareTargetItem.title} className="w-full h-full object-cover" />
                       ) : (
-                        <Icons.Video className="w-6 h-6 text-purple-400" />
+                        <Icons.Video className="w-5 h-5 text-purple-400" />
                       )}
                       <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
                         <Icons.Play className="w-3 h-3 text-white" />
@@ -1428,15 +1442,15 @@ export default function GalleryModal({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-pink-500/10 text-pink-600 dark:text-pink-400">
+                    <span className="px-1.5 py-0.2 rounded text-[8px] sm:text-[9px] font-black uppercase bg-pink-500/10 text-pink-600 dark:text-pink-400">
                       {shareTargetItem.category}
                     </span>
                     {shareTargetItem.mediaType === "video" && (
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-purple-600 text-white uppercase">
+                      <span className="px-1.5 py-0.2 rounded text-[8px] sm:text-[9px] font-black bg-purple-600 text-white uppercase">
                         Video
                       </span>
                     )}
-                    <span className="text-[10px] text-zinc-400 font-medium">
+                    <span className="text-[9px] sm:text-[10px] text-zinc-400 font-medium">
                       {shareTargetItem.aspectRatio}
                     </span>
                   </div>
@@ -1452,18 +1466,18 @@ export default function GalleryModal({
               {/* Top Hero: Web Share API Trigger */}
               <button
                 onClick={() => triggerWebShareAPI(shareTargetItem)}
-                className="w-full flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-[#007AFF] via-[#5856D6] to-[#AF52DE] hover:opacity-95 text-white shadow-lg shadow-blue-500/25 active:scale-[0.98] transition-all group"
+                className="w-full flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-[#007AFF] via-[#5856D6] to-[#AF52DE] hover:opacity-95 text-white shadow-lg shadow-blue-500/25 active:scale-[0.98] transition-all group"
               >
-                <div className="flex items-center gap-3 text-left min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0">
-                    <Icons.Smartphone className="w-5 h-5 stroke-[2.5]" />
+                <div className="flex items-center gap-2.5 sm:gap-3 text-left min-w-0">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0">
+                    <Icons.Smartphone className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-black text-sm tracking-tight">Buka Web Share API Sistem</span>
-                      <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-white/25 uppercase">Semua App</span>
+                      <span className="font-black text-xs sm:text-sm tracking-tight">Buka Web Share API Sistem</span>
+                      <span className="px-1.5 py-0.2 rounded text-[8px] sm:text-[9px] font-black bg-white/25 uppercase">Semua App</span>
                     </div>
-                    <p className="text-[11px] text-white/80 truncate">
+                    <p className="text-[10px] sm:text-[11px] text-white/80 truncate">
                       Buka menu share bawaan HP dengan file & caption
                     </p>
                   </div>
@@ -1472,34 +1486,34 @@ export default function GalleryModal({
               </button>
 
               {/* Priority Channels Section Header */}
-              <div className="pt-2">
-                <div className="flex items-center justify-between mb-2.5 px-1">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+              <div className="pt-1">
+                <div className="flex items-center justify-between mb-2 px-1">
+                  <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
                     Saluran Favorit (Urutan Prioritas)
                   </span>
-                  <span className="text-[10px] font-bold text-zinc-400">1-Tap Direct Action</span>
+                  <span className="text-[9px] sm:text-[10px] font-bold text-zinc-400">1-Tap Direct Action</span>
                 </div>
 
-                <div className="grid grid-cols-1 gap-2.5">
+                <div className="grid grid-cols-1 gap-2 sm:gap-2.5">
                   {/* Prioritas 1: WhatsApp Business KHUSUS */}
                   <button
                     onClick={() => shareToWhatsAppBusiness(shareTargetItem)}
-                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border-2 border-emerald-500/40 text-left transition-all active:scale-[0.99] group shadow-sm shadow-emerald-500/10"
+                    className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border-2 border-emerald-500/40 text-left transition-all active:scale-[0.99] group shadow-sm shadow-emerald-500/10"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/30">
-                        <Icons.WhatsAppBusiness className="w-5 h-5" />
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/30">
+                        <Icons.WhatsAppBusiness className="w-4 h-4 sm:w-5 sm:h-5" />
                       </div>
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
                           <span className="font-bold text-xs text-zinc-900 dark:text-white">
                             WhatsApp Business (WA Bisnis)
                           </span>
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-[#25D366] text-white uppercase tracking-wider">
+                          <span className="px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[9px] font-black bg-[#25D366] text-white uppercase tracking-wider">
                             Prioritas #1
                           </span>
                         </div>
-                        <p className="text-[10px] text-zinc-600 dark:text-zinc-300 truncate mt-0.5">
+                        <p className="text-[9px] sm:text-[10px] text-zinc-600 dark:text-zinc-300 truncate mt-0.5">
                           Khusus ke aplikasi WhatsApp Business (Auto-salin caption)
                         </p>
                       </div>
@@ -1510,22 +1524,22 @@ export default function GalleryModal({
                   {/* Prioritas 2: Instagram */}
                   <button
                     onClick={() => shareToInstagram(shareTargetItem)}
-                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-pink-500/10 hover:bg-pink-500/15 border border-pink-500/20 text-left transition-all active:scale-[0.99] group"
+                    className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-pink-500/10 hover:bg-pink-500/15 border border-pink-500/20 text-left transition-all active:scale-[0.99] group"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-pink-500/20">
-                        <Icons.Instagram className="w-5 h-5" />
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-pink-500/20">
+                        <Icons.Instagram className="w-4 h-4 sm:w-5 sm:h-5" />
                       </div>
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
                           <span className="font-bold text-xs text-zinc-900 dark:text-white">
                             Instagram Story & Feed
                           </span>
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-pink-500 text-white uppercase tracking-wider">
+                          <span className="px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[9px] font-black bg-pink-500 text-white uppercase tracking-wider">
                             Prioritas #2
                           </span>
                         </div>
-                        <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                        <p className="text-[9px] sm:text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
                           Auto-download media & salin caption untuk Instagram
                         </p>
                       </div>
@@ -1536,22 +1550,22 @@ export default function GalleryModal({
                   {/* Prioritas 3: Facebook */}
                   <button
                     onClick={() => shareToFacebook(shareTargetItem)}
-                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-blue-500/10 hover:bg-blue-500/15 border border-blue-500/20 text-left transition-all active:scale-[0.99] group"
+                    className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-blue-500/10 hover:bg-blue-500/15 border border-blue-500/20 text-left transition-all active:scale-[0.99] group"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-[#1877F2] text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-600/20">
-                        <Icons.Facebook className="w-5 h-5" />
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#1877F2] text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-600/20">
+                        <Icons.Facebook className="w-4 h-4 sm:w-5 sm:h-5" />
                       </div>
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
                           <span className="font-bold text-xs text-zinc-900 dark:text-white">
                             Facebook Story & Beranda
                           </span>
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-[#1877F2] text-white uppercase tracking-wider">
+                          <span className="px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[9px] font-black bg-[#1877F2] text-white uppercase tracking-wider">
                             Prioritas #3
                           </span>
                         </div>
-                        <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                        <p className="text-[9px] sm:text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
                           Bagikan postingan & story promosi ke Facebook
                         </p>
                       </div>
@@ -1562,22 +1576,22 @@ export default function GalleryModal({
                   {/* Prioritas 4: TikTok */}
                   <button
                     onClick={() => shareToTikTok(shareTargetItem)}
-                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 border border-black/5 dark:border-white/10 text-left transition-all active:scale-[0.99] group"
+                    className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 border border-black/5 dark:border-white/10 text-left transition-all active:scale-[0.99] group"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-black dark:bg-white text-white dark:text-black flex items-center justify-center shrink-0 shadow-md">
-                        <Icons.TikTok className="w-5 h-5" />
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-black dark:bg-white text-white dark:text-black flex items-center justify-center shrink-0 shadow-md">
+                        <Icons.TikTok className="w-4 h-4 sm:w-5 sm:h-5" />
                       </div>
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
                           <span className="font-bold text-xs text-zinc-900 dark:text-white">
                             TikTok Video & Foto Slide
                           </span>
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-zinc-700 dark:bg-zinc-300 text-white dark:text-black uppercase tracking-wider">
+                          <span className="px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[9px] font-black bg-zinc-700 dark:bg-zinc-300 text-white dark:text-black uppercase tracking-wider">
                             Prioritas #4
                           </span>
                         </div>
-                        <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                        <p className="text-[9px] sm:text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
                           Auto-download media & salin caption untuk TikTok
                         </p>
                       </div>
@@ -1588,14 +1602,14 @@ export default function GalleryModal({
                   {/* Opsi Tambahan: WhatsApp Biasa (Personal) */}
                   <button
                     onClick={() => shareToWhatsAppRegular(shareTargetItem)}
-                    className="w-full flex items-center justify-between p-3 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 border border-black/5 dark:border-white/10 text-left transition-all active:scale-[0.99] group mt-1"
+                    className="w-full flex items-center justify-between p-2.5 sm:p-3 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 border border-black/5 dark:border-white/10 text-left transition-all active:scale-[0.99] group mt-0.5"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-600/80 text-white flex items-center justify-center shrink-0">
-                        <Icons.WhatsApp className="w-4 h-4" />
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-600/80 text-white flex items-center justify-center shrink-0">
+                        <Icons.WhatsApp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                       </div>
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <span className="font-medium text-xs text-zinc-700 dark:text-zinc-300">
                             WhatsApp Biasa (Personal)
                           </span>
@@ -1618,7 +1632,7 @@ export default function GalleryModal({
               <div className="grid grid-cols-2 gap-2 pt-2 border-t border-black/5 dark:border-white/5">
                 <button
                   onClick={() => handleCopyCaption(shareTargetItem.caption)}
-                  className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-zinc-800 dark:text-zinc-200 font-bold text-xs transition-all active:scale-95"
+                  className="flex items-center justify-center gap-1.5 py-2 sm:py-2.5 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-zinc-800 dark:text-zinc-200 font-bold text-xs transition-all active:scale-95"
                 >
                   <Icons.Copy className="w-3.5 h-3.5" />
                   <span>Salin Caption</span>
@@ -1626,7 +1640,7 @@ export default function GalleryModal({
 
                 <button
                   onClick={() => handleDownloadMedia(shareTargetItem)}
-                  className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-zinc-800 dark:text-zinc-200 font-bold text-xs transition-all active:scale-95"
+                  className="flex items-center justify-center gap-1.5 py-2 sm:py-2.5 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-zinc-800 dark:text-zinc-200 font-bold text-xs transition-all active:scale-95"
                 >
                   <Icons.Download className="w-3.5 h-3.5" />
                   <span>Download Media</span>
@@ -1642,20 +1656,20 @@ export default function GalleryModal({
           UPLOAD MEDIA MODAL (APPLE IOS FORM - IMAGE & VIDEO)
           ============================================================ */}
       {openUpload && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 font-sans">
-          <div className="relative w-full max-w-xl bg-white dark:bg-[#1C1C1E] border border-black/10 dark:border-white/10 rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[90vh] text-zinc-900 dark:text-white">
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-3.5 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 font-sans">
+          <div className="relative w-full max-w-xl bg-white dark:bg-[#1C1C1E] border border-black/10 dark:border-white/10 rounded-[28px] sm:rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[90vh] text-zinc-900 dark:text-white">
             
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-black/5 dark:border-white/5 bg-black/5 dark:bg-black/30">
+            <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-black/5 dark:border-white/5 bg-black/5 dark:bg-black/30">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-[#007AFF]/10 text-[#007AFF] flex items-center justify-center">
                   <Icons.Upload className="w-4 h-4 stroke-[2.2]" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black uppercase tracking-tight">
+                  <h3 className="text-xs sm:text-sm font-black uppercase tracking-tight">
                     Unggah Media Baru (Foto / Video)
                   </h3>
-                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                  <p className="text-[9px] sm:text-[10px] text-zinc-500 dark:text-zinc-400">
                     File video & gambar akan disimpan di Firebase Storage
                   </p>
                 </div>
@@ -1669,7 +1683,7 @@ export default function GalleryModal({
             </div>
 
             {/* Form Body */}
-            <form onSubmit={handleSubmitUpload} className="p-6 overflow-y-auto space-y-4 flex-1 scrollbar-ios">
+            <form onSubmit={handleSubmitUpload} className="p-4 sm:p-6 overflow-y-auto space-y-3.5 sm:space-y-4 flex-1 scrollbar-ios">
               
               {/* File Dropzone */}
               <div>
@@ -1687,7 +1701,7 @@ export default function GalleryModal({
                   {uploadPreviewUrl ? (
                     <div className="flex items-center gap-3">
                       <div className="w-16 h-16 rounded-xl overflow-hidden bg-black shrink-0 border border-black/10 dark:border-white/10 flex items-center justify-center">
-                        {uploadMediaType === "video" ? (
+                        {uploadMediaType === "video" && !uploadThumbnailBlob ? (
                           <video src={uploadPreviewUrl} muted playsInline className="w-full h-full object-cover" />
                         ) : (
                           <img src={uploadPreviewUrl} alt="Preview" className="w-full h-full object-cover" />
@@ -1789,13 +1803,13 @@ export default function GalleryModal({
                       type="button"
                       key={r.id}
                       onClick={() => setUploadAspectRatio(r.id as any)}
-                      className={`p-2.5 rounded-xl border text-left transition-all ${
+                      className={`p-2 sm:p-2.5 rounded-xl border text-left transition-all ${
                         uploadAspectRatio === r.id
                           ? "bg-[#007AFF]/10 border-[#007AFF] text-[#007AFF] font-bold shadow-xs"
                           : "bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/10 text-zinc-600 dark:text-zinc-400"
                       }`}
                     >
-                      <div className="text-xs">{r.label}</div>
+                      <div className="text-xs font-semibold">{r.label}</div>
                       <div className="text-[9px] opacity-75">{r.desc}</div>
                     </button>
                   ))}
@@ -1906,10 +1920,10 @@ export default function GalleryModal({
           EDIT METADATA MODAL (APPLE DESIGN)
           ============================================================ */}
       {openEdit && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 font-sans">
-          <div className="relative w-full max-w-md bg-white dark:bg-[#1C1C1E] border border-black/10 dark:border-white/10 rounded-[32px] overflow-hidden shadow-2xl flex flex-col text-zinc-900 dark:text-white">
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-3.5 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 font-sans">
+          <div className="relative w-full max-w-md bg-white dark:bg-[#1C1C1E] border border-black/10 dark:border-white/10 rounded-[28px] sm:rounded-[32px] overflow-hidden shadow-2xl flex flex-col text-zinc-900 dark:text-white">
             
-            <div className="flex items-center justify-between px-6 py-4 border-b border-black/5 dark:border-white/5 bg-black/5 dark:bg-black/30">
+            <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-black/5 dark:border-white/5 bg-black/5 dark:bg-black/30">
               <h3 className="text-sm font-black uppercase tracking-tight">
                 Edit Informasi Media
               </h3>
@@ -1921,7 +1935,7 @@ export default function GalleryModal({
               </button>
             </div>
 
-            <form onSubmit={handleUpdateItem} className="p-6 space-y-4">
+            <form onSubmit={handleUpdateItem} className="p-4 sm:p-6 space-y-3.5 sm:space-y-4">
               <div>
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Judul</label>
                 <input
