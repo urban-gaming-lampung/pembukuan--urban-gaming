@@ -177,7 +177,6 @@ const INITIAL_MEDIA_SEEDS: Omit<MediaItem, "id">[] = [
    PURE SVG SF-SYMBOLS & SOCIAL MEDIA ICONS (APPLE DESIGN)
    ============================================================ */
 const Icons = {
-  // Apple SF Symbols: Photos / Gallery Stack
   Gallery: ({ className = "w-5 h-5" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <rect width="18" height="18" x="3" y="3" rx="4" />
@@ -186,7 +185,6 @@ const Icons = {
     </svg>
   ),
 
-  // Apple SF Symbols: Share (Arrow up from squircle)
   Share: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M4 12v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6" />
@@ -195,7 +193,6 @@ const Icons = {
     </svg>
   ),
 
-  // Apple SF Symbols: Copy / Duplicate
   Copy: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <rect width="13" height="13" x="9" y="9" rx="3" />
@@ -203,7 +200,6 @@ const Icons = {
     </svg>
   ),
 
-  // Apple SF Symbols: Download / Arrow down into tray
   Download: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -212,7 +208,6 @@ const Icons = {
     </svg>
   ),
 
-  // Apple SF Symbols: Arrow up into tray / Upload
   Upload: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -221,7 +216,6 @@ const Icons = {
     </svg>
   ),
 
-  // Apple SF Symbols: Pin
   Pin: ({ className = "w-4 h-4", filled = false }: { className?: string; filled?: boolean }) => (
     <svg viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <line x1="12" y1="17" x2="12" y2="22" />
@@ -229,7 +223,6 @@ const Icons = {
     </svg>
   ),
 
-  // Apple SF Symbols: Trash
   Trash: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M3 6h18" />
@@ -240,14 +233,12 @@ const Icons = {
     </svg>
   ),
 
-  // Apple SF Symbols: Pencil / Edit
   Edit: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
     </svg>
   ),
 
-  // Apple SF Symbols: Magnifying Glass / Search
   Search: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <circle cx="11" cy="11" r="8" />
@@ -255,7 +246,6 @@ const Icons = {
     </svg>
   ),
 
-  // Apple SF Symbols: Close / X
   X: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <line x1="18" y1="6" x2="6" y2="18" />
@@ -263,14 +253,12 @@ const Icons = {
     </svg>
   ),
 
-  // Apple SF Symbols: Checkmark
   Check: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <polyline points="20 6 9 17 4 12" />
     </svg>
   ),
 
-  // Apple SF Symbols: Eye / Preview
   Eye: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
@@ -278,7 +266,6 @@ const Icons = {
     </svg>
   ),
 
-  // Apple SF Symbols: Video Camera
   Video: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="m22 8-6 4 6 4V8Z" />
@@ -286,7 +273,6 @@ const Icons = {
     </svg>
   ),
 
-  // Apple SF Symbols: iPhone / Smartphone
   Smartphone: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <rect width="14" height="20" x="5" y="2" rx="4" />
@@ -294,14 +280,12 @@ const Icons = {
     </svg>
   ),
 
-  // Apple SF Symbols: Sparkles / Magic
   Sparkles: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z" />
     </svg>
   ),
 
-  // Apple SF Symbols: Plus
   Plus: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <line x1="12" y1="5" x2="12" y2="19" />
@@ -309,7 +293,6 @@ const Icons = {
     </svg>
   ),
 
-  // Apple SF Symbols: External Link Arrow
   External: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
@@ -318,7 +301,6 @@ const Icons = {
     </svg>
   ),
 
-  // Play icon
   Play: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
       <polygon points="6 3 20 12 6 21 6 3" />
@@ -357,6 +339,110 @@ const Icons = {
   ),
 };
 
+/* ============================================================
+   ROBUST CLIENT-SIDE VIDEO THUMBNAIL CAPTURER
+   ============================================================ */
+const captureVideoThumbnail = (file: File): Promise<{ blob: Blob; previewUrl: string; width: number; height: number }> => {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.setAttribute("playsinline", "true");
+    video.setAttribute("webkit-playsinline", "true");
+    video.preload = "auto";
+
+    const objectUrl = URL.createObjectURL(file);
+    video.src = objectUrl;
+
+    // Attach offscreen in DOM so mobile hardware decoders process frames
+    video.style.position = "fixed";
+    video.style.left = "-9999px";
+    video.style.top = "-9999px";
+    video.style.width = "200px";
+    video.style.height = "200px";
+    video.style.opacity = "0.01";
+    video.style.pointerEvents = "none";
+    document.body.appendChild(video);
+
+    let finished = false;
+
+    const cleanup = () => {
+      if (finished) return;
+      finished = true;
+      try {
+        video.pause();
+        video.removeAttribute("src");
+        video.load();
+        if (document.body.contains(video)) {
+          document.body.removeChild(video);
+        }
+      } catch (e) {
+        console.warn("Cleanup error:", e);
+      }
+    };
+
+    const drawFrame = () => {
+      if (finished) return true;
+      try {
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        if (!w || !h) return false;
+
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.min(w, 1080);
+        canvas.height = Math.round(canvas.width * (h / w));
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) return false;
+
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob && blob.size > 500) {
+              const previewUrl = URL.createObjectURL(blob);
+              cleanup();
+              resolve({ blob, previewUrl, width: w, height: h });
+            }
+          },
+          "image/jpeg",
+          0.88
+        );
+        return true;
+      } catch (err) {
+        console.warn("drawFrame error:", err);
+        return false;
+      }
+    };
+
+    video.onloadeddata = () => {
+      const seekTime = Math.min(1.0, Math.max(0.5, (video.duration || 2) / 2));
+      video.currentTime = seekTime;
+    };
+
+    video.onseeked = () => {
+      if (!drawFrame()) {
+        setTimeout(drawFrame, 250);
+      }
+    };
+
+    // Mobile fallback trigger
+    video.play().then(() => {
+      video.pause();
+    }).catch(() => {
+      // ignore auto-play restriction
+    });
+
+    setTimeout(() => {
+      if (!finished) {
+        if (!drawFrame()) {
+          cleanup();
+          reject(new Error("Timeout generating thumbnail"));
+        }
+      }
+    }, 4500);
+  });
+};
+
 export default function GalleryModal({
   open,
   onClose,
@@ -389,10 +475,16 @@ export default function GalleryModal({
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string | null>(null);
   const [uploadThumbnailBlob, setUploadThumbnailBlob] = useState<Blob | null>(null);
+  const [uploadThumbnailPreviewUrl, setUploadThumbnailPreviewUrl] = useState<string | null>(null);
   const [directUrlInput, setDirectUrlInput] = useState("");
   const [uploadPinned, setUploadPinned] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+
+  // Edit Cover Form State
+  const [editCoverFile, setEditCoverFile] = useState<File | null>(null);
+  const [editCoverPreviewUrl, setEditCoverPreviewUrl] = useState<string | null>(null);
+  const [updatingCover, setUpdatingCover] = useState(false);
 
   // Toast Auto-Dismiss
   useEffect(() => {
@@ -443,7 +535,7 @@ export default function GalleryModal({
   }, [open]);
 
   // Handle File Selection (Supports Images AND Videos with Auto Aspect-Ratio & Robust Poster Frame Generation)
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -455,15 +547,15 @@ export default function GalleryModal({
 
     if (isVideo) {
       setUploadMediaType("video");
-      const video = document.createElement("video");
-      video.preload = "auto";
-      video.src = objectUrl;
-      video.muted = true;
-      video.playsInline = true;
-      video.crossOrigin = "anonymous";
+      showToast("Menganalisis video & membuat cover thumbnail... ⏳");
 
-      video.onloadedmetadata = () => {
-        const ratio = video.videoHeight / video.videoWidth;
+      try {
+        const thumbResult = await captureVideoThumbnail(file);
+        setUploadThumbnailBlob(thumbResult.blob);
+        setUploadThumbnailPreviewUrl(thumbResult.previewUrl);
+
+        // Calculate aspect ratio from video dimensions
+        const ratio = thumbResult.height / thumbResult.width;
         if (ratio >= 1.35) {
           setUploadAspectRatio("9:16");
         } else if (ratio >= 0.85 && ratio <= 1.15) {
@@ -471,37 +563,14 @@ export default function GalleryModal({
         } else if (ratio <= 0.7) {
           setUploadAspectRatio("16:9");
         }
-
-        // Seek to 0.5s or midpoint to avoid blank initial frame
-        const seekTime = Math.min(1.0, Math.max(0.2, (video.duration || 2) / 2));
-        video.currentTime = seekTime;
-      };
-
-      video.onseeked = () => {
-        try {
-          const canvas = document.createElement("canvas");
-          const width = Math.min(video.videoWidth || 720, 1080);
-          const height = Math.round(width * ((video.videoHeight || 1280) / (video.videoWidth || 720)));
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            ctx.drawImage(video, 0, 0, width, height);
-            canvas.toBlob((blob) => {
-              if (blob) {
-                setUploadThumbnailBlob(blob);
-                const thumbUrl = URL.createObjectURL(blob);
-                setUploadPreviewUrl(thumbUrl);
-              }
-            }, "image/jpeg", 0.88);
-          }
-        } catch (err) {
-          console.warn("Video thumbnail capture warning:", err);
-        }
-      };
+        showToast("Cover thumbnail video berhasil dibuat! 📸");
+      } catch (err) {
+        console.warn("Auto thumbnail fallback:", err);
+      }
     } else {
       setUploadMediaType("image");
       setUploadThumbnailBlob(null);
+      setUploadThumbnailPreviewUrl(null);
 
       // Auto-detect image aspect ratio
       const img = new Image();
@@ -521,6 +590,16 @@ export default function GalleryModal({
     if (!uploadTitle) {
       setUploadTitle(file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "));
     }
+  };
+
+  // Handle Custom Cover Photo Selection for Video Upload
+  const handleCustomCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadThumbnailBlob(file);
+    const url = URL.createObjectURL(file);
+    setUploadThumbnailPreviewUrl(url);
+    showToast("Foto cover kustom berhasil dipilih! 🖼️");
   };
 
   // Seed Default Templates if empty
@@ -544,7 +623,7 @@ export default function GalleryModal({
   };
 
   // Compress Image for Storage
-  const compressImage = async (file: File): Promise<Blob> => {
+  const compressImage = async (file: File | Blob): Promise<Blob> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
@@ -613,15 +692,17 @@ export default function GalleryModal({
           // Upload Video File
           storagePath = `gallery_media/${timestamp}_${cleanName}`;
           const storageRef = ref(storage, storagePath);
-          setUploadProgress(50);
+          setUploadProgress(45);
           await uploadBytes(storageRef, uploadFile);
           finalMediaUrl = await getDownloadURL(storageRef);
 
           // Upload Video Thumbnail frame if available
           if (uploadThumbnailBlob) {
+            setUploadProgress(75);
             thumbStoragePath = `gallery_media/${timestamp}_thumb.jpg`;
             const thumbRef = ref(storage, thumbStoragePath);
-            await uploadBytes(thumbRef, uploadThumbnailBlob);
+            const compressedThumb = await compressImage(uploadThumbnailBlob);
+            await uploadBytes(thumbRef, compressedThumb);
             finalThumbnailUrl = await getDownloadURL(thumbRef);
           }
         } else {
@@ -633,7 +714,7 @@ export default function GalleryModal({
           await uploadBytes(storageRef, compressedBlob);
           finalMediaUrl = await getDownloadURL(storageRef);
         }
-        setUploadProgress(85);
+        setUploadProgress(88);
       }
 
       setUploadProgress(95);
@@ -661,6 +742,7 @@ export default function GalleryModal({
       setUploadFile(null);
       setUploadPreviewUrl(null);
       setUploadThumbnailBlob(null);
+      setUploadThumbnailPreviewUrl(null);
       setDirectUrlInput("");
       setUploadPinned(false);
     } catch (e: any) {
@@ -706,22 +788,43 @@ export default function GalleryModal({
     }
   };
 
-  // Update Item Metadata
+  // Update Item Metadata & Optional Cover
   const handleUpdateItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!openEdit) return;
     try {
+      setUpdatingCover(true);
+      let newThumbUrl = openEdit.thumbnailUrl || "";
+      let newThumbStoragePath = openEdit.thumbStoragePath || "";
+
+      if (editCoverFile) {
+        showToast("Mengunggah cover thumbnail baru... ⏳");
+        const timestamp = Date.now();
+        newThumbStoragePath = `gallery_media/${timestamp}_custom_thumb.jpg`;
+        const thumbRef = ref(storage, newThumbStoragePath);
+        const compressed = await compressImage(editCoverFile);
+        await uploadBytes(thumbRef, compressed);
+        newThumbUrl = await getDownloadURL(thumbRef);
+      }
+
       await updateDoc(doc(db, "media_gallery", openEdit.id), {
         title: openEdit.title,
         caption: openEdit.caption,
         category: openEdit.category,
         aspectRatio: openEdit.aspectRatio,
         pinned: openEdit.pinned,
+        thumbnailUrl: newThumbUrl || null,
+        thumbStoragePath: newThumbStoragePath || null,
       });
-      showToast("Perubahan media berhasil disimpan.");
+
+      showToast("Perubahan media berhasil disimpan! ✨");
       setOpenEdit(null);
+      setEditCoverFile(null);
+      setEditCoverPreviewUrl(null);
     } catch (e: any) {
       alert("Gagal menyimpan perubahan: " + e.message);
+    } finally {
+      setUpdatingCover(false);
     }
   };
 
@@ -1078,10 +1181,10 @@ export default function GalleryModal({
                   key={item.id}
                   className="group relative bg-white dark:bg-[#1C1C1E] rounded-[18px] sm:rounded-[24px] border border-black/5 dark:border-white/10 overflow-hidden shadow-xs hover:shadow-xl hover:scale-[1.01] transition-all duration-300 flex flex-col justify-between"
                 >
-                  {/* Thumbnail & Aspect Ratio Container (Video with Auto Poster Frame & Image) */}
+                  {/* Thumbnail & Aspect Ratio Container */}
                   <div
                     onClick={() => setOpenPreview(item)}
-                    className={`relative w-full cursor-pointer overflow-hidden bg-zinc-950 ${
+                    className={`relative w-full cursor-pointer overflow-hidden bg-gradient-to-br from-zinc-800 to-zinc-950 ${
                       item.aspectRatio === "9:16"
                         ? "aspect-[9/16]"
                         : item.aspectRatio === "16:9"
@@ -1096,16 +1199,16 @@ export default function GalleryModal({
                             src={item.thumbnailUrl}
                             alt={item.title}
                             loading="lazy"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.opacity = "0";
+                            }}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                           />
                         ) : (
-                          <video
-                            src={`${item.mediaUrl}#t=0.5`}
-                            preload="metadata"
-                            muted
-                            playsInline
-                            className="w-full h-full object-cover"
-                          />
+                          <div className="w-full h-full bg-gradient-to-br from-purple-950/80 via-zinc-900 to-black flex flex-col items-center justify-center p-3 text-center">
+                            <Icons.Video className="w-8 h-8 text-purple-400 mb-1 opacity-70" />
+                            <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Video Promo</span>
+                          </div>
                         )}
                         {/* Play Overlay Indicator */}
                         <div className="absolute inset-0 flex items-center justify-center bg-black/25 group-hover:bg-black/10 transition-colors">
@@ -1218,9 +1321,13 @@ export default function GalleryModal({
                       {isSuperAdminOrOwner && (
                         <div className="flex items-center gap-0.5 sm:gap-1">
                           <button
-                            onClick={() => setOpenEdit(item)}
+                            onClick={() => {
+                              setOpenEdit(item);
+                              setEditCoverFile(null);
+                              setEditCoverPreviewUrl(item.thumbnailUrl || null);
+                            }}
                             className="p-1 sm:p-1.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-zinc-400 hover:text-[#007AFF] transition-colors"
-                            title="Edit Konten"
+                            title="Edit Konten & Cover"
                           >
                             <Icons.Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           </button>
@@ -1622,7 +1729,7 @@ export default function GalleryModal({
                         </p>
                       </div>
                     </div>
-                    <Icons.External className="w-3 h-3 text-zinc-400 shrink-0 ml-2" />
+                    <Icons.External className="w-3.5 h-3.5 text-zinc-400 shrink-0 ml-2" />
                   </button>
 
                 </div>
@@ -1701,8 +1808,15 @@ export default function GalleryModal({
                   {uploadPreviewUrl ? (
                     <div className="flex items-center gap-3">
                       <div className="w-16 h-16 rounded-xl overflow-hidden bg-black shrink-0 border border-black/10 dark:border-white/10 flex items-center justify-center">
-                        {uploadMediaType === "video" && !uploadThumbnailBlob ? (
-                          <video src={uploadPreviewUrl} muted playsInline className="w-full h-full object-cover" />
+                        {uploadMediaType === "video" ? (
+                          uploadThumbnailPreviewUrl ? (
+                            <img src={uploadThumbnailPreviewUrl} alt="Cover Preview" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center bg-purple-950/40 text-purple-400 p-1 text-center">
+                              <Icons.Video className="w-5 h-5 mb-0.5" />
+                              <span className="text-[8px] font-bold">Video File</span>
+                            </div>
+                          )
                         ) : (
                           <img src={uploadPreviewUrl} alt="Preview" className="w-full h-full object-cover" />
                         )}
@@ -1739,6 +1853,48 @@ export default function GalleryModal({
                   )}
                 </div>
               </div>
+
+              {/* Dedicated Cover Thumbnail Selector for Videos */}
+              {uploadMediaType === "video" && uploadFile && (
+                <div className="p-3 bg-[#007AFF]/5 dark:bg-[#007AFF]/10 border border-[#007AFF]/20 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                      <Icons.Gallery className="w-3.5 h-3.5 text-[#007AFF]" />
+                      <span>Cover Poster / Thumbnail Video</span>
+                    </span>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                      {uploadThumbnailBlob ? "✓ Cover Siap" : "Otomatis"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="w-14 h-14 rounded-xl overflow-hidden bg-black shrink-0 border border-black/10 dark:border-white/10 relative">
+                      {uploadThumbnailPreviewUrl ? (
+                        <img src={uploadThumbnailPreviewUrl} alt="Thumbnail Preview" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-purple-950 text-purple-300 text-[9px] text-center p-1 font-bold">
+                          Cover
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white text-xs font-bold shadow-xs cursor-pointer active:scale-95 transition-all border border-black/5 dark:border-white/10">
+                        <Icons.Upload className="w-3.5 h-3.5 text-[#007AFF]" />
+                        <span>Pilih Foto Cover Sendiri</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleCustomCoverChange}
+                          className="hidden"
+                        />
+                      </label>
+                      <p className="text-[10px] text-zinc-500 mt-1">
+                        Gunakan hasil snapshot otomatis di atas, atau pilih file gambar/poster khusus.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Direct URL Fallback */}
               <div>
@@ -1917,7 +2073,7 @@ export default function GalleryModal({
       )}
 
       {/* ============================================================
-          EDIT METADATA MODAL (APPLE DESIGN)
+          EDIT METADATA MODAL (APPLE DESIGN - WITH COVER CHANGER)
           ============================================================ */}
       {openEdit && (
         <div className="fixed inset-0 z-[130] flex items-center justify-center p-3.5 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 font-sans">
@@ -1946,6 +2102,50 @@ export default function GalleryModal({
                   className="w-full px-3.5 py-2.5 text-xs bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
                 />
               </div>
+
+              {/* Cover Thumbnail Changer for Video */}
+              {openEdit.mediaType === "video" && (
+                <div className="p-3 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/10 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                      Ganti Foto Cover / Thumbnail Video
+                    </span>
+                    <span className="text-[10px] text-zinc-400">JPG / PNG</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-14 h-14 rounded-xl overflow-hidden bg-black shrink-0 border border-black/10 dark:border-white/10">
+                      {editCoverPreviewUrl ? (
+                        <img src={editCoverPreviewUrl} alt="Cover Preview" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-zinc-500 text-[9px] text-center p-1">
+                          Tanpa Cover
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-800 hover:bg-zinc-100 text-zinc-900 dark:text-white text-xs font-bold shadow-xs cursor-pointer active:scale-95 transition-all border border-black/5 dark:border-white/10">
+                        <Icons.Upload className="w-3.5 h-3.5 text-[#007AFF]" />
+                        <span>Pilih Foto Cover Baru</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setEditCoverFile(file);
+                              setEditCoverPreviewUrl(URL.createObjectURL(file));
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                      <p className="text-[10px] text-zinc-400 mt-1">
+                        Pilih foto poster agar tampilan thumbnail tidak hitam.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1991,15 +2191,17 @@ export default function GalleryModal({
                 <button
                   type="button"
                   onClick={() => setOpenEdit(null)}
+                  disabled={updatingCover}
                   className="px-4 py-2 text-xs font-bold text-zinc-500"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0066D6] text-white font-bold text-xs"
+                  disabled={updatingCover}
+                  className="px-5 py-2.5 rounded-xl bg-[#007AFF] hover:bg-[#0066D6] text-white font-bold text-xs disabled:opacity-50"
                 >
-                  Simpan Perubahan
+                  {updatingCover ? "Menyimpan..." : "Simpan Perubahan"}
                 </button>
               </div>
             </form>
