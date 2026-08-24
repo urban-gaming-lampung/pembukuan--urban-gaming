@@ -9,8 +9,11 @@ export interface MediaItem {
   title: string;
   caption: string;
   mediaUrl: string;
+  thumbnailUrl?: string;
   storagePath?: string;
+  thumbStoragePath?: string;
   mediaType: "image" | "video";
+  videoDuration?: number;
   aspectRatio: "9:16" | "1:1" | "16:9" | "auto";
   category: "Story Harian" | "Promo & Diskon" | "Daftar Harga & Sewa" | "Game Baru" | "Event & Turnamen" | "Branding";
   createdAt?: any;
@@ -275,6 +278,14 @@ const Icons = {
     </svg>
   ),
 
+  // Apple SF Symbols: Video Camera
+  Video: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="m22 8-6 4 6 4V8Z" />
+      <rect width="14" height="12" x="2" y="6" rx="3" />
+    </svg>
+  ),
+
   // Apple SF Symbols: iPhone / Smartphone
   Smartphone: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -298,16 +309,6 @@ const Icons = {
     </svg>
   ),
 
-  // Apple SF Symbols: Arrow Clockwise / Refresh
-  Refresh: ({ className = "w-4 h-4" }: { className?: string }) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-      <path d="M3 3v5h5" />
-      <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-      <path d="M16 21h5v-5" />
-    </svg>
-  ),
-
   // Apple SF Symbols: External Link Arrow
   External: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -325,6 +326,12 @@ const Icons = {
   ),
 
   // ================= SOCIAL MEDIA VECTOR LOGOS =================
+  WhatsAppBusiness: ({ className = "w-5 h-5" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2zm.05 15.68c-1.4 0-2.38-.28-3.08-.72l.44-1.22c.58.35 1.44.62 2.45.62 1.38 0 2.22-.68 2.22-1.68 0-.91-.56-1.46-1.95-1.97-1.78-.66-2.58-1.5-2.58-2.69 0-1.53 1.26-2.67 3.23-2.67 1.15 0 2.05.24 2.58.52l-.43 1.21c-.44-.24-1.17-.46-2.09-.46-1.22 0-1.89.65-1.89 1.45 0 .86.58 1.35 1.95 1.87 1.83.69 2.62 1.54 2.62 2.82 0 1.63-1.28 2.72-3.47 2.72z"/>
+    </svg>
+  ),
+
   WhatsApp: ({ className = "w-5 h-5" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
       <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2zm5.79 14.07c-.24.67-1.39 1.29-1.92 1.37-.49.08-1.12.11-3.23-.76-2.69-1.12-4.42-3.84-4.55-4.02-.13-.18-1.09-1.45-1.09-2.77 0-1.32.69-1.97.94-2.23.24-.26.53-.32.71-.32.18 0 .35 0 .51.01.16.01.39-.06.6.46.24.57.81 1.98.88 2.13.07.15.12.32.02.52-.09.2-.14.32-.28.48-.14.16-.3.35-.43.47-.14.14-.29.29-.12.58.17.29.74 1.22 1.6 1.98 1.1 1 2.03 1.31 2.32 1.45.29.14.46.12.63-.07.17-.2.74-.86.94-1.16.2-.29.4-.24.67-.14.27.1 1.73.81 2.03.96.3.15.49.22.56.34.07.12.07.72-.17 1.39z"/>
@@ -378,8 +385,10 @@ export default function GalleryModal({
   const [uploadCaption, setUploadCaption] = useState(CAPTION_PRESETS[0].caption);
   const [uploadCategory, setUploadCategory] = useState<MediaItem["category"]>("Promo & Diskon");
   const [uploadAspectRatio, setUploadAspectRatio] = useState<MediaItem["aspectRatio"]>("9:16");
+  const [uploadMediaType, setUploadMediaType] = useState<"image" | "video">("image");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string | null>(null);
+  const [uploadThumbnailBlob, setUploadThumbnailBlob] = useState<Blob | null>(null);
   const [directUrlInput, setDirectUrlInput] = useState("");
   const [uploadPinned, setUploadPinned] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -433,7 +442,7 @@ export default function GalleryModal({
     }
   }, [open]);
 
-  // Handle Image File Selection & Auto Aspect-Ratio Detection
+  // Handle File Selection (Supports Images AND Videos with Auto Aspect-Ratio & Poster Frame)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -442,19 +451,54 @@ export default function GalleryModal({
     const objectUrl = URL.createObjectURL(file);
     setUploadPreviewUrl(objectUrl);
 
-    // Auto-detect aspect ratio
-    const img = new Image();
-    img.onload = () => {
-      const ratio = img.height / img.width;
-      if (ratio >= 1.4) {
-        setUploadAspectRatio("9:16");
-      } else if (ratio >= 0.85 && ratio <= 1.15) {
-        setUploadAspectRatio("1:1");
-      } else if (ratio <= 0.7) {
-        setUploadAspectRatio("16:9");
-      }
-    };
-    img.src = objectUrl;
+    const isVideo = file.type.startsWith("video/") || /\.(mp4|mov|webm|m4v|mkv)$/i.test(file.name);
+
+    if (isVideo) {
+      setUploadMediaType("video");
+      const video = document.createElement("video");
+      video.src = objectUrl;
+      video.muted = true;
+      video.playsInline = true;
+      video.currentTime = 0.5;
+
+      video.onloadeddata = () => {
+        const ratio = video.videoHeight / video.videoWidth;
+        if (ratio >= 1.4) {
+          setUploadAspectRatio("9:16");
+        } else if (ratio >= 0.85 && ratio <= 1.15) {
+          setUploadAspectRatio("1:1");
+        } else if (ratio <= 0.7) {
+          setUploadAspectRatio("16:9");
+        }
+
+        // Generate Video Poster Thumbnail Frame
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.min(video.videoWidth || 720, 1080);
+        canvas.height = Math.round(canvas.width * (video.videoHeight / video.videoWidth));
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+          if (blob) setUploadThumbnailBlob(blob);
+        }, "image/jpeg", 0.85);
+      };
+    } else {
+      setUploadMediaType("image");
+      setUploadThumbnailBlob(null);
+
+      // Auto-detect image aspect ratio
+      const img = new Image();
+      img.onload = () => {
+        const ratio = img.height / img.width;
+        if (ratio >= 1.4) {
+          setUploadAspectRatio("9:16");
+        } else if (ratio >= 0.85 && ratio <= 1.15) {
+          setUploadAspectRatio("1:1");
+        } else if (ratio <= 0.7) {
+          setUploadAspectRatio("16:9");
+        }
+      };
+      img.src = objectUrl;
+    }
 
     if (!uploadTitle) {
       setUploadTitle(file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "));
@@ -481,7 +525,7 @@ export default function GalleryModal({
     }
   };
 
-  // Compress & Upload Image
+  // Compress Image for Storage
   const compressImage = async (file: File): Promise<Blob> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -519,11 +563,11 @@ export default function GalleryModal({
     });
   };
 
-  // Submit Upload Form
+  // Submit Upload Form (Image or Video)
   const handleSubmitUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!uploadFile && !directUrlInput.trim()) {
-      alert("Pilih file gambar atau masukkan URL gambar langsung.");
+      alert("Pilih file media gambar/video atau masukkan URL langsung.");
       return;
     }
     if (!uploadTitle.trim()) {
@@ -533,23 +577,45 @@ export default function GalleryModal({
 
     try {
       setUploading(true);
-      setUploadProgress(20);
+      setUploadProgress(15);
 
       let finalMediaUrl = directUrlInput.trim();
+      let finalThumbnailUrl = "";
       let storagePath = "";
+      let thumbStoragePath = "";
+
+      const isVideo = uploadMediaType === "video" || /\.(mp4|mov|webm|m4v|mkv)$/i.test(finalMediaUrl);
 
       if (uploadFile) {
-        setUploadProgress(40);
-        const compressedBlob = await compressImage(uploadFile);
+        setUploadProgress(30);
         const timestamp = Date.now();
         const cleanName = uploadFile.name.replace(/[^a-zA-Z0-9.]/g, "_");
-        storagePath = `gallery_media/${timestamp}_${cleanName}`;
-        const storageRef = ref(storage, storagePath);
 
-        setUploadProgress(60);
-        await uploadBytes(storageRef, compressedBlob);
+        if (isVideo) {
+          // Upload Video File
+          storagePath = `gallery_media/${timestamp}_${cleanName}`;
+          const storageRef = ref(storage, storagePath);
+          setUploadProgress(50);
+          await uploadBytes(storageRef, uploadFile);
+          finalMediaUrl = await getDownloadURL(storageRef);
+
+          // Upload Video Thumbnail if generated
+          if (uploadThumbnailBlob) {
+            thumbStoragePath = `gallery_media/${timestamp}_thumb.jpg`;
+            const thumbRef = ref(storage, thumbStoragePath);
+            await uploadBytes(thumbRef, uploadThumbnailBlob);
+            finalThumbnailUrl = await getDownloadURL(thumbRef);
+          }
+        } else {
+          // Upload Compressed Image
+          const compressedBlob = await compressImage(uploadFile);
+          storagePath = `gallery_media/${timestamp}_${cleanName}`;
+          const storageRef = ref(storage, storagePath);
+          setUploadProgress(60);
+          await uploadBytes(storageRef, compressedBlob);
+          finalMediaUrl = await getDownloadURL(storageRef);
+        }
         setUploadProgress(85);
-        finalMediaUrl = await getDownloadURL(storageRef);
       }
 
       setUploadProgress(95);
@@ -557,8 +623,10 @@ export default function GalleryModal({
         title: uploadTitle.trim(),
         caption: uploadCaption.trim(),
         mediaUrl: finalMediaUrl,
+        thumbnailUrl: finalThumbnailUrl || null,
         storagePath: storagePath || null,
-        mediaType: "image",
+        thumbStoragePath: thumbStoragePath || null,
+        mediaType: isVideo ? "video" : "image",
         aspectRatio: uploadAspectRatio,
         category: uploadCategory,
         createdAt: Date.now(),
@@ -566,7 +634,7 @@ export default function GalleryModal({
         pinned: uploadPinned,
       });
 
-      showToast("Media berhasil diunggah ke Galeri!");
+      showToast(`Media ${isVideo ? "video" : "gambar"} berhasil diunggah! 🚀`);
       
       // Reset Form & Close
       setOpenUpload(false);
@@ -574,6 +642,7 @@ export default function GalleryModal({
       setUploadCaption(CAPTION_PRESETS[0].caption);
       setUploadFile(null);
       setUploadPreviewUrl(null);
+      setUploadThumbnailBlob(null);
       setDirectUrlInput("");
       setUploadPinned(false);
     } catch (e: any) {
@@ -604,8 +673,10 @@ export default function GalleryModal({
       await deleteDoc(doc(db, "media_gallery", item.id));
       if (item.storagePath) {
         try {
-          const fileRef = ref(storage, item.storagePath);
-          await deleteObject(fileRef);
+          await deleteObject(ref(storage, item.storagePath));
+          if (item.thumbStoragePath) {
+            await deleteObject(ref(storage, item.thumbStoragePath));
+          }
         } catch (storageErr) {
           console.warn("Storage deletion skipped:", storageErr);
         }
@@ -652,7 +723,7 @@ export default function GalleryModal({
     }
   };
 
-  // Download Media
+  // Download Media (Image or Video)
   const handleDownloadMedia = async (item: MediaItem) => {
     try {
       showToast("Mengunduh media...");
@@ -661,18 +732,19 @@ export default function GalleryModal({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `URBAN_GAMING_${item.title.replace(/\s+/g, "_")}.${item.mediaType === "video" ? "mp4" : "jpg"}`;
+      const ext = item.mediaType === "video" ? "mp4" : "jpg";
+      a.download = `URBAN_GAMING_${item.title.replace(/\s+/g, "_")}.${ext}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-      showToast("Media berhasil diunduh! ⬇️");
+      showToast(`Media ${ext.toUpperCase()} berhasil diunduh! ⬇️`);
     } catch (e) {
       window.open(item.mediaUrl, "_blank");
     }
   };
 
-  // Trigger Web Share API Native
+  // Trigger Web Share API Native with Video / Image File
   const triggerWebShareAPI = async (item: MediaItem) => {
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
       try {
@@ -680,9 +752,8 @@ export default function GalleryModal({
         const response = await fetch(item.mediaUrl);
         const blob = await response.blob();
         const ext = item.mediaType === "video" ? "mp4" : "jpg";
-        const file = new File([blob], `${item.title.replace(/\s+/g, "_")}.${ext}`, { 
-          type: blob.type || (item.mediaType === "video" ? "video/mp4" : "image/jpeg") 
-        });
+        const mime = blob.type || (item.mediaType === "video" ? "video/mp4" : "image/jpeg");
+        const file = new File([blob], `${item.title.replace(/\s+/g, "_")}.${ext}`, { type: mime });
 
         if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
           await navigator.share({
@@ -713,12 +784,38 @@ export default function GalleryModal({
     }
   };
 
-  // Prioritas 1: WhatsApp Business / WA Standard
-  const shareToWhatsApp = async (item: MediaItem) => {
+  // Prioritas 1: WhatsApp BUSINESS Khusus (Direct Intent com.whatsapp.w4b)
+  const shareToWhatsAppBusiness = async (item: MediaItem) => {
     await handleCopyCaption(item.caption);
-    const text = encodeURIComponent(`${item.caption}\n\n📸 Media: ${item.mediaUrl}`);
-    window.open(`https://api.whatsapp.com/send?text=${text}`, "_blank");
-    showToast("Caption disalin! Membuka WhatsApp... 🟢");
+    const text = `${item.caption}\n\n📸 Media: ${item.mediaUrl}`;
+    const encoded = encodeURIComponent(text);
+    const isAndroid = /android/i.test(navigator.userAgent || "");
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent || "");
+
+    if (isAndroid) {
+      // Direct Android Intent to WhatsApp Business package
+      window.location.href = `intent://send?text=${encoded}#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end`;
+    } else if (isIOS) {
+      window.location.href = `whatsapp://send?text=${encoded}`;
+    } else {
+      window.open(`https://web.whatsapp.com/send?text=${encoded}`, "_blank");
+    }
+    showToast("Caption disalin! Membuka WhatsApp Business... 🟢");
+  };
+
+  // Opsi Tambahan: WhatsApp Personal / Reguler
+  const shareToWhatsAppRegular = async (item: MediaItem) => {
+    await handleCopyCaption(item.caption);
+    const text = `${item.caption}\n\n📸 Media: ${item.mediaUrl}`;
+    const encoded = encodeURIComponent(text);
+    const isAndroid = /android/i.test(navigator.userAgent || "");
+
+    if (isAndroid) {
+      window.location.href = `intent://send?text=${encoded}#Intent;package=com.whatsapp;scheme=whatsapp;end`;
+    } else {
+      window.open(`https://api.whatsapp.com/send?text=${encoded}`, "_blank");
+    }
+    showToast("Caption disalin! Membuka WhatsApp Biasa... 💬");
   };
 
   // Prioritas 2: Instagram Story & Feed
@@ -934,7 +1031,7 @@ export default function GalleryModal({
                 Belum Ada Media di Kategori Ini
               </h3>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mb-6">
-                Unggah poster promosi, update game baru, atau daftar harga untuk dibagikan ke Story sosial media.
+                Unggah poster promosi, video gameplay seru, atau pricelist rental untuk dibagikan ke Story WhatsApp Business & Instagram.
               </p>
               {isSuperAdminOrOwner && (
                 <div className="flex items-center gap-3">
@@ -962,7 +1059,7 @@ export default function GalleryModal({
                   key={item.id}
                   className="group relative bg-white dark:bg-[#1C1C1E] rounded-[24px] border border-black/5 dark:border-white/10 overflow-hidden shadow-xs hover:shadow-xl hover:scale-[1.01] transition-all duration-300 flex flex-col"
                 >
-                  {/* Thumbnail & Aspect Ratio Container */}
+                  {/* Thumbnail & Aspect Ratio Container (Handles Video & Images) */}
                   <div
                     onClick={() => setOpenPreview(item)}
                     className={`relative w-full cursor-pointer overflow-hidden bg-black/5 dark:bg-black/40 ${
@@ -973,12 +1070,39 @@ export default function GalleryModal({
                         : "aspect-square"
                     }`}
                   >
-                    <img
-                      src={item.mediaUrl}
-                      alt={item.title}
-                      loading="lazy"
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
+                    {item.mediaType === "video" ? (
+                      <div className="relative w-full h-full">
+                        {item.thumbnailUrl ? (
+                          <img
+                            src={item.thumbnailUrl}
+                            alt={item.title}
+                            loading="lazy"
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          />
+                        ) : (
+                          <video
+                            src={item.mediaUrl}
+                            muted
+                            playsInline
+                            loop
+                            className="w-full h-full object-cover"
+                          />
+                        )}
+                        {/* Play Overlay Indicator */}
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center shadow-lg border border-white/20 group-hover:scale-110 transition-transform">
+                            <Icons.Play className="w-5 h-5 fill-white ml-0.5" />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <img
+                        src={item.mediaUrl}
+                        alt={item.title}
+                        loading="lazy"
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                    )}
 
                     {/* Dark Vignette Gradient */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20 pointer-events-none" />
@@ -990,6 +1114,12 @@ export default function GalleryModal({
                       </span>
 
                       <div className="flex items-center gap-1.5">
+                        {item.mediaType === "video" && (
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-purple-600 text-white shadow-xs flex items-center gap-1">
+                            <Icons.Video className="w-2.5 h-2.5" />
+                            <span>VIDEO</span>
+                          </span>
+                        )}
                         {item.pinned && (
                           <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-500 text-white shadow-xs flex items-center gap-1">
                             <Icons.Pin className="w-2.5 h-2.5" filled />
@@ -1032,7 +1162,7 @@ export default function GalleryModal({
                       <button
                         onClick={() => handleShareClick(item)}
                         className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-[12px] bg-[#34C759] hover:bg-[#2EB84F] active:bg-[#28A745] text-white font-bold text-xs shadow-xs active:scale-95 transition-all"
-                        title="Share ke WhatsApp, Instagram, FB, TikTok"
+                        title="Share ke WhatsApp Business, Instagram, FB, TikTok"
                       >
                         <Icons.Share className="w-3.5 h-3.5 stroke-[2.5]" />
                         <span>Share Story</span>
@@ -1111,15 +1241,26 @@ export default function GalleryModal({
             <div className="flex-1 bg-black flex items-center justify-center p-4 sm:p-6">
               <div className="relative w-full max-w-[310px] aspect-[9/16] rounded-[36px] overflow-hidden ring-4 ring-white/15 shadow-2xl bg-zinc-900 flex flex-col justify-between">
                 
-                {/* Background Image */}
-                <img
-                  src={openPreview.mediaUrl}
-                  alt={openPreview.title}
-                  className="absolute inset-0 w-full h-full object-cover"
-                />
+                {/* Background Image / Video Player */}
+                {openPreview.mediaType === "video" ? (
+                  <video
+                    src={openPreview.mediaUrl}
+                    controls
+                    autoPlay
+                    loop
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                ) : (
+                  <img
+                    src={openPreview.mediaUrl}
+                    alt={openPreview.title}
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                )}
 
                 {/* Top Overlay: Progress Bars & Dynamic Island */}
-                <div className="relative z-10 p-3 bg-gradient-to-b from-black/70 to-transparent">
+                <div className="relative z-10 p-3 bg-gradient-to-b from-black/70 to-transparent pointer-events-none">
                   
                   {/* Dynamic Island */}
                   <div className="w-20 h-5 bg-black rounded-full mx-auto mb-2 flex items-center justify-center shadow-inner" />
@@ -1147,7 +1288,7 @@ export default function GalleryModal({
                 </div>
 
                 {/* Bottom Story Gradient */}
-                <div className="relative z-10 p-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
+                <div className="relative z-10 p-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent pointer-events-none">
                   <p className="text-white text-xs font-semibold line-clamp-2 drop-shadow-md">
                     {openPreview.caption}
                   </p>
@@ -1165,6 +1306,11 @@ export default function GalleryModal({
                     <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-pink-500/20 text-pink-400 border border-pink-500/30">
                       {openPreview.category}
                     </span>
+                    {openPreview.mediaType === "video" && (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-purple-600 text-white">
+                        VIDEO
+                      </span>
+                    )}
                     <span className="text-[10px] text-zinc-400 font-medium">
                       Rasio: {openPreview.aspectRatio}
                     </span>
@@ -1202,7 +1348,7 @@ export default function GalleryModal({
                   className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-[#34C759] hover:bg-[#2EB84F] active:bg-[#28A745] text-white font-bold text-xs shadow-lg shadow-green-500/20 active:scale-95 transition-all"
                 >
                   <Icons.Share className="w-4 h-4 stroke-[2.5]" />
-                  <span>Bagikan ke Sosial Media (WA, IG, FB, TikTok)</span>
+                  <span>Bagikan ke Sosial Media (WA Business, IG, FB, TikTok)</span>
                 </button>
 
                 <div className="grid grid-cols-2 gap-2">
@@ -1264,14 +1410,32 @@ export default function GalleryModal({
               
               {/* Media Summary Box */}
               <div className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/5">
-                <div className="w-14 h-14 rounded-xl overflow-hidden bg-black shrink-0 border border-black/10 dark:border-white/10">
-                  <img src={shareTargetItem.mediaUrl} alt={shareTargetItem.title} className="w-full h-full object-cover" />
+                <div className="w-14 h-14 rounded-xl overflow-hidden bg-black shrink-0 border border-black/10 dark:border-white/10 relative">
+                  {shareTargetItem.mediaType === "video" ? (
+                    <div className="w-full h-full flex items-center justify-center bg-zinc-900">
+                      {shareTargetItem.thumbnailUrl ? (
+                        <img src={shareTargetItem.thumbnailUrl} alt={shareTargetItem.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <Icons.Video className="w-6 h-6 text-purple-400" />
+                      )}
+                      <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                        <Icons.Play className="w-3 h-3 text-white" />
+                      </div>
+                    </div>
+                  ) : (
+                    <img src={shareTargetItem.mediaUrl} alt={shareTargetItem.title} className="w-full h-full object-cover" />
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 mb-0.5">
                     <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-pink-500/10 text-pink-600 dark:text-pink-400">
                       {shareTargetItem.category}
                     </span>
+                    {shareTargetItem.mediaType === "video" && (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-purple-600 text-white uppercase">
+                        Video
+                      </span>
+                    )}
                     <span className="text-[10px] text-zinc-400 font-medium">
                       {shareTargetItem.aspectRatio}
                     </span>
@@ -1317,30 +1481,30 @@ export default function GalleryModal({
                 </div>
 
                 <div className="grid grid-cols-1 gap-2.5">
-                  {/* Prioritas 1: WhatsApp Business */}
+                  {/* Prioritas 1: WhatsApp Business KHUSUS */}
                   <button
-                    onClick={() => shareToWhatsApp(shareTargetItem)}
-                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 text-left transition-all active:scale-[0.99] group"
+                    onClick={() => shareToWhatsAppBusiness(shareTargetItem)}
+                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border-2 border-emerald-500/40 text-left transition-all active:scale-[0.99] group shadow-sm shadow-emerald-500/10"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/20">
-                        <Icons.WhatsApp className="w-5 h-5" />
+                      <div className="w-10 h-10 rounded-xl bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/30">
+                        <Icons.WhatsAppBusiness className="w-5 h-5" />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-xs text-zinc-900 dark:text-white">
-                            WhatsApp / WA Business
+                            WhatsApp Business (WA Bisnis)
                           </span>
                           <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-[#25D366] text-white uppercase tracking-wider">
                             Prioritas #1
                           </span>
                         </div>
-                        <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                          Kirim ke Story WA & Chat Pelanggan (Auto-salin caption)
+                        <p className="text-[10px] text-zinc-600 dark:text-zinc-300 truncate mt-0.5">
+                          Khusus ke aplikasi WhatsApp Business (Auto-salin caption)
                         </p>
                       </div>
                     </div>
-                    <Icons.External className="w-3.5 h-3.5 text-emerald-500 shrink-0 ml-2" />
+                    <Icons.External className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 ml-2" />
                   </button>
 
                   {/* Prioritas 2: Instagram */}
@@ -1420,6 +1584,33 @@ export default function GalleryModal({
                     </div>
                     <Icons.External className="w-3.5 h-3.5 text-zinc-500 shrink-0 ml-2" />
                   </button>
+
+                  {/* Opsi Tambahan: WhatsApp Biasa (Personal) */}
+                  <button
+                    onClick={() => shareToWhatsAppRegular(shareTargetItem)}
+                    className="w-full flex items-center justify-between p-3 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 border border-black/5 dark:border-white/10 text-left transition-all active:scale-[0.99] group mt-1"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-600/80 text-white flex items-center justify-center shrink-0">
+                        <Icons.WhatsApp className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-xs text-zinc-700 dark:text-zinc-300">
+                            WhatsApp Biasa (Personal)
+                          </span>
+                          <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-black/10 dark:bg-white/10 text-zinc-500 dark:text-zinc-400 uppercase">
+                            Personal
+                          </span>
+                        </div>
+                        <p className="text-[9px] text-zinc-400 truncate">
+                          Kirim ke kontak atau grup WhatsApp pribadi
+                        </p>
+                      </div>
+                    </div>
+                    <Icons.External className="w-3 h-3 text-zinc-400 shrink-0 ml-2" />
+                  </button>
+
                 </div>
               </div>
 
@@ -1448,7 +1639,7 @@ export default function GalleryModal({
       )}
 
       {/* ============================================================
-          UPLOAD MEDIA MODAL (APPLE IOS FORM STYLE)
+          UPLOAD MEDIA MODAL (APPLE IOS FORM - IMAGE & VIDEO)
           ============================================================ */}
       {openUpload && (
         <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 font-sans">
@@ -1462,10 +1653,10 @@ export default function GalleryModal({
                 </div>
                 <div>
                   <h3 className="text-sm font-black uppercase tracking-tight">
-                    Unggah Media Baru ke Galeri
+                    Unggah Media Baru (Foto / Video)
                   </h3>
                   <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
-                    File akan disimpan di Firebase Storage & siap dibagikan
+                    File video & gambar akan disimpan di Firebase Storage
                   </p>
                 </div>
               </div>
@@ -1483,7 +1674,7 @@ export default function GalleryModal({
               {/* File Dropzone */}
               <div>
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
-                  File Gambar / Video
+                  File Gambar atau Video (MP4, MOV, WEBM)
                 </label>
                 <div className="relative border-2 border-dashed border-black/10 dark:border-white/10 hover:border-[#007AFF] dark:hover:border-[#007AFF] rounded-2xl p-4 text-center bg-black/5 dark:bg-white/5 transition-colors cursor-pointer">
                   <input
@@ -1495,17 +1686,24 @@ export default function GalleryModal({
 
                   {uploadPreviewUrl ? (
                     <div className="flex items-center gap-3">
-                      <img
-                        src={uploadPreviewUrl}
-                        alt="Preview"
-                        className="w-16 h-16 rounded-xl object-cover border border-black/10 dark:border-white/10"
-                      />
+                      <div className="w-16 h-16 rounded-xl overflow-hidden bg-black shrink-0 border border-black/10 dark:border-white/10 flex items-center justify-center">
+                        {uploadMediaType === "video" ? (
+                          <video src={uploadPreviewUrl} muted playsInline className="w-full h-full object-cover" />
+                        ) : (
+                          <img src={uploadPreviewUrl} alt="Preview" className="w-full h-full object-cover" />
+                        )}
+                      </div>
                       <div className="text-left min-w-0 flex-1">
-                        <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">
-                          {uploadFile?.name}
-                        </p>
-                        <p className="text-[10px] text-zinc-500">
-                          Format otomatis terdeteksi: <span className="font-bold text-[#007AFF]">{uploadAspectRatio}</span>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                            {uploadFile?.name}
+                          </p>
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-[#007AFF] text-white">
+                            {uploadMediaType}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">
+                          Format terdeteksi: <span className="font-bold text-[#007AFF]">{uploadAspectRatio}</span>
                         </p>
                         <p className="text-[10px] text-emerald-500 font-semibold mt-0.5">
                           ✓ Klik untuk ganti file
@@ -1518,10 +1716,10 @@ export default function GalleryModal({
                         <Icons.Upload className="w-6 h-6 stroke-[2]" />
                       </div>
                       <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                        Klik atau seret gambar ke sini
+                        Klik atau seret file gambar / video ke sini
                       </p>
                       <p className="text-[10px] text-zinc-400 mt-0.5">
-                        JPG, PNG, WEBP (Otomatis dikompres kualitas tinggi)
+                        Foto (JPG, PNG, WEBP) atau Video (MP4, MOV, WEBM)
                       </p>
                     </div>
                   )}
@@ -1531,13 +1729,13 @@ export default function GalleryModal({
               {/* Direct URL Fallback */}
               <div>
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
-                  Atau Masukkan URL Gambar (Opsional)
+                  Atau Masukkan URL Media Langsung (Opsional)
                 </label>
                 <input
                   type="url"
                   value={directUrlInput}
                   onChange={(e) => setDirectUrlInput(e.target.value)}
-                  placeholder="https://images.unsplash.com/..."
+                  placeholder="https://..."
                   className="w-full px-3.5 py-2.5 text-xs bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
                 />
               </div>
@@ -1553,7 +1751,7 @@ export default function GalleryModal({
                     required
                     value={uploadTitle}
                     onChange={(e) => setUploadTitle(e.target.value)}
-                    placeholder="Contoh: Promo Weekend PS5"
+                    placeholder="Contoh: Video Gameplay FC 25 PS5"
                     className="w-full px-3.5 py-2.5 text-xs bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 rounded-xl text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
                   />
                 </div>
@@ -1583,7 +1781,7 @@ export default function GalleryModal({
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { id: "9:16", label: "📱 Story (9:16)", desc: "Status WA / IG / TikTok" },
+                    { id: "9:16", label: "📱 Story (9:16)", desc: "Status WA / IG Reels / TikTok" },
                     { id: "1:1", label: "🟦 Feed (1:1)", desc: "Postingan Persegi" },
                     { id: "16:9", label: "🖥️ Wide (16:9)", desc: "Banner Horizontal" },
                   ].map((r) => (
@@ -1668,7 +1866,7 @@ export default function GalleryModal({
               {uploading && (
                 <div className="space-y-1.5 pt-2">
                   <div className="flex justify-between text-xs font-bold text-[#007AFF]">
-                    <span>Mengunggah ke Firebase Storage...</span>
+                    <span>Mengunggah media ke Firebase Storage...</span>
                     <span>{uploadProgress}%</span>
                   </div>
                   <div className="w-full h-2 bg-black/10 dark:bg-white/10 rounded-full overflow-hidden">
