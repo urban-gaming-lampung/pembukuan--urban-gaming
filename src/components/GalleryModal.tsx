@@ -844,11 +844,12 @@ export default function GalleryModal({
     }
   };
 
-  // Download Media (Image or Video)
+  // Download Media (Image or Video) without opening media player tab
   const handleDownloadMedia = async (item: MediaItem) => {
     try {
       showToast("Mengunduh media...");
-      const response = await fetch(item.mediaUrl);
+      const response = await fetch(item.mediaUrl, { mode: "cors" });
+      if (!response.ok) throw new Error("CORS or fetch error");
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -859,131 +860,113 @@ export default function GalleryModal({
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-      showToast(`Media ${ext.toUpperCase()} berhasil diunduh ke HP! ⬇️`);
-    } catch (e) {
-      window.open(item.mediaUrl, "_blank");
+      showToast(`Media ${ext.toUpperCase()} berhasil diunduh! ⬇️`);
+    } catch {
+      // Fallback: Trigger anchor download directly without tab navigation
+      const a = document.createElement("a");
+      a.href = item.mediaUrl;
+      const ext = item.mediaType === "video" ? "mp4" : "jpg";
+      a.setAttribute("download", `URBAN_GAMING_${item.title.replace(/\s+/g, "_")}.${ext}`);
+      a.setAttribute("target", "_blank");
+      a.setAttribute("rel", "noopener noreferrer");
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showToast("Mengunduh media ke perangkat...");
     }
   };
 
-  // Universal Video/Image File Sharer via Web Share API
+  // Instant Native Web Share API (Preserves User Gesture)
   const triggerWebShareAPI = async (item: MediaItem): Promise<boolean> => {
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
       try {
-        showToast("Mempersiapkan file media & caption untuk dikirim... ⏳");
-        const response = await fetch(item.mediaUrl);
-        const blob = await response.blob();
-        const ext = item.mediaType === "video" ? "mp4" : "jpg";
-        const mime = blob.type || (item.mediaType === "video" ? "video/mp4" : "image/jpeg");
-        const file = new File([blob], `${item.title.replace(/\s+/g, "_")}.${ext}`, { type: mime });
-
-        // Check if device supports sharing files
-        if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            title: item.title,
-            text: item.caption,
-            files: [file],
-          });
-          showToast("Berhasil dibagikan ke Story / Chat! 🚀");
-          setShareTargetItem(null);
-          return true;
-        } else {
-          await navigator.share({
-            title: item.title,
-            text: `${item.caption}\n\n📸 Media: ${item.mediaUrl}`,
-          });
-          showToast("Berhasil dibagikan via Web Share! 🚀");
-          setShareTargetItem(null);
-          return true;
-        }
+        await navigator.share({
+          title: item.title,
+          text: `${item.caption}\n\n📸 Media: ${item.mediaUrl}`,
+          url: item.mediaUrl,
+        });
+        showToast("Berhasil dibagikan ke aplikasi! 🚀");
+        setShareTargetItem(null);
+        return true;
       } catch (err: any) {
-        if (err.name !== "AbortError") {
-          console.warn("Web Share API error:", err);
-          showToast("Pilih salah satu aplikasi sosial media di bawah 👇");
+        if (err.name === "AbortError") {
+          return false;
         }
+        console.warn("Web Share API:", err);
       }
     }
     return false;
   };
 
-  // Prioritas 1: WhatsApp Business (Kirim File Video/Foto Langsung ke Story & Chat)
+  // Prioritas 1: WhatsApp Business (Direct App Launcher)
   const shareToWhatsAppBusiness = async (item: MediaItem) => {
-    // Attempt 1: Native File Share (Brings actual video file + caption directly into WhatsApp Business Story/Status)
-    const success = await triggerWebShareAPI(item);
-    if (success) return;
-
-    // Attempt 2: Fallback for browsers that don't support file sharing
     await handleCopyCaption(item.caption);
-    await handleDownloadMedia(item);
-    
+    const text = `${item.caption}\n\n📸 Media: ${item.mediaUrl}`;
+    const encoded = encodeURIComponent(text);
     const isAndroid = /android/i.test(navigator.userAgent || "");
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent || "");
 
     if (isAndroid) {
-      window.location.href = `intent://send?#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end`;
+      // Direct intent into WhatsApp Business package (com.whatsapp.w4b)
+      window.location.href = `intent://send?text=${encoded}#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end`;
     } else if (isIOS) {
-      window.location.href = `whatsapp://`;
+      window.location.href = `whatsapp://send?text=${encoded}`;
     } else {
-      window.open(`https://web.whatsapp.com/`, "_blank");
+      window.open(`https://web.whatsapp.com/send?text=${encoded}`, "_blank");
     }
-    showToast("Video diunduh & caption disalin! Buka Status di WhatsApp Business 🟢");
+    showToast("Caption disalin! Membuka WhatsApp Business... 🟢");
   };
 
   // Opsi Tambahan: WhatsApp Personal / Reguler
   const shareToWhatsAppRegular = async (item: MediaItem) => {
-    const success = await triggerWebShareAPI(item);
-    if (success) return;
-
     await handleCopyCaption(item.caption);
-    await handleDownloadMedia(item);
+    const text = `${item.caption}\n\n📸 Media: ${item.mediaUrl}`;
+    const encoded = encodeURIComponent(text);
     const isAndroid = /android/i.test(navigator.userAgent || "");
 
     if (isAndroid) {
-      window.location.href = `intent://send?#Intent;package=com.whatsapp;scheme=whatsapp;end`;
+      window.location.href = `intent://send?text=${encoded}#Intent;package=com.whatsapp;scheme=whatsapp;end`;
     } else {
-      window.open(`https://api.whatsapp.com/`, "_blank");
+      window.open(`https://api.whatsapp.com/send?text=${encoded}`, "_blank");
     }
-    showToast("Video diunduh & caption disalin! Buka Status di WhatsApp Biasa 💬");
+    showToast("Caption disalin! Membuka WhatsApp Biasa... 💬");
   };
 
   // Prioritas 2: Instagram Story & Feed
   const shareToInstagram = async (item: MediaItem) => {
-    const success = await triggerWebShareAPI(item);
-    if (success) return;
-
     await handleCopyCaption(item.caption);
-    await handleDownloadMedia(item);
-    window.open("https://instagram.com", "_blank");
-    showToast("Video diunduh & caption disalin! Buka Instagram Story 📸");
+    handleDownloadMedia(item);
+    const isMobile = /android|iphone|ipad|ipod/i.test(navigator.userAgent || "");
+    if (isMobile) {
+      window.location.href = "instagram://app";
+      setTimeout(() => {
+        window.open("https://instagram.com", "_blank");
+      }, 1500);
+    } else {
+      window.open("https://instagram.com", "_blank");
+    }
+    showToast("Media diunduh & caption disalin! Membuka Instagram... 📸");
   };
 
   // Prioritas 3: Facebook Story & Post
   const shareToFacebook = async (item: MediaItem) => {
-    const success = await triggerWebShareAPI(item);
-    if (success) return;
-
     await handleCopyCaption(item.caption);
     const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(item.mediaUrl)}&quote=${encodeURIComponent(item.caption)}`;
     window.open(fbUrl, "_blank");
-    showToast("Caption disalin! Membuka Facebook Story / Post... 🔵");
+    showToast("Caption disalin! Membuka Facebook... 🔵");
   };
 
   // Prioritas 4: TikTok Video & Photo Slide
   const shareToTikTok = async (item: MediaItem) => {
-    const success = await triggerWebShareAPI(item);
-    if (success) return;
-
     await handleCopyCaption(item.caption);
-    await handleDownloadMedia(item);
+    handleDownloadMedia(item);
     window.open("https://www.tiktok.com/upload", "_blank");
-    showToast("Video diunduh & caption disalin! Buka TikTok 🎵");
+    showToast("Media diunduh & caption disalin! Membuka TikTok... 🎵");
   };
 
-  // Open Share Hub & Trigger Native Video/Image File Share
-  const handleShareClick = async (item: MediaItem) => {
+  // Open Share Hub
+  const handleShareClick = (item: MediaItem) => {
     setShareTargetItem(item);
-    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-      await triggerWebShareAPI(item);
-    }
   };
 
   // Filtered & Sorted Media List
