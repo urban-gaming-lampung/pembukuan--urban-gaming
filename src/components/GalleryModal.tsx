@@ -39,10 +39,10 @@ const CATEGORIES = [
 ] as const;
 
 const ASPECT_RATIOS = [
-  { key: "all", label: "Semua Format" },
-  { key: "9:16", label: "📱 Story 9:16" },
-  { key: "1:1", label: "🟦 Square 1:1" },
-  { key: "16:9", label: "🖥️ Wide 16:9" },
+  { key: "all", label: "SEMUA FORMAT" },
+  { key: "9:16", label: "STORY 9:16" },
+  { key: "1:1", label: "SQUARE 1:1" },
+  { key: "16:9", label: "WIDE 16:9" },
 ];
 
 const CAPTION_PRESETS = [
@@ -174,7 +174,7 @@ const INITIAL_MEDIA_SEEDS: Omit<MediaItem, "id">[] = [
 ];
 
 /* ============================================================
-   PURE SVG SF-SYMBOLS & SOCIAL MEDIA ICONS (APPLE DESIGN)
+   PURE SVG SF-SYMBOLS & POS-STYLE ICONS
    ============================================================ */
 const Icons = {
   Gallery: ({ className = "w-5 h-5" }: { className?: string }) => (
@@ -216,10 +216,11 @@ const Icons = {
     </svg>
   ),
 
-  Pin: ({ className = "w-4 h-4", filled = false }: { className?: string; filled?: boolean }) => (
-    <svg viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <line x1="12" y1="17" x2="12" y2="22" />
-      <path d="M5 17h14l-1.5-6H17l1-6H6l1 6H6.5z" />
+  PlusCircle: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="16" />
+      <line x1="8" y1="12" x2="16" y2="12" />
     </svg>
   ),
 
@@ -273,17 +274,16 @@ const Icons = {
     </svg>
   ),
 
-  Eye: ({ className = "w-4 h-4" }: { className?: string }) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  ),
-
   Video: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="m22 8-6 4 6 4V8Z" />
       <rect width="14" height="12" x="2" y="6" rx="3" />
+    </svg>
+  ),
+
+  Play: ({ className = "w-4 h-4" }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <polygon points="6 3 20 12 6 21 6 3" />
     </svg>
   ),
 
@@ -294,30 +294,11 @@ const Icons = {
     </svg>
   ),
 
-  Sparkles: ({ className = "w-4 h-4" }: { className?: string }) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z" />
-    </svg>
-  ),
-
-  Plus: ({ className = "w-4 h-4" }: { className?: string }) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <line x1="12" y1="5" x2="12" y2="19" />
-      <line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  ),
-
   External: ({ className = "w-4 h-4" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
       <polyline points="15 3 21 3 21 9" />
       <line x1="10" y1="14" x2="21" y2="3" />
-    </svg>
-  ),
-
-  Play: ({ className = "w-4 h-4" }: { className?: string }) => (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
-      <polygon points="6 3 20 12 6 21 6 3" />
     </svg>
   ),
 
@@ -474,17 +455,14 @@ export default function GalleryModal({
   isSuperAdminOrOwner,
   adminName,
 }: GalleryModalProps) {
-  // Lock body scroll when modal is active
   useBodyScrollLock(open);
 
-  // Core States
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>("Semua");
   const [activeRatio, setActiveRatio] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Modals & Drawers
   const [openUpload, setOpenUpload] = useState(false);
   const [openPreview, setOpenPreview] = useState<MediaItem | null>(null);
   const [openEdit, setOpenEdit] = useState<MediaItem | null>(null);
@@ -511,7 +489,6 @@ export default function GalleryModal({
   const [editCoverPreviewUrl, setEditCoverPreviewUrl] = useState<string | null>(null);
   const [updatingCover, setUpdatingCover] = useState(false);
 
-  // Toast Auto-Dismiss
   useEffect(() => {
     if (!toastMsg) return;
     const timer = setTimeout(() => setToastMsg(null), 3200);
@@ -522,7 +499,6 @@ export default function GalleryModal({
     setToastMsg(msg);
   };
 
-  // Subscribe to Firestore media_gallery
   useEffect(() => {
     if (!open) return;
     setLoading(true);
@@ -559,7 +535,6 @@ export default function GalleryModal({
     }
   }, [open]);
 
-  // Handle File Selection
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -615,7 +590,6 @@ export default function GalleryModal({
     }
   };
 
-  // Handle Custom Cover Photo Selection for Video Upload
   const handleCustomCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -625,7 +599,6 @@ export default function GalleryModal({
     showToast("Foto cover kustom berhasil dipilih! 🖼️");
   };
 
-  // Seed Default Templates if empty
   const handleSeedDefaults = async () => {
     if (!confirm("Inisialisasi template bawaan promosi URBAN Gaming ke database?")) return;
     try {
@@ -645,7 +618,6 @@ export default function GalleryModal({
     }
   };
 
-  // Compress Image for Storage
   const compressImage = async (file: File | Blob): Promise<Blob> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -683,7 +655,6 @@ export default function GalleryModal({
     });
   };
 
-  // Submit Upload Form (Image or Video)
   const handleSubmitUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!uploadFile && !directUrlInput.trim()) {
@@ -773,7 +744,6 @@ export default function GalleryModal({
     }
   };
 
-  // Toggle Pin Item
   const handleTogglePin = async (item: MediaItem) => {
     try {
       await updateDoc(doc(db, "media_gallery", item.id), {
@@ -785,7 +755,6 @@ export default function GalleryModal({
     }
   };
 
-  // Delete Item
   const handleDeleteItem = async (item: MediaItem) => {
     if (!confirm(`Hapus media "${item.title}" dari galeri?`)) return;
     try {
@@ -807,7 +776,6 @@ export default function GalleryModal({
     }
   };
 
-  // Update Item Metadata & Optional Cover
   const handleUpdateItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!openEdit) return;
@@ -847,7 +815,6 @@ export default function GalleryModal({
     }
   };
 
-  // Copy Caption to Clipboard
   const handleCopyCaption = async (caption: string) => {
     try {
       await navigator.clipboard.writeText(caption);
@@ -863,7 +830,6 @@ export default function GalleryModal({
     }
   };
 
-  // Download Media without opening video playback in tab
   const handleDownloadMedia = async (item: MediaItem) => {
     try {
       showToast("Mengunduh media...");
@@ -894,7 +860,6 @@ export default function GalleryModal({
     }
   };
 
-  // Instant Native Web Share API (Preserves User Gesture)
   const triggerWebShareAPI = async (item: MediaItem): Promise<boolean> => {
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
       try {
@@ -916,7 +881,6 @@ export default function GalleryModal({
     return false;
   };
 
-  // WhatsApp Business Direct App Launcher
   const shareToWhatsAppBusiness = async (item: MediaItem) => {
     await handleCopyCaption(item.caption);
     const text = `${item.caption}\n\n📸 Media: ${item.mediaUrl}`;
@@ -934,7 +898,6 @@ export default function GalleryModal({
     showToast("Caption disalin! Membuka WhatsApp Business... 🟢");
   };
 
-  // WhatsApp Personal / Reguler
   const shareToWhatsAppRegular = async (item: MediaItem) => {
     await handleCopyCaption(item.caption);
     const text = `${item.caption}\n\n📸 Media: ${item.mediaUrl}`;
@@ -949,7 +912,6 @@ export default function GalleryModal({
     showToast("Caption disalin! Membuka WhatsApp Biasa... 💬");
   };
 
-  // Instagram Story & Feed
   const shareToInstagram = async (item: MediaItem) => {
     await handleCopyCaption(item.caption);
     handleDownloadMedia(item);
@@ -965,7 +927,6 @@ export default function GalleryModal({
     showToast("Media diunduh & caption disalin! Membuka Instagram... 📸");
   };
 
-  // Facebook Story & Post
   const shareToFacebook = async (item: MediaItem) => {
     await handleCopyCaption(item.caption);
     const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(item.mediaUrl)}&quote=${encodeURIComponent(item.caption)}`;
@@ -973,7 +934,6 @@ export default function GalleryModal({
     showToast("Caption disalin! Membuka Facebook... 🔵");
   };
 
-  // TikTok Video & Photo Slide
   const shareToTikTok = async (item: MediaItem) => {
     await handleCopyCaption(item.caption);
     handleDownloadMedia(item);
@@ -981,12 +941,10 @@ export default function GalleryModal({
     showToast("Media diunduh & caption disalin! Membuka TikTok... 🎵");
   };
 
-  // Open Share Hub
   const handleShareClick = (item: MediaItem) => {
     setShareTargetItem(item);
   };
 
-  // Filtered & Sorted Media List
   const filteredMedia = useMemo(() => {
     return mediaList.filter((item) => {
       if (activeCategory !== "Semua" && item.category !== activeCategory) {
@@ -1013,68 +971,91 @@ export default function GalleryModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-[#F8F9FB] dark:bg-black overflow-y-auto font-sans text-zinc-900 dark:text-white transition-all duration-300 scrollbar-ios">
+    <div className={`fixed inset-0 z-[100] items-center justify-center bg-black/40 backdrop-blur-md transition-opacity duration-300 font-sans ${open ? "flex" : "hidden"}`}>
       
-      <div className="max-w-4xl mx-auto w-full p-3 sm:p-5 md:p-6 pb-24">
+      {/* ============================================================
+          MAIN CONTAINER (Full-Screen iOS Style matching POSModal)
+          ============================================================ */}
+      <div className="relative w-full h-full bg-zinc-50 dark:bg-[#1C1C1E] overflow-hidden flex flex-col animate-in fade-in duration-300">
+        
+        {/* ============================================================
+            1. TOP iOS HEADER BAR (SSOT MATCHING POS)
+            ============================================================ */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200/50 dark:border-white/5 bg-white/70 dark:bg-[#1C1C1E]/70 backdrop-blur-xl z-20 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-black/10 dark:bg-white/20 text-black dark:text-white flex items-center justify-center">
+              <Icons.Gallery className="w-4 h-4 stroke-[2.2]" />
+            </div>
+            <h2 className="text-base sm:text-lg font-black tracking-tight text-zinc-900 dark:text-white uppercase">
+              GALERI MEDIA SOSIAL
+            </h2>
+          </div>
+          <button 
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-zinc-200/60 dark:bg-zinc-800 hover:bg-zinc-300/60 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 active:scale-90 transition-all"
+            aria-label="Tutup Galeri"
+          >
+            <Icons.X className="w-4 h-4" />
+          </button>
+        </div>
 
         {/* ============================================================
-            TOP HEADER CARD (CLEAN APPLE DESIGN AS IN MOCKUP)
+            2. TOP CONTROLS & FILTER SECTION (SSOT MATCHING POS TABS)
             ============================================================ */}
-        <div className="bg-white dark:bg-[#1C1C1E] rounded-[26px] sm:rounded-[32px] p-4 sm:p-5 border border-zinc-200/80 dark:border-zinc-800 shadow-xs mb-4 sm:mb-6">
+        <div className="p-3.5 sm:p-4 bg-white/50 dark:bg-black/10 border-b border-zinc-200/60 dark:border-white/5 shrink-0 max-w-4xl mx-auto w-full space-y-2.5">
           
-          {/* Header Row: Icon, Title, Badge, and Action Buttons */}
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-[18px] bg-gradient-to-tr from-fuchsia-500 via-pink-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-pink-500/20 shrink-0">
-                <Icons.Gallery className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.2]" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-base sm:text-lg font-black tracking-tight text-zinc-900 dark:text-white truncate">
-                    Galeri Media Sosial
-                  </h1>
-                  <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-fuchsia-600 to-pink-600 text-white shadow-xs shrink-0">
-                    SUPER ADMIN
-                  </span>
-                </div>
-                <p className="text-[11px] sm:text-xs text-zinc-500 dark:text-zinc-400 font-medium truncate mt-0.5">
-                  Pusat Story & Konten Promosi URBAN Gaming
-                </p>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex items-center gap-2 shrink-0">
-              {isSuperAdminOrOwner && (
+          {/* Segmented Format/Rasio Tabs (Matching POS Sub-Menu) */}
+          <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-[14px] gap-1 overflow-x-auto no-scrollbar">
+            {ASPECT_RATIOS.map((r) => {
+              const active = activeRatio === r.key;
+              return (
                 <button
-                  onClick={() => setOpenUpload(true)}
-                  className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl bg-[#007AFF] hover:bg-[#0066D6] active:bg-[#0055B3] text-white text-xs sm:text-sm font-bold shadow-md shadow-blue-500/20 active:scale-95 transition-all"
+                  key={r.key}
+                  onClick={() => setActiveRatio(r.key)}
+                  className={`flex-1 min-w-[80px] py-2.5 text-[11px] font-bold rounded-[10px] tracking-wide transition-all ${
+                    active
+                      ? "bg-white dark:bg-[#2C2C2E] text-black dark:text-white shadow-sm ring-1 ring-black/5"
+                      : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700"
+                  }`}
                 >
-                  <Icons.Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[3]" />
-                  <span>Unggah</span>
+                  {r.label}
                 </button>
-              )}
-
-              {/* Close Button / More Options */}
-              <button
-                onClick={onClose}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all active:scale-95"
-                title="Tutup Galeri"
-              >
-                <Icons.MoreHorizontal className="w-4 h-4" />
-              </button>
-            </div>
+              );
+            })}
           </div>
 
-          {/* Search Input Bar */}
-          <div className="relative mt-3.5">
+          {/* Large Black Action Button (Matching POS "+ Tambah Produk") */}
+          {isSuperAdminOrOwner && (
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setOpenUpload(true)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black shadow-md shadow-black/25 dark:shadow-white/10 active:scale-95 transition-all font-bold text-xs sm:text-sm"
+              >
+                <Icons.PlusCircle className="w-4 h-4" />
+                <span>Tambah Media Promosi</span>
+              </button>
+
+              {mediaList.length === 0 && (
+                <button 
+                  onClick={handleSeedDefaults}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-bold text-xs active:scale-95 transition-all"
+                >
+                  <Icons.Upload className="w-4 h-4" />
+                  <span>Inisialisasi Awal</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Search Input Bar (Matching POS Search Bar) */}
+          <div className="relative">
             <Icons.Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Cari konten promosi, game, atau promo..."
-              className="w-full pl-10 pr-8 py-2.5 rounded-full bg-zinc-100/90 dark:bg-zinc-800/80 border border-transparent focus:border-[#007AFF] text-xs sm:text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none transition-all"
+              className="w-full pl-10 pr-8 py-2.5 rounded-2xl bg-zinc-100/90 dark:bg-zinc-800/80 border border-transparent focus:border-zinc-400 text-xs sm:text-sm text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none transition-all"
             />
             {searchQuery && (
               <button
@@ -1086,28 +1067,8 @@ export default function GalleryModal({
             )}
           </div>
 
-          {/* Aspect Ratio Filter Pills */}
-          <div className="flex items-center gap-1.5 sm:gap-2 mt-3.5 overflow-x-auto pb-1 scrollbar-none">
-            {ASPECT_RATIOS.map((r) => {
-              const active = activeRatio === r.key;
-              return (
-                <button
-                  key={r.key}
-                  onClick={() => setActiveRatio(r.key)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all whitespace-nowrap border ${
-                    active
-                      ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white border-zinc-300 dark:border-zinc-600 shadow-xs"
-                      : "bg-transparent text-zinc-500 dark:text-zinc-400 border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
-                  }`}
-                >
-                  {r.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Category Filter Pills with Count */}
-          <div className="flex items-center gap-1.5 sm:gap-2 mt-2.5 overflow-x-auto pb-1 scrollbar-none">
+          {/* Category Filter Pills (Matching POS Category Pills) */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
             {CATEGORIES.map((cat) => {
               const count = cat === "Semua" ? mediaList.length : mediaList.filter((m) => m.category === cat).length;
               const active = activeCategory === cat;
@@ -1117,15 +1078,15 @@ export default function GalleryModal({
                   onClick={() => setActiveCategory(cat)}
                   className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                     active
-                      ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-sm"
-                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                      ? "bg-black text-white dark:bg-white dark:text-black shadow-sm font-bold"
+                      : "bg-white dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700"
                   }`}
                 >
                   <span>{cat}</span>
                   <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                     active
                       ? "bg-zinc-800 text-zinc-300 dark:bg-zinc-200 dark:text-zinc-800"
-                      : "bg-black/5 dark:bg-white/10 text-zinc-500 dark:text-zinc-400"
+                      : "bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400"
                   }`}>
                     {count}
                   </span>
@@ -1137,213 +1098,210 @@ export default function GalleryModal({
         </div>
 
         {/* ============================================================
-            GALLERY 2-GRID (AS IN MOCKUP)
+            3. MAIN GALLERY GRID (2-COLUMNS WITH CLEAN CARD DESIGN)
             ============================================================ */}
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 text-zinc-400">
-            <div className="w-10 h-10 border-3 border-[#007AFF] border-t-transparent rounded-full animate-spin mb-3" />
-            <p className="text-xs font-semibold">Memuat galeri media sosial...</p>
-          </div>
-        ) : filteredMedia.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 px-4 text-center bg-white dark:bg-[#1C1C1E] rounded-[28px] border border-zinc-200/80 dark:border-zinc-800">
-            <div className="w-16 h-16 rounded-[20px] bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 mb-4 shadow-inner">
-              <Icons.Gallery className="w-8 h-8 stroke-[1.8]" />
-            </div>
-            <h3 className="text-base font-bold text-zinc-900 dark:text-white mb-1">
-              Belum Ada Media di Kategori Ini
-            </h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mb-6">
-              Unggah poster promosi, video gameplay seru, atau pricelist rental untuk dibagikan ke Story WhatsApp Business & Instagram.
-            </p>
-            {isSuperAdminOrOwner && (
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setOpenUpload(true)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-[#007AFF] text-white text-xs font-semibold shadow-md shadow-blue-500/20 active:scale-95 transition-all"
-                >
-                  <Icons.Plus className="w-4 h-4 stroke-[2.5]" />
-                  <span>Unggah Media Baru</span>
-                </button>
-                <button
-                  onClick={handleSeedDefaults}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-semibold active:scale-95 transition-all"
-                >
-                  <Icons.Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                  <span>Pakai Template Bawaan</span>
-                </button>
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 scrollbar-ios">
+          <div className="max-w-4xl mx-auto w-full pb-20">
+            
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-24 text-zinc-400">
+                <div className="w-10 h-10 border-3 border-black dark:border-white border-t-transparent rounded-full animate-spin mb-3" />
+                <p className="text-xs font-semibold">Memuat galeri media sosial...</p>
               </div>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
-            {filteredMedia.map((item) => (
-              <div
-                key={item.id}
-                className="group bg-white dark:bg-[#1C1C1E] rounded-[24px] sm:rounded-[28px] border border-zinc-200/80 dark:border-zinc-800/80 shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col p-2 sm:p-2.5 justify-between"
-              >
-                {/* Media Container with Inside Aspect Ratio */}
-                <div
-                  onClick={() => setOpenPreview(item)}
-                  className={`relative w-full cursor-pointer overflow-hidden rounded-[18px] sm:rounded-[20px] bg-zinc-900 ${
-                    item.aspectRatio === "9:16"
-                      ? "aspect-[9/16]"
-                      : item.aspectRatio === "16:9"
-                      ? "aspect-[16/9]"
-                      : "aspect-square"
-                  }`}
-                >
-                  {item.mediaType === "video" ? (
-                    <div className="relative w-full h-full bg-zinc-950 flex items-center justify-center">
-                      {item.thumbnailUrl ? (
+            ) : filteredMedia.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 px-4 text-center bg-white dark:bg-[#1C1C1E] rounded-[24px] border border-zinc-200/80 dark:border-zinc-800">
+                <div className="w-16 h-16 rounded-[20px] bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 mb-4 shadow-inner">
+                  <Icons.Gallery className="w-8 h-8 stroke-[1.8]" />
+                </div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white mb-1">
+                  Belum Ada Media di Kategori Ini
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mb-6">
+                  Unggah poster promosi, video gameplay seru, atau pricelist rental untuk dibagikan ke Story WhatsApp Business & Instagram.
+                </p>
+                {isSuperAdminOrOwner && (
+                  <button
+                    onClick={() => setOpenUpload(true)}
+                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black text-xs font-bold shadow-md active:scale-95 transition-all"
+                  >
+                    <Icons.PlusCircle className="w-4 h-4" />
+                    <span>Tambah Media Promosi</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
+                {filteredMedia.map((item) => (
+                  <div
+                    key={item.id}
+                    className="group bg-white dark:bg-[#1C1C1E] rounded-[24px] border border-zinc-200/80 dark:border-zinc-800/80 shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col p-2 sm:p-2.5 justify-between"
+                  >
+                    {/* Media Poster Box */}
+                    <div
+                      onClick={() => setOpenPreview(item)}
+                      className={`relative w-full cursor-pointer overflow-hidden rounded-[18px] bg-zinc-900 ${
+                        item.aspectRatio === "9:16"
+                          ? "aspect-[9/16]"
+                          : item.aspectRatio === "16:9"
+                          ? "aspect-[16/9]"
+                          : "aspect-square"
+                      }`}
+                    >
+                      {item.mediaType === "video" ? (
+                        <div className="relative w-full h-full bg-zinc-950 flex items-center justify-center">
+                          {item.thumbnailUrl ? (
+                            <img
+                              src={item.thumbnailUrl}
+                              alt={item.title}
+                              loading="lazy"
+                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-purple-950/80 via-zinc-900 to-black flex flex-col items-center justify-center p-3 text-center">
+                              <Icons.Video className="w-8 h-8 text-purple-400 mb-1 opacity-70" />
+                              <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Video Promo</span>
+                            </div>
+                          )}
+                          
+                          {/* Play Button Indicator */}
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-colors">
+                            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/60 backdrop-blur-md text-white flex items-center justify-center shadow-lg border border-white/20 group-hover:scale-110 transition-transform">
+                              <Icons.Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-white ml-0.5" />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
                         <img
-                          src={item.thumbnailUrl}
+                          src={item.mediaUrl}
                           alt={item.title}
                           loading="lazy"
                           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                         />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-purple-950/80 via-zinc-900 to-black flex flex-col items-center justify-center p-3 text-center">
-                          <Icons.Video className="w-8 h-8 text-purple-400 mb-1 opacity-70" />
-                          <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Video Promo</span>
-                        </div>
                       )}
-                      
-                      {/* Play Overlay Indicator */}
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-colors">
-                        <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/60 backdrop-blur-md text-white flex items-center justify-center shadow-lg border border-white/20 group-hover:scale-110 transition-transform">
-                          <Icons.Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-white ml-0.5" />
+
+                      {/* Top Overlay Badges */}
+                      <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none gap-1">
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-black/60 text-white backdrop-blur-md border border-white/10 shadow-xs truncate max-w-[70%]">
+                          {item.category}
+                        </span>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          {item.mediaType === "video" && (
+                            <div className="w-6 h-6 rounded-full bg-purple-600 text-white shadow-md flex items-center justify-center">
+                              <Icons.Video className="w-3 h-3" />
+                            </div>
+                          )}
+                          {item.pinned && (
+                            <div className="w-6 h-6 rounded-full bg-amber-500 text-white shadow-md flex items-center justify-center">
+                              <Icons.Bookmark className="w-3 h-3" filled />
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
-                  ) : (
-                    <img
-                      src={item.mediaUrl}
-                      alt={item.title}
-                      loading="lazy"
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                  )}
 
-                  {/* Top Badges Inside Poster */}
-                  <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none gap-1">
-                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-black/60 text-white backdrop-blur-md border border-white/10 shadow-xs truncate max-w-[70%]">
-                      {item.category}
-                    </span>
+                    {/* Card Content Info */}
+                    <div className="pt-2.5 pb-1 px-1 flex flex-col gap-2 flex-1 justify-between">
+                      
+                      {/* Title & Time */}
+                      <div>
+                        <div className="flex items-center justify-between gap-1">
+                          <h4 className="text-xs sm:text-sm font-black text-zinc-900 dark:text-white truncate">
+                            {item.title}
+                          </h4>
+                          <button
+                            onClick={() => setOpenPreview(item)}
+                            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-0.5 rounded"
+                          >
+                            <Icons.MoreHorizontal className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-zinc-400 font-medium mt-0.5">
+                          Story • {item.aspectRatio} • {formatTimeAgo(item.createdAt)}
+                        </p>
+                      </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
-                      {item.mediaType === "video" && (
-                        <div className="w-6 h-6 rounded-full bg-purple-600 text-white shadow-md flex items-center justify-center">
-                          <Icons.Video className="w-3 h-3" />
-                        </div>
-                      )}
-                      {item.pinned && (
-                        <div className="w-6 h-6 rounded-full bg-amber-500 text-white shadow-md flex items-center justify-center">
-                          <Icons.Bookmark className="w-3 h-3" filled />
-                        </div>
-                      )}
+                      {/* Caption Preview */}
+                      <div className="bg-zinc-50 dark:bg-zinc-800/40 rounded-xl p-2 sm:p-2.5 border border-zinc-100 dark:border-zinc-800/60">
+                        <p className="text-[10px] sm:text-[11px] text-zinc-600 dark:text-zinc-300 font-sans line-clamp-2 leading-relaxed">
+                          {item.caption || "Tidak ada caption"}
+                        </p>
+                      </div>
+
+                      {/* Primary Buttons */}
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          onClick={() => handleShareClick(item)}
+                          className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-[#22C55E] hover:bg-[#16A34A] active:bg-[#15803D] text-white font-bold text-[11px] sm:text-xs shadow-sm shadow-green-500/20 active:scale-95 transition-all"
+                          title="Share Media & Caption"
+                        >
+                          <Icons.Share className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>Share</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleCopyCaption(item.caption)}
+                          className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-bold text-[11px] sm:text-xs active:scale-95 transition-all border border-zinc-200/50 dark:border-zinc-700/50"
+                          title="Salin Teks Caption"
+                        >
+                          <Icons.Copy className="w-3.5 h-3.5" />
+                          <span>Salin</span>
+                        </button>
+                      </div>
+
+                      {/* Bottom Toolbar Icons */}
+                      <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800/80 px-1 text-zinc-400">
+                        <button
+                          onClick={() => handleDownloadMedia(item)}
+                          className="p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+                          title="Download Media"
+                        >
+                          <Icons.Download className="w-4 h-4" />
+                        </button>
+
+                        {isSuperAdminOrOwner && (
+                          <>
+                            <button
+                              onClick={() => handleTogglePin(item)}
+                              className={`p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${
+                                item.pinned ? "text-amber-500" : "hover:text-amber-500"
+                              }`}
+                              title={item.pinned ? "Lepas Bookmark / Pin" : "Sematkan"}
+                            >
+                              <Icons.Bookmark className="w-4 h-4" filled={item.pinned} />
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setOpenEdit(item);
+                                setEditCoverFile(null);
+                                setEditCoverPreviewUrl(item.thumbnailUrl || null);
+                              }}
+                              className="p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-blue-500 transition-colors"
+                              title="Edit Media"
+                            >
+                              <Icons.Edit className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteItem(item)}
+                              className="p-1 rounded-lg hover:bg-red-500/10 hover:text-[#FF3B30] transition-colors"
+                              title="Hapus Media"
+                            >
+                              <Icons.Trash className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+
                     </div>
                   </div>
-                </div>
-
-                {/* Card Content Body */}
-                <div className="pt-2.5 pb-1 px-1 flex flex-col gap-2 flex-1 justify-between">
-                  
-                  {/* Title & Time Ago Row */}
-                  <div>
-                    <div className="flex items-center justify-between gap-1">
-                      <h4 className="text-xs sm:text-sm font-black text-zinc-900 dark:text-white truncate">
-                        {item.title}
-                      </h4>
-                      <button
-                        onClick={() => setOpenPreview(item)}
-                        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-0.5 rounded"
-                      >
-                        <Icons.MoreHorizontal className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <p className="text-[10px] text-zinc-400 font-medium mt-0.5">
-                      Story • {item.aspectRatio} • {formatTimeAgo(item.createdAt)}
-                    </p>
-                  </div>
-
-                  {/* Caption Preview Box */}
-                  <div className="bg-zinc-50 dark:bg-zinc-800/40 rounded-xl p-2 sm:p-2.5 border border-zinc-100 dark:border-zinc-800/60">
-                    <p className="text-[10px] sm:text-[11px] text-zinc-600 dark:text-zinc-300 font-sans line-clamp-2 leading-relaxed">
-                      {item.caption || "Tidak ada caption"}
-                    </p>
-                  </div>
-
-                  {/* Primary Action Buttons (Share & Copy) */}
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <button
-                      onClick={() => handleShareClick(item)}
-                      className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-[#22C55E] hover:bg-[#16A34A] active:bg-[#15803D] text-white font-bold text-[11px] sm:text-xs shadow-sm shadow-green-500/20 active:scale-95 transition-all"
-                      title="Share Media & Caption"
-                    >
-                      <Icons.Share className="w-3.5 h-3.5 stroke-[2.5]" />
-                      <span>Share</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleCopyCaption(item.caption)}
-                      className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-bold text-[11px] sm:text-xs active:scale-95 transition-all border border-zinc-200/50 dark:border-zinc-700/50"
-                      title="Salin Teks Caption"
-                    >
-                      <Icons.Copy className="w-3.5 h-3.5" />
-                      <span>Salin</span>
-                    </button>
-                  </div>
-
-                  {/* Bottom Toolbar Icons Row (Download, Bookmark/Pin, Edit, Delete) */}
-                  <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800/80 px-1 text-zinc-400">
-                    <button
-                      onClick={() => handleDownloadMedia(item)}
-                      className="p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
-                      title="Download Media"
-                    >
-                      <Icons.Download className="w-4 h-4" />
-                    </button>
-
-                    {isSuperAdminOrOwner && (
-                      <>
-                        <button
-                          onClick={() => handleTogglePin(item)}
-                          className={`p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${
-                            item.pinned ? "text-amber-500" : "hover:text-amber-500"
-                          }`}
-                          title={item.pinned ? "Lepas Bookmark / Pin" : "Sematkan"}
-                        >
-                          <Icons.Bookmark className="w-4 h-4" filled={item.pinned} />
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setOpenEdit(item);
-                            setEditCoverFile(null);
-                            setEditCoverPreviewUrl(item.thumbnailUrl || null);
-                          }}
-                          className="p-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-[#007AFF] transition-colors"
-                          title="Edit Media"
-                        >
-                          <Icons.Edit className="w-4 h-4" />
-                        </button>
-
-                        <button
-                          onClick={() => handleDeleteItem(item)}
-                          className="p-1 rounded-lg hover:bg-red-500/10 hover:text-[#FF3B30] transition-colors"
-                          title="Hapus Media"
-                        >
-                          <Icons.Trash className="w-4 h-4" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-
-                </div>
+                ))}
               </div>
-            ))}
+            )}
+
           </div>
-        )}
+        </div>
 
       </div>
 
@@ -1354,7 +1312,6 @@ export default function GalleryModal({
         <div className="fixed inset-0 z-[140] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-200">
           <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col md:flex-row bg-[#1C1C1E] border border-white/10 rounded-[28px] sm:rounded-[32px] overflow-hidden shadow-2xl">
             
-            {/* Left: Smartphone Simulator */}
             <div className="flex-1 bg-black flex items-center justify-center p-3 sm:p-6">
               <div className="relative w-full max-w-[280px] sm:max-w-[310px] aspect-[9/16] rounded-[32px] sm:rounded-[36px] overflow-hidden ring-4 ring-white/15 shadow-2xl bg-zinc-900 flex flex-col justify-between">
                 
@@ -1375,7 +1332,6 @@ export default function GalleryModal({
                   />
                 )}
 
-                {/* Top Overlay: Progress Bars & Dynamic Island */}
                 <div className="relative z-10 p-3 bg-gradient-to-b from-black/70 to-transparent pointer-events-none">
                   <div className="w-20 h-5 bg-black rounded-full mx-auto mb-2 flex items-center justify-center shadow-inner" />
                   
@@ -1399,7 +1355,6 @@ export default function GalleryModal({
                   </div>
                 </div>
 
-                {/* Bottom Story Gradient */}
                 <div className="relative z-10 p-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent pointer-events-none">
                   <p className="text-white text-xs font-semibold line-clamp-2 drop-shadow-md">
                     {openPreview.caption}
@@ -1408,7 +1363,6 @@ export default function GalleryModal({
               </div>
             </div>
 
-            {/* Right: Metadata & Social Share Action Hub */}
             <div className="w-full md:w-[380px] p-5 sm:p-6 flex flex-col justify-between bg-zinc-900 border-t md:border-t-0 md:border-l border-white/10 text-white">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -1438,7 +1392,6 @@ export default function GalleryModal({
                   {openPreview.title}
                 </h3>
 
-                {/* Full Caption Box */}
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
                     Teks Caption Promosi
@@ -1451,7 +1404,6 @@ export default function GalleryModal({
                 </div>
               </div>
 
-              {/* Action Buttons Hub */}
               <div className="space-y-2.5 pt-4 mt-4 border-t border-white/10">
                 <button
                   onClick={() => handleShareClick(openPreview)}
@@ -1492,7 +1444,6 @@ export default function GalleryModal({
         <div className="fixed inset-0 z-[145] flex items-center justify-center p-3.5 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 font-sans">
           <div className="relative w-full max-w-lg bg-white dark:bg-[#1C1C1E] border border-black/10 dark:border-white/10 rounded-[28px] sm:rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[92vh] text-zinc-900 dark:text-white">
             
-            {/* Header */}
             <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-black/5 dark:border-white/5 bg-black/5 dark:bg-black/30">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-[10px] bg-gradient-to-tr from-emerald-500 to-teal-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/20">
@@ -1515,10 +1466,8 @@ export default function GalleryModal({
               </button>
             </div>
 
-            {/* Content Body */}
             <div className="p-4 sm:p-6 overflow-y-auto space-y-3.5 sm:space-y-4 flex-1 scrollbar-ios">
               
-              {/* Media Summary Box */}
               <div className="flex items-center gap-3 p-2.5 sm:p-3 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/5">
                 <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl overflow-hidden bg-black shrink-0 border border-black/10 dark:border-white/10 relative">
                   {shareTargetItem.mediaType === "video" ? (
@@ -1559,7 +1508,6 @@ export default function GalleryModal({
                 </div>
               </div>
 
-              {/* Top Hero: Web Share API Trigger */}
               <button
                 onClick={() => triggerWebShareAPI(shareTargetItem)}
                 className="w-full flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-[#007AFF] via-[#5856D6] to-[#AF52DE] hover:opacity-95 text-white shadow-lg shadow-blue-500/25 active:scale-[0.98] transition-all group"
@@ -1581,7 +1529,6 @@ export default function GalleryModal({
                 <Icons.External className="w-4 h-4 text-white/70 group-hover:text-white transition-colors shrink-0 ml-2" />
               </button>
 
-              {/* Priority Channels Section */}
               <div className="pt-1">
                 <div className="flex items-center justify-between mb-2 px-1">
                   <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
@@ -1591,7 +1538,6 @@ export default function GalleryModal({
                 </div>
 
                 <div className="grid grid-cols-1 gap-2 sm:gap-2.5">
-                  {/* WhatsApp Business */}
                   <button
                     onClick={() => shareToWhatsAppBusiness(shareTargetItem)}
                     className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border-2 border-emerald-500/40 text-left transition-all active:scale-[0.99] group shadow-sm shadow-emerald-500/10"
@@ -1617,7 +1563,6 @@ export default function GalleryModal({
                     <Icons.External className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 ml-2" />
                   </button>
 
-                  {/* Instagram */}
                   <button
                     onClick={() => shareToInstagram(shareTargetItem)}
                     className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-pink-500/10 hover:bg-pink-500/15 border border-pink-500/20 text-left transition-all active:scale-[0.99] group"
@@ -1643,7 +1588,6 @@ export default function GalleryModal({
                     <Icons.External className="w-3.5 h-3.5 text-pink-500 shrink-0 ml-2" />
                   </button>
 
-                  {/* Facebook */}
                   <button
                     onClick={() => shareToFacebook(shareTargetItem)}
                     className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-blue-500/10 hover:bg-blue-500/15 border border-blue-500/20 text-left transition-all active:scale-[0.99] group"
@@ -1669,7 +1613,6 @@ export default function GalleryModal({
                     <Icons.External className="w-3.5 h-3.5 text-blue-500 shrink-0 ml-2" />
                   </button>
 
-                  {/* TikTok */}
                   <button
                     onClick={() => shareToTikTok(shareTargetItem)}
                     className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 text-left transition-all active:scale-[0.99] group"
@@ -1695,7 +1638,6 @@ export default function GalleryModal({
                     <Icons.External className="w-3.5 h-3.5 text-zinc-500 shrink-0 ml-2" />
                   </button>
 
-                  {/* WhatsApp Biasa */}
                   <button
                     onClick={() => shareToWhatsAppRegular(shareTargetItem)}
                     className="w-full flex items-center justify-between p-2.5 sm:p-3 rounded-2xl bg-zinc-100/70 dark:bg-zinc-800/50 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200/50 dark:border-zinc-700/50 text-left transition-all active:scale-[0.99] group mt-0.5"
@@ -1720,7 +1662,6 @@ export default function GalleryModal({
                 </div>
               </div>
 
-              {/* Fast Tools Toolbar */}
               <div className="grid grid-cols-2 gap-2 pt-2 border-t border-black/5 dark:border-white/5">
                 <button
                   onClick={() => handleCopyCaption(shareTargetItem.caption)}
@@ -1753,7 +1694,7 @@ export default function GalleryModal({
             
             <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-black/5 dark:border-white/5 bg-black/5 dark:bg-black/30">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-[#007AFF]/10 text-[#007AFF] flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-black/10 dark:bg-white/20 text-black dark:text-white flex items-center justify-center">
                   <Icons.Upload className="w-4 h-4 stroke-[2.2]" />
                 </div>
                 <div>
@@ -1775,12 +1716,11 @@ export default function GalleryModal({
 
             <form onSubmit={handleSubmitUpload} className="p-4 sm:p-6 overflow-y-auto space-y-3.5 sm:space-y-4 flex-1 scrollbar-ios">
               
-              {/* File Dropzone */}
               <div>
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
                   File Gambar atau Video (MP4, MOV, WEBM)
                 </label>
-                <div className="relative border-2 border-dashed border-zinc-200 dark:border-zinc-700 hover:border-[#007AFF] dark:hover:border-[#007AFF] rounded-2xl p-4 text-center bg-zinc-50 dark:bg-zinc-800/40 transition-colors cursor-pointer">
+                <div className="relative border-2 border-dashed border-zinc-200 dark:border-zinc-700 hover:border-black dark:hover:border-white rounded-2xl p-4 text-center bg-zinc-50 dark:bg-zinc-800/40 transition-colors cursor-pointer">
                   <input
                     type="file"
                     accept="image/*,video/*"
@@ -1809,12 +1749,12 @@ export default function GalleryModal({
                           <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">
                             {uploadFile?.name}
                           </p>
-                          <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-[#007AFF] text-white">
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-black text-white dark:bg-white dark:text-black">
                             {uploadMediaType}
                           </span>
                         </div>
                         <p className="text-[10px] text-zinc-500 mt-0.5">
-                          Format terdeteksi: <span className="font-bold text-[#007AFF]">{uploadAspectRatio}</span>
+                          Format terdeteksi: <span className="font-bold text-black dark:text-white">{uploadAspectRatio}</span>
                         </p>
                         <p className="text-[10px] text-emerald-500 font-semibold mt-0.5">
                           ✓ Klik untuk ganti file
@@ -1837,12 +1777,11 @@ export default function GalleryModal({
                 </div>
               </div>
 
-              {/* Dedicated Cover Thumbnail Selector for Videos */}
               {uploadMediaType === "video" && uploadFile && (
-                <div className="p-3 bg-[#007AFF]/5 dark:bg-[#007AFF]/10 border border-[#007AFF]/20 rounded-2xl space-y-2">
+                <div className="p-3 bg-zinc-100/60 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-700 rounded-2xl space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
-                      <Icons.Gallery className="w-3.5 h-3.5 text-[#007AFF]" />
+                      <Icons.Gallery className="w-3.5 h-3.5 text-black dark:text-white" />
                       <span>Cover Poster / Thumbnail Video</span>
                     </span>
                     <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
@@ -1862,7 +1801,7 @@ export default function GalleryModal({
                     </div>
                     <div className="flex-1">
                       <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white text-xs font-bold shadow-xs cursor-pointer active:scale-95 transition-all border border-zinc-200 dark:border-zinc-700">
-                        <Icons.Upload className="w-3.5 h-3.5 text-[#007AFF]" />
+                        <Icons.Upload className="w-3.5 h-3.5 text-black dark:text-white" />
                         <span>Pilih Foto Cover Sendiri</span>
                         <input
                           type="file"
@@ -1879,7 +1818,6 @@ export default function GalleryModal({
                 </div>
               )}
 
-              {/* Direct URL Fallback */}
               <div>
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
                   Atau Masukkan URL Media Langsung (Opsional)
@@ -1889,11 +1827,10 @@ export default function GalleryModal({
                   value={directUrlInput}
                   onChange={(e) => setDirectUrlInput(e.target.value)}
                   placeholder="https://..."
-                  className="w-full px-3.5 py-2.5 text-xs bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                  className="w-full px-3.5 py-2.5 text-xs bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white"
                 />
               </div>
 
-              {/* Title & Category Row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
@@ -1905,7 +1842,7 @@ export default function GalleryModal({
                     value={uploadTitle}
                     onChange={(e) => setUploadTitle(e.target.value)}
                     placeholder="Contoh: Video Gameplay FC 25 PS5"
-                    className="w-full px-3.5 py-2.5 text-xs bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                    className="w-full px-3.5 py-2.5 text-xs bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white"
                   />
                 </div>
 
@@ -1916,7 +1853,7 @@ export default function GalleryModal({
                   <select
                     value={uploadCategory}
                     onChange={(e) => setUploadCategory(e.target.value as any)}
-                    className="w-full px-3.5 py-2.5 text-xs bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                    className="w-full px-3.5 py-2.5 text-xs bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white"
                   >
                     {CATEGORIES.filter((c) => c !== "Semua").map((c) => (
                       <option key={c} value={c} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">
@@ -1927,7 +1864,6 @@ export default function GalleryModal({
                 </div>
               </div>
 
-              {/* Aspect Ratio Selector */}
               <div>
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
                   Format Aspek Rasio
@@ -1944,7 +1880,7 @@ export default function GalleryModal({
                       onClick={() => setUploadAspectRatio(r.id as any)}
                       className={`p-2 sm:p-2.5 rounded-xl border text-left transition-all ${
                         uploadAspectRatio === r.id
-                          ? "bg-[#007AFF]/10 border-[#007AFF] text-[#007AFF] font-bold shadow-xs"
+                          ? "bg-black text-white dark:bg-white dark:text-black border-black dark:border-white font-bold shadow-xs"
                           : "bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400"
                       }`}
                     >
@@ -1955,7 +1891,6 @@ export default function GalleryModal({
                 </div>
               </div>
 
-              {/* Preset Caption Selector */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
@@ -1982,7 +1917,6 @@ export default function GalleryModal({
                 </div>
               </div>
 
-              {/* Caption Textarea */}
               <div>
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
                   Teks Caption Promosi
@@ -1992,11 +1926,10 @@ export default function GalleryModal({
                   value={uploadCaption}
                   onChange={(e) => setUploadCaption(e.target.value)}
                   placeholder="Tulis caption promosi menarik..."
-                  className="w-full p-3 text-xs bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-900 dark:text-white font-mono leading-relaxed placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                  className="w-full p-3 text-xs bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-900 dark:text-white font-mono leading-relaxed placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white"
                 />
               </div>
 
-              {/* Pin Switch */}
               <div className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-200 dark:border-zinc-700">
                 <div>
                   <div className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
@@ -2011,27 +1944,25 @@ export default function GalleryModal({
                   type="checkbox"
                   checked={uploadPinned}
                   onChange={(e) => setUploadPinned(e.target.checked)}
-                  className="w-5 h-5 rounded text-[#007AFF] focus:ring-[#007AFF] cursor-pointer"
+                  className="w-5 h-5 rounded text-black focus:ring-black cursor-pointer"
                 />
               </div>
 
-              {/* Progress Bar */}
               {uploading && (
                 <div className="space-y-1.5 pt-2">
-                  <div className="flex justify-between text-xs font-bold text-[#007AFF]">
+                  <div className="flex justify-between text-xs font-bold text-zinc-900 dark:text-white">
                     <span>Mengunggah media ke Firebase Storage...</span>
                     <span>{uploadProgress}%</span>
                   </div>
                   <div className="w-full h-2 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-[#007AFF] to-[#5856D6] transition-all duration-300 rounded-full"
+                      className="h-full bg-black dark:bg-white transition-all duration-300 rounded-full"
                       style={{ width: `${uploadProgress}%` }}
                     />
                   </div>
                 </div>
               )}
 
-              {/* Modal Actions */}
               <div className="flex items-center justify-end gap-2 pt-4 border-t border-zinc-100 dark:border-zinc-800">
                 <button
                   type="button"
@@ -2044,7 +1975,7 @@ export default function GalleryModal({
                 <button
                   type="submit"
                   disabled={uploading}
-                  className="px-6 py-2.5 rounded-2xl bg-[#007AFF] hover:bg-[#0066D6] text-white font-bold text-xs shadow-md shadow-blue-500/20 active:scale-95 transition-all disabled:opacity-50"
+                  className="px-6 py-2.5 rounded-xl bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black font-bold text-xs shadow-md active:scale-95 transition-all disabled:opacity-50"
                 >
                   {uploading ? "Sedang Mengunggah..." : "Simpan ke Galeri"}
                 </button>
@@ -2082,11 +2013,10 @@ export default function GalleryModal({
                   required
                   value={openEdit.title}
                   onChange={(e) => setOpenEdit({ ...openEdit, title: e.target.value })}
-                  className="w-full px-3.5 py-2.5 text-xs bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#007AFF]"
+                  className="w-full px-3.5 py-2.5 text-xs bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white"
                 />
               </div>
 
-              {/* Cover Thumbnail Changer for Video */}
               {openEdit.mediaType === "video" && (
                 <div className="p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-2xl border border-zinc-200 dark:border-zinc-700 space-y-2">
                   <div className="flex items-center justify-between">
@@ -2107,7 +2037,7 @@ export default function GalleryModal({
                     </div>
                     <div className="flex-1">
                       <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-800 hover:bg-zinc-100 text-zinc-900 dark:text-white text-xs font-bold shadow-xs cursor-pointer active:scale-95 transition-all border border-zinc-200 dark:border-zinc-700">
-                        <Icons.Upload className="w-3.5 h-3.5 text-[#007AFF]" />
+                        <Icons.Upload className="w-3.5 h-3.5 text-black dark:text-white" />
                         <span>Pilih Foto Cover Baru</span>
                         <input
                           type="file"
@@ -2182,7 +2112,7 @@ export default function GalleryModal({
                 <button
                   type="submit"
                   disabled={updatingCover}
-                  className="px-5 py-2.5 rounded-2xl bg-[#007AFF] hover:bg-[#0066D6] text-white font-bold text-xs disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-xl bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black font-bold text-xs disabled:opacity-50"
                 >
                   {updatingCover ? "Menyimpan..." : "Simpan Perubahan"}
                 </button>
