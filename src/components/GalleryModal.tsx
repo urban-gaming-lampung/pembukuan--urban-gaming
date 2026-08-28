@@ -14,7 +14,7 @@ export interface MediaItem {
   thumbStoragePath?: string;
   mediaType: "image" | "video";
   videoDuration?: number;
-  aspectRatio: "9:16" | "1:1" | "16:9" | "auto";
+  aspectRatio: "9:16" | "3:4" | "1:1" | "16:9" | "auto";
   category: "Story Harian" | "Promo & Diskon" | "Daftar Harga & Sewa" | "Game Baru" | "Event & Turnamen" | "Branding";
   createdAt?: any;
   uploadedBy?: string;
@@ -41,6 +41,7 @@ const CATEGORIES = [
 const ASPECT_RATIOS = [
   { key: "all", label: "SEMUA FORMAT" },
   { key: "9:16", label: "STORY 9:16" },
+  { key: "3:4", label: "PORTRAIT 3:4" },
   { key: "1:1", label: "SQUARE 1:1" },
   { key: "16:9", label: "WIDE 16:9" },
 ];
@@ -555,8 +556,10 @@ export default function GalleryModal({
         setUploadThumbnailPreviewUrl(thumbResult.previewUrl);
 
         const ratio = thumbResult.height / thumbResult.width;
-        if (ratio >= 1.35) {
+        if (ratio >= 1.5) {
           setUploadAspectRatio("9:16");
+        } else if (ratio >= 1.2 && ratio < 1.5) {
+          setUploadAspectRatio("3:4");
         } else if (ratio >= 0.85 && ratio <= 1.15) {
           setUploadAspectRatio("1:1");
         } else if (ratio <= 0.7) {
@@ -574,8 +577,10 @@ export default function GalleryModal({
       const img = new Image();
       img.onload = () => {
         const ratio = img.height / img.width;
-        if (ratio >= 1.4) {
+        if (ratio >= 1.5) {
           setUploadAspectRatio("9:16");
+        } else if (ratio >= 1.2 && ratio < 1.5) {
+          setUploadAspectRatio("3:4");
         } else if (ratio >= 0.85 && ratio <= 1.15) {
           setUploadAspectRatio("1:1");
         } else if (ratio <= 0.7) {
@@ -1142,6 +1147,8 @@ export default function GalleryModal({
                       className={`relative w-full cursor-pointer overflow-hidden rounded-[18px] bg-zinc-900 ${
                         item.aspectRatio === "9:16"
                           ? "aspect-[9/16]"
+                          : item.aspectRatio === "3:4"
+                          ? "aspect-[3/4]"
                           : item.aspectRatio === "16:9"
                           ? "aspect-[16/9]"
                           : "aspect-square"
@@ -1868,24 +1875,24 @@ export default function GalleryModal({
                 <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
                   Format Aspek Rasio
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
-                    { id: "9:16", label: "Story (9:16)", desc: "Status WA / IG Reels / TikTok" },
-                    { id: "1:1", label: "Feed (1:1)", desc: "Postingan Persegi" },
-                    { id: "16:9", label: "Wide (16:9)", desc: "Banner Horizontal" },
+                    { id: "9:16", label: "Story (9:16)" },
+                    { id: "3:4", label: "Portrait (3:4)" },
+                    { id: "1:1", label: "Feed (1:1)" },
+                    { id: "16:9", label: "Wide (16:9)" },
                   ].map((r) => (
                     <button
                       type="button"
                       key={r.id}
                       onClick={() => setUploadAspectRatio(r.id as any)}
-                      className={`p-2 sm:p-2.5 rounded-xl border text-left transition-all ${
+                      className={`py-2.5 px-3 rounded-xl border text-center transition-all ${
                         uploadAspectRatio === r.id
                           ? "bg-black text-white dark:bg-white dark:text-black border-black dark:border-white font-bold shadow-xs"
-                          : "bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400"
+                          : "bg-zinc-50 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                       }`}
                     >
                       <div className="text-xs font-semibold">{r.label}</div>
-                      <div className="text-[9px] opacity-75">{r.desc}</div>
                     </button>
                   ))}
                 </div>
@@ -2084,6 +2091,7 @@ export default function GalleryModal({
                     className="w-full px-3.5 py-2.5 text-xs bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-900 dark:text-white"
                   >
                     <option value="9:16">Story (9:16)</option>
+                    <option value="3:4">Portrait (3:4)</option>
                     <option value="1:1">Feed Persegi (1:1)</option>
                     <option value="16:9">Wide (16:9)</option>
                   </select>
