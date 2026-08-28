@@ -47,7 +47,7 @@ const ASPECT_RATIOS = [
 
 const CAPTION_PRESETS = [
   {
-    title: "🎮 Promo Rental PS Weekend",
+    title: "Promo Rental PS Weekend",
     category: "Promo & Diskon" as const,
     aspectRatio: "9:16" as const,
     caption: `🔥 WEEKEND VIBES BARENG URBAN GAMING! 🔥
@@ -66,7 +66,7 @@ WhatsApp: 0822-8949-0123 / DM Instagram @urbangaming.lampung
 #UrbanGaming #RentalPSLampung #RentalPS4 #RentalPS5 #MabarLampung`,
   },
   {
-    title: "⚽ Update Game eFootball & FC 25",
+    title: "Update Game eFootball & FC 25",
     category: "Game Baru" as const,
     aspectRatio: "9:16" as const,
     caption: `⚽ GAME BARU & SQUAD TERBARU READY! ⚽
@@ -79,7 +79,7 @@ Siap adu skill & gelar turnamen mini bareng tongkrongan kamu! 🏆🔥
 #EAFC25 #eFootball2025 #RentalPS5 #RentalPSLampung #UrbanGaming`,
   },
   {
-    title: "💰 Pricelist Resmi Rental PS",
+    title: "Pricelist Resmi Rental PS",
     category: "Daftar Harga & Sewa" as const,
     aspectRatio: "9:16" as const,
     caption: `📋 DAFTAR HARGA & PAKET SEWA URBAN GAMING 📋
@@ -97,7 +97,7 @@ Info & Pemesanan: WhatsApp 0822-8949-0123
 #PricelistRentalPS #RentalPSLampung #UrbanGamingLampung`,
   },
   {
-    title: "✨ Story Harian - Open Slot Ready",
+    title: "Story Harian - Open Slot Ready",
     category: "Story Harian" as const,
     aspectRatio: "9:16" as const,
     caption: `🎮 UNIT READY SIAP MELUNCUR HARI INI! 🎮
@@ -110,7 +110,7 @@ Chat WhatsApp kami sekarang 📲
 #UrbanGaming #RentalPSHariIni #PlaystationLampung`,
   },
   {
-    title: "🏆 Info Turnamen & Event",
+    title: "Info Turnamen & Event",
     category: "Event & Turnamen" as const,
     aspectRatio: "1:1" as const,
     caption: `🏆 TURNAMEN PLAYSTATION URBAN GAMING 🏆
@@ -122,7 +122,7 @@ Pendaftaran dibuka terbatas! Hubungi admin sekarang!
 #TurnamenPSLampung #UrbanGamingTournament`,
   },
   {
-    title: "🌟 Logo & Branding URBAN Gaming",
+    title: "Logo & Branding URBAN Gaming",
     category: "Branding" as const,
     aspectRatio: "1:1" as const,
     caption: `🎮 URBAN GAMING LAMPUNG 🎮
@@ -1870,9 +1870,9 @@ export default function GalleryModal({
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { id: "9:16", label: "📱 Story (9:16)", desc: "Status WA / IG Reels / TikTok" },
-                    { id: "1:1", label: "🟦 Feed (1:1)", desc: "Postingan Persegi" },
-                    { id: "16:9", label: "🖥️ Wide (16:9)", desc: "Banner Horizontal" },
+                    { id: "9:16", label: "Story (9:16)", desc: "Status WA / IG Reels / TikTok" },
+                    { id: "1:1", label: "Feed (1:1)", desc: "Postingan Persegi" },
+                    { id: "16:9", label: "Wide (16:9)", desc: "Banner Horizontal" },
                   ].map((r) => (
                     <button
                       type="button"
@@ -2083,9 +2083,9 @@ export default function GalleryModal({
                     onChange={(e) => setOpenEdit({ ...openEdit, aspectRatio: e.target.value as any })}
                     className="w-full px-3.5 py-2.5 text-xs bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-900 dark:text-white"
                   >
-                    <option value="9:16">📱 Story (9:16)</option>
-                    <option value="1:1">🟦 Feed Persegi (1:1)</option>
-                    <option value="16:9">🖥️ Wide (16:9)</option>
+                    <option value="9:16">Story (9:16)</option>
+                    <option value="1:1">Feed Persegi (1:1)</option>
+                    <option value="16:9">Wide (16:9)</option>
                   </select>
                 </div>
               </div>
