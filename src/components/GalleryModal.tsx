@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { collection, onSnapshot, query, addDoc, doc, deleteDoc, updateDoc, orderBy } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL, deleteObject, getBlob } from "firebase/storage";
 import { db, storage } from "../lib/firebase";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 
@@ -451,24 +451,47 @@ const captureVideoThumbnail = (file: File): Promise<{ blob: Blob; previewUrl: st
 };
 
 /* ============================================================
-   MEDIA BLOB CACHE FOR INSTANT NATIVE FILE SHARING
+   MEDIA BLOB CACHE FOR INSTANT NATIVE FULL FILE SHARING
    ============================================================ */
 const mediaBlobCache = new Map<string, Blob>();
 
-const prefetchMediaBlob = async (mediaUrl: string): Promise<Blob | null> => {
-  if (!mediaUrl) return null;
-  if (mediaBlobCache.has(mediaUrl)) {
-    return mediaBlobCache.get(mediaUrl)!;
+const prefetchMediaBlob = async (item: MediaItem): Promise<Blob | null> => {
+  if (!item.mediaUrl) return null;
+  if (mediaBlobCache.has(item.mediaUrl)) {
+    return mediaBlobCache.get(item.mediaUrl)!;
   }
+
+  // Method 1: Firebase Storage SDK getBlob (Direct binary download without browser CORS block)
   try {
-    const response = await fetch(mediaUrl, { mode: "cors" });
+    if (item.storagePath) {
+      const storageRef = ref(storage, item.storagePath);
+      const blob = await getBlob(storageRef);
+      if (blob) {
+        mediaBlobCache.set(item.mediaUrl, blob);
+        return blob;
+      }
+    } else if (item.mediaUrl.includes("firebasestorage.googleapis.com")) {
+      const storageRef = ref(storage, item.mediaUrl);
+      const blob = await getBlob(storageRef);
+      if (blob) {
+        mediaBlobCache.set(item.mediaUrl, blob);
+        return blob;
+      }
+    }
+  } catch (err) {
+    console.warn("Firebase getBlob failed, falling back to fetch:", err);
+  }
+
+  // Method 2: Standard fetch fallback
+  try {
+    const response = await fetch(item.mediaUrl);
     if (response.ok) {
       const blob = await response.blob();
-      mediaBlobCache.set(mediaUrl, blob);
+      mediaBlobCache.set(item.mediaUrl, blob);
       return blob;
     }
   } catch (err) {
-    console.warn("prefetchMediaBlob error:", err);
+    console.warn("Standard fetch failed:", err);
   }
   return null;
 };
@@ -525,20 +548,20 @@ export default function GalleryModal({
 
   useEffect(() => {
     if (shareTargetItem?.mediaUrl) {
-      prefetchMediaBlob(shareTargetItem.mediaUrl);
+      prefetchMediaBlob(shareTargetItem);
     }
   }, [shareTargetItem]);
 
   useEffect(() => {
     if (openPreview?.mediaUrl) {
-      prefetchMediaBlob(openPreview.mediaUrl);
+      prefetchMediaBlob(openPreview);
     }
   }, [openPreview]);
 
   useEffect(() => {
     if (mediaList.length > 0) {
       mediaList.slice(0, 15).forEach((item) => {
-        prefetchMediaBlob(item.mediaUrl);
+        prefetchMediaBlob(item);
       });
     }
   }, [mediaList]);
@@ -914,44 +937,34 @@ export default function GalleryModal({
     try {
       let blob = mediaBlobCache.get(item.mediaUrl);
       if (!blob) {
-        try {
-          const res = await fetch(item.mediaUrl, { mode: "cors" });
-          if (res.ok) {
-            blob = await res.blob();
-            mediaBlobCache.set(item.mediaUrl, blob);
-          }
-        } catch (e) {
-          console.warn("fetch blob failed:", e);
-        }
+        showToast("Menyiapkan file media... ⏳");
+        blob = (await prefetchMediaBlob(item)) || undefined;
       }
 
-      if (blob && navigator.canShare) {
+      if (blob) {
         const ext = item.mediaType === "video" ? "mp4" : "jpg";
         const mimeType = item.mediaType === "video" ? "video/mp4" : "image/jpeg";
         const cleanTitle = (item.title || "media").replace(/[^a-zA-Z0-9]/g, "_");
         const file = new File([blob], `URBAN_${cleanTitle}.${ext}`, { type: mimeType });
 
-        if (navigator.canShare({ files: [file] })) {
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({
             files: [file],
+            title: item.title,
           });
-          showToast("Berhasil membagikan media! 🚀");
+          showToast("Berhasil membagikan media asli! 🚀");
           setShareTargetItem(null);
           return true;
         }
       }
 
-      // Fallback: Web Share URL
-      await navigator.share({
-        title: item.title,
-        url: item.mediaUrl,
-      });
-      showToast("Berhasil membagikan media! 🚀");
-      setShareTargetItem(null);
+      // Fallback: If device doesn't support binary file share, save full media to gallery!
+      await handleDownloadMedia(item);
+      showToast("Media tersimpan di galeri HP! Silakan pasang ke WhatsApp / Story 📸");
       return true;
     } catch (err: any) {
       if (err.name === "AbortError") {
-        return true; // User cancelled share sheet
+        return true; // User intentionally cancelled share sheet
       }
       console.warn("Direct file share error:", err);
     }
@@ -1237,6 +1250,8 @@ export default function GalleryModal({
                 {filteredMedia.map((item) => (
                   <div
                     key={item.id}
+                    onMouseEnter={() => prefetchMediaBlob(item)}
+                    onTouchStart={() => prefetchMediaBlob(item)}
                     className="group bg-white dark:bg-[#1C1C1E] rounded-[24px] border border-zinc-200/80 dark:border-zinc-800/80 shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col p-2 sm:p-2.5 justify-between"
                   >
                     {/* Media Poster Box */}
