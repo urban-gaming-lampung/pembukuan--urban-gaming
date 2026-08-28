@@ -536,6 +536,14 @@ export default function GalleryModal({
   }, [openPreview]);
 
   useEffect(() => {
+    if (mediaList.length > 0) {
+      mediaList.slice(0, 15).forEach((item) => {
+        prefetchMediaBlob(item.mediaUrl);
+      });
+    }
+  }, [mediaList]);
+
+  useEffect(() => {
     if (!open) return;
     setLoading(true);
 
@@ -871,6 +879,8 @@ export default function GalleryModal({
   };
 
   const handleDownloadMedia = async (item: MediaItem) => {
+    const ext = item.mediaType === "video" ? "mp4" : "jpg";
+    const filename = `URBAN_GAMING_${(item.title || "media").replace(/\s+/g, "_")}.${ext}`;
     try {
       showToast("Mengunduh media...");
       const response = await fetch(item.mediaUrl, { mode: "cors" });
@@ -879,8 +889,7 @@ export default function GalleryModal({
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const ext = item.mediaType === "video" ? "mp4" : "jpg";
-      a.download = `URBAN_GAMING_${item.title.replace(/\s+/g, "_")}.${ext}`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -889,10 +898,7 @@ export default function GalleryModal({
     } catch {
       const a = document.createElement("a");
       a.href = item.mediaUrl;
-      const ext = item.mediaType === "video" ? "mp4" : "jpg";
-      a.setAttribute("download", `URBAN_GAMING_${item.title.replace(/\s+/g, "_")}.${ext}`);
-      a.setAttribute("target", "_blank");
-      a.setAttribute("rel", "noopener noreferrer");
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -908,28 +914,44 @@ export default function GalleryModal({
     try {
       let blob = mediaBlobCache.get(item.mediaUrl);
       if (!blob) {
-        showToast("Menyiapkan file media... ⏳");
-        blob = (await prefetchMediaBlob(item.mediaUrl)) || undefined;
+        try {
+          const res = await fetch(item.mediaUrl, { mode: "cors" });
+          if (res.ok) {
+            blob = await res.blob();
+            mediaBlobCache.set(item.mediaUrl, blob);
+          }
+        } catch (e) {
+          console.warn("fetch blob failed:", e);
+        }
       }
 
-      if (blob) {
+      if (blob && navigator.canShare) {
         const ext = item.mediaType === "video" ? "mp4" : "jpg";
         const mimeType = item.mediaType === "video" ? "video/mp4" : "image/jpeg";
         const cleanTitle = (item.title || "media").replace(/[^a-zA-Z0-9]/g, "_");
         const file = new File([blob], `URBAN_${cleanTitle}.${ext}`, { type: mimeType });
 
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        if (navigator.canShare({ files: [file] })) {
           await navigator.share({
             files: [file],
           });
-          showToast("Berhasil membagikan media asli! 🚀");
+          showToast("Berhasil membagikan media! 🚀");
           setShareTargetItem(null);
           return true;
         }
       }
+
+      // Fallback: Web Share URL
+      await navigator.share({
+        title: item.title,
+        url: item.mediaUrl,
+      });
+      showToast("Berhasil membagikan media! 🚀");
+      setShareTargetItem(null);
+      return true;
     } catch (err: any) {
       if (err.name === "AbortError") {
-        return true; // User intentionally closed/cancelled the share sheet
+        return true; // User cancelled share sheet
       }
       console.warn("Direct file share error:", err);
     }
@@ -1016,8 +1038,13 @@ export default function GalleryModal({
     showToast("Media tersimpan di galeri! Silakan upload ke TikTok 🎵");
   };
 
-  const handleShareClick = (item: MediaItem) => {
-    prefetchMediaBlob(item.mediaUrl);
+  const handleShareClick = async (item: MediaItem) => {
+    // Directly launch native Web Share API on click
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      const handled = await shareFileDirectly(item);
+      if (handled) return;
+    }
+    // If Web Share API is not supported on this device/browser:
     setShareTargetItem(item);
   };
 
