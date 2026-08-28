@@ -450,6 +450,29 @@ const captureVideoThumbnail = (file: File): Promise<{ blob: Blob; previewUrl: st
   });
 };
 
+/* ============================================================
+   MEDIA BLOB CACHE FOR INSTANT NATIVE FILE SHARING
+   ============================================================ */
+const mediaBlobCache = new Map<string, Blob>();
+
+const prefetchMediaBlob = async (mediaUrl: string): Promise<Blob | null> => {
+  if (!mediaUrl) return null;
+  if (mediaBlobCache.has(mediaUrl)) {
+    return mediaBlobCache.get(mediaUrl)!;
+  }
+  try {
+    const response = await fetch(mediaUrl, { mode: "cors" });
+    if (response.ok) {
+      const blob = await response.blob();
+      mediaBlobCache.set(mediaUrl, blob);
+      return blob;
+    }
+  } catch (err) {
+    console.warn("prefetchMediaBlob error:", err);
+  }
+  return null;
+};
+
 export default function GalleryModal({
   open,
   onClose,
@@ -499,6 +522,18 @@ export default function GalleryModal({
   const showToast = (msg: string) => {
     setToastMsg(msg);
   };
+
+  useEffect(() => {
+    if (shareTargetItem?.mediaUrl) {
+      prefetchMediaBlob(shareTargetItem.mediaUrl);
+    }
+  }, [shareTargetItem]);
+
+  useEffect(() => {
+    if (openPreview?.mediaUrl) {
+      prefetchMediaBlob(openPreview.mediaUrl);
+    }
+  }, [openPreview]);
 
   useEffect(() => {
     if (!open) return;
@@ -865,116 +900,124 @@ export default function GalleryModal({
     }
   };
 
-  const triggerWebShareAPI = async (item: MediaItem): Promise<boolean> => {
-    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-      try {
-        // Attempt 1: Native file share (Image / Video file directly, without caption)
-        try {
-          const response = await fetch(item.mediaUrl, { mode: "cors" });
-          if (response.ok) {
-            const blob = await response.blob();
-            const ext = item.mediaType === "video" ? "mp4" : "jpg";
-            const mimeType = item.mediaType === "video" ? "video/mp4" : "image/jpeg";
-            const file = new File([blob], `URBAN_GAMING_${Date.now()}.${ext}`, { type: mimeType });
-
-            if (navigator.canShare && navigator.canShare({ files: [file] })) {
-              await navigator.share({
-                files: [file],
-              });
-              showToast("Berhasil membagikan media! 🚀");
-              setShareTargetItem(null);
-              return true;
-            }
-          }
-        } catch (fileErr: any) {
-          if (fileErr.name === "AbortError") return false;
-          console.warn("File share failed, falling back to URL:", fileErr);
-        }
-
-        // Attempt 2: Share only the media URL without caption text
-        await navigator.share({
-          title: item.title,
-          url: item.mediaUrl,
-        });
-        showToast("Berhasil membagikan media! 🚀");
-        setShareTargetItem(null);
-        return true;
-      } catch (err: any) {
-        if (err.name === "AbortError") {
-          return false;
-        }
-        console.warn("Web Share API:", err);
-      }
+  const shareFileDirectly = async (item: MediaItem): Promise<boolean> => {
+    if (typeof navigator === "undefined" || typeof navigator.share !== "function") {
+      return false;
     }
+
+    try {
+      let blob = mediaBlobCache.get(item.mediaUrl);
+      if (!blob) {
+        showToast("Menyiapkan file media... ⏳");
+        blob = (await prefetchMediaBlob(item.mediaUrl)) || undefined;
+      }
+
+      if (blob) {
+        const ext = item.mediaType === "video" ? "mp4" : "jpg";
+        const mimeType = item.mediaType === "video" ? "video/mp4" : "image/jpeg";
+        const cleanTitle = (item.title || "media").replace(/[^a-zA-Z0-9]/g, "_");
+        const file = new File([blob], `URBAN_${cleanTitle}.${ext}`, { type: mimeType });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+          });
+          showToast("Berhasil membagikan media asli! 🚀");
+          setShareTargetItem(null);
+          return true;
+        }
+      }
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        return true; // User intentionally closed/cancelled the share sheet
+      }
+      console.warn("Direct file share error:", err);
+    }
+
     return false;
   };
 
   const shareToWhatsAppBusiness = async (item: MediaItem) => {
-    // Attempt file share first if supported on the device
-    const shared = await triggerWebShareAPI(item);
-    if (shared) return;
+    // 1. Native OS File Share (Passes actual video/photo into WhatsApp)
+    const success = await shareFileDirectly(item);
+    if (success) return;
 
-    // Fallback: Direct WhatsApp Business URL scheme with ONLY media link
-    const text = item.mediaUrl;
-    const encoded = encodeURIComponent(text);
+    // 2. Fallback: Download the real media file to gallery first, then open WhatsApp!
+    showToast("Mengunduh foto/video ke Galeri HP... ⏳");
+    await handleDownloadMedia(item);
+
     const isAndroid = /android/i.test(navigator.userAgent || "");
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent || "");
 
-    if (isAndroid) {
-      window.location.href = `intent://send?text=${encoded}#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end`;
-    } else if (isIOS) {
-      window.location.href = `whatsapp://send?text=${encoded}`;
-    } else {
-      window.open(`https://web.whatsapp.com/send?text=${encoded}`, "_blank");
-    }
-    showToast("Membuka WhatsApp Business... 🟢");
+    setTimeout(() => {
+      if (isAndroid) {
+        window.location.href = "intent://#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end";
+      } else if (isIOS) {
+        window.location.href = "whatsapp://";
+      } else {
+        window.open("https://web.whatsapp.com", "_blank");
+      }
+      showToast("Media tersimpan di galeri! Buka Status WA untuk memilih foto/video 📸");
+    }, 800);
   };
 
   const shareToWhatsAppRegular = async (item: MediaItem) => {
-    // Attempt file share first if supported on the device
-    const shared = await triggerWebShareAPI(item);
-    if (shared) return;
+    const success = await shareFileDirectly(item);
+    if (success) return;
 
-    // Fallback: Direct WhatsApp URL scheme with ONLY media link
-    const text = item.mediaUrl;
-    const encoded = encodeURIComponent(text);
+    showToast("Mengunduh foto/video ke Galeri HP... ⏳");
+    await handleDownloadMedia(item);
+
     const isAndroid = /android/i.test(navigator.userAgent || "");
 
-    if (isAndroid) {
-      window.location.href = `intent://send?text=${encoded}#Intent;package=com.whatsapp;scheme=whatsapp;end`;
-    } else {
-      window.open(`https://api.whatsapp.com/send?text=${encoded}`, "_blank");
-    }
-    showToast("Membuka WhatsApp... 💬");
+    setTimeout(() => {
+      if (isAndroid) {
+        window.location.href = "intent://#Intent;package=com.whatsapp;scheme=whatsapp;end";
+      } else {
+        window.open("https://api.whatsapp.com", "_blank");
+      }
+      showToast("Media tersimpan di galeri! Buka Status WA untuk memilih foto/video 📸");
+    }, 800);
   };
 
   const shareToInstagram = async (item: MediaItem) => {
-    handleDownloadMedia(item);
+    const success = await shareFileDirectly(item);
+    if (success) return;
+
+    showToast("Mengunduh foto/video ke Galeri HP... ⏳");
+    await handleDownloadMedia(item);
+
     const isMobile = /android|iphone|ipad|ipod/i.test(navigator.userAgent || "");
-    if (isMobile) {
-      window.location.href = "instagram://app";
-      setTimeout(() => {
+    setTimeout(() => {
+      if (isMobile) {
+        window.location.href = "instagram://app";
+      } else {
         window.open("https://instagram.com", "_blank");
-      }, 1500);
-    } else {
-      window.open("https://instagram.com", "_blank");
-    }
-    showToast("Media diunduh! Membuka Instagram... 📸");
+      }
+      showToast("Media tersimpan di galeri! Silakan pasang Story Instagram 📸");
+    }, 800);
   };
 
   const shareToFacebook = async (item: MediaItem) => {
+    const success = await shareFileDirectly(item);
+    if (success) return;
+
     const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(item.mediaUrl)}`;
     window.open(fbUrl, "_blank");
     showToast("Membuka Facebook... 🔵");
   };
 
   const shareToTikTok = async (item: MediaItem) => {
-    handleDownloadMedia(item);
+    const success = await shareFileDirectly(item);
+    if (success) return;
+
+    await handleDownloadMedia(item);
     window.open("https://www.tiktok.com/upload", "_blank");
-    showToast("Media diunduh! Membuka TikTok... 🎵");
+    showToast("Media tersimpan di galeri! Silakan upload ke TikTok 🎵");
   };
 
   const handleShareClick = (item: MediaItem) => {
+    prefetchMediaBlob(item.mediaUrl);
     setShareTargetItem(item);
   };
 
@@ -1544,7 +1587,7 @@ export default function GalleryModal({
               </div>
 
               <button
-                onClick={() => triggerWebShareAPI(shareTargetItem)}
+                onClick={() => shareFileDirectly(shareTargetItem)}
                 className="w-full flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-[#007AFF] via-[#5856D6] to-[#AF52DE] hover:opacity-95 text-white shadow-lg shadow-blue-500/25 active:scale-[0.98] transition-all group"
               >
                 <div className="flex items-center gap-2.5 sm:gap-3 text-left min-w-0">
