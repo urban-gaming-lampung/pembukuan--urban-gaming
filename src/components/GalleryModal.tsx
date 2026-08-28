@@ -868,12 +868,35 @@ export default function GalleryModal({
   const triggerWebShareAPI = async (item: MediaItem): Promise<boolean> => {
     if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
       try {
+        // Attempt 1: Native file share (Image / Video file directly, without caption)
+        try {
+          const response = await fetch(item.mediaUrl, { mode: "cors" });
+          if (response.ok) {
+            const blob = await response.blob();
+            const ext = item.mediaType === "video" ? "mp4" : "jpg";
+            const mimeType = item.mediaType === "video" ? "video/mp4" : "image/jpeg";
+            const file = new File([blob], `URBAN_GAMING_${Date.now()}.${ext}`, { type: mimeType });
+
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              await navigator.share({
+                files: [file],
+              });
+              showToast("Berhasil membagikan media! 🚀");
+              setShareTargetItem(null);
+              return true;
+            }
+          }
+        } catch (fileErr: any) {
+          if (fileErr.name === "AbortError") return false;
+          console.warn("File share failed, falling back to URL:", fileErr);
+        }
+
+        // Attempt 2: Share only the media URL without caption text
         await navigator.share({
           title: item.title,
-          text: `${item.caption}\n\n📸 Media: ${item.mediaUrl}`,
           url: item.mediaUrl,
         });
-        showToast("Berhasil dibagikan ke aplikasi! 🚀");
+        showToast("Berhasil membagikan media! 🚀");
         setShareTargetItem(null);
         return true;
       } catch (err: any) {
@@ -887,8 +910,12 @@ export default function GalleryModal({
   };
 
   const shareToWhatsAppBusiness = async (item: MediaItem) => {
-    await handleCopyCaption(item.caption);
-    const text = `${item.caption}\n\n📸 Media: ${item.mediaUrl}`;
+    // Attempt file share first if supported on the device
+    const shared = await triggerWebShareAPI(item);
+    if (shared) return;
+
+    // Fallback: Direct WhatsApp Business URL scheme with ONLY media link
+    const text = item.mediaUrl;
     const encoded = encodeURIComponent(text);
     const isAndroid = /android/i.test(navigator.userAgent || "");
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent || "");
@@ -900,12 +927,16 @@ export default function GalleryModal({
     } else {
       window.open(`https://web.whatsapp.com/send?text=${encoded}`, "_blank");
     }
-    showToast("Caption disalin! Membuka WhatsApp Business... 🟢");
+    showToast("Membuka WhatsApp Business... 🟢");
   };
 
   const shareToWhatsAppRegular = async (item: MediaItem) => {
-    await handleCopyCaption(item.caption);
-    const text = `${item.caption}\n\n📸 Media: ${item.mediaUrl}`;
+    // Attempt file share first if supported on the device
+    const shared = await triggerWebShareAPI(item);
+    if (shared) return;
+
+    // Fallback: Direct WhatsApp URL scheme with ONLY media link
+    const text = item.mediaUrl;
     const encoded = encodeURIComponent(text);
     const isAndroid = /android/i.test(navigator.userAgent || "");
 
@@ -914,11 +945,10 @@ export default function GalleryModal({
     } else {
       window.open(`https://api.whatsapp.com/send?text=${encoded}`, "_blank");
     }
-    showToast("Caption disalin! Membuka WhatsApp Biasa... 💬");
+    showToast("Membuka WhatsApp... 💬");
   };
 
   const shareToInstagram = async (item: MediaItem) => {
-    await handleCopyCaption(item.caption);
     handleDownloadMedia(item);
     const isMobile = /android|iphone|ipad|ipod/i.test(navigator.userAgent || "");
     if (isMobile) {
@@ -929,21 +959,19 @@ export default function GalleryModal({
     } else {
       window.open("https://instagram.com", "_blank");
     }
-    showToast("Media diunduh & caption disalin! Membuka Instagram... 📸");
+    showToast("Media diunduh! Membuka Instagram... 📸");
   };
 
   const shareToFacebook = async (item: MediaItem) => {
-    await handleCopyCaption(item.caption);
-    const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(item.mediaUrl)}&quote=${encodeURIComponent(item.caption)}`;
+    const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(item.mediaUrl)}`;
     window.open(fbUrl, "_blank");
-    showToast("Caption disalin! Membuka Facebook... 🔵");
+    showToast("Membuka Facebook... 🔵");
   };
 
   const shareToTikTok = async (item: MediaItem) => {
-    await handleCopyCaption(item.caption);
     handleDownloadMedia(item);
     window.open("https://www.tiktok.com/upload", "_blank");
-    showToast("Media diunduh & caption disalin! Membuka TikTok... 🎵");
+    showToast("Media diunduh! Membuka TikTok... 🎵");
   };
 
   const handleShareClick = (item: MediaItem) => {
@@ -1509,8 +1537,8 @@ export default function GalleryModal({
                   <h4 className="font-bold text-xs truncate text-zinc-900 dark:text-white">
                     {shareTargetItem.title}
                   </h4>
-                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
-                    {shareTargetItem.caption}
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    Media siap dibagikan langsung
                   </p>
                 </div>
               </div>
@@ -1529,7 +1557,7 @@ export default function GalleryModal({
                       <span className="px-1.5 py-0.2 rounded text-[8px] sm:text-[9px] font-black bg-white/25 uppercase">Semua App</span>
                     </div>
                     <p className="text-[10px] sm:text-[11px] text-white/80 truncate">
-                      Pilih aplikasi langsung dari menu share bawaan HP
+                      Kirim file foto / video langsung ke aplikasi pilihan Anda
                     </p>
                   </div>
                 </div>
@@ -1563,7 +1591,7 @@ export default function GalleryModal({
                           </span>
                         </div>
                         <p className="text-[9px] sm:text-[10px] text-zinc-600 dark:text-zinc-300 truncate mt-0.5">
-                          Buka aplikasi WhatsApp Business & salin caption otomatis
+                          Kirim gambar / video ke WhatsApp Business
                         </p>
                       </div>
                     </div>
@@ -1588,7 +1616,7 @@ export default function GalleryModal({
                           </span>
                         </div>
                         <p className="text-[9px] sm:text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                          Download media & salin caption untuk Instagram
+                          Download gambar / video & buka Instagram
                         </p>
                       </div>
                     </div>
@@ -1613,7 +1641,7 @@ export default function GalleryModal({
                           </span>
                         </div>
                         <p className="text-[9px] sm:text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                          Buka dialog postingan & story Facebook
+                          Bagikan gambar / video ke Facebook
                         </p>
                       </div>
                     </div>
@@ -1638,7 +1666,7 @@ export default function GalleryModal({
                           </span>
                         </div>
                         <p className="text-[9px] sm:text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                          Download media & salin caption untuk TikTok
+                          Download gambar / video & buka TikTok
                         </p>
                       </div>
                     </div>
@@ -1660,7 +1688,7 @@ export default function GalleryModal({
                           </span>
                         </div>
                         <p className="text-[9px] text-zinc-400 truncate">
-                          Kirim ke kontak atau grup WhatsApp pribadi
+                          Kirim gambar / video ke WhatsApp pribadi
                         </p>
                       </div>
                     </div>
