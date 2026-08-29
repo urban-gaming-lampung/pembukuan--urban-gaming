@@ -3,6 +3,7 @@ import AbsenPopup from "./AbsenPopup";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadString, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "../lib/firebase";
+import { atomicAddDenda, normalizeEmail } from "../lib/salaryService";
 
 // === KONSTANTA ABSENSI ===
 // (Catatan: Konstanta di bawah sudah dipindah ke dinamis via absenConfig, kecuali yang tidak terkait denda keterlambatan per blok)
@@ -130,8 +131,9 @@ const Input: React.FC<InputProps> = ({
   };
 
   const handleLiburLog = async () => {
-    const currentUserEmail = auth.currentUser?.email;
-    if (!currentUserEmail) return;
+    const rawEmail = auth.currentUser?.email;
+    if (!rawEmail) return;
+    const currentUserEmail = normalizeEmail(rawEmail);
     try {
       const dateStr = new Date().toISOString().split("T")[0];
       const logData = {
@@ -156,11 +158,12 @@ const Input: React.FC<InputProps> = ({
     if (shiftPegawai === "Libur") return;
     
     // Default the active email, with fallback check
-    const currentUserEmail = auth.currentUser?.email;
-    if (!currentUserEmail) {
+    const rawEmail = auth.currentUser?.email;
+    if (!rawEmail) {
        console.warn("User email belum tersedia, menggunakan mode lokal.");
        return;
     }
+    const currentUserEmail = normalizeEmail(rawEmail);
 
     try {
       setIsProcessingAbsen(true);
@@ -196,7 +199,7 @@ const Input: React.FC<InputProps> = ({
        // melewati tengah malam.
 
       // 2. Kalkulasi Denda Keterlambatan Absen Masuk
-      if (jenisAbsen === "Masuk") {
+      if (jenisAbsen === "Masuk" && absenConfig) {
         const timePart = waktuAbsen.split(" - ")[0]; // Extract HH:MM
         const [jam, menit] = timePart.split(":").map(Number);
         const waktuAbsenMinutes = jam * 60 + menit;
@@ -207,20 +210,21 @@ const Input: React.FC<InputProps> = ({
 
         // RULE TOLERANSI: Sesuai pengaturan
         // Denda dihitung dari menit setelah toleransi
-        if (lateMinutes > absenConfig.waktuToleransi) {
-           const effectiveLate = lateMinutes - absenConfig.waktuToleransi;
-           const blockDenda = Math.ceil(effectiveLate / absenConfig.durasiWaktuPotongan);
-           const denda = blockDenda * absenConfig.nominalDenda;
+        if (lateMinutes > (absenConfig.waktuToleransi ?? 15)) {
+           const toleransi = absenConfig.waktuToleransi ?? 15;
+           const durasiPotongan = absenConfig.durasiWaktuPotongan > 0 ? absenConfig.durasiWaktuPotongan : 15;
+           const nominalDenda = absenConfig.nominalDenda ?? 1500;
+
+           const effectiveLate = lateMinutes - toleransi;
+           const blockDenda = Math.ceil(effectiveLate / durasiPotongan);
+           const denda = blockDenda * nominalDenda;
            
             if (denda > 0) {
-               const docRef = doc(db, "gaji_pegawai", currentUserEmail);
-               const docSnap = await getDoc(docRef);
-
                const dateStrToday = new Date().toISOString().split("T")[0];
-               const idempKey = `lateCheckin_${currentUserEmail.toLowerCase().trim()}_${dateStrToday}_${shiftPegawai.replace(/\s+/g, '')}`;
+               const idempKey = `lateCheckin_${currentUserEmail}_${dateStrToday}_${shiftPegawai.replace(/\s+/g, '')}`;
 
                const newDenda = {
-                  id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
+                  id: `denda_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
                   nominal: denda,
                   ket: `[Auto-Sistem] Telat absen masuk (${waktuAbsen}) - Telat ${lateMinutes}m (efektif ${effectiveLate}m). Shift: ${shiftPegawai}`,
                   photoUrl: imageUrl,
@@ -234,53 +238,11 @@ const Input: React.FC<InputProps> = ({
                const yy = String(d.getFullYear()).slice(-2);
                const currentBulanTahun = `${mm}/${yy}`;
 
-               let basePokok = 0;
-               if (docSnap.exists()) {
-                  const data = docSnap.data();
-                  let records = Array.isArray(data.records) ? data.records : [];
-
-                  // Check if already injected
-                  const alreadyInjected = records.some((r: any) => 
-                     r.gajiPengurangan?.some((pg: any) => pg._idempKey === idempKey)
-                  );
-                  if (alreadyInjected) {
-                     console.log("Denda telat sudah pernah masuk:", idempKey);
-                     return;
-                  }
-
-                  for (const r of records) {
-                     const v = Number(r.gajiPokok) || 0;
-                     if (v > 0) { basePokok = v; break; }
-                  }
-                  if (basePokok === 0) basePokok = Number(data.gajiPokok) || 1500000;
-                  
-                  const monthIndex = records.findIndex((r: any) => r.bulanTahun === currentBulanTahun);
-                  if (monthIndex >= 0) {
-                     const currentMonth = records[monthIndex];
-                     const gajiPengurangan = Array.isArray(currentMonth.gajiPengurangan) ? currentMonth.gajiPengurangan : [];
-                     records[monthIndex] = { ...currentMonth, gajiPengurangan: [...gajiPengurangan, newDenda] };
-                  } else {
-                     records = [{
-                         id: `rec-${Date.now()}`,
-                         bulanTahun: currentBulanTahun,
-                         gajiPokok: basePokok,
-                         gajiTambahan: [],
-                         gajiPengurangan: [newDenda]
-                     }, ...records];
-                  }
-                  await setDoc(docRef, { records, gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
-               } else {
-                  basePokok = 1500000;
-                  const newMonth = {
-                      id: `rec-${Date.now()}`,
-                      bulanTahun: currentBulanTahun,
-                      gajiPokok: basePokok,
-                      gajiTambahan: [],
-                      gajiPengurangan: [newDenda]
-                  };
-                  await setDoc(docRef, { records: [newMonth], gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
+               // Gunakan atomic transaction agar tidak pernah menimpa atau terhapus
+               const res = await atomicAddDenda(currentUserEmail, newDenda, currentBulanTahun);
+               if (!res.alreadyExisted) {
+                 alert(`🚨 PERINGATAN SISTEM\nAnda telat absen ${lateMinutes} menit (toleransi ${toleransi}m, efektif telat ${effectiveLate}m)!\nGaji Anda otomatis dipotong Rp ${denda.toLocaleString("id-ID")}`);
                }
-               alert(`🚨 PERINGATAN SISTEM\nAnda telat absen ${lateMinutes} menit (toleransi ${absenConfig.waktuToleransi}m, efektif telat ${effectiveLate}m)!\nGaji Anda otomatis dipotong Rp ${denda.toLocaleString("id-ID")}`);
             }
         }
       }

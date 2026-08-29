@@ -12,6 +12,7 @@ import { RowHarian, RowJajanan, RowJasaAks, RowSewa, HistoryItem } from "../lib/
 import { DEFAULT_HARGA_HARIAN, DEFAULT_HARGA_JAJANAN, DEFAULT_HARGA_JASA_AKS, DEFAULT_HARGA_SEWA } from "../constants/prices";
 import { LS_KEY } from "../constants/storage";
 import { checkCatalogBaselineAndLogUpdates, isVersionLower, SavedCatalogState, startOfDay, endOfDay } from "../lib/catalog";
+import { atomicAddDenda, normalizeEmail } from "../lib/salaryService";
 import useStokData from "./useStokData";
 import { PdfExporterHandle } from "../components/PdfExporter";
 
@@ -939,26 +940,22 @@ export default function useAppController() {
     if (editingId) return;
     if (hasAutoCorrectRef.current) return;
 
-    const alreadySaved = history.some(h => h.tanggal === tanggal);
-    if (alreadySaved) {
-      hasAutoCorrectRef.current = true;
-      
-      const realNow = getWibDate();
-      const realDateStr = `${realNow.getFullYear()}-${String(realNow.getMonth() + 1).padStart(2, "0")}-${String(realNow.getDate()).padStart(2, "0")}`;
-      
-      if (tanggal !== realDateStr) {
-        systemDateRef.current = realNow.getDate();
-        setTanggal(realDateStr);
-        const h = new Intl.DateTimeFormat("id-ID", { weekday: "long" }).format(realNow);
-        setHari(h.charAt(0).toUpperCase() + h.slice(1));
+    // Hanya ubah tanggal secara otomatis jika form benar-benar kosong dan belum diubah user
+    if (!hasDataRef.current) {
+      const alreadySaved = history.some(h => h.tanggal === tanggal);
+      if (alreadySaved) {
+        hasAutoCorrectRef.current = true;
+        
+        const realNow = getWibDate();
+        const realDateStr = `${realNow.getFullYear()}-${String(realNow.getMonth() + 1).padStart(2, "0")}-${String(realNow.getDate()).padStart(2, "0")}`;
+        
+        if (tanggal !== realDateStr && !history.some(h => h.tanggal === realDateStr)) {
+          systemDateRef.current = realNow.getDate();
+          setTanggal(realDateStr);
+          const h = new Intl.DateTimeFormat("id-ID", { weekday: "long" }).format(realNow);
+          setHari(h.charAt(0).toUpperCase() + h.slice(1));
+        }
       }
-      
-      setAbsenPagi("");
-      setAbsenSiang("");
-      setShiftPegawai("");
-      setRukoBuka("");
-      setRukoTutup("");
-      hasDataRef.current = false;
     }
   }, [history, tanggal, editingId]);
 
@@ -1036,13 +1033,11 @@ export default function useAppController() {
   }, [currentFormSignature]);
 
   const applyRemoteDraft = useCallback((data: any) => {
-    if (data.tanggal && historyRef.current.some(h => h.tanggal === data.tanggal)) {
-      return;
-    }
+    if (!data || typeof data !== "object") return;
 
-    if (editingId) {
-      if (data.tanggal !== undefined) setTanggal(data.tanggal);
-      if (data.hari !== undefined) setHari(data.hari);
+    if (!editingId) {
+      if (data.tanggal) setTanggal(data.tanggal);
+      if (data.hari) setHari(data.hari);
     }
     if (data.rukoBuka !== undefined) _setRukoBuka(data.rukoBuka ? data.rukoBuka.split(" - ")[0] : "");
     if (data.rukoTutup !== undefined) _setRukoTutup(data.rukoTutup ? data.rukoTutup.split(" - ")[0] : "");
@@ -1063,12 +1058,12 @@ export default function useAppController() {
        return res;
     };
 
-    if (data.rowsHarian) setRowsHarian(cleanRows(data.rowsHarian, 5));
-    if (data.rowsJajanan) setRowsJajanan(cleanRows(data.rowsJajanan, 5));
-    if (data.rowsJasaAks) setRowsJasaAks(cleanRows(data.rowsJasaAks, 5));
-    if (data.rowsSewa) setRowsSewa(cleanRows(data.rowsSewa, 5));
-    if (data.rowsSetoran) setRowsSetoran(cleanRows(data.rowsSetoran, 1));
-    if (data.rowsPengeluaran) setRowsPengeluaran(cleanRows(data.rowsPengeluaran, 1));
+    if (Array.isArray(data.rowsHarian) && data.rowsHarian.length > 0) setRowsHarian(cleanRows(data.rowsHarian, 5));
+    if (Array.isArray(data.rowsJajanan) && data.rowsJajanan.length > 0) setRowsJajanan(cleanRows(data.rowsJajanan, 5));
+    if (Array.isArray(data.rowsJasaAks) && data.rowsJasaAks.length > 0) setRowsJasaAks(cleanRows(data.rowsJasaAks, 5));
+    if (Array.isArray(data.rowsSewa) && data.rowsSewa.length > 0) setRowsSewa(cleanRows(data.rowsSewa, 5));
+    if (Array.isArray(data.rowsSetoran) && data.rowsSetoran.length > 0) setRowsSetoran(cleanRows(data.rowsSetoran, 1));
+    if (Array.isArray(data.rowsPengeluaran) && data.rowsPengeluaran.length > 0) setRowsPengeluaran(cleanRows(data.rowsPengeluaran, 1));
   }, [editingId]);
 
   useFormDraft(currentFormSignature, applyRemoteDraft, activeTab, !!editingId);
@@ -1495,11 +1490,10 @@ export default function useAppController() {
         const dendaAmount = absenConfig?.dendaTidakAbsenPulang ?? 40000;
         if (dendaAmount > 0) {
           try {
-             const docRef = doc(db, "gaji_pegawai", user.email);
-             const docSnap = await getDoc(docRef);
-             const idempKey = `dendaBolos_${tanggal}_${user.email}`;
+             const cleanUserEmail = normalizeEmail(user.email);
+             const idempKey = `dendaBolos_${tanggal}_${cleanUserEmail}`;
              const newDenda = {
-                  id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
+                  id: `dendaBolos_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
                   nominal: dendaAmount,
                   ket: `[Auto-Sistem] Tidak Full Absen (Bolos/Lupa) pada ${tanggal}`,
                   photoUrl: "",
@@ -1512,37 +1506,7 @@ export default function useAppController() {
              const yy = String(d.getFullYear()).slice(-2);
              const currentBulanTahun = `${mm}/${yy}`;
 
-             let basePokok = 0;
-             if (docSnap.exists()) {
-                 const data = docSnap.data();
-                 let records = Array.isArray(data.records) ? data.records : [];
-                 
-                 const alreadyInjected = records.some((r: any) => 
-                     r.gajiPengurangan?.some((pg: any) => pg._idempKey === idempKey)
-                 );
-                 
-                 if (!alreadyInjected) {
-                      for (const r of records) {
-                          const v = Number(r.gajiPokok) || 0;
-                          if (v > 0) { basePokok = v; break; }
-                      }
-                      if (basePokok === 0) basePokok = Number(data.gajiPokok) || 1500000;
-
-                      const monthIndex = records.findIndex((r: any) => r.bulanTahun === currentBulanTahun);
-                      if (monthIndex >= 0) {
-                          const currentMonth = records[monthIndex];
-                          const gajiPengurangan = Array.isArray(currentMonth.gajiPengurangan) ? currentMonth.gajiPengurangan : [];
-                          records[monthIndex] = { ...currentMonth, gajiPengurangan: [...gajiPengurangan, newDenda] };
-                      } else {
-                          records = [{ id: `rec-${Date.now()}`, bulanTahun: currentBulanTahun, gajiPokok: basePokok, gajiTambahan: [], gajiPengurangan: [newDenda] }, ...records];
-                      }
-                      await setDoc(docRef, { records, gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
-                 }
-             } else {
-                 basePokok = 1500000;
-                 const newMonth = { id: `rec-${Date.now()}`, bulanTahun: currentBulanTahun, gajiPokok: basePokok, gajiTambahan: [], gajiPengurangan: [newDenda] };
-                 await setDoc(docRef, { records: [newMonth], gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
-             }
+             await atomicAddDenda(cleanUserEmail, newDenda, currentBulanTahun);
           } catch (err) {
               console.error("Gagal menerapkan denda bolos/lupa absen:", err);
           }
