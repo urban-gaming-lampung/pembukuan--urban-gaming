@@ -349,13 +349,15 @@ export default function useAppController() {
 
   const setShiftPegawai = useCallback((val: string) => {
     _setShiftPegawai(val);
-    if (!editingId && user?.email) {
-      setDoc(doc(db, "data", `shift_${user.email}`), { shift: val, tanggal }, { merge: true }).catch(console.error);
+    const cleanEmail = normalizeEmail(user?.email || "");
+    if (!editingId && cleanEmail) {
+      setDoc(doc(db, "data", `shift_${cleanEmail}`), { shift: val, tanggal }, { merge: true }).catch(console.error);
     }
   }, [editingId, tanggal, user?.email]);
 
   useEffect(() => {
-    if (!user?.email || !tanggal) return;
+    const cleanEmail = normalizeEmail(user?.email || "");
+    if (!cleanEmail || !tanggal) return;
 
     const alreadySaved = historyRef.current.some(h => h.tanggal === tanggal);
     if (alreadySaved && !editingId) {
@@ -366,7 +368,7 @@ export default function useAppController() {
 
     const q = query(
       collection(db, "log_absensi"),
-      where("email", "==", user.email),
+      where("email", "==", cleanEmail),
       where("tanggal", "==", tanggal)
     );
     const unsub = onSnapshot(q, (snap) => {
@@ -379,19 +381,21 @@ export default function useAppController() {
         if (data.jenisAbsen === "Masuk") pagi = data.waktu;
         if (data.jenisAbsen === "Pulang") siang = data.waktu;
       });
-      setAbsenPagi(pagi);
-      setAbsenSiang(siang);
+      // Hanya update jika query berhasil menemukan log atau belum ada state lokal
+      if (pagi) setAbsenPagi(pagi);
+      if (siang) setAbsenSiang(siang);
     }, (err) => console.error("Error fetching absen: ", err));
     return () => unsub();
   }, [user?.email, tanggal, editingId]);
 
   useEffect(() => {
-    if (!user?.email || !tanggal || editingId) return;
+    const cleanEmail = normalizeEmail(user?.email || "");
+    if (!cleanEmail || !tanggal || editingId) return;
     
     const alreadySaved = historyRef.current.some(h => h.tanggal === tanggal);
     if (alreadySaved) return;
 
-    const unsub = onSnapshot(doc(db, "data", `shift_${user.email}`), (snap) => {
+    const unsub = onSnapshot(doc(db, "data", `shift_${cleanEmail}`), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
         if (data.tanggal === tanggal) {
@@ -416,38 +420,28 @@ export default function useAppController() {
     const dStr = dateStr || new Date().toLocaleString("en-CA", { timeZone: "Asia/Jakarta" }).slice(0, 10);
     if (val) _setRukoBukaDate(dStr);
     if (!editingId && val) {
-      const isNewDay = rukoStatusDbTanggal !== tanggal;
       const updateData: any = {
         rukoBuka: val,
         rukoBukaDate: dStr,
         tanggal
       };
-      if (isNewDay) {
-        updateData.rukoTutup = "";
-        updateData.rukoTutupDate = "";
-      }
       setDoc(doc(db, "data", "ruko_status"), updateData, { merge: true }).catch(console.error);
     }
-  }, [editingId, tanggal, rukoStatusDbTanggal]);
+  }, [editingId, tanggal]);
 
   const setRukoTutup = useCallback((val: string, dateStr?: string) => {
     _setRukoTutup(val);
     const dStr = dateStr || new Date().toLocaleString("en-CA", { timeZone: "Asia/Jakarta" }).slice(0, 10);
     if (val) _setRukoTutupDate(dStr);
     if (!editingId && val) {
-      const isNewDay = rukoStatusDbTanggal !== tanggal;
       const updateData: any = {
         rukoTutup: val,
         rukoTutupDate: dStr,
         tanggal
       };
-      if (isNewDay) {
-        updateData.rukoBuka = "";
-        updateData.rukoBukaDate = "";
-      }
       setDoc(doc(db, "data", "ruko_status"), updateData, { merge: true }).catch(console.error);
     }
-  }, [editingId, tanggal, rukoStatusDbTanggal]);
+  }, [editingId, tanggal]);
 
   useEffect(() => {
     if (!user) return;
@@ -925,8 +919,12 @@ export default function useAppController() {
   }, [hasData]);
 
   const mandatoryFilled = useMemo(() => {
-    if (shiftPegawai === "Libur") return !!(rukoBuka && rukoTutup);
-    return !!(absenPagi && absenSiang && rukoBuka && rukoTutup);
+    const effBuka = rukoBuka || (absenPagi ? absenPagi.split(" - ")[0] : "");
+    const effTutup = rukoTutup || (absenSiang ? absenSiang.split(" - ")[0] : "");
+    if (shiftPegawai === "Libur") {
+      return !!(effBuka && effTutup);
+    }
+    return !!(absenPagi && absenSiang && effBuka && effTutup);
   }, [absenPagi, absenSiang, rukoBuka, rukoTutup, shiftPegawai]);
 
   // ===== HISTORY & FILTER =====
@@ -1454,10 +1452,16 @@ export default function useAppController() {
       ? crypto.randomUUID() 
       : Date.now().toString() + Math.random().toString(36).slice(2);
     
+    const finalRukoBuka = rukoBuka || (absenPagi ? absenPagi.split(" - ")[0] : "");
+    const finalRukoTutup = rukoTutup || (absenSiang ? absenSiang.split(" - ")[0] : "");
+
     const newItem = {
       id: uniqueId,
       tanggal, hari,
-      absenPagi, absenSiang, shiftPegawai, rukoBuka, rukoTutup, catatan,
+      absenPagi, absenSiang, shiftPegawai, 
+      rukoBuka: finalRukoBuka, 
+      rukoTutup: finalRukoTutup, 
+      catatan,
       totalHarian, totalJajanan, totalJasaAks, totalSewa, totalCash, totalTransfer,
       rowsHarian: JSON.parse(JSON.stringify(rowsHarian)),
       rowsJajanan: JSON.parse(JSON.stringify(rowsJajanan)),
@@ -1531,14 +1535,17 @@ export default function useAppController() {
     
     hasDataRef.current = false;
     
-    const q = query(collection(db, "log_absensi"), where("email", "==", user?.email), where("tanggal", "==", tanggal));
-    getDocs(q).then((snapshot) => {
-      snapshot.forEach((docSnap) => {
-        updateDoc(docSnap.ref, { status: "completed" }).catch(console.error);
+    const cleanCompletedEmail = normalizeEmail(user?.email || "");
+    if (cleanCompletedEmail) {
+      const q = query(collection(db, "log_absensi"), where("email", "==", cleanCompletedEmail), where("tanggal", "==", tanggal));
+      getDocs(q).then((snapshot) => {
+        snapshot.forEach((docSnap) => {
+          updateDoc(docSnap.ref, { status: "completed" }).catch(console.error);
+        });
+      }).catch((e) => {
+        console.error("Gagal update status log_absensi:", e);
       });
-    }).catch((e) => {
-      console.error("Gagal update status log_absensi:", e);
-    });
+    }
     const realNow = getWibDate();
     systemDateRef.current = realNow.getDate();
     const yyyy = realNow.getFullYear();
@@ -2166,8 +2173,9 @@ export default function useAppController() {
   const handleResetAbsenPagi = useCallback(async () => {
     setAbsenPagi("");
     try {
-      const userEmail = auth.currentUser?.email;
-      if (!userEmail) return;
+      const rawEmail = auth.currentUser?.email;
+      if (!rawEmail) return;
+      const userEmail = normalizeEmail(rawEmail);
       const q = query(collection(db, "log_absensi"), where("tanggal", "==", tanggal), where("email", "==", userEmail), where("jenisAbsen", "==", "Masuk"));
       const snapshot = await getDocs(q);
       snapshot.forEach((docSnap) => deleteDoc(docSnap.ref).catch(console.error));
@@ -2179,8 +2187,9 @@ export default function useAppController() {
   const handleResetAbsenSiang = useCallback(async () => {
     setAbsenSiang("");
     try {
-      const userEmail = auth.currentUser?.email;
-      if (!userEmail) return;
+      const rawEmail = auth.currentUser?.email;
+      if (!rawEmail) return;
+      const userEmail = normalizeEmail(rawEmail);
       const q = query(collection(db, "log_absensi"), where("tanggal", "==", tanggal), where("email", "==", userEmail), where("jenisAbsen", "==", "Pulang"));
       const snapshot = await getDocs(q);
       snapshot.forEach((docSnap) => deleteDoc(docSnap.ref).catch(console.error));

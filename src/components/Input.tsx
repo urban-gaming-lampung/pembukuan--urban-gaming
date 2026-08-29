@@ -130,6 +130,25 @@ const Input: React.FC<InputProps> = ({
     setHari(getHariIndonesia(value));
   };
 
+  // Auto-fill rukoBuka dan rukoTutup jika belum terisi tapi sudah absen masuk/pulang
+  useEffect(() => {
+    if (absenPagi && !rukoBuka) {
+      const timeOnly = absenPagi.split(" - ")[0];
+      const dateOnly = absenPagi.split(" - ")[1]?.replace(/\//g, "-");
+      const dStr = dateOnly && dateOnly.includes("-") ? `${dateOnly.split("-")[2]}-${dateOnly.split("-")[1].padStart(2, '0')}-${dateOnly.split("-")[0].padStart(2, '0')}` : undefined;
+      setRukoBuka(timeOnly, dStr);
+    }
+  }, [absenPagi, rukoBuka, setRukoBuka]);
+
+  useEffect(() => {
+    if (absenSiang && !rukoTutup) {
+      const timeOnly = absenSiang.split(" - ")[0];
+      const dateOnly = absenSiang.split(" - ")[1]?.replace(/\//g, "-");
+      const dStr = dateOnly && dateOnly.includes("-") ? `${dateOnly.split("-")[2]}-${dateOnly.split("-")[1].padStart(2, '0')}-${dateOnly.split("-")[0].padStart(2, '0')}` : undefined;
+      setRukoTutup(timeOnly, dStr);
+    }
+  }, [absenSiang, rukoTutup, setRukoTutup]);
+
   const handleLiburLog = async () => {
     const rawEmail = auth.currentUser?.email;
     if (!rawEmail) return;
@@ -436,8 +455,8 @@ const Input: React.FC<InputProps> = ({
                 type="time"
                 value={rukoBuka}
                 onChange={(e) => setRukoBuka(e.target.value)}
-                readOnly={!isOwner}
-                className={`${inputStyle} ${!isOwner ? 'opacity-70 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
+                readOnly={!isOwner && !!rukoBuka}
+                className={`${inputStyle} ${!isOwner && !!rukoBuka ? 'opacity-70 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
               />
               {rukoBukaDate && rukoBuka && (
                 <span className="text-[11px] font-medium text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-md shrink-0">
@@ -468,8 +487,8 @@ const Input: React.FC<InputProps> = ({
                 type="time"
                 value={rukoTutup}
                 onChange={(e) => setRukoTutup(e.target.value)}
-                readOnly={!isOwner}
-                className={`${inputStyle} ${!isOwner ? 'opacity-70 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
+                readOnly={!isOwner && !!rukoTutup}
+                className={`${inputStyle} ${!isOwner && !!rukoTutup ? 'opacity-70 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
               />
               {rukoTutupDate && rukoTutup && (
                 <span className="text-[11px] font-medium text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-md shrink-0">
