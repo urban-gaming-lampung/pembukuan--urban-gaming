@@ -381,9 +381,8 @@ export default function useAppController() {
         if (data.jenisAbsen === "Masuk") pagi = data.waktu;
         if (data.jenisAbsen === "Pulang") siang = data.waktu;
       });
-      // Hanya update jika query berhasil menemukan log atau belum ada state lokal
-      if (pagi) setAbsenPagi(pagi);
-      if (siang) setAbsenSiang(siang);
+      setAbsenPagi(pagi);
+      setAbsenSiang(siang);
     }, (err) => console.error("Error fetching absen: ", err));
     return () => unsub();
   }, [user?.email, tanggal, editingId]);
@@ -393,16 +392,21 @@ export default function useAppController() {
     if (!cleanEmail || !tanggal || editingId) return;
     
     const alreadySaved = historyRef.current.some(h => h.tanggal === tanggal);
-    if (alreadySaved) return;
+    if (alreadySaved) {
+      _setShiftPegawai("");
+      return;
+    }
 
     const unsub = onSnapshot(doc(db, "data", `shift_${cleanEmail}`), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
-        if (data.tanggal === tanggal) {
+        if (data.tanggal === tanggal && data.shift) {
           _setShiftPegawai(data.shift || "");
         } else {
           _setShiftPegawai("");
         }
+      } else {
+        _setShiftPegawai("");
       }
     });
     return () => unsub();
@@ -1033,6 +1037,23 @@ export default function useAppController() {
   const applyRemoteDraft = useCallback((data: any) => {
     if (!data || typeof data !== "object") return;
 
+    if (Object.keys(data).length === 0) {
+      if (!editingId) {
+        _setRukoBuka("");
+        _setRukoBukaDate("");
+        _setRukoTutup("");
+        _setRukoTutupDate("");
+        setCatatan("");
+        setRowsHarian(Array.from({ length: 5 }, () => ({ ...blankHarian })));
+        setRowsJajanan(Array.from({ length: 5 }, () => ({ ...blankJajanan })));
+        setRowsJasaAks(Array.from({ length: 5 }, () => ({ ...blankJasaAks })));
+        setRowsSewa(Array.from({ length: 5 }, () => newBlankSewa()));
+        setRowsSetoran([{ ket: "", harga: "", bayar: "" }]);
+        setRowsPengeluaran([{ ket: "", harga: "", bayar: "", buktiTransfer: "" }]);
+      }
+      return;
+    }
+
     if (!editingId) {
       if (data.tanggal) setTanggal(data.tanggal);
       if (data.hari) setHari(data.hari);
@@ -1561,6 +1582,9 @@ export default function useAppController() {
 
     setDoc(doc(db, "data", "draft"), {}).catch(console.error);
     setDoc(doc(db, "data", "ruko_status"), { rukoBuka: "", rukoBukaDate: "", rukoTutup: "", rukoTutupDate: "", tanggal: "" }, { merge: false }).catch(console.error);
+    if (cleanCompletedEmail) {
+      setDoc(doc(db, "data", `shift_${cleanCompletedEmail}`), { shift: "", tanggal: "" }, { merge: true }).catch(console.error);
+    }
 
     setSuccessMessage("Data berhasil disimpan secara real-time!");
     setShowSuccessAlert(true);
@@ -2200,8 +2224,19 @@ export default function useAppController() {
 
   const handleResetForm = useCallback(async () => {
     setAbsenPagi(""); setAbsenSiang(""); setShiftPegawai(""); setRukoBuka(""); setRukoTutup(""); setCatatan(""); 
+    setRowsHarian(Array.from({ length: 5 }, () => ({ ...blankHarian })));
+    setRowsJajanan(Array.from({ length: 5 }, () => ({ ...blankJajanan })));
+    setRowsJasaAks(Array.from({ length: 5 }, () => ({ ...blankJasaAks })));
+    setRowsSewa(Array.from({ length: 5 }, () => newBlankSewa()));
+    setRowsSetoran([{ ket: "", harga: "", bayar: "" }]);
+    setRowsPengeluaran([{ ket: "", harga: "", bayar: "", buktiTransfer: "" }]);
     try {
+      await setDoc(doc(db, "data", "draft"), {});
       await setDoc(doc(db, "data", "ruko_status"), { rukoBuka: "", rukoBukaDate: "", rukoTutup: "", rukoTutupDate: "", tanggal: "" }, { merge: false });
+      const cleanEmail = normalizeEmail(user?.email || "");
+      if (cleanEmail) {
+        await setDoc(doc(db, "data", `shift_${cleanEmail}`), { shift: "", tanggal: "" }, { merge: true });
+      }
       const q = query(collection(db, "log_absensi"), where("tanggal", "==", tanggal));
       const snapshot = await getDocs(q);
       snapshot.forEach((docSnap) => {
@@ -2210,7 +2245,7 @@ export default function useAppController() {
     } catch (e) {
       console.error("Gagal menghapus log_absensi/ruko_status:", e);
     }
-  }, [tanggal, setShiftPegawai, setRukoBuka, setRukoTutup]);
+  }, [tanggal, user?.email]);
 
   return {
     rootRef,

@@ -82,14 +82,12 @@ export function useFormDraft(
 
       // Hanya ganti state lokal jika snapshot ini BERASAL DARI SERVER (admin lain).
       if (snap.exists() && !snap.metadata.hasPendingWrites) {
-        const remoteData = snap.data();
-        if (remoteData && Object.keys(remoteData).length > 0) {
-          const remoteSig = JSON.stringify(remoteData);
-          if (remoteSig !== lastRemoteSignatureRef.current) {
-            lastRemoteSignatureRef.current = remoteSig;
-            isIncomingUpdateRef.current = true;
-            onIncomingUpdate(remoteData);
-          }
+        const remoteData = snap.data() || {};
+        const remoteSig = JSON.stringify(remoteData);
+        if (remoteSig !== lastRemoteSignatureRef.current) {
+          lastRemoteSignatureRef.current = remoteSig;
+          isIncomingUpdateRef.current = true;
+          onIncomingUpdate(remoteData);
         }
       }
     }, (err) => console.error("Error draft snapshot:", err));

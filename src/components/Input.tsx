@@ -132,22 +132,22 @@ const Input: React.FC<InputProps> = ({
 
   // Auto-fill rukoBuka dan rukoTutup jika belum terisi tapi sudah absen masuk/pulang
   useEffect(() => {
-    if (absenPagi && !rukoBuka) {
+    if (absenPagi && !rukoBuka && shiftPegawai !== "Libur") {
       const timeOnly = absenPagi.split(" - ")[0];
       const dateOnly = absenPagi.split(" - ")[1]?.replace(/\//g, "-");
       const dStr = dateOnly && dateOnly.includes("-") ? `${dateOnly.split("-")[2]}-${dateOnly.split("-")[1].padStart(2, '0')}-${dateOnly.split("-")[0].padStart(2, '0')}` : undefined;
       setRukoBuka(timeOnly, dStr);
     }
-  }, [absenPagi, rukoBuka, setRukoBuka]);
+  }, [absenPagi, rukoBuka, setRukoBuka, shiftPegawai]);
 
   useEffect(() => {
-    if (absenSiang && !rukoTutup) {
+    if (absenSiang && !rukoTutup && shiftPegawai !== "Libur") {
       const timeOnly = absenSiang.split(" - ")[0];
       const dateOnly = absenSiang.split(" - ")[1]?.replace(/\//g, "-");
       const dStr = dateOnly && dateOnly.includes("-") ? `${dateOnly.split("-")[2]}-${dateOnly.split("-")[1].padStart(2, '0')}-${dateOnly.split("-")[0].padStart(2, '0')}` : undefined;
       setRukoTutup(timeOnly, dStr);
     }
-  }, [absenSiang, rukoTutup, setRukoTutup]);
+  }, [absenSiang, rukoTutup, setRukoTutup, shiftPegawai]);
 
   const [isManualPagi, setIsManualPagi] = useState(false);
   const [isManualSiang, setIsManualSiang] = useState(false);
