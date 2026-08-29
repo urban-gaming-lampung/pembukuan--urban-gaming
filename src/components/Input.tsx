@@ -429,7 +429,7 @@ const Input: React.FC<InputProps> = ({
                   type="time"
                   defaultValue={rukoBuka || "10:00"}
                   onChange={(e) => handleManualAbsenChange("Masuk", e.target.value)}
-                  className={`${inputStyle} cursor-pointer`}
+                  className={`${inputStyle} flex-1 cursor-pointer`}
                   autoFocus
                 />
                 <button
@@ -441,14 +441,14 @@ const Input: React.FC<InputProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-1.5 mt-2.5 w-full">
+              <div className="flex flex-col gap-1.5 mt-2.5 w-full">
                 <button 
                   onClick={() => {
                     if (isAbsenBlocked) { setShowAbsenBlockedAlert(true); return; }
                     setPopupAbsen("Masuk");
                   }}
                   disabled={shiftPegawai === "Libur" || shiftPegawai === ""}
-                  className="flex-1 group relative flex items-center justify-center gap-2 rounded-[10px] transition-all duration-200 active:scale-[0.96] disabled:opacity-50 font-semibold select-none overflow-hidden px-3 py-2.5 text-[13px] sm:text-[14px] bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md shadow-zinc-500/10 disabled:bg-zinc-100 dark:disabled:bg-white/5 disabled:text-zinc-400 dark:disabled:text-zinc-600"
+                  className="group relative flex items-center justify-center gap-2 w-full rounded-[10px] transition-all duration-200 active:scale-[0.97] disabled:opacity-50 font-semibold select-none overflow-hidden px-3 py-2 text-[13px] sm:text-[14px] bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md shadow-zinc-500/10 disabled:bg-zinc-100 dark:disabled:bg-white/5 disabled:text-zinc-400 dark:disabled:text-zinc-600"
                 >
                   {shiftPegawai === "" ? (
                      <span className="relative z-0 text-[12px] opacity-70">Pilih Shift Dahulu</span>
@@ -465,11 +465,11 @@ const Input: React.FC<InputProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsManualPagi(true)}
-                    className="px-2.5 sm:px-3 py-2.5 rounded-[10px] bg-red-600 hover:bg-red-700 active:scale-95 text-white text-[11px] sm:text-[12px] font-bold shrink-0 shadow-md shadow-red-600/25 flex items-center gap-1.5 transition-all"
+                    className="w-full py-1.5 px-2.5 rounded-[8px] bg-red-600 hover:bg-red-700 active:scale-[0.97] text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm shadow-red-600/20"
                     title="Emergency Absen (Set Jam Masuk Manual)"
                   >
                     <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                    <span className="whitespace-nowrap">Emergency Absen</span>
+                    <span>Emergency Absen</span>
                   </button>
                 )}
               </div>
@@ -503,7 +503,7 @@ const Input: React.FC<InputProps> = ({
                   type="time"
                   defaultValue={rukoTutup || "20:00"}
                   onChange={(e) => handleManualAbsenChange("Pulang", e.target.value)}
-                  className={`${inputStyle} cursor-pointer`}
+                  className={`${inputStyle} flex-1 cursor-pointer`}
                   autoFocus
                 />
                 <button
@@ -515,14 +515,14 @@ const Input: React.FC<InputProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-1.5 mt-2.5 w-full">
+              <div className="flex flex-col gap-1.5 mt-2.5 w-full">
                 <button 
                   onClick={() => {
                     if (isAbsenBlocked) { setShowAbsenBlockedAlert(true); return; }
                     setPopupAbsen("Pulang");
                   }}
                   disabled={shiftPegawai === "Libur" || shiftPegawai === "" || !isSudahWaktuPulang}
-                  className="flex-1 group relative flex items-center justify-center gap-2 rounded-[10px] transition-all duration-200 active:scale-[0.96] disabled:opacity-50 font-semibold select-none overflow-hidden px-3 py-2.5 text-[13px] sm:text-[14px] bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md shadow-zinc-500/10 disabled:bg-zinc-100 dark:disabled:bg-white/5 disabled:text-zinc-400 dark:disabled:text-zinc-600"
+                  className="group relative flex items-center justify-center gap-2 w-full rounded-[10px] transition-all duration-200 active:scale-[0.97] disabled:opacity-50 font-semibold select-none overflow-hidden px-3 py-2 text-[13px] sm:text-[14px] bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md shadow-zinc-500/10 disabled:bg-zinc-100 dark:disabled:bg-white/5 disabled:text-zinc-400 dark:disabled:text-zinc-600"
                 >
                   {shiftPegawai === "" ? (
                      <span className="relative z-0 text-[12px] opacity-70">Pilih Shift Dahulu</span>
@@ -541,11 +541,11 @@ const Input: React.FC<InputProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsManualSiang(true)}
-                    className="px-2.5 sm:px-3 py-2.5 rounded-[10px] bg-red-600 hover:bg-red-700 active:scale-95 text-white text-[11px] sm:text-[12px] font-bold shrink-0 shadow-md shadow-red-600/25 flex items-center gap-1.5 transition-all"
+                    className="w-full py-1.5 px-2.5 rounded-[8px] bg-red-600 hover:bg-red-700 active:scale-[0.97] text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm shadow-red-600/20"
                     title="Emergency Absen (Set Jam Pulang Manual)"
                   >
                     <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                    <span className="whitespace-nowrap">Emergency Absen</span>
+                    <span>Emergency Absen</span>
                   </button>
                 )}
               </div>
