@@ -1541,21 +1541,25 @@ export default function useAppController() {
 
     if (editingId) setEditingId(null);
     
-    setRukoBuka("");
-    setRukoTutup("");
-    setCatatan("");
-    setRowsHarian(Array.from({ length: 5 }, () => ({ ...blankHarian })));
-    setRowsJajanan(Array.from({ length: 5 }, () => ({ ...blankJajanan })));
-    setRowsJasaAks(Array.from({ length: 5 }, () => ({ ...blankJasaAks })));
-    setRowsSewa(Array.from({ length: 5 }, () => newBlankSewa()));
-    setRowsSetoran([{ ket: "", harga: "", bayar: "" }]);
-    setRowsPengeluaran([{ ket: "", harga: "", bayar: "", buktiTransfer: "" }]);
+    const emptyRowsHarian = Array.from({ length: 5 }, () => ({ ...blankHarian }));
+    const emptyRowsJajanan = Array.from({ length: 5 }, () => ({ ...blankJajanan }));
+    const emptyRowsJasaAks = Array.from({ length: 5 }, () => ({ ...blankJasaAks }));
+    const emptyRowsSewa = Array.from({ length: 5 }, () => newBlankSewa());
+    const emptyRowsSetoran = [{ ket: "", harga: "", bayar: "" }];
+    const emptyRowsPengeluaran = [{ ket: "", harga: "", bayar: "", buktiTransfer: "" }];
 
-    setSavedSignature(currentFormSignature);
-    isJustSavedOrLoaded.current = false; 
-    
-    hasDataRef.current = false;
-    
+    setRukoBuka("");
+    _setRukoBukaDate("");
+    setRukoTutup("");
+    _setRukoTutupDate("");
+    setCatatan("");
+    setRowsHarian(emptyRowsHarian);
+    setRowsJajanan(emptyRowsJajanan);
+    setRowsJasaAks(emptyRowsJasaAks);
+    setRowsSewa(emptyRowsSewa);
+    setRowsSetoran(emptyRowsSetoran);
+    setRowsPengeluaran(emptyRowsPengeluaran);
+
     const cleanCompletedEmail = normalizeEmail(user?.email || "");
     if (cleanCompletedEmail) {
       const q = query(collection(db, "log_absensi"), where("email", "==", cleanCompletedEmail), where("tanggal", "==", tanggal));
@@ -1572,13 +1576,38 @@ export default function useAppController() {
     const yyyy = realNow.getFullYear();
     const mm = String(realNow.getMonth() + 1).padStart(2, "0");
     const dd = String(realNow.getDate()).padStart(2, "0");
-    setTanggal(`${yyyy}-${mm}-${dd}`);
+    const nextDateStr = `${yyyy}-${mm}-${dd}`;
+    setTanggal(nextDateStr);
     const nextHari = new Intl.DateTimeFormat("id-ID", { weekday: "long" }).format(realNow);
-    setHari(nextHari.charAt(0).toUpperCase() + nextHari.slice(1));
+    const nextHariStr = nextHari.charAt(0).toUpperCase() + nextHari.slice(1);
+    setHari(nextHariStr);
 
     setAbsenPagi("");
     setAbsenSiang("");
     setShiftPegawai("");
+
+    const emptySig = JSON.stringify({
+      tanggal: nextDateStr,
+      hari: nextHariStr,
+      catatan: "",
+      rukoBuka: "",
+      rukoTutup: "",
+      rowsHarian: emptyRowsHarian,
+      rowsJajanan: emptyRowsJajanan,
+      rowsJasaAks: emptyRowsJasaAks,
+      rowsSewa: emptyRowsSewa,
+      totalHarian: 0,
+      totalJajanan: 0,
+      totalJasaAks: 0,
+      totalSewa: 0,
+      totalCash: 0,
+      totalTransfer: 0,
+      rowsSetoran: emptyRowsSetoran,
+      rowsPengeluaran: emptyRowsPengeluaran
+    });
+    setSavedSignature(emptySig);
+    isJustSavedOrLoaded.current = true;
+    hasDataRef.current = false;
 
     setDoc(doc(db, "data", "draft"), {}).catch(console.error);
     setDoc(doc(db, "data", "ruko_status"), { rukoBuka: "", rukoBukaDate: "", rukoTutup: "", rukoTutupDate: "", tanggal: "" }, { merge: false }).catch(console.error);

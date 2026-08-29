@@ -13,6 +13,23 @@ export function useFormDraft(
   const isIncomingUpdateRef = useRef(false);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  const checkHasContent = (sig: string) => {
+    try {
+      const parsed = JSON.parse(sig);
+      return (
+        Boolean(parsed.rukoBuka || parsed.rukoTutup || parsed.catatan) ||
+        (Array.isArray(parsed.rowsHarian) && parsed.rowsHarian.some((r: any) => r.harga || r.bayar || r.jenisPS)) ||
+        (Array.isArray(parsed.rowsJajanan) && parsed.rowsJajanan.some((r: any) => r.harga || r.bayar || r.jenisJajanan)) ||
+        (Array.isArray(parsed.rowsJasaAks) && parsed.rowsJasaAks.some((r: any) => r.harga || r.bayar || r.tipe)) ||
+        (Array.isArray(parsed.rowsSewa) && parsed.rowsSewa.some((r: any) => r.harga || r.bayar || r.jenisPS || r.namaPenyewa || r.ket)) ||
+        (Array.isArray(parsed.rowsSetoran) && parsed.rowsSetoran.some((r: any) => r.harga || r.ket)) ||
+        (Array.isArray(parsed.rowsPengeluaran) && parsed.rowsPengeluaran.some((r: any) => r.harga || r.ket))
+      );
+    } catch {
+      return false;
+    }
+  };
+
   // 1. Tulis ke Firestore saat ada perubahan lokal dari admin (dengan debounce 600ms)
   useEffect(() => {
     if (activeTab !== "USAHA RENTAL") return; // Hanya jalankan draft untuk Usaha Rental
@@ -32,32 +49,33 @@ export function useFormDraft(
 
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
+    const hasContent = checkHasContent(currentSignature);
+
+    // Jika form kosong (setelah simpan / reset), langsung sinkronkan draft kosong ke Firestore tanpa menunggu debounce
+    if (!hasContent) {
+      lastRemoteSignatureRef.current = currentSignature;
+      setDoc(doc(db, "data", "draft"), {}).catch(console.error);
+      return;
     }
 
     debounceTimerRef.current = setTimeout(() => {
       try {
         const parsed = JSON.parse(currentSignature);
-        
-        // Cek apakah draft ini memiliki konten bermakna agar tidak menimpa draft server dengan form kosong
-        const hasContent = 
-          Boolean(parsed.absenPagi || parsed.absenSiang || parsed.rukoBuka || parsed.rukoTutup || parsed.catatan) ||
-          (Array.isArray(parsed.rowsHarian) && parsed.rowsHarian.some((r: any) => r.harga || r.bayar || r.jenisPS)) ||
-          (Array.isArray(parsed.rowsJajanan) && parsed.rowsJajanan.some((r: any) => r.harga || r.bayar || r.jenisJajanan)) ||
-          (Array.isArray(parsed.rowsJasaAks) && parsed.rowsJasaAks.some((r: any) => r.harga || r.bayar || r.tipe)) ||
-          (Array.isArray(parsed.rowsSewa) && parsed.rowsSewa.some((r: any) => r.harga || r.bayar || r.jenisPS || r.namaPenyewa || r.ket)) ||
-          (Array.isArray(parsed.rowsSetoran) && parsed.rowsSetoran.some((r: any) => r.harga || r.ket)) ||
-          (Array.isArray(parsed.rowsPengeluaran) && parsed.rowsPengeluaran.some((r: any) => r.harga || r.ket));
-
-        if (hasContent) {
-          setDoc(doc(db, "data", "draft"), parsed).catch(console.error);
-        }
+        lastRemoteSignatureRef.current = currentSignature;
+        setDoc(doc(db, "data", "draft"), parsed).catch(console.error);
       } catch (e) {
         console.error("Gagal menyimpan draft", e);
       }
     }, 600);
 
     return () => {
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
     };
   }, [currentSignature, activeTab, hasHydrated, isEditing]);
 
@@ -70,8 +88,8 @@ export function useFormDraft(
       if (!hasHydrated) {
         setHasHydrated(true);
         if (snap.exists()) {
-          const remoteData = snap.data();
-          if (remoteData && Object.keys(remoteData).length > 0) {
+          const remoteData = snap.data() || {};
+          if (Object.keys(remoteData).length > 0) {
             isIncomingUpdateRef.current = true;
             lastRemoteSignatureRef.current = JSON.stringify(remoteData);
             onIncomingUpdate(remoteData);
