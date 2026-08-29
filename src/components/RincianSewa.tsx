@@ -138,21 +138,20 @@ const RincianSewa: React.FC<{
     const unsub1 = onSnapshot(collection(db, "users"), (snap) => {
       snap.docs.forEach(d => {
         const data = d.data();
-        const cleanId = d.id.toLowerCase().trim();
         if (data && data.role === "super admin") {
-          emailSet.delete(cleanId);
+          emailSet.delete(d.id);
         } else {
-          emailSet.add(cleanId);
+          emailSet.add(d.id);
         }
       });
       rebuild();
     });
     const unsub2 = onSnapshot(collection(db, "pegawai_logs"), (snap) => {
-      snap.docs.forEach(d => emailSet.add(d.id.toLowerCase().trim()));
+      snap.docs.forEach(d => emailSet.add(d.id));
       rebuild();
     });
     const unsub3 = onSnapshot(collection(db, "gaji_pegawai"), (snap) => {
-      snap.docs.forEach(d => emailSet.add(d.id.toLowerCase().trim()));
+      snap.docs.forEach(d => emailSet.add(d.id));
       rebuild();
     });
 

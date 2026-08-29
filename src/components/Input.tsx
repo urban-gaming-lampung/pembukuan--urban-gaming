@@ -3,7 +3,6 @@ import AbsenPopup from "./AbsenPopup";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadString, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "../lib/firebase";
-import { atomicAddDenda, normalizeEmail } from "../lib/salaryService";
 
 // === KONSTANTA ABSENSI ===
 // (Catatan: Konstanta di bawah sudah dipindah ke dinamis via absenConfig, kecuali yang tidak terkait denda keterlambatan per blok)
@@ -130,85 +129,9 @@ const Input: React.FC<InputProps> = ({
     setHari(getHariIndonesia(value));
   };
 
-  // Auto-fill rukoBuka dan rukoTutup jika belum terisi tapi sudah absen masuk/pulang
-  useEffect(() => {
-    if (absenPagi && !rukoBuka && shiftPegawai !== "Libur") {
-      const timeOnly = absenPagi.split(" - ")[0];
-      const dateOnly = absenPagi.split(" - ")[1]?.replace(/\//g, "-");
-      const dStr = dateOnly && dateOnly.includes("-") ? `${dateOnly.split("-")[2]}-${dateOnly.split("-")[1].padStart(2, '0')}-${dateOnly.split("-")[0].padStart(2, '0')}` : undefined;
-      setRukoBuka(timeOnly, dStr);
-    }
-  }, [absenPagi, rukoBuka, setRukoBuka, shiftPegawai]);
-
-  useEffect(() => {
-    if (absenSiang && !rukoTutup && shiftPegawai !== "Libur") {
-      const timeOnly = absenSiang.split(" - ")[0];
-      const dateOnly = absenSiang.split(" - ")[1]?.replace(/\//g, "-");
-      const dStr = dateOnly && dateOnly.includes("-") ? `${dateOnly.split("-")[2]}-${dateOnly.split("-")[1].padStart(2, '0')}-${dateOnly.split("-")[0].padStart(2, '0')}` : undefined;
-      setRukoTutup(timeOnly, dStr);
-    }
-  }, [absenSiang, rukoTutup, setRukoTutup, shiftPegawai]);
-
-  const [isManualPagi, setIsManualPagi] = useState(false);
-  const [isManualSiang, setIsManualSiang] = useState(false);
-
-  const handleManualAbsenChange = async (jenisAbsen: "Masuk" | "Pulang", timeValue: string) => {
-    if (!timeValue) return;
-    
-    let dateStr = "";
-    if (tanggal) {
-      const parts = tanggal.split("-");
-      if (parts.length === 3) {
-        dateStr = `${parts[2]}/${parts[1]}/${parts[0]}`;
-      }
-    }
-    if (!dateStr) {
-      const now = new Date();
-      dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
-    }
-    const fullAbsenStr = `${timeValue} - ${dateStr}`;
-
-    const rawEmail = auth.currentUser?.email;
-    const currentUserEmail = rawEmail ? normalizeEmail(rawEmail) : "owner@gmail.com";
-
-    if (jenisAbsen === "Masuk") {
-      setAbsenPagi(fullAbsenStr);
-      setRukoBuka(timeValue, tanggal);
-      setIsManualPagi(false);
-    } else {
-      setAbsenSiang(fullAbsenStr);
-      setRukoTutup(timeValue, tanggal);
-      setIsManualSiang(false);
-    }
-
-    if (onAbsenSubmit) onAbsenSubmit();
-
-    try {
-      const dateOnly = new Date().toISOString().split("T")[0];
-      const safeTimeStr = timeValue.replace(/[^a-zA-Z0-9]/g, "_");
-      const logData = {
-        email: currentUserEmail,
-        tanggal: tanggal,
-        tanggalReal: dateOnly,
-        shift: shiftPegawai || (jenisAbsen === "Masuk" ? "Shift Pagi" : "Shift Sore"),
-        jenisAbsen: jenisAbsen,
-        waktu: fullAbsenStr,
-        photoUrl: "",
-        _isEmergency: true,
-        timestamp: new Date().toISOString(),
-        _serverTs: serverTimestamp()
-      };
-      const logId = `${dateOnly}_${jenisAbsen}_manual_${safeTimeStr}_${currentUserEmail}`;
-      await setDoc(doc(db, "log_absensi", logId), logData);
-    } catch (e) {
-      console.error("Gagal menyimpan emergency log_absensi", e);
-    }
-  };
-
   const handleLiburLog = async () => {
-    const rawEmail = auth.currentUser?.email;
-    if (!rawEmail) return;
-    const currentUserEmail = normalizeEmail(rawEmail);
+    const currentUserEmail = auth.currentUser?.email;
+    if (!currentUserEmail) return;
     try {
       const dateStr = new Date().toISOString().split("T")[0];
       const logData = {
@@ -233,12 +156,11 @@ const Input: React.FC<InputProps> = ({
     if (shiftPegawai === "Libur") return;
     
     // Default the active email, with fallback check
-    const rawEmail = auth.currentUser?.email;
-    if (!rawEmail) {
+    const currentUserEmail = auth.currentUser?.email;
+    if (!currentUserEmail) {
        console.warn("User email belum tersedia, menggunakan mode lokal.");
        return;
     }
-    const currentUserEmail = normalizeEmail(rawEmail);
 
     try {
       setIsProcessingAbsen(true);
@@ -274,7 +196,7 @@ const Input: React.FC<InputProps> = ({
        // melewati tengah malam.
 
       // 2. Kalkulasi Denda Keterlambatan Absen Masuk
-      if (jenisAbsen === "Masuk" && absenConfig) {
+      if (jenisAbsen === "Masuk") {
         const timePart = waktuAbsen.split(" - ")[0]; // Extract HH:MM
         const [jam, menit] = timePart.split(":").map(Number);
         const waktuAbsenMinutes = jam * 60 + menit;
@@ -285,21 +207,20 @@ const Input: React.FC<InputProps> = ({
 
         // RULE TOLERANSI: Sesuai pengaturan
         // Denda dihitung dari menit setelah toleransi
-        if (lateMinutes > (absenConfig.waktuToleransi ?? 15)) {
-           const toleransi = absenConfig.waktuToleransi ?? 15;
-           const durasiPotongan = absenConfig.durasiWaktuPotongan > 0 ? absenConfig.durasiWaktuPotongan : 15;
-           const nominalDenda = absenConfig.nominalDenda ?? 1500;
-
-           const effectiveLate = lateMinutes - toleransi;
-           const blockDenda = Math.ceil(effectiveLate / durasiPotongan);
-           const denda = blockDenda * nominalDenda;
+        if (lateMinutes > absenConfig.waktuToleransi) {
+           const effectiveLate = lateMinutes - absenConfig.waktuToleransi;
+           const blockDenda = Math.ceil(effectiveLate / absenConfig.durasiWaktuPotongan);
+           const denda = blockDenda * absenConfig.nominalDenda;
            
             if (denda > 0) {
+               const docRef = doc(db, "gaji_pegawai", currentUserEmail);
+               const docSnap = await getDoc(docRef);
+
                const dateStrToday = new Date().toISOString().split("T")[0];
-               const idempKey = `lateCheckin_${currentUserEmail}_${dateStrToday}_${shiftPegawai.replace(/\s+/g, '')}`;
+               const idempKey = `lateCheckin_${currentUserEmail.toLowerCase().trim()}_${dateStrToday}_${shiftPegawai.replace(/\s+/g, '')}`;
 
                const newDenda = {
-                  id: `denda_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                  id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
                   nominal: denda,
                   ket: `[Auto-Sistem] Telat absen masuk (${waktuAbsen}) - Telat ${lateMinutes}m (efektif ${effectiveLate}m). Shift: ${shiftPegawai}`,
                   photoUrl: imageUrl,
@@ -313,11 +234,53 @@ const Input: React.FC<InputProps> = ({
                const yy = String(d.getFullYear()).slice(-2);
                const currentBulanTahun = `${mm}/${yy}`;
 
-               // Gunakan atomic transaction agar tidak pernah menimpa atau terhapus
-               const res = await atomicAddDenda(currentUserEmail, newDenda, currentBulanTahun);
-               if (!res.alreadyExisted) {
-                 alert(`🚨 PERINGATAN SISTEM\nAnda telat absen ${lateMinutes} menit (toleransi ${toleransi}m, efektif telat ${effectiveLate}m)!\nGaji Anda otomatis dipotong Rp ${denda.toLocaleString("id-ID")}`);
+               let basePokok = 0;
+               if (docSnap.exists()) {
+                  const data = docSnap.data();
+                  let records = Array.isArray(data.records) ? data.records : [];
+
+                  // Check if already injected
+                  const alreadyInjected = records.some((r: any) => 
+                     r.gajiPengurangan?.some((pg: any) => pg._idempKey === idempKey)
+                  );
+                  if (alreadyInjected) {
+                     console.log("Denda telat sudah pernah masuk:", idempKey);
+                     return;
+                  }
+
+                  for (const r of records) {
+                     const v = Number(r.gajiPokok) || 0;
+                     if (v > 0) { basePokok = v; break; }
+                  }
+                  if (basePokok === 0) basePokok = Number(data.gajiPokok) || 1500000;
+                  
+                  const monthIndex = records.findIndex((r: any) => r.bulanTahun === currentBulanTahun);
+                  if (monthIndex >= 0) {
+                     const currentMonth = records[monthIndex];
+                     const gajiPengurangan = Array.isArray(currentMonth.gajiPengurangan) ? currentMonth.gajiPengurangan : [];
+                     records[monthIndex] = { ...currentMonth, gajiPengurangan: [...gajiPengurangan, newDenda] };
+                  } else {
+                     records = [{
+                         id: `rec-${Date.now()}`,
+                         bulanTahun: currentBulanTahun,
+                         gajiPokok: basePokok,
+                         gajiTambahan: [],
+                         gajiPengurangan: [newDenda]
+                     }, ...records];
+                  }
+                  await setDoc(docRef, { records, gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
+               } else {
+                  basePokok = 1500000;
+                  const newMonth = {
+                      id: `rec-${Date.now()}`,
+                      bulanTahun: currentBulanTahun,
+                      gajiPokok: basePokok,
+                      gajiTambahan: [],
+                      gajiPengurangan: [newDenda]
+                  };
+                  await setDoc(docRef, { records: [newMonth], gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
                }
+               alert(`🚨 PERINGATAN SISTEM\nAnda telat absen ${lateMinutes} menit (toleransi ${absenConfig.waktuToleransi}m, efektif telat ${effectiveLate}m)!\nGaji Anda otomatis dipotong Rp ${denda.toLocaleString("id-ID")}`);
             }
         }
       }
@@ -422,57 +385,26 @@ const Input: React.FC<InputProps> = ({
                  <span className="text-[17px] font-bold tracking-tight text-emerald-600 dark:text-emerald-400">{absenPagi}</span>
                  <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">Sistem mendeteksi potong gaji jika telat</span>
               </div>
-            ) : isManualPagi && isOwner ? (
-              <div className="flex items-center gap-2 mt-2">
-                <input
-                  data-fieldid="manualAbsenPagi"
-                  type="time"
-                  defaultValue={rukoBuka || "10:00"}
-                  onChange={(e) => handleManualAbsenChange("Masuk", e.target.value)}
-                  className={`${inputStyle} flex-1 cursor-pointer`}
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={() => setIsManualPagi(false)}
-                  className="px-2.5 py-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-xs font-semibold shrink-0 transition-colors"
-                >
-                  Batal
-                </button>
-              </div>
             ) : (
-              <div className="flex flex-col gap-1.5 mt-2.5 w-full">
-                <button 
-                  onClick={() => {
-                    if (isAbsenBlocked) { setShowAbsenBlockedAlert(true); return; }
-                    setPopupAbsen("Masuk");
-                  }}
-                  disabled={shiftPegawai === "Libur" || shiftPegawai === ""}
-                  className="group relative flex items-center justify-center gap-2 w-full rounded-[10px] transition-all duration-200 active:scale-[0.97] disabled:opacity-50 font-semibold select-none overflow-hidden px-3 py-2 text-[13px] sm:text-[14px] bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md shadow-zinc-500/10 disabled:bg-zinc-100 dark:disabled:bg-white/5 disabled:text-zinc-400 dark:disabled:text-zinc-600"
-                >
-                  {shiftPegawai === "" ? (
-                     <span className="relative z-0 text-[12px] opacity-70">Pilih Shift Dahulu</span>
-                  ) : shiftPegawai === "Libur" ? (
-                     <span className="relative z-0 text-[13px]">Selamat Berlibur</span>
-                  ) : (
-                     <>
-                       <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/10 dark:via-black/10 to-transparent z-10" />
-                       <span className="relative z-0">Klik untuk Absen</span>
-                     </>
-                  )}
-                </button>
-                {isOwner && (
-                  <button
-                    type="button"
-                    onClick={() => setIsManualPagi(true)}
-                    className="w-full py-1.5 px-2.5 rounded-[8px] bg-red-600 hover:bg-red-700 active:scale-[0.97] text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm shadow-red-600/20"
-                    title="Emergency Absen (Set Jam Masuk Manual)"
-                  >
-                    <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                    <span>Emergency Absen</span>
-                  </button>
+              <button 
+                onClick={() => {
+                  if (isAbsenBlocked) { setShowAbsenBlockedAlert(true); return; }
+                  setPopupAbsen("Masuk");
+                }}
+                disabled={shiftPegawai === "Libur" || shiftPegawai === ""}
+                className="group relative flex items-center justify-center gap-2 mt-2.5 w-full rounded-[10px] transition-all duration-200 active:scale-[0.96] disabled:opacity-50 font-semibold select-none overflow-hidden px-4 py-2.5 text-[14px] bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md shadow-zinc-500/10 disabled:bg-zinc-100 dark:disabled:bg-white/5 disabled:text-zinc-400 dark:disabled:text-zinc-600"
+              >
+                {shiftPegawai === "" ? (
+                   <span className="relative z-0 text-[12px] opacity-70">Pilih Shift Dahulu</span>
+                ) : shiftPegawai === "Libur" ? (
+                   <span className="relative z-0 text-[14px]">Selamat Berlibur</span>
+                ) : (
+                   <>
+                     <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/10 dark:via-black/10 to-transparent z-10" />
+                     <span className="relative z-0">Klik untuk Absen</span>
+                   </>
                 )}
-              </div>
+              </button>
             )}
           </div>
 
@@ -496,59 +428,28 @@ const Input: React.FC<InputProps> = ({
                  <span className="text-[17px] font-bold tracking-tight text-emerald-600 dark:text-emerald-400">{absenSiang}</span>
                  <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">Sistem mendeteksi potong gaji jika telat</span>
               </div>
-            ) : isManualSiang && isOwner ? (
-              <div className="flex items-center gap-2 mt-2">
-                <input
-                  data-fieldid="manualAbsenSiang"
-                  type="time"
-                  defaultValue={rukoTutup || "20:00"}
-                  onChange={(e) => handleManualAbsenChange("Pulang", e.target.value)}
-                  className={`${inputStyle} flex-1 cursor-pointer`}
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={() => setIsManualSiang(false)}
-                  className="px-2.5 py-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-xs font-semibold shrink-0 transition-colors"
-                >
-                  Batal
-                </button>
-              </div>
             ) : (
-              <div className="flex flex-col gap-1.5 mt-2.5 w-full">
-                <button 
-                  onClick={() => {
-                    if (isAbsenBlocked) { setShowAbsenBlockedAlert(true); return; }
-                    setPopupAbsen("Pulang");
-                  }}
-                  disabled={shiftPegawai === "Libur" || shiftPegawai === "" || !isSudahWaktuPulang}
-                  className="group relative flex items-center justify-center gap-2 w-full rounded-[10px] transition-all duration-200 active:scale-[0.97] disabled:opacity-50 font-semibold select-none overflow-hidden px-3 py-2 text-[13px] sm:text-[14px] bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md shadow-zinc-500/10 disabled:bg-zinc-100 dark:disabled:bg-white/5 disabled:text-zinc-400 dark:disabled:text-zinc-600"
-                >
-                  {shiftPegawai === "" ? (
-                     <span className="relative z-0 text-[12px] opacity-70">Pilih Shift Dahulu</span>
-                  ) : shiftPegawai === "Libur" ? (
-                     <span className="relative z-0 text-[13px]">Selamat Berlibur</span>
-                  ) : !isSudahWaktuPulang ? (
-                     <span className="relative z-0 text-[12px] opacity-70">Belum Waktu Pulang</span>
-                  ) : (
-                     <>
-                       <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/10 dark:via-black/10 to-transparent z-10" />
-                       <span className="relative z-0">Klik untuk Absen</span>
-                     </>
-                  )}
-                </button>
-                {isOwner && (
-                  <button
-                    type="button"
-                    onClick={() => setIsManualSiang(true)}
-                    className="w-full py-1.5 px-2.5 rounded-[8px] bg-red-600 hover:bg-red-700 active:scale-[0.97] text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm shadow-red-600/20"
-                    title="Emergency Absen (Set Jam Pulang Manual)"
-                  >
-                    <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                    <span>Emergency Absen</span>
-                  </button>
+              <button 
+                onClick={() => {
+                  if (isAbsenBlocked) { setShowAbsenBlockedAlert(true); return; }
+                  setPopupAbsen("Pulang");
+                }}
+                disabled={shiftPegawai === "Libur" || shiftPegawai === "" || !isSudahWaktuPulang}
+                className="group relative flex items-center justify-center gap-2 mt-2.5 w-full rounded-[10px] transition-all duration-200 active:scale-[0.96] disabled:opacity-50 font-semibold select-none overflow-hidden px-4 py-2.5 text-[14px] bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md shadow-zinc-500/10 disabled:bg-zinc-100 dark:disabled:bg-white/5 disabled:text-zinc-400 dark:disabled:text-zinc-600"
+              >
+                {shiftPegawai === "" ? (
+                   <span className="relative z-0 text-[12px] opacity-70">Pilih Shift Dahulu</span>
+                ) : shiftPegawai === "Libur" ? (
+                   <span className="relative z-0 text-[14px]">Selamat Berlibur</span>
+                ) : !isSudahWaktuPulang ? (
+                   <span className="relative z-0 text-[12px] opacity-70">Belum Waktu Pulang</span>
+                ) : (
+                   <>
+                     <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/10 dark:via-black/10 to-transparent z-10" />
+                     <span className="relative z-0">Klik untuk Absen</span>
+                   </>
                 )}
-              </div>
+              </button>
             )}
           </div>
 
@@ -573,8 +474,8 @@ const Input: React.FC<InputProps> = ({
                 type="time"
                 value={rukoBuka}
                 onChange={(e) => setRukoBuka(e.target.value)}
-                readOnly={!isOwner && !!rukoBuka}
-                className={`${inputStyle} ${!isOwner && !!rukoBuka ? 'opacity-70 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
+                readOnly={!isOwner}
+                className={`${inputStyle} ${!isOwner ? 'opacity-70 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
               />
               {rukoBukaDate && rukoBuka && (
                 <span className="text-[11px] font-medium text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-md shrink-0">
@@ -605,8 +506,8 @@ const Input: React.FC<InputProps> = ({
                 type="time"
                 value={rukoTutup}
                 onChange={(e) => setRukoTutup(e.target.value)}
-                readOnly={!isOwner && !!rukoTutup}
-                className={`${inputStyle} ${!isOwner && !!rukoTutup ? 'opacity-70 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
+                readOnly={!isOwner}
+                className={`${inputStyle} ${!isOwner ? 'opacity-70 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
               />
               {rukoTutupDate && rukoTutup && (
                 <span className="text-[11px] font-medium text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-md shrink-0">

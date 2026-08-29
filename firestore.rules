@@ -2,34 +2,21 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper functions untuk validasi role yang konsisten dan case-insensitive
-    function isOwner() {
-      return request.auth != null && request.auth.token.email.lower() == "owner@gmail.com";
-    }
-
-    function isSuperAdmin() {
-      return request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.token.email.lower())) &&
-        get(/databases/$(database)/documents/users/$(request.auth.token.email.lower())).data.role == "super admin";
-    }
-
-    function isOwnerOrSuperAdmin() {
-      return isOwner() || isSuperAdmin();
-    }
-
     // ==========================================
     // Aturan Profil Pegawai (users & logs)
     // ==========================================
     match /pegawai_logs/{email} {
       allow read: if request.auth != null;
-      allow write: if (request.auth != null && request.auth.token.email.lower() == email.lower()) 
-                   || isOwnerOrSuperAdmin();
+      allow write: if request.auth.token.email.lower() == email.lower() 
+                   || request.auth.token.email == "owner@gmail.com"
+                   || (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin");
     }
 
     match /users/{email} {
       allow read: if request.auth != null;
-      allow write: if (request.auth != null && request.auth.token.email.lower() == email.lower()) 
-                   || isOwnerOrSuperAdmin();
+      allow write: if request.auth.token.email.lower() == email.lower() 
+                   || request.auth.token.email == "owner@gmail.com"
+                   || (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin");
     }
     
     // ==========================================
@@ -40,11 +27,13 @@ service cloud.firestore {
       
       // Karyawan hanya bisa CREATE / UPDATE dokumennya Murni untuk menyuntik data telat.
       // Mereka DILARANG KERAS mendelete (menghapus blok array history mereka sendiri)
-      allow create, update: if (request.auth != null && request.auth.token.email.lower() == email.lower()) || isOwnerOrSuperAdmin();
-      allow delete: if isOwnerOrSuperAdmin();
+      allow create, update: if request.auth.token.email.lower() == email.lower();
+      allow delete: if request.auth.token.email == "owner@gmail.com"
+                    || (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin");
       
       // Owner Bebas Edit
-      allow write: if isOwnerOrSuperAdmin();
+      allow write: if request.auth.token.email == "owner@gmail.com"
+                   || (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin");
     }
 
     // ==========================================
@@ -54,7 +43,8 @@ service cloud.firestore {
       allow read: if request.auth != null;
       // Karyawan hanya bisa CREATE laporan absensinya.
       allow create: if request.auth != null;
-      allow update, delete: if isOwnerOrSuperAdmin();
+      allow update, delete: if request.auth.token.email == "owner@gmail.com"
+                            || (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin");
     }
 
     // ==========================================
@@ -86,7 +76,8 @@ service cloud.firestore {
     // ==========================================
     match /products/{productId} {
       allow read: if true;
-      allow write: if isOwnerOrSuperAdmin();
+      allow write: if request.auth != null && (request.auth.token.email == "owner@gmail.com"
+                    || (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin"));
     }
     
     // ==========================================
@@ -94,25 +85,29 @@ service cloud.firestore {
     // ==========================================
     match /monitoring_devices/{deviceId} {
       allow read, create, update: if request.auth != null;
-      allow delete: if isOwnerOrSuperAdmin();
+      allow delete: if request.auth != null && (request.auth.token.email == "owner@gmail.com"
+                    || (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin"));
     }
     
     // ==========================================
     // Aturan Eksekutif Owner (Buku Pengeluaran Pribadi, Asisten AI)
     // ==========================================
     match /owner_expenses/{docId} {
-      allow read, write: if isOwnerOrSuperAdmin();
+      allow read, write: if request.auth != null && (request.auth.token.email == "owner@gmail.com"
+                         || (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin"));
     }
     
     match /owner_assistants/{docId} {
-      allow read, write: if isOwnerOrSuperAdmin();
+      allow read, write: if request.auth != null && (request.auth.token.email == "owner@gmail.com"
+                         || (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin"));
     }
 
     // ==========================================
     // Aturan Logging Pembukuan (pembukuan_logs)
     // ==========================================
     match /pembukuan_logs/{docId} {
-      allow read: if isOwnerOrSuperAdmin();
+      allow read: if request.auth != null && (request.auth.token.email == "owner@gmail.com"
+                    || (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin"));
       allow write: if request.auth != null;
     }
 
@@ -121,7 +116,8 @@ service cloud.firestore {
     // ==========================================
     match /edit_requests/{docId} {
       allow create: if request.auth != null;
-      allow read, update, delete: if isOwnerOrSuperAdmin();
+      allow read, update, delete: if request.auth != null && (request.auth.token.email == "owner@gmail.com"
+                    || (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin"));
     }
 
     // ==========================================
@@ -131,13 +127,15 @@ service cloud.firestore {
     // Game config: semua user auth bisa baca, hanya owner yang tulis
     match /data/game_config {
       allow read: if request.auth != null;
-      allow write: if isOwnerOrSuperAdmin();
+      allow write: if request.auth != null && (request.auth.token.email == "owner@gmail.com"
+                   || (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin"));
     }
 
     // Leaderboard: semua user auth bisa baca, hanya owner yang bisa tulis/reset dari client
     match /game_leaderboard/{docId} {
       allow read: if request.auth != null;
-      allow write: if isOwnerOrSuperAdmin();
+      allow write: if request.auth != null && (request.auth.token.email == "owner@gmail.com"
+                   || (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin"));
     }
 
     // Winners: semua user auth bisa baca, tidak ada yang tulis langsung dari client
@@ -158,7 +156,7 @@ service cloud.firestore {
     // ==========================================
     match /{document=**} {
       // Data apa pun yang belum dideklarasikan di atas hanya bisa diakses oleh Owner
-      allow read, write: if isOwner();
+      allow read, write: if request.auth != null && request.auth.token.email == "owner@gmail.com";
     }
     
   }
