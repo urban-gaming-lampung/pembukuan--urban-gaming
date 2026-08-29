@@ -149,6 +149,62 @@ const Input: React.FC<InputProps> = ({
     }
   }, [absenSiang, rukoTutup, setRukoTutup]);
 
+  const [isManualPagi, setIsManualPagi] = useState(false);
+  const [isManualSiang, setIsManualSiang] = useState(false);
+
+  const handleManualAbsenChange = async (jenisAbsen: "Masuk" | "Pulang", timeValue: string) => {
+    if (!timeValue) return;
+    
+    let dateStr = "";
+    if (tanggal) {
+      const parts = tanggal.split("-");
+      if (parts.length === 3) {
+        dateStr = `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+    }
+    if (!dateStr) {
+      const now = new Date();
+      dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+    }
+    const fullAbsenStr = `${timeValue} - ${dateStr}`;
+
+    const rawEmail = auth.currentUser?.email;
+    const currentUserEmail = rawEmail ? normalizeEmail(rawEmail) : "owner@gmail.com";
+
+    if (jenisAbsen === "Masuk") {
+      setAbsenPagi(fullAbsenStr);
+      setRukoBuka(timeValue, tanggal);
+      setIsManualPagi(false);
+    } else {
+      setAbsenSiang(fullAbsenStr);
+      setRukoTutup(timeValue, tanggal);
+      setIsManualSiang(false);
+    }
+
+    if (onAbsenSubmit) onAbsenSubmit();
+
+    try {
+      const dateOnly = new Date().toISOString().split("T")[0];
+      const safeTimeStr = timeValue.replace(/[^a-zA-Z0-9]/g, "_");
+      const logData = {
+        email: currentUserEmail,
+        tanggal: tanggal,
+        tanggalReal: dateOnly,
+        shift: shiftPegawai || (jenisAbsen === "Masuk" ? "Shift Pagi" : "Shift Sore"),
+        jenisAbsen: jenisAbsen,
+        waktu: fullAbsenStr,
+        photoUrl: "",
+        _isEmergency: true,
+        timestamp: new Date().toISOString(),
+        _serverTs: serverTimestamp()
+      };
+      const logId = `${dateOnly}_${jenisAbsen}_manual_${safeTimeStr}_${currentUserEmail}`;
+      await setDoc(doc(db, "log_absensi", logId), logData);
+    } catch (e) {
+      console.error("Gagal menyimpan emergency log_absensi", e);
+    }
+  };
+
   const handleLiburLog = async () => {
     const rawEmail = auth.currentUser?.email;
     if (!rawEmail) return;
@@ -366,26 +422,57 @@ const Input: React.FC<InputProps> = ({
                  <span className="text-[17px] font-bold tracking-tight text-emerald-600 dark:text-emerald-400">{absenPagi}</span>
                  <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">Sistem mendeteksi potong gaji jika telat</span>
               </div>
+            ) : isManualPagi && isOwner ? (
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  data-fieldid="manualAbsenPagi"
+                  type="time"
+                  defaultValue={rukoBuka || "10:00"}
+                  onChange={(e) => handleManualAbsenChange("Masuk", e.target.value)}
+                  className={`${inputStyle} cursor-pointer`}
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsManualPagi(false)}
+                  className="px-2.5 py-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-xs font-semibold shrink-0 transition-colors"
+                >
+                  Batal
+                </button>
+              </div>
             ) : (
-              <button 
-                onClick={() => {
-                  if (isAbsenBlocked) { setShowAbsenBlockedAlert(true); return; }
-                  setPopupAbsen("Masuk");
-                }}
-                disabled={shiftPegawai === "Libur" || shiftPegawai === ""}
-                className="group relative flex items-center justify-center gap-2 mt-2.5 w-full rounded-[10px] transition-all duration-200 active:scale-[0.96] disabled:opacity-50 font-semibold select-none overflow-hidden px-4 py-2.5 text-[14px] bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md shadow-zinc-500/10 disabled:bg-zinc-100 dark:disabled:bg-white/5 disabled:text-zinc-400 dark:disabled:text-zinc-600"
-              >
-                {shiftPegawai === "" ? (
-                   <span className="relative z-0 text-[12px] opacity-70">Pilih Shift Dahulu</span>
-                ) : shiftPegawai === "Libur" ? (
-                   <span className="relative z-0 text-[14px]">Selamat Berlibur</span>
-                ) : (
-                   <>
-                     <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/10 dark:via-black/10 to-transparent z-10" />
-                     <span className="relative z-0">Klik untuk Absen</span>
-                   </>
+              <div className="flex items-center gap-1.5 mt-2.5 w-full">
+                <button 
+                  onClick={() => {
+                    if (isAbsenBlocked) { setShowAbsenBlockedAlert(true); return; }
+                    setPopupAbsen("Masuk");
+                  }}
+                  disabled={shiftPegawai === "Libur" || shiftPegawai === ""}
+                  className="flex-1 group relative flex items-center justify-center gap-2 rounded-[10px] transition-all duration-200 active:scale-[0.96] disabled:opacity-50 font-semibold select-none overflow-hidden px-3 py-2.5 text-[13px] sm:text-[14px] bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md shadow-zinc-500/10 disabled:bg-zinc-100 dark:disabled:bg-white/5 disabled:text-zinc-400 dark:disabled:text-zinc-600"
+                >
+                  {shiftPegawai === "" ? (
+                     <span className="relative z-0 text-[12px] opacity-70">Pilih Shift Dahulu</span>
+                  ) : shiftPegawai === "Libur" ? (
+                     <span className="relative z-0 text-[13px]">Selamat Berlibur</span>
+                  ) : (
+                     <>
+                       <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/10 dark:via-black/10 to-transparent z-10" />
+                       <span className="relative z-0">Klik untuk Absen</span>
+                     </>
+                  )}
+                </button>
+                {isOwner && (
+                  <button
+                    type="button"
+                    onClick={() => setIsManualPagi(true)}
+                    className="px-2.5 sm:px-3 py-2.5 rounded-[10px] bg-red-600 hover:bg-red-700 active:scale-95 text-white text-[11px] sm:text-[12px] font-bold shrink-0 shadow-md shadow-red-600/25 flex items-center gap-1.5 transition-all"
+                    title="Emergency Absen (Set Jam Masuk Manual)"
+                  >
+                    <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    <span className="whitespace-nowrap">Emergency Absen</span>
+                  </button>
                 )}
-              </button>
+              </div>
             )}
           </div>
 
@@ -409,28 +496,59 @@ const Input: React.FC<InputProps> = ({
                  <span className="text-[17px] font-bold tracking-tight text-emerald-600 dark:text-emerald-400">{absenSiang}</span>
                  <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">Sistem mendeteksi potong gaji jika telat</span>
               </div>
+            ) : isManualSiang && isOwner ? (
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  data-fieldid="manualAbsenSiang"
+                  type="time"
+                  defaultValue={rukoTutup || "20:00"}
+                  onChange={(e) => handleManualAbsenChange("Pulang", e.target.value)}
+                  className={`${inputStyle} cursor-pointer`}
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setIsManualSiang(false)}
+                  className="px-2.5 py-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-xs font-semibold shrink-0 transition-colors"
+                >
+                  Batal
+                </button>
+              </div>
             ) : (
-              <button 
-                onClick={() => {
-                  if (isAbsenBlocked) { setShowAbsenBlockedAlert(true); return; }
-                  setPopupAbsen("Pulang");
-                }}
-                disabled={shiftPegawai === "Libur" || shiftPegawai === "" || !isSudahWaktuPulang}
-                className="group relative flex items-center justify-center gap-2 mt-2.5 w-full rounded-[10px] transition-all duration-200 active:scale-[0.96] disabled:opacity-50 font-semibold select-none overflow-hidden px-4 py-2.5 text-[14px] bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md shadow-zinc-500/10 disabled:bg-zinc-100 dark:disabled:bg-white/5 disabled:text-zinc-400 dark:disabled:text-zinc-600"
-              >
-                {shiftPegawai === "" ? (
-                   <span className="relative z-0 text-[12px] opacity-70">Pilih Shift Dahulu</span>
-                ) : shiftPegawai === "Libur" ? (
-                   <span className="relative z-0 text-[14px]">Selamat Berlibur</span>
-                ) : !isSudahWaktuPulang ? (
-                   <span className="relative z-0 text-[12px] opacity-70">Belum Waktu Pulang</span>
-                ) : (
-                   <>
-                     <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/10 dark:via-black/10 to-transparent z-10" />
-                     <span className="relative z-0">Klik untuk Absen</span>
-                   </>
+              <div className="flex items-center gap-1.5 mt-2.5 w-full">
+                <button 
+                  onClick={() => {
+                    if (isAbsenBlocked) { setShowAbsenBlockedAlert(true); return; }
+                    setPopupAbsen("Pulang");
+                  }}
+                  disabled={shiftPegawai === "Libur" || shiftPegawai === "" || !isSudahWaktuPulang}
+                  className="flex-1 group relative flex items-center justify-center gap-2 rounded-[10px] transition-all duration-200 active:scale-[0.96] disabled:opacity-50 font-semibold select-none overflow-hidden px-3 py-2.5 text-[13px] sm:text-[14px] bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md shadow-zinc-500/10 disabled:bg-zinc-100 dark:disabled:bg-white/5 disabled:text-zinc-400 dark:disabled:text-zinc-600"
+                >
+                  {shiftPegawai === "" ? (
+                     <span className="relative z-0 text-[12px] opacity-70">Pilih Shift Dahulu</span>
+                  ) : shiftPegawai === "Libur" ? (
+                     <span className="relative z-0 text-[13px]">Selamat Berlibur</span>
+                  ) : !isSudahWaktuPulang ? (
+                     <span className="relative z-0 text-[12px] opacity-70">Belum Waktu Pulang</span>
+                  ) : (
+                     <>
+                       <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/10 dark:via-black/10 to-transparent z-10" />
+                       <span className="relative z-0">Klik untuk Absen</span>
+                     </>
+                  )}
+                </button>
+                {isOwner && (
+                  <button
+                    type="button"
+                    onClick={() => setIsManualSiang(true)}
+                    className="px-2.5 sm:px-3 py-2.5 rounded-[10px] bg-red-600 hover:bg-red-700 active:scale-95 text-white text-[11px] sm:text-[12px] font-bold shrink-0 shadow-md shadow-red-600/25 flex items-center gap-1.5 transition-all"
+                    title="Emergency Absen (Set Jam Pulang Manual)"
+                  >
+                    <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    <span className="whitespace-nowrap">Emergency Absen</span>
+                  </button>
                 )}
-              </button>
+              </div>
             )}
           </div>
 
