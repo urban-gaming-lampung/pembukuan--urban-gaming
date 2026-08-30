@@ -79,10 +79,24 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
     return () => unsub();
   }, []);
 
-  // 4. Fetch data log_absensi (LAZY LOAD)
+  // 4. Fetch data log_absensi (REALTIME SSOT)
   const [logAbsensi, setLogAbsensi] = useState<any[]>([]);
   const [isLogAbsensiLoaded, setIsLogAbsensiLoaded] = useState(false);
   const [loadingLogAbsensi, setLoadingLogAbsensi] = useState(false);
+
+  useEffect(() => {
+    setLoadingLogAbsensi(true);
+    const unsub = onSnapshot(collection(db, "log_absensi"), (snap) => {
+      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setLogAbsensi(data);
+      setIsLogAbsensiLoaded(true);
+      setLoadingLogAbsensi(false);
+    }, (err) => {
+      console.error("Error subscribing to log_absensi:", err);
+      setLoadingLogAbsensi(false);
+    });
+    return () => unsub();
+  }, []);
 
   // States for Manage Account widget
   const [newEmail, setNewEmail] = useState("");
@@ -482,7 +496,82 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
        }
     });
 
-    // Calculate auto-penalties for missing checkouts
+    // 2. Kalkulasi Denda Keterlambatan Absen Masuk Otomatis dari log_absensi
+    const latePenaltyMap = new Map<string, number>(); // key: `email_MM/YY`, value: total late denda
+    const latePenaltyItemsMap = new Map<string, any[]>(); // key: `email_MM/YY`, value: array of denda items
+
+    const toleransiCfg = absenConfig.waktuToleransi ?? 15;
+    const durasiBlokCfg = absenConfig.durasiWaktuPotongan ?? 15;
+    const nominalDendaCfg = absenConfig.nominalDenda ?? 1500;
+
+    logAbsensi.forEach((l: any) => {
+      if (l.jenisAbsen === "Masuk" && l.email && l.tanggal) {
+        const em = l.email.toLowerCase().trim();
+        if (isSuperAdminOrOwnerEmail(em)) return;
+
+        const d = new Date(l.tanggal);
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yy = String(d.getFullYear()).slice(-2);
+        const bulanTahun = `${mm}/${yy}`;
+        const key = `${em}_${bulanTahun}`;
+
+        let denda = 0;
+        let lateM = 0;
+        let effLate = 0;
+
+        if (typeof l.denda === "number" && typeof l.lateMinutes === "number") {
+          denda = l.denda;
+          lateM = l.lateMinutes;
+          effLate = l.effectiveLate || Math.max(0, lateM - (l.toleransi ?? toleransiCfg));
+        } else if (l.waktu) {
+          const timePart = l.waktu.split(" - ")[0];
+          const [jam, menit] = timePart.split(":").map(Number);
+          const waktuAbsenMinutes = (jam || 0) * 60 + (menit || 0);
+          const shiftStr = String(l.shift || "").toLowerCase();
+          const shiftStartMinutes = shiftStr.includes("sore") ? 15 * 60 : 10 * 60;
+          lateM = Math.max(0, waktuAbsenMinutes - shiftStartMinutes);
+
+          if (lateM > toleransiCfg) {
+            effLate = lateM - toleransiCfg;
+            const blockDenda = Math.ceil(effLate / durasiBlokCfg);
+            denda = blockDenda * nominalDendaCfg;
+          }
+        }
+
+        if (denda > 0) {
+          latePenaltyMap.set(key, (latePenaltyMap.get(key) || 0) + denda);
+
+          const timeDisplay = l.waktu ? l.waktu.split(" - ")[0] : "";
+          const shiftDisplay = l.shift || "Shift Pagi";
+          const idempKey = `lateCheckin_${em}_${l.tanggal}_${shiftDisplay.replace(/\s+/g, '')}`;
+
+          const item = {
+            id: l.id || `late_${l.tanggal}_${em}`,
+            nominal: denda,
+            ket: `[Auto-Sistem] Telat absen masuk (${timeDisplay}) - Telat ${lateM}m (efektif ${effLate}m). Shift: ${shiftDisplay}`,
+            photoUrl: l.photoUrl || null,
+            dateStr: l.timestamp || new Date().toISOString(),
+            _isAutoSistem: true,
+            _idempKey: idempKey,
+            _lateMinutes: lateM,
+            _effectiveLate: effLate,
+            _shift: shiftDisplay,
+            _waktuAbsen: l.waktu,
+            _tanggalAbsen: l.tanggal
+          };
+
+          if (!latePenaltyItemsMap.has(key)) {
+            latePenaltyItemsMap.set(key, []);
+          }
+          const existingList = latePenaltyItemsMap.get(key)!;
+          if (!existingList.some(x => x._idempKey === idempKey)) {
+            existingList.push(item);
+          }
+        }
+      }
+    });
+
+    // 3. Calculate auto-penalties for missing checkouts
     const penaltyMap = new Map(); // key: `email_MM/YY`, value: count of missed checkouts * penalty
     logAbsensi.forEach(l => {
         if (l.jenisAbsen === "Masuk") {
@@ -562,12 +651,36 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         
         let totalOngkir = 0;
         
-        // Populate ongkirBulanIni to existing records
+        // Populate ongkirBulanIni, late penalties to existing records
         p.records.forEach((rec: any) => {
            const k = `${p.email.toLowerCase()}_${rec.bulanTahun}`;
            rec.ongkirBulanIni = ongkirMap.get(k) || 0;
            rec.ongkirMasukGajiBulanIni = ongkirMasukGajiMap.get(k) || 0;
            rec.dendaAbsen = penaltyMap.get(k) || 0;
+           rec.dendaTelat = latePenaltyMap.get(k) || 0;
+
+           // Auto-merge late penalty items into rec.gajiPengurangan
+           const lateItems = latePenaltyItemsMap.get(k) || [];
+           let currentPg = Array.isArray(rec.gajiPengurangan) ? [...rec.gajiPengurangan] : [];
+           
+           lateItems.forEach(lateItem => {
+             const existingIdx = currentPg.findIndex((x: any) => 
+               x._idempKey === lateItem._idempKey || 
+               (x._isAutoSistem && x.ket && x.ket.includes(lateItem._tanggalAbsen || ""))
+             );
+             if (existingIdx >= 0) {
+               currentPg[existingIdx] = {
+                 ...lateItem,
+                 ...currentPg[existingIdx],
+                 nominal: currentPg[existingIdx].nominal || lateItem.nominal,
+                 photoUrl: currentPg[existingIdx].photoUrl || lateItem.photoUrl
+               };
+             } else {
+               currentPg.push(lateItem);
+             }
+           });
+           rec.gajiPengurangan = currentPg;
+
            // Jika record auto-generated sebelumnya sempat tersimpan 0, perbaiki ke gaji pokok pegawai
            if ((Number(rec.gajiPokok) || 0) === 0 && rec.isAutoGenerated) {
                rec.gajiPokok = resolvedBasePokok;
@@ -576,31 +689,46 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
            ongkirMap.delete(k); // remove processed keys
            ongkirMasukGajiMap.delete(k);
            penaltyMap.delete(k);
+           latePenaltyMap.delete(k);
+           latePenaltyItemsMap.delete(k);
         });
 
-        // Any remaining keys in ongkirMap for this specific email means the employee earned ongkir
-        // in a month that the owner hasn't created a 'gaji record' for yet!
-        // So we create a stub "dummy" record automatically just to display the ongkir.
-        Array.from(ongkirMap.entries()).forEach(([key, val]) => {
-           if (key.startsWith(`${p.email.toLowerCase()}_`)) {
-               const bTahun = key.split("_")[1];
-               const valMasukGaji = ongkirMasukGajiMap.get(key) || 0;
-               p.records.push({
-                   id: `auto-ongkir-${bTahun}`,
-                   bulanTahun: bTahun,
-                   gajiPokok: resolvedBasePokok,
-                   gajiTambahan: [],
-                   gajiPengurangan: [],
-                   buktiTransfer: "",
-                   ongkirBulanIni: val,
-                   ongkirMasukGajiBulanIni: valMasukGaji,
-                   dendaAbsen: penaltyMap.get(key) || 0,
-                   isAutoGenerated: true
-               });
-               totalOngkir += val;
-               ongkirMasukGajiMap.delete(key);
-               penaltyMap.delete(key);
-           }
+        // Any remaining keys in ongkirMap, latePenaltyMap, or penaltyMap for this specific email
+        // means there is activity in a month where owner hasn't created a 'gaji record' for yet!
+        // We create a stub "dummy" record automatically.
+        const allRemainingMonthKeys = new Set([
+          ...Array.from(ongkirMap.keys()).filter(k => k.startsWith(`${p.email.toLowerCase()}_`)),
+          ...Array.from(latePenaltyMap.keys()).filter(k => k.startsWith(`${p.email.toLowerCase()}_`)),
+          ...Array.from(penaltyMap.keys()).filter(k => k.startsWith(`${p.email.toLowerCase()}_`))
+        ]);
+
+        allRemainingMonthKeys.forEach((key) => {
+           const bTahun = key.split("_")[1];
+           const valOngkir = ongkirMap.get(key) || 0;
+           const valMasukGaji = ongkirMasukGajiMap.get(key) || 0;
+           const lateItems = latePenaltyItemsMap.get(key) || [];
+           const valLate = latePenaltyMap.get(key) || 0;
+           const valPenaltyPulang = penaltyMap.get(key) || 0;
+
+           p.records.push({
+               id: `auto-rec-${bTahun}`,
+               bulanTahun: bTahun,
+               gajiPokok: resolvedBasePokok,
+               gajiTambahan: [],
+               gajiPengurangan: [...lateItems],
+               buktiTransfer: "",
+               ongkirBulanIni: valOngkir,
+               ongkirMasukGajiBulanIni: valMasukGaji,
+               dendaAbsen: valPenaltyPulang,
+               dendaTelat: valLate,
+               isAutoGenerated: true
+           });
+           totalOngkir += valOngkir;
+           ongkirMap.delete(key);
+           ongkirMasukGajiMap.delete(key);
+           penaltyMap.delete(key);
+           latePenaltyMap.delete(key);
+           latePenaltyItemsMap.delete(key);
         });
 
         // Rekap untuk PieChart Nanti
@@ -621,7 +749,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
     });
 
     return Array.from(mergedMap.values());
-  }, [logs, gaji, usersProfile, history, logAbsensi, ongkirConfig]);
+  }, [logs, gaji, usersProfile, history, logAbsensi, ongkirConfig, absenConfig]);
 
   const chartData = pegawaiData.map((p: any) => ({
      name: p.email.split("@")[0].toUpperCase(),
@@ -747,8 +875,8 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
             id: autoRec.id,
             bulanTahun: autoRec.bulanTahun,
             gajiPokok: basePokok,
-            gajiTambahan: [],
-            gajiPengurangan: [],
+            gajiTambahan: autoRec.gajiTambahan || [],
+            gajiPengurangan: autoRec.gajiPengurangan || [],
             buktiTransfer: "",
             updatedAt: Date.now(),
             isAutoGenerated: true
@@ -1742,6 +1870,20 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false }: any) => {
                                                <span className="text-[9px] font-extrabold uppercase bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 px-2 py-1 rounded-md w-fit">Tidak Masuk Gaji</span>
                                             )}
                                         </div>
+                                     </div>
+                                   )}
+
+                                   {(Number(r.dendaTelat) > 0 || Number(r.dendaAbsen) > 0) && (
+                                     <div className="w-full bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/20 rounded-xl p-3 flex items-center justify-between">
+                                       <div className="flex flex-col">
+                                         <span className="text-[10px] font-bold uppercase tracking-wide text-rose-600 dark:text-rose-400">Total Denda Absensi (⚡ Auto)</span>
+                                         <span className="text-sm font-black text-rose-600 dark:text-rose-400">- Rp {((Number(r.dendaTelat) || 0) + (Number(r.dendaAbsen) || 0)).toLocaleString("id-ID")}</span>
+                                       </div>
+                                       <span className="text-[9px] font-bold uppercase bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 px-2 py-1 rounded-md">
+                                         {Number(r.dendaTelat) > 0 && `Telat: -Rp ${Number(r.dendaTelat).toLocaleString("id-ID")}`}
+                                         {Number(r.dendaTelat) > 0 && Number(r.dendaAbsen) > 0 && ' · '}
+                                         {Number(r.dendaAbsen) > 0 && `Bolos/Pulang: -Rp ${Number(r.dendaAbsen).toLocaleString("id-ID")}`}
+                                       </span>
                                      </div>
                                    )}
 

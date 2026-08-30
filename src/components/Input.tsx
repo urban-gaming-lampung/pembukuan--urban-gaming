@@ -218,127 +218,145 @@ const Input: React.FC<InputProps> = ({
        return;
     }
 
+    const emailTrimmed = currentUserEmail.toLowerCase().trim();
+
     try {
       setIsProcessingAbsen(true);
       // 1. Upload photo to Firebase Storage
       const dateStr = new Date().toLocaleString("en-CA", { timeZone: "Asia/Jakarta" }).slice(0, 10);
       const safeTimeStr = waktuAbsen.replace(/[^a-zA-Z0-9]/g, "_");
-      const imageRef = ref(storage, `absensi/${currentUserEmail}/${dateStr}_${jenisAbsen}_${safeTimeStr}.jpg`);
+      const imageRef = ref(storage, `absensi/${emailTrimmed}/${dateStr}_${jenisAbsen}_${safeTimeStr}.jpg`);
       await uploadString(imageRef, fotoBase64, 'data_url');
       const imageUrl = await getDownloadURL(imageRef);
+
+      // 1.2. Hitung keterlambatan jika jenisAbsen === "Masuk"
+      let lateMinutes = 0;
+      let effectiveLate = 0;
+      let blockDenda = 0;
+      let denda = 0;
+      const toleransi = absenConfig.waktuToleransi ?? 15;
+      const durasiBlok = absenConfig.durasiWaktuPotongan ?? 15;
+      const nominal = absenConfig.nominalDenda ?? 1500;
+
+      if (jenisAbsen === "Masuk") {
+        const timePart = waktuAbsen.split(" - ")[0]; // Extract HH:MM
+        const [jam, menit] = timePart.split(":").map(Number);
+        const waktuAbsenMinutes = (jam || 0) * 60 + (menit || 0);
+        // Shift Pagi acuan 10:00 (600m), Shift Sore acuan 15:00 (900m)
+        const shiftStartMinutes = shiftPegawai.toLowerCase().includes("sore") ? 15 * 60 : 10 * 60;
+        
+        lateMinutes = Math.max(0, waktuAbsenMinutes - shiftStartMinutes);
+
+        if (lateMinutes > toleransi) {
+           effectiveLate = lateMinutes - toleransi;
+           blockDenda = Math.ceil(effectiveLate / durasiBlok);
+           denda = blockDenda * nominal;
+        }
+      }
 
       // 1.5. Injeksi Data ke log_absensi (Rekam jejak semua absensi masuk & pulang)
       try {
         const logData = {
-           email: currentUserEmail,
+           email: emailTrimmed,
            tanggal: tanggal,
            tanggalReal: new Date().toISOString().split("T")[0],
            shift: shiftPegawai,
            jenisAbsen: jenisAbsen,
            waktu: waktuAbsen,
            photoUrl: imageUrl,
+           lateMinutes: lateMinutes,
+           effectiveLate: effectiveLate,
+           blockDenda: blockDenda,
+           denda: denda,
+           toleransi: toleransi,
+           durasiWaktuPotongan: durasiBlok,
+           nominalDenda: nominal,
            timestamp: new Date().toISOString(),
            _serverTs: serverTimestamp() // Server timestamp untuk konsistensi
         };
-        const logId = `${dateStr}_${jenisAbsen}_${safeTimeStr}_${currentUserEmail}`;
+        const logId = `${dateStr}_${jenisAbsen}_${safeTimeStr}_${emailTrimmed}`;
         await setDoc(doc(db, "log_absensi", logId), logData);
       } catch(e) {
         console.error("Gagal menyimpan log_absensi", e);
       }
 
-       // AUTO RUKO BUKA / TUTUP dihapus dari sini (SSOT).
-       // Logika auto-fill sekarang hanya ada di onSubmit callback AbsenPopup
-       // untuk menghindari race condition dan inkonsistensi tanggal saat absen
-       // melewati tengah malam.
+      // 2. Kalkulasi Denda Keterlambatan Absen Masuk & Injeksi ke gaji_pegawai
+      if (jenisAbsen === "Masuk" && denda > 0) {
+         const docRef = doc(db, "gaji_pegawai", emailTrimmed);
+         const docSnap = await getDoc(docRef);
 
-      // 2. Kalkulasi Denda Keterlambatan Absen Masuk
-      if (jenisAbsen === "Masuk") {
-        const timePart = waktuAbsen.split(" - ")[0]; // Extract HH:MM
-        const [jam, menit] = timePart.split(":").map(Number);
-        const waktuAbsenMinutes = jam * 60 + menit;
-        // Gunakan shift yang DIPILIH admin sebagai acuan (bukan default Pagi)
-        const shiftStartMinutes = shiftPegawai.includes("Pagi") ? 10 * 60 : 15 * 60;
-        
-        const lateMinutes = waktuAbsenMinutes - shiftStartMinutes;
+         const dateStrToday = new Date().toISOString().split("T")[0];
+         const effectiveDate = tanggal || dateStrToday;
+         const idempKey = `lateCheckin_${emailTrimmed}_${effectiveDate}_${shiftPegawai.replace(/\s+/g, '')}`;
 
-        // RULE TOLERANSI: Sesuai pengaturan
-        // Denda dihitung dari menit setelah toleransi
-        if (lateMinutes > absenConfig.waktuToleransi) {
-           const effectiveLate = lateMinutes - absenConfig.waktuToleransi;
-           const blockDenda = Math.ceil(effectiveLate / absenConfig.durasiWaktuPotongan);
-           const denda = blockDenda * absenConfig.nominalDenda;
-           
-            if (denda > 0) {
-               const docRef = doc(db, "gaji_pegawai", currentUserEmail);
-               const docSnap = await getDoc(docRef);
+         const newDenda = {
+            id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
+            nominal: denda,
+            ket: `[Auto-Sistem] Telat absen masuk (${waktuAbsen.split(" - ")[0]}) - Telat ${lateMinutes}m (efektif ${effectiveLate}m). Shift: ${shiftPegawai}`,
+            photoUrl: imageUrl,
+            dateStr: new Date().toISOString(),
+            _isAutoSistem: true,
+            _idempKey: idempKey,
+            _lateMinutes: lateMinutes,
+            _effectiveLate: effectiveLate,
+            _shift: shiftPegawai,
+            _waktuAbsen: waktuAbsen
+         };
 
-               const dateStrToday = new Date().toISOString().split("T")[0];
-               const idempKey = `lateCheckin_${currentUserEmail.toLowerCase().trim()}_${dateStrToday}_${shiftPegawai.replace(/\s+/g, '')}`;
+         const d = new Date(effectiveDate);
+         const mm = String(d.getMonth() + 1).padStart(2, '0');
+         const yy = String(d.getFullYear()).slice(-2);
+         const currentBulanTahun = `${mm}/${yy}`;
 
-               const newDenda = {
-                  id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
-                  nominal: denda,
-                  ket: `[Auto-Sistem] Telat absen masuk (${waktuAbsen}) - Telat ${lateMinutes}m (efektif ${effectiveLate}m). Shift: ${shiftPegawai}`,
-                  photoUrl: imageUrl,
-                  dateStr: new Date().toISOString(),
-                  _isAutoSistem: true,
-                  _idempKey: idempKey
-               };
+         let basePokok = 0;
+         if (docSnap.exists()) {
+            const data = docSnap.data();
+            let records = Array.isArray(data.records) ? data.records : [];
 
-               const d = new Date();
-               const mm = String(d.getMonth() + 1).padStart(2, '0');
-               const yy = String(d.getFullYear()).slice(-2);
-               const currentBulanTahun = `${mm}/${yy}`;
-
-               let basePokok = 0;
-               if (docSnap.exists()) {
-                  const data = docSnap.data();
-                  let records = Array.isArray(data.records) ? data.records : [];
-
-                  // Check if already injected
-                  const alreadyInjected = records.some((r: any) => 
-                     r.gajiPengurangan?.some((pg: any) => pg._idempKey === idempKey)
-                  );
-                  if (alreadyInjected) {
-                     console.log("Denda telat sudah pernah masuk:", idempKey);
-                     return;
-                  }
-
-                  for (const r of records) {
-                     const v = Number(r.gajiPokok) || 0;
-                     if (v > 0) { basePokok = v; break; }
-                  }
-                  if (basePokok === 0) basePokok = Number(data.gajiPokok) || 1500000;
-                  
-                  const monthIndex = records.findIndex((r: any) => r.bulanTahun === currentBulanTahun);
-                  if (monthIndex >= 0) {
-                     const currentMonth = records[monthIndex];
-                     const gajiPengurangan = Array.isArray(currentMonth.gajiPengurangan) ? currentMonth.gajiPengurangan : [];
-                     records[monthIndex] = { ...currentMonth, gajiPengurangan: [...gajiPengurangan, newDenda] };
-                  } else {
-                     records = [{
-                         id: `rec-${Date.now()}`,
-                         bulanTahun: currentBulanTahun,
-                         gajiPokok: basePokok,
-                         gajiTambahan: [],
-                         gajiPengurangan: [newDenda]
-                     }, ...records];
-                  }
-                  await setDoc(docRef, { records, gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
-               } else {
-                  basePokok = 1500000;
-                  const newMonth = {
-                      id: `rec-${Date.now()}`,
-                      bulanTahun: currentBulanTahun,
-                      gajiPokok: basePokok,
-                      gajiTambahan: [],
-                      gajiPengurangan: [newDenda]
-                  };
-                  await setDoc(docRef, { records: [newMonth], gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
-               }
-               alert(`🚨 PERINGATAN SISTEM\nAnda telat absen ${lateMinutes} menit (toleransi ${absenConfig.waktuToleransi}m, efektif telat ${effectiveLate}m)!\nGaji Anda otomatis dipotong Rp ${denda.toLocaleString("id-ID")}`);
+            // Check if already injected
+            const alreadyInjected = records.some((r: any) => 
+               r.gajiPengurangan?.some((pg: any) => pg._idempKey === idempKey)
+            );
+            if (alreadyInjected) {
+               console.log("Denda telat sudah pernah masuk:", idempKey);
+               return;
             }
-        }
+
+            for (const r of records) {
+               const v = Number(r.gajiPokok) || 0;
+               if (v > 0) { basePokok = v; break; }
+            }
+            if (basePokok === 0) basePokok = Number(data.gajiPokok) || 1500000;
+            
+            const monthIndex = records.findIndex((r: any) => r.bulanTahun === currentBulanTahun);
+            if (monthIndex >= 0) {
+               const currentMonth = records[monthIndex];
+               const gajiPengurangan = Array.isArray(currentMonth.gajiPengurangan) ? currentMonth.gajiPengurangan : [];
+               records[monthIndex] = { ...currentMonth, gajiPengurangan: [...gajiPengurangan, newDenda] };
+            } else {
+               records = [{
+                   id: `rec-${Date.now()}`,
+                   bulanTahun: currentBulanTahun,
+                   gajiPokok: basePokok,
+                   gajiTambahan: [],
+                   gajiPengurangan: [newDenda],
+                   isAutoGenerated: true
+               }, ...records];
+            }
+            await setDoc(docRef, { records, gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
+         } else {
+            basePokok = 1500000;
+            const newMonth = {
+                id: `rec-${Date.now()}`,
+                bulanTahun: currentBulanTahun,
+                gajiPokok: basePokok,
+                gajiTambahan: [],
+                gajiPengurangan: [newDenda],
+                isAutoGenerated: true
+            };
+            await setDoc(docRef, { records: [newMonth], gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
+         }
+         alert(`🚨 PERINGATAN SISTEM\nAnda telat absen ${lateMinutes} menit (toleransi ${toleransi}m, efektif telat ${effectiveLate}m)!\nGaji Anda otomatis dipotong Rp ${denda.toLocaleString("id-ID")}`);
       }
       
     } catch (err) {

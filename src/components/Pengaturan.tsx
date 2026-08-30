@@ -463,8 +463,11 @@ const Pengaturan: React.FC<Props> = ({
   const [gajiExpandedId, setGajiExpandedId] = useState<string | null>(null);
   useEffect(() => {
     if (open && userEmail && !isOwner) {
-      const unsub = onSnapshot(doc(db, "gaji_pegawai", userEmail.toLowerCase().trim()), docSnap => {
-        const data = docSnap.exists() ? docSnap.data() : { records: [] };
+      const emailTrimmed = userEmail.toLowerCase().trim();
+      let latestDocData: any = { records: [] };
+      let latestLogAbsensi: any[] = [];
+
+      const updateGajiKuState = (data: any, logs: any[]) => {
         let recs = Array.isArray(data.records) ? data.records : [];
 
         // 1. Kalkulasi Ongkir Otomatis dari history pembukuan khusus untuk user ini
@@ -478,7 +481,7 @@ const Pengaturan: React.FC<Props> = ({
 
           if (Array.isArray(h.rowsSewa)) {
             h.rowsSewa.forEach((r: any) => {
-              if (r.isOngkir === "YA" && r._ongkir && r.diantarOleh && r.diantarOleh.toLowerCase() === userEmail.toLowerCase().trim()) {
+              if (r.isOngkir === "YA" && r._ongkir && r.diantarOleh && r.diantarOleh.toLowerCase() === emailTrimmed) {
                 const key = bulanTahun;
                 const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
                 if (r._isNewOngkirSystem) {
@@ -495,7 +498,7 @@ const Pengaturan: React.FC<Props> = ({
 
           if (Array.isArray(h.rowsHarian)) {
             h.rowsHarian.forEach((r: any) => {
-              if (r._ongkir && r.diantarOleh && r.diantarOleh.toLowerCase() === userEmail.toLowerCase().trim()) {
+              if (r._ongkir && r.diantarOleh && r.diantarOleh.toLowerCase() === emailTrimmed) {
                 const key = bulanTahun;
                 const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
                 if (nominalAsli > 0) {
@@ -513,7 +516,78 @@ const Pengaturan: React.FC<Props> = ({
           }
         });
 
-        // 2. Populate ongkirBulanIni ke records & resolve base salary
+        // 1.5. Kalkulasi Keterlambatan Otomatis dari log_absensi
+        const latePenaltyMap = new Map<string, number>();
+        const latePenaltyItemsMap = new Map<string, any[]>();
+        const toleransiCfg = absenConfig?.waktuToleransi ?? 15;
+        const durasiBlokCfg = absenConfig?.durasiWaktuPotongan ?? 15;
+        const nominalDendaCfg = absenConfig?.nominalDenda ?? 1500;
+
+        logs.forEach((l: any) => {
+          if (l.jenisAbsen === "Masuk" && l.email && l.email.toLowerCase().trim() === emailTrimmed && l.tanggal) {
+            const d = new Date(l.tanggal);
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const yy = String(d.getFullYear()).slice(-2);
+            const bulanTahun = `${mm}/${yy}`;
+            const key = bulanTahun;
+
+            let denda = 0;
+            let lateM = 0;
+            let effLate = 0;
+
+            if (typeof l.denda === "number" && typeof l.lateMinutes === "number") {
+              denda = l.denda;
+              lateM = l.lateMinutes;
+              effLate = l.effectiveLate || Math.max(0, lateM - (l.toleransi ?? toleransiCfg));
+            } else if (l.waktu) {
+              const timePart = l.waktu.split(" - ")[0];
+              const [jam, menit] = timePart.split(":").map(Number);
+              const waktuAbsenMinutes = (jam || 0) * 60 + (menit || 0);
+              const shiftStr = String(l.shift || "").toLowerCase();
+              const shiftStartMinutes = shiftStr.includes("sore") ? 15 * 60 : 10 * 60;
+              lateM = Math.max(0, waktuAbsenMinutes - shiftStartMinutes);
+
+              if (lateM > toleransiCfg) {
+                effLate = lateM - toleransiCfg;
+                const blockDenda = Math.ceil(effLate / durasiBlokCfg);
+                denda = blockDenda * nominalDendaCfg;
+              }
+            }
+
+            if (denda > 0) {
+              latePenaltyMap.set(key, (latePenaltyMap.get(key) || 0) + denda);
+
+              const timeDisplay = l.waktu ? l.waktu.split(" - ")[0] : "";
+              const shiftDisplay = l.shift || "Shift Pagi";
+              const idempKey = `lateCheckin_${emailTrimmed}_${l.tanggal}_${shiftDisplay.replace(/\s+/g, '')}`;
+
+              const item = {
+                id: l.id || `late_${l.tanggal}_${emailTrimmed}`,
+                nominal: denda,
+                ket: `[Auto-Sistem] Telat absen masuk (${timeDisplay}) - Telat ${lateM}m (efektif ${effLate}m). Shift: ${shiftDisplay}`,
+                photoUrl: l.photoUrl || null,
+                dateStr: l.timestamp || new Date().toISOString(),
+                _isAutoSistem: true,
+                _idempKey: idempKey,
+                _lateMinutes: lateM,
+                _effectiveLate: effLate,
+                _shift: shiftDisplay,
+                _waktuAbsen: l.waktu,
+                _tanggalAbsen: l.tanggal
+              };
+
+              if (!latePenaltyItemsMap.has(key)) {
+                latePenaltyItemsMap.set(key, []);
+              }
+              const existingList = latePenaltyItemsMap.get(key)!;
+              if (!existingList.some(x => x._idempKey === idempKey)) {
+                existingList.push(item);
+              }
+            }
+          }
+        });
+
+        // 2. Populate ongkirBulanIni & late deductions ke records & resolve base salary
         let basePokok = Number(data.gajiPokok) || 0;
         if (basePokok === 0 && recs.length > 0) {
           for (const r of recs) {
@@ -525,26 +599,56 @@ const Pengaturan: React.FC<Props> = ({
 
         recs.forEach((r: any) => {
           r.ongkirBulanIni = ongkirMap.get(r.bulanTahun) || 0;
+          r.dendaTelat = latePenaltyMap.get(r.bulanTahun) || 0;
+
+          // Merge auto-detected late deductions into r.gajiPengurangan
+          const lateItems = latePenaltyItemsMap.get(r.bulanTahun) || [];
+          let currentPg = Array.isArray(r.gajiPengurangan) ? [...r.gajiPengurangan] : [];
+          lateItems.forEach(lateItem => {
+            const existingIdx = currentPg.findIndex((x: any) =>
+              x._idempKey === lateItem._idempKey ||
+              (x._isAutoSistem && x.ket && x.ket.includes(lateItem._tanggalAbsen || ""))
+            );
+            if (existingIdx >= 0) {
+              currentPg[existingIdx] = {
+                ...lateItem,
+                ...currentPg[existingIdx],
+                nominal: currentPg[existingIdx].nominal || lateItem.nominal,
+                photoUrl: currentPg[existingIdx].photoUrl || lateItem.photoUrl
+              };
+            } else {
+              currentPg.push(lateItem);
+            }
+          });
+          r.gajiPengurangan = currentPg;
+
           if ((Number(r.gajiPokok) || 0) === 0 && r.isAutoGenerated) {
             r.gajiPokok = basePokok;
           }
           ongkirMap.delete(r.bulanTahun);
+          latePenaltyMap.delete(r.bulanTahun);
+          latePenaltyItemsMap.delete(r.bulanTahun);
         });
 
-        // 3. Tambahkan sisa ongkir ke dalam dummy records baru
-        Array.from(ongkirMap.entries()).forEach(([bTahun, val]) => {
+        // 3. Tambahkan sisa ongkir/denda ke dalam dummy records baru
+        const allRemainingKeys = new Set([...Array.from(ongkirMap.keys()), ...Array.from(latePenaltyMap.keys())]);
+        allRemainingKeys.forEach((bTahun) => {
+          const valOngkir = ongkirMap.get(bTahun) || 0;
+          const lateItems = latePenaltyItemsMap.get(bTahun) || [];
+          const valLate = latePenaltyMap.get(bTahun) || 0;
           recs.push({
-            id: `auto-ongkir-${bTahun}`,
+            id: `auto-rec-${bTahun}`,
             bulanTahun: bTahun,
             gajiPokok: basePokok,
             bonus: 0,
             potongan: 0,
             gajiTambahan: [],
-            gajiPengurangan: [],
+            gajiPengurangan: [...lateItems],
             ketPemasukan: "",
             ketPengeluaran: "",
             buktiTransfer: "",
-            ongkirBulanIni: val,
+            ongkirBulanIni: valOngkir,
+            dendaTelat: valLate,
             isAutoGenerated: true
           });
         });
@@ -560,11 +664,25 @@ const Pengaturan: React.FC<Props> = ({
         });
 
         data.records = recs;
-        setGajiKu(data as any);
+        setGajiKu({ ...data });
+      };
+
+      const unsubGaji = onSnapshot(doc(db, "gaji_pegawai", emailTrimmed), docSnap => {
+        latestDocData = docSnap.exists() ? docSnap.data() : { records: [] };
+        updateGajiKuState(latestDocData, latestLogAbsensi);
       });
-      return () => unsub();
+
+      const unsubLogs = onSnapshot(collection(db, "log_absensi"), snap => {
+        latestLogAbsensi = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        updateGajiKuState(latestDocData, latestLogAbsensi);
+      });
+
+      return () => {
+        unsubGaji();
+        unsubLogs();
+      };
     }
-  }, [open, userEmail, isOwner, history]);
+  }, [open, userEmail, isOwner, history, absenConfig]);
 
   const runOrAlert = (fn?: () => void, msg?: string) => {
     if (fn) return fn();
@@ -842,12 +960,24 @@ const Pengaturan: React.FC<Props> = ({
                                     <span className="text-right text-[11px] font-medium text-purple-400 max-w-[140px] italic">"Otomatis dari Sistem"</span>
                                   </div>
                                 )}
-                                {pgArr.map((pg: any, i: number) => Number(pg.nominal) > 0 && (
-                                  <div key={`pg-${i}`} className="flex justify-between items-center">
-                                    <span className="text-[12px] font-bold text-red-500">Pengurangan: -Rp {Number(pg.nominal).toLocaleString("id-ID")}</span>
-                                    <span className="text-right text-[11px] font-medium text-zinc-500 max-w-[140px] italic">"{pg.ket || "-"}"</span>
-                                  </div>
-                                ))}
+                                 {pgArr.map((pg: any, i: number) => Number(pg.nominal) > 0 && (
+                                   <div key={`pg-${i}`} className="flex justify-between items-center py-1">
+                                     <div className="flex flex-col gap-0.5">
+                                       <div className="flex items-center gap-1.5">
+                                         <span className="text-[12px] font-bold text-red-500">Pengurangan: -Rp {Number(pg.nominal).toLocaleString("id-ID")}</span>
+                                         {pg._isAutoSistem && (
+                                           <span className="text-[8px] font-extrabold uppercase tracking-wider text-orange-500 bg-orange-50 dark:bg-orange-500/10 px-1.5 py-0.5 rounded">⚡ Auto</span>
+                                         )}
+                                       </div>
+                                       {pg.photoUrl && (
+                                         <a href={pg.photoUrl} target="_blank" rel="noreferrer" className="text-[10px] text-blue-500 hover:underline flex items-center gap-1 mt-0.5 font-semibold">
+                                           📷 Lihat Bukti Foto
+                                         </a>
+                                       )}
+                                     </div>
+                                     <span className="text-right text-[11px] font-medium text-zinc-500 max-w-[150px] italic">"{pg.ket || "-"}"</span>
+                                   </div>
+                                 ))}
 
                                 <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl flex justify-between items-center">
                                   <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600/80 dark:text-amber-400/80">Yang Harus Ditransfer</span>
