@@ -365,72 +365,88 @@ export default function useAppController() {
     return () => unsub();
   }, []);
 
-  // Sync absenPagi, absenSiang, shiftPegawai, and initial rukoBuka/Tutup with log_absensi SSOT
+  // Sync absenPagi, absenSiang, shiftPegawai, and initial rukoBuka/Tutup with log_absensi SSOT (Identical to TabPegawai)
   useEffect(() => {
     if (!tanggal || editingId) return;
 
+    const isOwnerEmail = (em: string) => em.toLowerCase().trim() === "owner@gmail.com";
+    const currentUserEmail = user?.email?.toLowerCase().trim() || "";
+
     const logsForToday = allLogAbsensi.filter((l: any) => isLogForDate(l, tanggal) && l.status !== "deleted");
+    if (logsForToday.length === 0) return;
 
-    let pagi = "";
-    let siang = "";
-    let shiftFromLog = "";
+    // Check if there are real employee logs vs owner test logs
+    const hasEmployeeLogs = logsForToday.some((l: any) => l.email && !isOwnerEmail(l.email));
 
-    const currentUserEmail = user?.email?.toLowerCase().trim();
-    const masukLogs = logsForToday.filter(l => l.jenisAbsen === "Masuk" && l.waktu);
-    const pulangLogs = logsForToday.filter(l => l.jenisAbsen === "Pulang" && l.waktu);
-    const liburLogs = logsForToday.filter(l => l.jenisAbsen === "Libur" || l.shift === "Libur");
+    // Aggregate logs per employee (SSOT identical to TabPegawai)
+    const empMap = new Map<string, { email: string; masuk?: any; pulang?: any; libur?: any; shift?: string }>();
 
-    let selectedMasuk: any = null;
-    let selectedPulang: any = null;
-    let selectedLibur: any = null;
+    logsForToday.forEach((l: any) => {
+      const em = l.email ? l.email.toLowerCase().trim() : "";
+      if (!em) return;
+      if (hasEmployeeLogs && isOwnerEmail(em)) return; // Filter out owner test logs when real employee logs exist
 
-    if (masukLogs.length > 0) {
-      selectedMasuk = currentUserEmail ? (masukLogs.find(l => l.email?.toLowerCase().trim() === currentUserEmail) || masukLogs[0]) : masukLogs[0];
-      if (selectedMasuk) {
-        pagi = selectedMasuk.waktu;
-        if (selectedMasuk.shift && selectedMasuk.shift !== "Libur") shiftFromLog = selectedMasuk.shift;
+      if (!empMap.has(em)) {
+        empMap.set(em, { email: em });
       }
+      const entry = empMap.get(em)!;
+      if (l.jenisAbsen === "Masuk") {
+        entry.masuk = l;
+        if (l.shift) entry.shift = l.shift;
+      } else if (l.jenisAbsen === "Pulang") {
+        entry.pulang = l;
+        if (!entry.shift && l.shift) entry.shift = l.shift;
+      } else if (l.jenisAbsen === "Libur") {
+        entry.libur = l;
+        entry.shift = "Libur";
+      }
+    });
+
+    const entries = Array.from(empMap.values());
+    if (entries.length === 0) return;
+
+    // Pick active employee entry
+    let activeEntry: { email: string; masuk?: any; pulang?: any; libur?: any; shift?: string } | undefined;
+    if (currentUserEmail && !isOwnerEmail(currentUserEmail) && empMap.has(currentUserEmail)) {
+      activeEntry = empMap.get(currentUserEmail);
+    } else {
+      // For Owner or shared screen: pick the latest employee shift entry
+      activeEntry = entries[entries.length - 1];
     }
 
-    if (pulangLogs.length > 0) {
-      selectedPulang = currentUserEmail ? (pulangLogs.find(l => l.email?.toLowerCase().trim() === currentUserEmail) || pulangLogs[pulangLogs.length - 1]) : pulangLogs[pulangLogs.length - 1];
-      if (selectedPulang) {
-        siang = selectedPulang.waktu;
-        if (!shiftFromLog && selectedPulang.shift && selectedPulang.shift !== "Libur") shiftFromLog = selectedPulang.shift;
-      }
-    }
+    if (!activeEntry) return;
 
-    if (liburLogs.length > 0 && masukLogs.length === 0) {
-      selectedLibur = currentUserEmail ? (liburLogs.find(l => l.email?.toLowerCase().trim() === currentUserEmail) || liburLogs[0]) : liburLogs[0];
-      if (selectedLibur) {
-        shiftFromLog = "Libur";
-      }
-    }
+    const pagi = activeEntry.masuk?.waktu || "";
+    const siang = activeEntry.pulang?.waktu || "";
+    const shiftFromLog = activeEntry.shift || (activeEntry.masuk?.shift) || (activeEntry.pulang?.shift) || "";
 
     setAbsenPagi(pagi);
     setAbsenSiang(siang);
     if (shiftFromLog) {
-      _setShiftPegawai(prev => (prev === "Libur" && shiftFromLog !== "Libur" ? shiftFromLog : prev || shiftFromLog));
+      _setShiftPegawai(shiftFromLog);
     }
 
-    // Realtime auto-fill Ruko Buka from Masuk attendance
-    if (selectedMasuk && selectedMasuk.waktu) {
-      const timePart = selectedMasuk.waktu.split(" - ")[0]?.trim();
+    // Realtime auto-fill Ruko Buka
+    if (activeEntry.masuk?.waktu) {
+      const timePart = activeEntry.masuk.waktu.split(" - ")[0]?.trim();
       if (timePart) {
-        _setRukoBuka(prev => prev || timePart);
-        _setRukoBukaDate(prev => prev || normalizeDateStr(tanggal));
+        _setRukoBuka(timePart);
+        _setRukoBukaDate(normalizeDateStr(tanggal));
       }
     }
 
-    // Realtime auto-fill Ruko Tutup from Pulang attendance
-    if (selectedPulang && selectedPulang.waktu) {
-      const timePart = selectedPulang.waktu.split(" - ")[0]?.trim();
+    // Realtime auto-fill Ruko Tutup (hanya jika active employee sudah pulang)
+    if (activeEntry.pulang?.waktu) {
+      const timePart = activeEntry.pulang.waktu.split(" - ")[0]?.trim();
       if (timePart) {
-        _setRukoTutup(prev => prev || timePart);
-        _setRukoTutupDate(prev => prev || normalizeDateStr(tanggal));
+        _setRukoTutup(timePart);
+        _setRukoTutupDate(normalizeDateStr(tanggal));
       }
+    } else {
+      _setRukoTutup("");
+      _setRukoTutupDate("");
     }
-  }, [allLogAbsensi, tanggal, user?.email, editingId, isSuperAdminOrOwner]);
+  }, [allLogAbsensi, tanggal, user?.email, editingId]);
 
   useEffect(() => {
     if (!user?.email || !tanggal || editingId) return;
