@@ -123,39 +123,24 @@ const RincianSewa: React.FC<{
     [hargaItems]
   );
 
-  // Fetch ALL registered users from Firebase (merge users, pegawai_logs, gaji_pegawai)
+  // Fetch registered active users from Firebase
   const [allUsers, setAllUsers] = useState<{ id: string }[]>([]);
   useEffect(() => {
-    const emailSet = new Set<string>();
-    const rebuild = () => {
-      const arr = Array.from(emailSet)
-        .filter(e => e.toLowerCase() !== "owner@gmail.com")
-        .sort()
-        .map(e => ({ id: e }));
+    const unsub = onSnapshot(collection(db, "users"), (snap) => {
+      const arr = snap.docs
+        .filter(d => {
+          const data = d.data();
+          const email = d.id.toLowerCase().trim();
+          if (email === "owner@gmail.com" || email.includes("fauzanazim56")) return false;
+          if (data && (data.role === "super admin" || data.status === "nonaktif")) return false;
+          return true;
+        })
+        .map(d => ({ id: d.id }))
+        .sort((a, b) => a.id.localeCompare(b.id));
       setAllUsers(arr);
-    };
-
-    const unsub1 = onSnapshot(collection(db, "users"), (snap) => {
-      snap.docs.forEach(d => {
-        const data = d.data();
-        if (data && data.role === "super admin") {
-          emailSet.delete(d.id);
-        } else {
-          emailSet.add(d.id);
-        }
-      });
-      rebuild();
-    });
-    const unsub2 = onSnapshot(collection(db, "pegawai_logs"), (snap) => {
-      snap.docs.forEach(d => emailSet.add(d.id));
-      rebuild();
-    });
-    const unsub3 = onSnapshot(collection(db, "gaji_pegawai"), (snap) => {
-      snap.docs.forEach(d => emailSet.add(d.id));
-      rebuild();
     });
 
-    return () => { unsub1(); unsub2(); unsub3(); };
+    return () => unsub();
   }, []);
 
   return (

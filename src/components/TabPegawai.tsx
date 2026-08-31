@@ -72,10 +72,12 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   }, []);
 
   // 3. Fetch users profile
+  const [isUsersLoaded, setIsUsersLoaded] = useState(false);
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "users"), (snap) => {
       const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setUsersProfile(data);
+      setIsUsersLoaded(true);
     });
     return () => unsub();
   }, []);
@@ -176,12 +178,14 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
   const handleDeleteAccount = async (email: string) => {
     if (email.toLowerCase().trim() === "owner@gmail.com") return;
-    if (!confirm(`Apakah Anda yakin ingin menghapus akun ${email}? Pegawai ini tidak akan bisa login lagi.`)) return;
+    if (!confirm(`Apakah Anda yakin ingin menghapus akun ${email}? Pegawai ini tidak akan bisa login lagi dan seluruh datanya akan dibersihkan.`)) return;
     
     setIsDeletingEmail(email);
     try {
       await deleteDoc(doc(db, "users", email));
-      alert(`Akun ${email} berhasil dihapus.`);
+      await deleteDoc(doc(db, "logs", email)).catch(() => {});
+      await deleteDoc(doc(db, "gaji_pegawai", email)).catch(() => {});
+      alert(`Akun ${email} dan seluruh datanya berhasil dihapus.`);
     } catch (err: any) {
       console.error(err);
       alert(err.message || "Gagal menghapus akun.");
@@ -225,10 +229,18 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
      }
   };
 
-  // === Helper Akun Pegawai Nonaktif (Dicoret) ===
+  // === Helper Akun Pegawai Nonaktif / Dihapus (SSOT) ===
   const isPegawaiNonaktif = (email: string) => {
     if (!email) return false;
-    const up = usersProfile.find(u => u.id?.toLowerCase().trim() === email.toLowerCase().trim());
+    const em = email.toLowerCase().trim();
+    if (em.includes("fauzanazim56")) return true;
+    if (isUsersLoaded) {
+      const up = usersProfile.find(u => u.id?.toLowerCase().trim() === em);
+      // Jika akun tidak ditemukan di database users (sudah dihapus), otomatis nonaktif / hide!
+      if (!up) return true;
+      return up.status === "nonaktif";
+    }
+    const up = usersProfile.find(u => u.id?.toLowerCase().trim() === em);
     return up?.status === "nonaktif";
   };
 
@@ -253,11 +265,14 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   };
 
   const groupedLogAbsensi = useMemo(() => {
-     // Step 1: Group semua log ke siklus periode -> hari -> logs
+     // Step 1: Group semua log ke siklus periode -> hari -> logs (Hanya akun aktif)
      const rawMap = new Map<string, { cycle: any; hariMap: Map<string, any[]> }>();
      
      logAbsensi.forEach(log => {
         if (!log.tanggal) return;
+        const em = log.email ? log.email.toLowerCase().trim() : "";
+        if (isSuperAdminOrOwnerEmail(em) || isPegawaiNonaktif(em)) return;
+
         const cycle = getAbsenCycleInfo(log.tanggal, cutoffDay);
         const bulanTahun = cycle.bulanTahun;
         
@@ -309,7 +324,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
            // Aggregate pegawai per hari
            const emailMap = new Map<string, any>();
            logs.forEach((l: any) => {
-               const em = l.email.toLowerCase();
+               const em = l.email ? l.email.toLowerCase().trim() : "";
                if (isSuperAdminOrOwnerEmail(em) || isPegawaiNonaktif(em)) return;
                if (!emailMap.has(em)) {
                   emailMap.set(em, { email: em, waktuMasuk: "-", photoMasuk: null, waktuPulang: "-", photoPulang: null, isLibur: false });
@@ -399,7 +414,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
      });
 
      return finalData;
-  }, [logAbsensi, cutoffDay, usersProfile]);
+  }, [logAbsensi, cutoffDay, usersProfile, isUsersLoaded]);
 
   const [expandedLogBulan, setExpandedLogBulan] = useState<string[]>([]);
   const toggleLogBulan = (b: string) => setExpandedLogBulan(p => p.includes(b) ? p.filter(x => x !== b) : [...p, b]);
@@ -417,11 +432,12 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
     const mergedMap = new Map();
     const cutoffDay = Number(absenConfig?.tanggalMulaiHitung) || 1;
     
-    // Inisialisasi dari profil (khusus akun aktif yang tidak dicoret)
+    // Inisialisasi HANYA dari profil yang aktif dan tidak dicoret
     usersProfile.forEach(u => {
       if (!isSuperAdminOrOwnerEmail(u.id)) {
          if (u.status === "nonaktif") return; // Akun yang dicoret tidak dimasukkan
          const k = u.id.toLowerCase().trim();
+         if (k.includes("fauzanazim56")) return;
          mergedMap.set(k, { email: u.id, photoUrl: u.photoUrl || null, profileColor: u.profileColor || "#3b82f6", loginsCount: 0, records: [] });
       }
     });
@@ -430,9 +446,10 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
       if (!isSuperAdminOrOwnerEmail(l.id)) {
         const k = l.id.toLowerCase().trim();
         if (isPegawaiNonaktif(k)) return; // Lewati akun nonaktif
-        const p = mergedMap.get(k) || { email: l.id, photoUrl: null, profileColor: "#3b82f6", loginsCount: 0, records: [] };
-        p.loginsCount = Array.isArray(l.logins) ? l.logins.length : 0;
-        mergedMap.set(k, p);
+        if (mergedMap.has(k)) {
+          const p = mergedMap.get(k);
+          p.loginsCount = Array.isArray(l.logins) ? l.logins.length : 0;
+        }
       }
     });
 
@@ -449,7 +466,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
            h.rowsSewa.forEach((r: any) => {
                if (r.isOngkir === "YA" && r._ongkir && r.diantarOleh) {
                    const email = r.diantarOleh.toLowerCase().trim();
-                   if (isPegawaiNonaktif(email)) return;
+                   if (isPegawaiNonaktif(email) || !mergedMap.has(email)) return;
                    const key = `${email}_${bulanTahun}`;
                    const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
                    
@@ -479,7 +496,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
            h.rowsHarian.forEach((r: any) => {
                if (r._ongkir && r.diantarOleh) {
                    const email = r.diantarOleh.toLowerCase().trim();
-                   if (isPegawaiNonaktif(email)) return;
+                   if (isPegawaiNonaktif(email) || !mergedMap.has(email)) return;
                    const key = `${email}_${bulanTahun}`;
                    const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
                    
@@ -515,7 +532,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
     logAbsensi.forEach((l: any) => {
       if (l.jenisAbsen === "Masuk" && l.email && l.tanggal) {
         const em = l.email.toLowerCase().trim();
-        if (isSuperAdminOrOwnerEmail(em) || isPegawaiNonaktif(em)) return;
+        if (isSuperAdminOrOwnerEmail(em) || isPegawaiNonaktif(em) || !mergedMap.has(em)) return;
 
         const cycle = getAbsenCycleInfo(l.tanggal, cutoffDay);
         const bulanTahun = cycle.bulanTahun;
@@ -583,7 +600,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
     logAbsensi.forEach(l => {
         if (l.jenisAbsen === "Masuk" && l.email && l.tanggal) {
              const em = l.email.toLowerCase().trim();
-             if (isSuperAdminOrOwnerEmail(em) || isPegawaiNonaktif(em)) return;
+             if (isSuperAdminOrOwnerEmail(em) || isPegawaiNonaktif(em) || !mergedMap.has(em)) return;
              const sameDayPulang = logAbsensi.find(o => o.email === l.email && o.tanggal === l.tanggal && o.jenisAbsen === "Pulang");
              if (!sameDayPulang) {
                  const cycle = getAbsenCycleInfo(l.tanggal, cutoffDay);
@@ -596,7 +613,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
     gaji.forEach(g => {
       const k = g.id.toLowerCase().trim();
-      if (isPegawaiNonaktif(k) || isSuperAdminOrOwnerEmail(g.id)) return;
+      if (isPegawaiNonaktif(k) || isSuperAdminOrOwnerEmail(g.id) || !mergedMap.has(k)) return;
       let records = Array.isArray(g.records) ? g.records : [];
       if (records.length === 0 && (g.gajiPokok || g.bonus || g.potongan)) {
           // Migrasi data lama on the fly
@@ -629,13 +646,8 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
           });
       }
 
-      if (mergedMap.has(k)) {
-        mergedMap.get(k).records = records;
-        mergedMap.get(k).gajiPokok = Number(g.gajiPokok) || 0;
-      } else {
-        const up = usersProfile.find(u => u.id?.toLowerCase().trim() === k);
-        mergedMap.set(k, { email: g.id, photoUrl: up?.photoUrl || null, profileColor: up?.profileColor || "#3b82f6", loginsCount: 0, records, gajiPokok: Number(g.gajiPokok) || 0 });
-      }
+      mergedMap.get(k).records = records;
+      mergedMap.get(k).gajiPokok = Number(g.gajiPokok) || 0;
     });
     // Attach ongkir yang belum tercover di records, dan rekap total
     Array.from(mergedMap.values()).forEach((p: any) => {
@@ -795,6 +807,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
             h.rowsSewa.forEach((r: any) => {
                 if (r.isOngkir === "YA" && r._ongkir && r.diantarOleh) {
                     const email = r.diantarOleh.toLowerCase().trim();
+                    if (isPegawaiNonaktif(email)) return;
                     const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
                     
                     let amount = nominalAsli;
@@ -812,6 +825,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
             h.rowsHarian.forEach((r: any) => {
                 if (r._ongkir && r.diantarOleh) {
                     const email = r.diantarOleh.toLowerCase().trim();
+                    if (isPegawaiNonaktif(email)) return;
                     const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
                     
                     if (nominalAsli > 0) {
@@ -828,7 +842,9 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         }
      });
 
-     return Array.from(map.entries()).map(([email, total]) => {
+     return Array.from(map.entries())
+       .filter(([email]) => !isPegawaiNonaktif(email))
+       .map(([email, total]) => {
          const profile = usersProfile.find(u => u.id.toLowerCase().trim() === email);
          return {
              email,
@@ -838,7 +854,36 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
              profileColor: profile?.profileColor || "#3b82f6"
          };
      }).sort((a, b) => b.total - a.total);
-  }, [history, ongkirStart, ongkirEnd, usersProfile]);
+  }, [history, ongkirStart, ongkirEnd, usersProfile, isUsersLoaded]);
+
+  // Auto-clean ghost records in Firestore (like deleted accounts fauzanazim56, etc.)
+  useEffect(() => {
+    if (!isOwner || !isUsersLoaded) return;
+    
+    // Check logs collection for deleted accounts
+    logs.forEach(async (l) => {
+      const email = l.id?.toLowerCase().trim() || "";
+      if (email.includes("fauzanazim56") || (!isSuperAdminOrOwnerEmail(email) && !usersProfile.some(u => u.id?.toLowerCase().trim() === email))) {
+        try {
+          await deleteDoc(doc(db, "logs", l.id));
+        } catch (err) {
+          console.warn("Auto cleanup logs error:", err);
+        }
+      }
+    });
+
+    // Check gaji_pegawai collection for deleted accounts
+    gaji.forEach(async (g) => {
+      const email = g.id?.toLowerCase().trim() || "";
+      if (email.includes("fauzanazim56") || (!isSuperAdminOrOwnerEmail(email) && !usersProfile.some(u => u.id?.toLowerCase().trim() === email))) {
+        try {
+          await deleteDoc(doc(db, "gaji_pegawai", g.id));
+        } catch (err) {
+          console.warn("Auto cleanup gaji error:", err);
+        }
+      }
+    });
+  }, [isOwner, isUsersLoaded, usersProfile, logs, gaji]);
 
   // Auto-persist ongkir stub records to Firestore when detected
   const autoPersistedRef = React.useRef<Set<string>>(new Set());
