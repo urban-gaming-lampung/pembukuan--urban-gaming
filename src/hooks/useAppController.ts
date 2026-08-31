@@ -745,7 +745,7 @@ export default function useAppController() {
   const [hargaSewa, setHargaSewa] = useState<Price[]>(DEFAULT_HARGA_SEWA as Price[]);
   
   const [ongkirConfig, setOngkirConfig] = useState({ pegawaiPersen: 70, masukGaji: false });
-  const [absenConfig, setAbsenConfig] = useState({ durasiWaktuPotongan: 15, waktuToleransi: 15, nominalDenda: 1500, dendaTidakAbsenPulang: 40000 });
+  const [absenConfig, setAbsenConfig] = useState({ durasiWaktuPotongan: 15, waktuToleransi: 15, nominalDenda: 1500, dendaTidakAbsenPulang: 40000, tanggalMulaiHitung: 1 });
 
   const [openEditRincian, setOpenEditRincian] = useState<PriceListKey | null>(null);
 
@@ -1802,7 +1802,7 @@ export default function useAppController() {
                 priceLists: { hargaHarian: DEFAULT_HARGA_HARIAN, hargaJajanan: DEFAULT_HARGA_JAJANAN, hargaJasaAks: DEFAULT_HARGA_JASA_AKS, hargaSewa: DEFAULT_HARGA_SEWA }
             },
             ongkirConfig: { pegawaiPersen: 70, masukGaji: false },
-            absenConfig: { durasiWaktuPotongan: 15, waktuToleransi: 15, nominalDenda: 1500, dendaTidakAbsenPulang: 40000 }
+            absenConfig: { durasiWaktuPotongan: 15, waktuToleransi: 15, nominalDenda: 1500, dendaTidakAbsenPulang: 40000, tanggalMulaiHitung: 1 }
         }, { merge: true });
         try {
             const raw = localStorage.getItem(LS_KEY);
@@ -2014,7 +2014,8 @@ export default function useAppController() {
       nominalDenda: typeof cfg?.nominalDenda === "number" ? cfg.nominalDenda : 1500,
       waktuToleransi: typeof cfg?.waktuToleransi === "number" ? cfg.waktuToleransi : 15,
       durasiWaktuPotongan: typeof cfg?.durasiWaktuPotongan === "number" ? cfg.durasiWaktuPotongan : 15,
-      dendaTidakAbsenPulang: typeof cfg?.dendaTidakAbsenPulang === "number" ? cfg.dendaTidakAbsenPulang : 40000
+      dendaTidakAbsenPulang: typeof cfg?.dendaTidakAbsenPulang === "number" ? cfg.dendaTidakAbsenPulang : 40000,
+      tanggalMulaiHitung: typeof cfg?.tanggalMulaiHitung === "number" ? Math.max(1, Math.min(31, cfg.tanggalMulaiHitung)) : 1
     };
     setAbsenConfig(sanitizedCfg);
     setDoc(doc(db, "data", "settings"), { absenConfig: sanitizedCfg }, { merge: true }).catch(console.error);

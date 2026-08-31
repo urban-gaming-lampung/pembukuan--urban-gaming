@@ -9,6 +9,7 @@ import {
 import { Users, Activity, Banknote, Save, Plus, ChevronDown, ChevronUp, Trash2, X, Camera, UserPlus, Shield, UserCheck, AlertTriangle, CalendarDays, CalendarRange, RotateCcw, Ban } from "lucide-react";
 import Section from "./common/Section";
 import UserAvatar from "./common/UserAvatar";
+import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, BULAN_NAMES } from "../lib/absenPeriod";
 
 // === KONSTANTA ABSENSI ===
 
@@ -224,22 +225,14 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
      }
   };
 
-  // === HELPER: Hitung week number dari tanggal (SSOT) ===
-  const getWeekNum = (dayOfMonth: number) => {
-    if (dayOfMonth <= 7) return 1;
-    if (dayOfMonth <= 14) return 2;
-    if (dayOfMonth <= 21) return 3;
-    return 4;
+  // === Helper Akun Pegawai Nonaktif (Dicoret) ===
+  const isPegawaiNonaktif = (email: string) => {
+    if (!email) return false;
+    const up = usersProfile.find(u => u.id?.toLowerCase().trim() === email.toLowerCase().trim());
+    return up?.status === "nonaktif";
   };
 
-  const getWeekRange = (weekNum: number, year: number, month: number) => {
-    const starts = [1, 8, 15, 22];
-    const lastDay = new Date(year, month, 0).getDate(); // hari terakhir bulan
-    const ends = [7, 14, 21, lastDay];
-    return { start: starts[weekNum - 1], end: ends[weekNum - 1] };
-  };
-
-  const BULAN_NAMES = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const cutoffDay = Number(absenConfig?.tanggalMulaiHitung) || 1;
 
   // === Classify shift dari string shift field (SSOT) ===
   const classifyShift = (shiftStr: string): 'pagi' | 'sore' | 'libur' => {
@@ -250,7 +243,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
     return 'pagi';
   };
 
-  // Set-up grouping log_absensi by Bulan -> Minggu -> Hari (SSOT)
+  // Set-up grouping log_absensi by Bulan/Siklus -> Minggu -> Hari (SSOT)
   type WeekData = {
     weekNum: number;
     weekLabel: string;
@@ -260,53 +253,53 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   };
 
   const groupedLogAbsensi = useMemo(() => {
-     // Step 1: Group semua log ke bulan -> hari -> logs
-     const rawMap = new Map<string, Map<string, any[]>>();
+     // Step 1: Group semua log ke siklus periode -> hari -> logs
+     const rawMap = new Map<string, { cycle: any; hariMap: Map<string, any[]> }>();
      
      logAbsensi.forEach(log => {
         if (!log.tanggal) return;
-        const d = new Date(log.tanggal);
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const yy = String(d.getFullYear()).slice(-2);
-        const bulanTahun = `${mm}/${yy}`;
+        const cycle = getAbsenCycleInfo(log.tanggal, cutoffDay);
+        const bulanTahun = cycle.bulanTahun;
         
         let hariIndo = "";
         try {
+           const d = new Date(log.tanggal);
            hariIndo = new Intl.DateTimeFormat("id-ID", { weekday: "long" }).format(d);
         } catch(e) { hariIndo = "" }
         
         const tglStr = `${hariIndo} - ${log.tanggal}`;
 
-        if (!rawMap.has(bulanTahun)) rawMap.set(bulanTahun, new Map());
-        if (!rawMap.get(bulanTahun)!.has(tglStr)) rawMap.get(bulanTahun)!.set(tglStr, []);
-        
-        rawMap.get(bulanTahun)!.get(tglStr)!.push(log);
+        if (!rawMap.has(bulanTahun)) {
+          rawMap.set(bulanTahun, { cycle, hariMap: new Map() });
+        }
+        const cycleEntry = rawMap.get(bulanTahun)!;
+        if (!cycleEntry.hariMap.has(tglStr)) {
+          cycleEntry.hariMap.set(tglStr, []);
+        }
+        cycleEntry.hariMap.get(tglStr)!.push(log);
      });
 
-     // Step 2: Transform ke Bulan -> Week[] -> Days
+     // Step 2: Transform ke Siklus -> Week[] -> Days
      const finalData: Array<[
         string,
         WeekData[],
         number,
-        Map<string, { email: string; pagi: number; sore: number; libur: number }>
+        Map<string, { email: string; pagi: number; sore: number; libur: number }>,
+        string, // labelPeriode
+        string  // shortLabelPeriode
      ]> = [];
 
-     for (const [bulan, hariMap] of rawMap.entries()) {
-        const [mmStr, yyStr] = bulan.split("/");
-        const fullYear = 2000 + parseInt(yyStr);
-        const monthNum = parseInt(mmStr);
-
+     for (const [bulan, { cycle, hariMap }] of rawMap.entries()) {
         const monthlySummary = new Map<string, { email: string; pagi: number; sore: number; libur: number }>();
-
-        // Group hari ke dalam weeks
         const weekMap = new Map<number, { days: Map<string, any[]>, summary: Map<string, { email: string; pagi: number; sore: number; libur: number }> }>();
 
         for (const [hari, logs] of hariMap.entries()) {
-           // Parse tanggal dari label hari: "Senin - 2026-05-28"
            const datePart = hari.split(' - ')[1] || hari;
            const dateObj = new Date(datePart);
-           const dayOfMonth = dateObj.getDate();
-           const wn = getWeekNum(dayOfMonth);
+           
+           // Hitung week number relatif terhadap awal siklus
+           const diffDays = Math.max(0, Math.floor((dateObj.getTime() - cycle.startDate.getTime()) / (1000 * 60 * 60 * 24)));
+           const wn = Math.min(4, Math.max(1, Math.floor(diffDays / 7) + 1));
 
            if (!weekMap.has(wn)) {
               weekMap.set(wn, { days: new Map(), summary: new Map() });
@@ -317,7 +310,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
            const emailMap = new Map<string, any>();
            logs.forEach((l: any) => {
                const em = l.email.toLowerCase();
-               if (isSuperAdminOrOwnerEmail(em)) return;
+               if (isSuperAdminOrOwnerEmail(em) || isPegawaiNonaktif(em)) return;
                if (!emailMap.has(em)) {
                   emailMap.set(em, { email: em, waktuMasuk: "-", photoMasuk: null, waktuPulang: "-", photoPulang: null, isLibur: false });
                }
@@ -362,10 +355,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         const weekNums = Array.from(weekMap.keys()).sort((a, b) => a - b);
         let totalDays = 0;
         for (const wn of weekNums) {
-           const { start, end } = getWeekRange(wn, fullYear, monthNum);
-           const bulanName = BULAN_NAMES[monthNum - 1] || '';
            const entry = weekMap.get(wn)!;
-           // Sort days desc within week
            const sortedDays = new Map(
               Array.from(entry.days.entries()).sort((a, b) => {
                  const dateA = new Date(a[0].split(' - ')[1] || a[0]).getTime();
@@ -374,16 +364,31 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
               })
            );
            totalDays += sortedDays.size;
+
+           // Calculate date range for wn
+           let wStart = new Date(cycle.startDate.getTime() + (wn - 1) * 7 * 86400000);
+           let wEnd = wn === 4 ? cycle.endDate : new Date(cycle.startDate.getTime() + (wn * 7 - 1) * 86400000);
+           if (wEnd > cycle.endDate) wEnd = cycle.endDate;
+
+           const rangeStr = `${wStart.getDate()} ${BULAN_NAMES[wStart.getMonth()]} - ${wEnd.getDate()} ${BULAN_NAMES[wEnd.getMonth()]}`;
+
            weeks.push({
               weekNum: wn,
               weekLabel: `Week ${wn}`,
-              dateRange: `${start} - ${end} ${bulanName}`,
+              dateRange: rangeStr,
               summary: entry.summary,
               days: sortedDays
            });
         }
 
-        finalData.push([bulan, weeks, totalDays, monthlySummary]);
+        finalData.push([
+          bulan, 
+          weeks, 
+          totalDays, 
+          monthlySummary,
+          cycle.labelPeriode,
+          cycle.shortLabelPeriode
+        ]);
      }
 
      // Sort bulan desc
@@ -394,7 +399,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
      });
 
      return finalData;
-  }, [logAbsensi]);
+  }, [logAbsensi, cutoffDay, usersProfile]);
 
   const [expandedLogBulan, setExpandedLogBulan] = useState<string[]>([]);
   const toggleLogBulan = (b: string) => setExpandedLogBulan(p => p.includes(b) ? p.filter(x => x !== b) : [...p, b]);
@@ -410,10 +415,12 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   // Merge Data
   const pegawaiData = useMemo(() => {
     const mergedMap = new Map();
+    const cutoffDay = Number(absenConfig?.tanggalMulaiHitung) || 1;
     
-    // Inisialisasi dari profil
+    // Inisialisasi dari profil (khusus akun aktif yang tidak dicoret)
     usersProfile.forEach(u => {
       if (!isSuperAdminOrOwnerEmail(u.id)) {
+         if (u.status === "nonaktif") return; // Akun yang dicoret tidak dimasukkan
          const k = u.id.toLowerCase().trim();
          mergedMap.set(k, { email: u.id, photoUrl: u.photoUrl || null, profileColor: u.profileColor || "#3b82f6", loginsCount: 0, records: [] });
       }
@@ -422,27 +429,27 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
     logs.forEach(l => {
       if (!isSuperAdminOrOwnerEmail(l.id)) {
         const k = l.id.toLowerCase().trim();
+        if (isPegawaiNonaktif(k)) return; // Lewati akun nonaktif
         const p = mergedMap.get(k) || { email: l.id, photoUrl: null, profileColor: "#3b82f6", loginsCount: 0, records: [] };
         p.loginsCount = Array.isArray(l.logins) ? l.logins.length : 0;
         mergedMap.set(k, p);
       }
     });
 
-    // 1. Kalkulasi Ongkir Otomatis dari history pembukuan
+    // 1. Kalkulasi Ongkir Otomatis dari history pembukuan (mengikuti siklus)
     const ongkirMap = new Map(); // key: `email_MM/YY`, value: total_ongkir (tampilan saja)
     const ongkirMasukGajiMap = new Map(); // key: `email_MM/YY`, value: total ongkir yg benar-benar masuk Gaji Yang Harus Dibayar
 
     history.forEach((h) => {
        if (!h.tanggal) return;
-       const d = new Date(h.tanggal);
-       const mm = String(d.getMonth() + 1).padStart(2, '0');
-       const yy = String(d.getFullYear()).slice(-2);
-       const bulanTahun = `${mm}/${yy}`;
+       const cycle = getAbsenCycleInfo(h.tanggal, cutoffDay);
+       const bulanTahun = cycle.bulanTahun;
 
        if (Array.isArray(h.rowsSewa)) {
            h.rowsSewa.forEach((r: any) => {
                if (r.isOngkir === "YA" && r._ongkir && r.diantarOleh) {
-                   const email = r.diantarOleh.toLowerCase();
+                   const email = r.diantarOleh.toLowerCase().trim();
+                   if (isPegawaiNonaktif(email)) return;
                    const key = `${email}_${bulanTahun}`;
                    const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
                    
@@ -471,7 +478,8 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
        if (Array.isArray(h.rowsHarian)) {
            h.rowsHarian.forEach((r: any) => {
                if (r._ongkir && r.diantarOleh) {
-                   const email = r.diantarOleh.toLowerCase();
+                   const email = r.diantarOleh.toLowerCase().trim();
+                   if (isPegawaiNonaktif(email)) return;
                    const key = `${email}_${bulanTahun}`;
                    const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
                    
@@ -496,7 +504,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
        }
     });
 
-    // 2. Kalkulasi Denda Keterlambatan Absen Masuk Otomatis dari log_absensi
+    // 2. Kalkulasi Denda Keterlambatan Absen Masuk Otomatis dari log_absensi (mengikuti siklus)
     const latePenaltyMap = new Map<string, number>(); // key: `email_MM/YY`, value: total late denda
     const latePenaltyItemsMap = new Map<string, any[]>(); // key: `email_MM/YY`, value: array of denda items
 
@@ -507,12 +515,10 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
     logAbsensi.forEach((l: any) => {
       if (l.jenisAbsen === "Masuk" && l.email && l.tanggal) {
         const em = l.email.toLowerCase().trim();
-        if (isSuperAdminOrOwnerEmail(em)) return;
+        if (isSuperAdminOrOwnerEmail(em) || isPegawaiNonaktif(em)) return;
 
-        const d = new Date(l.tanggal);
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const yy = String(d.getFullYear()).slice(-2);
-        const bulanTahun = `${mm}/${yy}`;
+        const cycle = getAbsenCycleInfo(l.tanggal, cutoffDay);
+        const bulanTahun = cycle.bulanTahun;
         const key = `${em}_${bulanTahun}`;
 
         let denda = 0;
@@ -557,7 +563,8 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
             _effectiveLate: effLate,
             _shift: shiftDisplay,
             _waktuAbsen: l.waktu,
-            _tanggalAbsen: l.tanggal
+            _tanggalAbsen: l.tanggal,
+            isDibatalkan: false
           };
 
           if (!latePenaltyItemsMap.has(key)) {
@@ -571,29 +578,31 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
       }
     });
 
-    // 3. Calculate auto-penalties for missing checkouts
+    // 3. Calculate auto-penalties for missing checkouts (mengikuti siklus)
     const penaltyMap = new Map(); // key: `email_MM/YY`, value: count of missed checkouts * penalty
     logAbsensi.forEach(l => {
-        if (l.jenisAbsen === "Masuk") {
+        if (l.jenisAbsen === "Masuk" && l.email && l.tanggal) {
+             const em = l.email.toLowerCase().trim();
+             if (isSuperAdminOrOwnerEmail(em) || isPegawaiNonaktif(em)) return;
              const sameDayPulang = logAbsensi.find(o => o.email === l.email && o.tanggal === l.tanggal && o.jenisAbsen === "Pulang");
              if (!sameDayPulang) {
-                 const d = new Date(l.tanggal);
-                 const mm = String(d.getMonth() + 1).padStart(2, '0');
-                 const yy = String(d.getFullYear()).slice(-2);
-                 const key = `${l.email.toLowerCase()}_${mm}/${yy}`;
+                 const cycle = getAbsenCycleInfo(l.tanggal, cutoffDay);
+                 const bulanTahun = cycle.bulanTahun;
+                 const key = `${em}_${bulanTahun}`;
                  penaltyMap.set(key, (penaltyMap.get(key) || 0) + (absenConfig.dendaTidakAbsenPulang ?? 40000));
              }
         }
     });
 
     gaji.forEach(g => {
+      const k = g.id.toLowerCase().trim();
+      if (isPegawaiNonaktif(k) || isSuperAdminOrOwnerEmail(g.id)) return;
       let records = Array.isArray(g.records) ? g.records : [];
       if (records.length === 0 && (g.gajiPokok || g.bonus || g.potongan)) {
           // Migrasi data lama on the fly
           const d = new Date();
-          const mm = String(d.getMonth() + 1).padStart(2, '0');
-          const yy = String(d.getFullYear()).slice(-2);
-          const bulanTahun = `${mm}/${yy}`;
+          const cycle = getAbsenCycleInfo(d.toISOString().slice(0, 10), cutoffDay);
+          const bulanTahun = cycle.bulanTahun;
           records = [{
              id: `migrated-${bulanTahun}`,
              bulanTahun: bulanTahun,
@@ -620,11 +629,10 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
           });
       }
 
-      const k = g.id.toLowerCase().trim();
       if (mergedMap.has(k)) {
         mergedMap.get(k).records = records;
         mergedMap.get(k).gajiPokok = Number(g.gajiPokok) || 0;
-      } else if (!isSuperAdminOrOwnerEmail(g.id)) {
+      } else {
         const up = usersProfile.find(u => u.id?.toLowerCase().trim() === k);
         mergedMap.set(k, { email: g.id, photoUrl: up?.photoUrl || null, profileColor: up?.profileColor || "#3b82f6", loginsCount: 0, records, gajiPokok: Number(g.gajiPokok) || 0 });
       }
@@ -752,7 +760,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         });
     });
 
-    return Array.from(mergedMap.values());
+    return Array.from(mergedMap.values()).filter((p: any) => !isPegawaiNonaktif(p.email));
   }, [logs, gaji, usersProfile, history, logAbsensi, ongkirConfig, absenConfig]);
 
   const chartData = pegawaiData.map((p: any) => ({
@@ -1320,8 +1328,70 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
       {/* NEW WIDGET: MONITORING ABSEN */}
       <Section title="Monitoring Absen Pegawai">
+         {/* TOP CONTROL: TANGGAL MULAI HITUNG ABSENSI (CUTOFF) */}
+         <div className="bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 dark:from-blue-500/15 dark:via-indigo-500/15 dark:to-purple-500/15 border border-blue-200/80 dark:border-blue-500/20 rounded-2xl p-4 sm:p-5 mb-4 shadow-sm w-full">
+           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+             <div className="flex items-start sm:items-center gap-3">
+               <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-md shadow-blue-500/20 shrink-0">
+                 <CalendarDays className="w-5 h-5" />
+               </div>
+               <div>
+                 <div className="flex items-center gap-2 flex-wrap">
+                   <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wide">
+                     Tanggal Mulai Hitung Absensi
+                   </h4>
+                   <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400">
+                     Siklus 1 Bulan
+                   </span>
+                 </div>
+                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                   {cutoffDay <= 1 
+                     ? "Absensi & potongan denda dihitung normal (Tanggal 1 s/d Akhir Bulan)."
+                     : `Absensi & potongan denda dihitung per siklus 1 bulan (Tgl ${cutoffDay} bulan lalu s/d Tgl ${cutoffDay - 1} bulan ini).`}
+                 </p>
+               </div>
+             </div>
+
+             {/* SELECTOR / CONTROLLER */}
+             <div className="flex items-center gap-3 self-end sm:self-center shrink-0">
+               <div className="flex flex-col items-end">
+                 <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Tanggal Cutoff</span>
+                 <div className="flex items-center gap-2 mt-1">
+                   {isOwner ? (
+                     <select
+                       value={cutoffDay}
+                       onChange={async (e) => {
+                         const val = Number(e.target.value);
+                         const newCfg = { ...absenConfig, tanggalMulaiHitung: val };
+                         setAbsenConfig(newCfg);
+                         try {
+                           await setDoc(doc(db, "data", "settings"), { absenConfig: newCfg }, { merge: true });
+                         } catch (err) {
+                           console.error("Gagal simpan tanggal cutoff:", err);
+                         }
+                       }}
+                       className="bg-white dark:bg-[#1C1C1E] border border-blue-300 dark:border-blue-500/40 text-blue-600 dark:text-blue-400 font-black text-sm rounded-xl px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                     >
+                       <option value={1}>Tgl 1 (Awal Bulan Normal)</option>
+                       {Array.from({ length: 30 }, (_, i) => i + 2).map((tgl) => (
+                         <option key={tgl} value={tgl}>
+                           Tanggal {tgl}
+                         </option>
+                       ))}
+                     </select>
+                   ) : (
+                     <span className="bg-white dark:bg-[#1C1C1E] border border-blue-300 dark:border-blue-500/40 text-blue-600 dark:text-blue-400 font-black text-sm rounded-xl px-3 py-2 shadow-sm">
+                       Tanggal {cutoffDay}
+                     </span>
+                   )}
+                 </div>
+               </div>
+             </div>
+           </div>
+         </div>
+
          {!isLogAbsensiLoaded ? (
-            <div className="flex flex-col items-center justify-center bg-white dark:bg-[#1C1C1E] border border-zinc-200 dark:border-white/10 rounded-2xl p-8 text-center shadow-sm">
+            <div className="flex flex-col items-center justify-center bg-white dark:bg-[#1C1C1E] border border-zinc-200 dark:border-white/10 rounded-2xl p-8 text-center shadow-sm w-full">
                 <p className="text-zinc-500 font-medium text-sm mb-4 max-w-md">Data absensi (log waktu & bukti foto) tidak dimuat secara otomatis untuk mengoptimalkan kuota pembacaan _database_ Bapak.</p>
                 <button onClick={loadDataAbsensi} disabled={loadingLogAbsensi} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 transition-all active:scale-95 flex items-center gap-2">
                     {loadingLogAbsensi ? (
@@ -1340,13 +1410,13 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                    </div>
                )}
             
-               {groupedLogAbsensi.map(([bulan, weeks, totalDays, monthlySummary]) => {
+               {groupedLogAbsensi.map(([bulan, weeks, totalDays, monthlySummary, labelPeriode]) => {
                  const isBulanExpanded = expandedLogBulan.includes(bulan);
 
                  return (
                     <div key={bulan} className="bg-white dark:bg-[#1C1C1E] rounded-3xl border border-zinc-200 dark:border-white/10 overflow-hidden shadow-sm transition-all duration-300">
                        
-                       {/* HEADER BULAN */}
+                       {/* HEADER BULAN / SIKLUS */}
                        <div 
                           onClick={() => toggleLogBulan(bulan)}
                           className="flex items-center justify-between p-5 cursor-pointer active:bg-zinc-50 dark:active:bg-white/5 transition-colors"
@@ -1358,7 +1428,14 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                                 </svg>
                              </div>
                              <div>
-                                <h3 className="text-sm font-black uppercase tracking-wider text-zinc-900 dark:text-white">Bulan <span className="text-blue-500">{bulan}</span></h3>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h3 className="text-sm font-black uppercase tracking-wider text-zinc-900 dark:text-white">Bulan <span className="text-blue-500">{bulan}</span></h3>
+                                  {labelPeriode && (
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800">
+                                      {labelPeriode}
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-[11px] font-bold text-zinc-400 mt-0.5">{totalDays} Hari · {weeks.length} Minggu</p>
                              </div>
                           </div>
@@ -1573,7 +1650,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
          <div className="flex flex-col gap-8 w-full">
             {groupedByMonth.length === 0 && <p className="text-zinc-500 text-sm px-2">Belum ada riwayat gaji di sistem.</p>}
             {groupedByMonth.map(([bulan, records]) => (
-                <RangkumanBulanItem key={bulan} bulan={bulan} records={records} />
+                <RangkumanBulanItem key={bulan} bulan={bulan} records={records} cutoffDay={cutoffDay} />
             ))}
          </div>
       </Section>
@@ -2092,8 +2169,9 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false }: any) => {
     );
 };
 
-const RangkumanBulanItem = ({ bulan, records }: { bulan: string, records: any[] }) => {
+const RangkumanBulanItem = ({ bulan, records, cutoffDay = 1 }: { bulan: string, records: any[], cutoffDay?: number }) => {
     const [isExpanded, setIsExpanded] = useState(false);
+    const cycleInfo = useMemo(() => getCycleInfoFromBulanTahun(bulan, cutoffDay), [bulan, cutoffDay]);
     
     let totalSatuBulan = 0;
     records.forEach(r => {
@@ -2110,11 +2188,18 @@ const RangkumanBulanItem = ({ bulan, records }: { bulan: string, records: any[] 
                onClick={() => setIsExpanded(!isExpanded)}
                className="bg-zinc-100/50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-white/10 px-6 py-5 flex items-center justify-between cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors"
            >
-               <div className="flex items-center gap-3">
+               <div className="flex items-center gap-3 flex-wrap">
                    <div className="bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 p-2 rounded-xl">
                        <Banknote size={20} strokeWidth={2.5} />
                    </div>
-                   <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-wide">GAJI {bulan}</h3>
+                   <div className="flex items-center gap-2 flex-wrap">
+                       <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-wide">GAJI {bulan}</h3>
+                       {cycleInfo.labelPeriode && (
+                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800">
+                               {cycleInfo.labelPeriode}
+                           </span>
+                       )}
+                   </div>
                </div>
                <div className="flex items-center gap-4">
                    {!isExpanded && (

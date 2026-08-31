@@ -42,6 +42,7 @@ import {
 // import SopPdf from "../SOP/SOP_SewaPS_URBAN.pdf";
 import versionData from "../version.json";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
+import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, BULAN_NAMES } from "../lib/absenPeriod";
 
 interface Price {
   label: string;
@@ -64,7 +65,7 @@ interface Props {
   ongkirConfig?: { pegawaiPersen: number, masukGaji: boolean };
   setOngkirConfig?: (cfg: any) => void;
 
-  absenConfig?: { durasiWaktuPotongan: number; waktuToleransi: number; nominalDenda: number; dendaTidakAbsenPulang?: number };
+  absenConfig?: { durasiWaktuPotongan: number; waktuToleransi: number; nominalDenda: number; dendaTidakAbsenPulang?: number; tanggalMulaiHitung?: number };
   setAbsenConfig?: (cfg: any) => void;
 
   themeMode?: ThemeMode;
@@ -352,6 +353,7 @@ const Pengaturan: React.FC<Props> = ({
   const [localWaktuToleransi, setLocalWaktuToleransi] = useState<number>(15);
   const [localDurasiWaktuPotongan, setLocalDurasiWaktuPotongan] = useState<number>(15);
   const [localDendaTidakAbsenPulang, setLocalDendaTidakAbsenPulang] = useState<number>(40000);
+  const [localTanggalMulaiHitung, setLocalTanggalMulaiHitung] = useState<number>(1);
 
   // Sync props to local states
   useEffect(() => {
@@ -367,6 +369,7 @@ const Pengaturan: React.FC<Props> = ({
       setLocalWaktuToleransi(absenConfig.waktuToleransi ?? 15);
       setLocalDurasiWaktuPotongan(absenConfig.durasiWaktuPotongan ?? 15);
       setLocalDendaTidakAbsenPulang(absenConfig.dendaTidakAbsenPulang ?? 40000);
+      setLocalTanggalMulaiHitung(absenConfig.tanggalMulaiHitung ?? 1);
     }
   }, [absenConfig]);
 
@@ -474,23 +477,24 @@ const Pengaturan: React.FC<Props> = ({
         const ongkirMap = new Map();
         history.forEach((h: any) => {
           if (!h.tanggal) return;
-          const d = new Date(h.tanggal);
-          const mm = String(d.getMonth() + 1).padStart(2, '0');
-          const yy = String(d.getFullYear()).slice(-2);
-          const bulanTahun = `${mm}/${yy}`;
+          const cutoffDay = Number(absenConfig?.tanggalMulaiHitung) || 1;
+          const cycle = getAbsenCycleInfo(h.tanggal, cutoffDay);
+          const bulanTahun = cycle.bulanTahun;
 
           if (Array.isArray(h.rowsSewa)) {
             h.rowsSewa.forEach((r: any) => {
               if (r.isOngkir === "YA" && r._ongkir && r.diantarOleh && r.diantarOleh.toLowerCase() === emailTrimmed) {
                 const key = bulanTahun;
                 const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
-                if (r._isNewOngkirSystem) {
-                    const fallbackPersen = r._ongkirPegawaiPersen ?? 70;
-                    const fallbackNominal = Math.round((nominalAsli * fallbackPersen) / 100);
-                    const pegawaiNominal = r._ongkirPegawaiNominal ?? fallbackNominal;
-                    ongkirMap.set(key, (ongkirMap.get(key) || 0) + pegawaiNominal);
-                } else {
-                    ongkirMap.set(key, (ongkirMap.get(key) || 0) + nominalAsli);
+                if (nominalAsli > 0) {
+                    if (r._isNewOngkirSystem) {
+                        const fallbackPersen = r._ongkirPegawaiPersen ?? 70;
+                        const fallbackNominal = Math.round((nominalAsli * fallbackPersen) / 100);
+                        const pegawaiNominal = r._ongkirPegawaiNominal ?? fallbackNominal;
+                        ongkirMap.set(key, (ongkirMap.get(key) || 0) + pegawaiNominal);
+                    } else {
+                        ongkirMap.set(key, (ongkirMap.get(key) || 0) + nominalAsli);
+                    }
                 }
               }
             });
@@ -517,6 +521,7 @@ const Pengaturan: React.FC<Props> = ({
         });
 
         // 1.5. Kalkulasi Keterlambatan Otomatis dari log_absensi
+        const cutoffDay = Number(absenConfig?.tanggalMulaiHitung) || 1;
         const latePenaltyMap = new Map<string, number>();
         const latePenaltyItemsMap = new Map<string, any[]>();
         const toleransiCfg = absenConfig?.waktuToleransi ?? 15;
@@ -525,10 +530,8 @@ const Pengaturan: React.FC<Props> = ({
 
         logs.forEach((l: any) => {
           if (l.jenisAbsen === "Masuk" && l.email && l.email.toLowerCase().trim() === emailTrimmed && l.tanggal) {
-            const d = new Date(l.tanggal);
-            const mm = String(d.getMonth() + 1).padStart(2, '0');
-            const yy = String(d.getFullYear()).slice(-2);
-            const bulanTahun = `${mm}/${yy}`;
+            const cycle = getAbsenCycleInfo(l.tanggal, cutoffDay);
+            const bulanTahun = cycle.bulanTahun;
             const key = bulanTahun;
 
             let denda = 0;
@@ -1156,6 +1159,34 @@ const Pengaturan: React.FC<Props> = ({
 
           {isOwner && (
             <IOSGroup title="Potongan Gaji Absen (Keterlambatan)">
+              <div className="px-4 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 dark:border-zinc-700/50">
+                <div className="space-y-0.5">
+                  <div className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">Tanggal Mulai Hitung Absensi (Cutoff)</div>
+                  <div className="text-xs text-zinc-500">Siklus 1 bulan absensi & potongan denda dihitung dari tanggal ini</div>
+                </div>
+                <select
+                  value={localTanggalMulaiHitung}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setLocalTanggalMulaiHitung(val);
+                    runOrAlert(() => setAbsenConfig && setAbsenConfig({
+                      nominalDenda: localNominalDenda,
+                      waktuToleransi: localWaktuToleransi,
+                      durasiWaktuPotongan: localDurasiWaktuPotongan,
+                      dendaTidakAbsenPulang: localDendaTidakAbsenPulang,
+                      tanggalMulaiHitung: val
+                    }));
+                  }}
+                  className="bg-white dark:bg-[#2C2C2E] border border-blue-300 dark:border-blue-500/40 text-blue-600 dark:text-blue-400 font-black text-sm rounded-xl px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer self-start sm:self-auto"
+                >
+                  <option value={1}>Tgl 1 (Awal Bulan Normal)</option>
+                  {Array.from({ length: 30 }, (_, i) => i + 2).map((tgl) => (
+                    <option key={tgl} value={tgl}>
+                      Tanggal {tgl}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="px-4 py-4 flex flex-col gap-4 border-b border-zinc-100 dark:border-zinc-700/50">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
