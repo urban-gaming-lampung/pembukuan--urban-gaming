@@ -116,11 +116,9 @@ const Input: React.FC<InputProps> = ({
   const isSudahWaktuPulang = (() => {
     if (shiftPegawai === "Libur" || shiftPegawai === "") return false;
     if (shiftPegawai.includes("Pagi")) {
-      return currentHour >= 20 || currentHour <= 3;
+      return currentHour >= 19 || currentHour <= 3;
     } else {
-      if (currentHour === 23 && currentMinute >= 59) return true;
-      if (currentHour < 6) return true;
-      return false;
+      return currentHour >= 23 || currentHour < 6;
     }
   })();
 
@@ -164,7 +162,7 @@ const Input: React.FC<InputProps> = ({
     if (onAbsenSubmit) onAbsenSubmit();
 
     try {
-      const dateOnly = new Date().toISOString().split("T")[0];
+      const dateOnly = new Date().toLocaleString("en-CA", { timeZone: "Asia/Jakarta" }).slice(0, 10);
       const safeTimeStr = timeValue.replace(/[^a-zA-Z0-9]/g, "_");
       const logData = {
         email: currentUserEmail,
@@ -188,10 +186,11 @@ const Input: React.FC<InputProps> = ({
   const handleLiburLog = async () => {
     const currentUserEmail = auth.currentUser?.email;
     if (!currentUserEmail) return;
+    const emailTrimmed = currentUserEmail.toLowerCase().trim();
     try {
-      const dateStr = new Date().toISOString().split("T")[0];
+      const dateStr = new Date().toLocaleString("en-CA", { timeZone: "Asia/Jakarta" }).slice(0, 10);
       const logData = {
-         email: currentUserEmail,
+         email: emailTrimmed,
          tanggal: tanggal,
          tanggalReal: dateStr,
          shift: "Libur",
@@ -201,7 +200,7 @@ const Input: React.FC<InputProps> = ({
          timestamp: new Date().toISOString(),
          _serverTs: serverTimestamp()
       };
-      const logId = `${dateStr}_Libur_${currentUserEmail}`;
+      const logId = `${dateStr}_Libur_${emailTrimmed}`;
       await setDoc(doc(db, "log_absensi", logId), logData);
     } catch(e) {
       console.error("Gagal menyimpan log libur", e);
@@ -259,7 +258,7 @@ const Input: React.FC<InputProps> = ({
         const logData = {
            email: emailTrimmed,
            tanggal: tanggal,
-           tanggalReal: new Date().toISOString().split("T")[0],
+           tanggalReal: dateStr,
            shift: shiftPegawai,
            jenisAbsen: jenisAbsen,
            waktu: waktuAbsen,
