@@ -184,18 +184,44 @@ export function normalizeBulanTahun(str: string): string {
 
 /**
  * Normalisasi format tanggal apapun ke standard YYYY-MM-DD
- * Contoh: "31/08/2026", "31-08-2026", "2026-08-31", "2026/08/31" -> "2026-08-31"
+ * Contoh: "31/08/2026", "08/31/2026", "31-08-2026", "2026-08-31", "2026/08/31" -> "2026-08-31"
  */
 export function normalizeDateStr(str: any): string {
   if (!str || typeof str !== 'string') return '';
   const clean = str.trim().replace(/\//g, '-');
   const parts = clean.split('-');
   if (parts.length === 3) {
-    if (parts[0].length === 2 && parts[2].length === 4) {
-      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-    }
+    // Case 1: Starts with 4-digit year (YYYY-MM-DD or YYYY-DD-MM)
     if (parts[0].length === 4) {
-      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+      const y = parts[0];
+      const m = parts[1].padStart(2, '0');
+      const d = parts[2].padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    // Case 2: Ends with 4-digit year (DD-MM-YYYY or MM-DD-YYYY)
+    if (parts[2].length === 4) {
+      const y = parts[2];
+      const n0 = parseInt(parts[0], 10);
+      const n1 = parseInt(parts[1], 10);
+      
+      if (!isNaN(n0) && !isNaN(n1)) {
+        // If first part > 12, it must be DD-MM-YYYY (e.g. 31-08-2026)
+        if (n0 > 12 && n1 <= 12) {
+          const d = String(n0).padStart(2, '0');
+          const m = String(n1).padStart(2, '0');
+          return `${y}-${m}-${d}`;
+        }
+        // If second part > 12, it must be MM-DD-YYYY (e.g. 08-31-2026)
+        if (n1 > 12 && n0 <= 12) {
+          const m = String(n0).padStart(2, '0');
+          const d = String(n1).padStart(2, '0');
+          return `${y}-${m}-${d}`;
+        }
+        // Default Indonesian format DD-MM-YYYY (e.g. 05-08-2026 -> 5 Agustus)
+        const d = String(n0).padStart(2, '0');
+        const m = String(n1).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
     }
   }
   return clean;
@@ -207,13 +233,31 @@ export function normalizeDateStr(str: any): string {
 export function isLogForDate(log: any, targetTanggal: string): boolean {
   if (!log || !targetTanggal) return false;
   const normTarget = normalizeDateStr(targetTanggal);
+  if (!normTarget) return false;
+
+  // 1. Direct match with normalized tanggal
   if (log.tanggal && normalizeDateStr(log.tanggal) === normTarget) return true;
+  // 2. Direct match with normalized tanggalReal
   if (log.tanggalReal && normalizeDateStr(log.tanggalReal) === normTarget) return true;
+  // 3. Match from waktu string (e.g. "22:49 - 31/08/2026" or "31-08-2026")
   if (log.waktu && typeof log.waktu === 'string') {
     const parts = log.waktu.split(' - ');
-    if (parts.length > 1 && normalizeDateStr(parts[1]) === normTarget) return true;
+    for (const p of parts) {
+      if (normalizeDateStr(p.trim()) === normTarget) return true;
+    }
+  }
+  // 4. Match from timestamp if present
+  if (log.timestamp && typeof log.timestamp === 'string') {
+    const tsDate = log.timestamp.slice(0, 10);
+    if (normalizeDateStr(tsDate) === normTarget) return true;
+  }
+  // 5. Match from document id (e.g. "2026-08-31_Masuk_...")
+  if (log.id && typeof log.id === 'string') {
+    const idDate = log.id.slice(0, 10);
+    if (normalizeDateStr(idDate) === normTarget) return true;
   }
   return false;
 }
+
 
 

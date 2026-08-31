@@ -635,23 +635,16 @@ export default function useAppController() {
       if (snap.exists() && !editingId) {
         const data = snap.data();
         _setRukoStatusDbTanggal(data.tanggal || "");
-        if (data.tanggal === tanggal) {
-           _setRukoBuka(data.rukoBuka ? data.rukoBuka.split(" - ")[0] : "");
-           _setRukoBukaDate(data.rukoBukaDate || "");
-           _setRukoTutup(data.rukoTutup ? data.rukoTutup.split(" - ")[0] : "");
-           _setRukoTutupDate(data.rukoTutupDate || "");
-        } else {
-           _setRukoBuka("");
-           _setRukoBukaDate("");
-           _setRukoTutup("");
-           _setRukoTutupDate("");
+        if (data.tanggal && normalizeDateStr(data.tanggal) === normalizeDateStr(tanggal)) {
+           if (data.rukoBuka) {
+             _setRukoBuka(data.rukoBuka.split(" - ")[0]);
+             _setRukoBukaDate(data.rukoBukaDate || normalizeDateStr(tanggal));
+           }
+           if (data.rukoTutup) {
+             _setRukoTutup(data.rukoTutup.split(" - ")[0]);
+             _setRukoTutupDate(data.rukoTutupDate || normalizeDateStr(tanggal));
+           }
         }
-      } else if (!snap.exists() && !editingId) {
-        _setRukoStatusDbTanggal("");
-        _setRukoBuka("");
-        _setRukoBukaDate("");
-        _setRukoTutup("");
-        _setRukoTutupDate("");
       }
     });
     return () => unsub();
