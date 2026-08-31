@@ -42,7 +42,7 @@ import {
 // import SopPdf from "../SOP/SOP_SewaPS_URBAN.pdf";
 import versionData from "../version.json";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
-import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, BULAN_NAMES, normalizeBulanTahun } from "../lib/absenPeriod";
+import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, BULAN_NAMES, normalizeBulanTahun, normalizeDateStr } from "../lib/absenPeriod";
 
 interface Price {
   label: string;
@@ -595,14 +595,44 @@ const Pengaturan: React.FC<Props> = ({
 
         // 2. Kalkulasi Denda Tidak Absen Pulang
         const penaltyMap = new Map();
+        const todayNorm = normalizeDateStr(new Date().toISOString().slice(0, 10));
+
         logs.forEach((l: any) => {
           if (l.jenisAbsen === "Masuk" && l.email && l.email.toLowerCase().trim() === emailTrimmed && l.tanggal) {
-            const sameDayPulang = logs.find((o: any) => o.email === l.email && o.tanggal === l.tanggal && o.jenisAbsen === "Pulang");
+            const normLogTgl = normalizeDateStr(l.tanggal);
+            if (normLogTgl >= todayNorm) return; // Skip today's active shift
+
+            const sameDayPulang = logs.find((o: any) => o.email?.toLowerCase().trim() === emailTrimmed && normalizeDateStr(o.tanggal) === normLogTgl && o.jenisAbsen === "Pulang");
             if (!sameDayPulang) {
               const cycle = getAbsenCycleInfo(l.tanggal, cutoffDay);
               const bulanTahun = cycle.bulanTahun;
               const key = bulanTahun;
-              penaltyMap.set(key, (penaltyMap.get(key) || 0) + (absenConfig?.dendaTidakAbsenPulang ?? 40000));
+              const nominalDendaPulang = absenConfig?.dendaTidakAbsenPulang ?? 40000;
+
+              penaltyMap.set(key, (penaltyMap.get(key) || 0) + nominalDendaPulang);
+
+              const shiftDisplay = l.shift || "Shift";
+              const idempKey = `missedCheckout_${emailTrimmed}_${normLogTgl}`;
+              const item = {
+                id: `missed_checkout_${normLogTgl}_${emailTrimmed}`,
+                nominal: nominalDendaPulang,
+                ket: `[Auto-Sistem] Tidak Absen Pulang (Tgl ${l.tanggal || normLogTgl}). Shift: ${shiftDisplay}`,
+                photoUrl: null,
+                dateStr: l.timestamp || new Date().toISOString(),
+                _isAutoSistem: true,
+                _isDendaPulang: true,
+                _idempKey: idempKey,
+                _tanggalAbsen: l.tanggal || normLogTgl,
+                isDibatalkan: false
+              };
+
+              if (!latePenaltyItemsMap.has(key)) {
+                latePenaltyItemsMap.set(key, []);
+              }
+              const existingList = latePenaltyItemsMap.get(key)!;
+              if (!existingList.some((x: any) => x._idempKey === idempKey)) {
+                existingList.push(item);
+              }
             }
           }
         });

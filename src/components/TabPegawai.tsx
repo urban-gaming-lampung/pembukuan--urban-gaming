@@ -634,17 +634,49 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
     // 3. Calculate auto-penalties for missing checkouts (mengikuti siklus per pegawai)
     const penaltyMap = new Map(); // key: `email_MM/YY`, value: count of missed checkouts * penalty
+    const todayNorm = normalizeDateStr(new Date().toISOString().slice(0, 10));
+
     logAbsensi.forEach(l => {
         if (l.jenisAbsen === "Masuk" && l.email && l.tanggal) {
              const em = l.email.toLowerCase().trim();
              if (isSuperAdminOrOwnerEmail(em) || isPegawaiNonaktif(em) || !mergedMap.has(em)) return;
-             const sameDayPulang = logAbsensi.find(o => o.email === l.email && o.tanggal === l.tanggal && o.jenisAbsen === "Pulang");
+
+             const normLogTgl = normalizeDateStr(l.tanggal);
+             // Jangan kenakan denda tidak absen pulang jika tanggalnya adalah hari ini (shift masih berjalan)
+             if (normLogTgl >= todayNorm) return;
+
+             const sameDayPulang = logAbsensi.find(o => o.email?.toLowerCase().trim() === em && normalizeDateStr(o.tanggal) === normLogTgl && o.jenisAbsen === "Pulang");
              if (!sameDayPulang) {
                  const empCutoff = getEmployeeCutoff(em);
                  const cycle = getAbsenCycleInfo(l.tanggal, empCutoff);
                  const bulanTahun = cycle.bulanTahun;
                  const key = `${em}_${bulanTahun}`;
-                 penaltyMap.set(key, (penaltyMap.get(key) || 0) + (absenConfig.dendaTidakAbsenPulang ?? 40000));
+                 const nominalDendaPulang = absenConfig.dendaTidakAbsenPulang ?? 40000;
+
+                 penaltyMap.set(key, (penaltyMap.get(key) || 0) + nominalDendaPulang);
+
+                 const shiftDisplay = l.shift || "Shift";
+                 const idempKey = `missedCheckout_${em}_${normLogTgl}`;
+                 const item = {
+                   id: `missed_checkout_${normLogTgl}_${em}`,
+                   nominal: nominalDendaPulang,
+                   ket: `[Auto-Sistem] Tidak Absen Pulang (Tgl ${l.tanggal || normLogTgl}). Shift: ${shiftDisplay}`,
+                   photoUrl: null,
+                   dateStr: l.timestamp || new Date().toISOString(),
+                   _isAutoSistem: true,
+                   _isDendaPulang: true,
+                   _idempKey: idempKey,
+                   _tanggalAbsen: l.tanggal || normLogTgl,
+                   isDibatalkan: false
+                 };
+
+                 if (!latePenaltyItemsMap.has(key)) {
+                   latePenaltyItemsMap.set(key, []);
+                 }
+                 const existingList = latePenaltyItemsMap.get(key)!;
+                 if (!existingList.some(x => x._idempKey === idempKey)) {
+                   existingList.push(item);
+                 }
              }
         }
     });
@@ -2254,24 +2286,24 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                      </div>
                                    )}
                                    {(() => {
-                                     const dendaTelatAktif = (r.gajiPengurangan || []).filter((pg: any) => pg._isAutoSistem && !pg.isDibatalkan).reduce((sum: number, pg: any) => sum + (Number(pg.nominal) || 0), 0);
-                                     const dendaAbsenAktif = Number(r.dendaAbsen) || 0;
-                                     const totalDendaAktif = dendaTelatAktif + dendaAbsenAktif;
-                                     if (totalDendaAktif <= 0) return null;
-                                     return (
-                                       <div className="w-full bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/20 rounded-xl p-3 flex items-center justify-between">
-                                         <div className="flex flex-col">
-                                           <span className="text-[10px] font-bold uppercase tracking-wide text-rose-600 dark:text-rose-400">Total Denda Absensi (⚡ Auto)</span>
-                                           <span className="text-sm font-black text-rose-600 dark:text-rose-400">- Rp {totalDendaAktif.toLocaleString("id-ID")}</span>
-                                         </div>
-                                         <span className="text-[9px] font-bold uppercase bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 px-2 py-1 rounded-md">
-                                           {dendaTelatAktif > 0 && `Telat: -Rp ${dendaTelatAktif.toLocaleString("id-ID")}`}
-                                           {dendaTelatAktif > 0 && dendaAbsenAktif > 0 && ' · '}
-                                           {dendaAbsenAktif > 0 && `Bolos/Pulang: -Rp ${dendaAbsenAktif.toLocaleString("id-ID")}`}
-                                         </span>
-                                       </div>
-                                     );
-                                   })()}
+                                      const dendaTelatAktif = (r.gajiPengurangan || []).filter((pg: any) => pg._isAutoSistem && !pg._isDendaPulang && !pg.isDibatalkan).reduce((sum: number, pg: any) => sum + (Number(pg.nominal) || 0), 0);
+                                      const dendaAbsenAktif = (r.gajiPengurangan || []).filter((pg: any) => pg._isAutoSistem && pg._isDendaPulang && !pg.isDibatalkan).reduce((sum: number, pg: any) => sum + (Number(pg.nominal) || 0), 0);
+                                      const totalDendaAktif = dendaTelatAktif + dendaAbsenAktif;
+                                      if (totalDendaAktif <= 0) return null;
+                                      return (
+                                        <div className="w-full bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/20 rounded-xl p-3 flex items-center justify-between">
+                                          <div className="flex flex-col">
+                                            <span className="text-[10px] font-bold uppercase tracking-wide text-rose-600 dark:text-rose-400">Total Denda Absensi (⚡ Auto)</span>
+                                            <span className="text-sm font-black text-rose-600 dark:text-rose-400">- Rp {totalDendaAktif.toLocaleString("id-ID")}</span>
+                                          </div>
+                                          <span className="text-[9px] font-bold uppercase bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 px-2 py-1 rounded-md">
+                                            {dendaTelatAktif > 0 && `Telat: -Rp ${dendaTelatAktif.toLocaleString("id-ID")}`}
+                                            {dendaTelatAktif > 0 && dendaAbsenAktif > 0 && ' · '}
+                                            {dendaAbsenAktif > 0 && `Bolos/Pulang: -Rp ${dendaAbsenAktif.toLocaleString("id-ID")}`}
+                                          </span>
+                                        </div>
+                                      );
+                                    })()}
 
                                    <div className="w-full space-y-2">
                                        <div className="flex items-center justify-between">
