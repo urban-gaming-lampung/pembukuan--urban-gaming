@@ -613,11 +613,15 @@ const Pengaturan: React.FC<Props> = ({
               currentPg[existingIdx] = {
                 ...lateItem,
                 ...currentPg[existingIdx],
-                nominal: currentPg[existingIdx].nominal || lateItem.nominal,
+                isDibatalkan: Boolean(currentPg[existingIdx].isDibatalkan),
+                nominal: currentPg[existingIdx].nominal !== undefined ? currentPg[existingIdx].nominal : lateItem.nominal,
                 photoUrl: currentPg[existingIdx].photoUrl || lateItem.photoUrl
               };
             } else {
-              currentPg.push(lateItem);
+              currentPg.push({
+                ...lateItem,
+                isDibatalkan: false
+              });
             }
           });
           r.gajiPengurangan = currentPg;
@@ -866,7 +870,7 @@ const Pengaturan: React.FC<Props> = ({
                 const totalPokok = gajiKu.records.reduce((acc: any, r: any) => acc + (Number(r.gajiPokok) || 0), 0);
                 const totalBonus = gajiKu.records.reduce((acc: any, r: any) => acc + (r.gajiTambahan?.reduce((sum: number, t: any) => sum + (Number(t.nominal) || 0), 0) || 0), 0);
                 const totalOngkir = gajiKu.records.reduce((acc: any, r: any) => acc + (Number(r.ongkirBulanIni) || 0), 0);
-                const totalPotongan = gajiKu.records.reduce((acc: any, r: any) => acc + (r.gajiPengurangan?.reduce((sum: number, p: any) => sum + (Number(p.nominal) || 0), 0) || 0), 0);
+                const totalPotongan = gajiKu.records.reduce((acc: any, r: any) => acc + (r.gajiPengurangan?.filter((p: any) => !p.isDibatalkan).reduce((sum: number, p: any) => sum + (Number(p.nominal) || 0), 0) || 0), 0);
                 const totalDiterima = totalPokok + totalBonus + totalOngkir - totalPotongan;
 
                 return (
@@ -911,7 +915,7 @@ const Pengaturan: React.FC<Props> = ({
                         const pgArr = r.gajiPengurangan || [];
                         const tBonus = tbArr.reduce((sum: number, t: any) => sum + (Number(t.nominal) || 0), 0);
                         const tOngkir = Number(r.ongkirBulanIni) || 0;
-                        const tPotongan = pgArr.reduce((sum: number, p: any) => sum + (Number(p.nominal) || 0), 0);
+                        const tPotongan = pgArr.filter((p: any) => !p.isDibatalkan).reduce((sum: number, p: any) => sum + (Number(p.nominal) || 0), 0);
                         const tBonusBelumDibayar = tbArr.filter((t: any) => t.status !== 'sudah').reduce((sum: number, t: any) => sum + (Number(t.nominal) || 0), 0);
                         const tDiterimaSemua = Math.max(0, tPokok + tBonus + tOngkir - tPotongan);
                         const tDitransfer = Math.max(0, tPokok + tBonusBelumDibayar - tPotongan);
@@ -960,24 +964,37 @@ const Pengaturan: React.FC<Props> = ({
                                     <span className="text-right text-[11px] font-medium text-purple-400 max-w-[140px] italic">"Otomatis dari Sistem"</span>
                                   </div>
                                 )}
-                                 {pgArr.map((pg: any, i: number) => Number(pg.nominal) > 0 && (
-                                   <div key={`pg-${i}`} className="flex justify-between items-center py-1">
-                                     <div className="flex flex-col gap-0.5">
-                                       <div className="flex items-center gap-1.5">
-                                         <span className="text-[12px] font-bold text-red-500">Pengurangan: -Rp {Number(pg.nominal).toLocaleString("id-ID")}</span>
-                                         {pg._isAutoSistem && (
-                                           <span className="text-[8px] font-extrabold uppercase tracking-wider text-orange-500 bg-orange-50 dark:bg-orange-500/10 px-1.5 py-0.5 rounded">⚡ Auto</span>
+                                 {pgArr.map((pg: any, i: number) => {
+                                   const isCanceled = Boolean(pg.isDibatalkan);
+                                   if (Number(pg.nominal) <= 0) return null;
+                                   return (
+                                     <div key={`pg-${i}`} className={`flex justify-between items-center py-1.5 ${isCanceled ? 'opacity-60' : ''}`}>
+                                       <div className="flex flex-col gap-0.5">
+                                         <div className="flex items-center gap-1.5 flex-wrap">
+                                           <span className={`text-[12px] font-bold ${isCanceled ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-red-500'}`}>
+                                             Pengurangan: -Rp {Number(pg.nominal).toLocaleString("id-ID")}
+                                           </span>
+                                           {pg._isAutoSistem && (
+                                             <span className="text-[8px] font-extrabold uppercase tracking-wider text-orange-500 bg-orange-50 dark:bg-orange-500/10 px-1.5 py-0.5 rounded">⚡ Auto</span>
+                                           )}
+                                           {isCanceled && (
+                                             <span className="text-[8px] font-extrabold uppercase tracking-wider text-amber-700 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-300 px-1.5 py-0.5 rounded">
+                                               Dicoret Owner (Tidak Memotong Gaji)
+                                             </span>
+                                           )}
+                                         </div>
+                                         {pg.photoUrl && (
+                                           <a href={pg.photoUrl} target="_blank" rel="noreferrer" className="text-[10px] text-blue-500 hover:underline flex items-center gap-1 mt-0.5 font-semibold">
+                                             📷 Lihat Bukti Foto
+                                           </a>
                                          )}
                                        </div>
-                                       {pg.photoUrl && (
-                                         <a href={pg.photoUrl} target="_blank" rel="noreferrer" className="text-[10px] text-blue-500 hover:underline flex items-center gap-1 mt-0.5 font-semibold">
-                                           📷 Lihat Bukti Foto
-                                         </a>
-                                       )}
+                                       <span className={`text-right text-[11px] font-medium max-w-[150px] italic ${isCanceled ? 'line-through text-zinc-400 dark:text-zinc-600' : 'text-zinc-500'}`}>
+                                         "{pg.ket || "-"}"
+                                       </span>
                                      </div>
-                                     <span className="text-right text-[11px] font-medium text-zinc-500 max-w-[150px] italic">"{pg.ket || "-"}"</span>
-                                   </div>
-                                 ))}
+                                   );
+                                 })}
 
                                 <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl flex justify-between items-center">
                                   <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600/80 dark:text-amber-400/80">Yang Harus Ditransfer</span>

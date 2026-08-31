@@ -6,7 +6,7 @@ import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie
 } from "recharts";
-import { Users, Activity, Banknote, Save, Plus, ChevronDown, ChevronUp, Trash2, X, Camera, UserPlus, Shield, UserCheck, AlertTriangle, CalendarDays, CalendarRange } from "lucide-react";
+import { Users, Activity, Banknote, Save, Plus, ChevronDown, ChevronUp, Trash2, X, Camera, UserPlus, Shield, UserCheck, AlertTriangle, CalendarDays, CalendarRange, RotateCcw, Ban } from "lucide-react";
 import Section from "./common/Section";
 import UserAvatar from "./common/UserAvatar";
 
@@ -672,11 +672,15 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                currentPg[existingIdx] = {
                  ...lateItem,
                  ...currentPg[existingIdx],
-                 nominal: currentPg[existingIdx].nominal || lateItem.nominal,
+                 isDibatalkan: Boolean(currentPg[existingIdx].isDibatalkan),
+                 nominal: currentPg[existingIdx].nominal !== undefined ? currentPg[existingIdx].nominal : lateItem.nominal,
                  photoUrl: currentPg[existingIdx].photoUrl || lateItem.photoUrl
                };
              } else {
-               currentPg.push(lateItem);
+               currentPg.push({
+                 ...lateItem,
+                 isDibatalkan: false
+               });
              }
            });
            rec.gajiPengurangan = currentPg;
@@ -706,7 +710,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
            const bTahun = key.split("_")[1];
            const valOngkir = ongkirMap.get(key) || 0;
            const valMasukGaji = ongkirMasukGajiMap.get(key) || 0;
-           const lateItems = latePenaltyItemsMap.get(key) || [];
+           const lateItems = (latePenaltyItemsMap.get(key) || []).map(li => ({ ...li, isDibatalkan: false }));
            const valLate = latePenaltyMap.get(key) || 0;
            const valPenaltyPulang = penaltyMap.get(key) || 0;
 
@@ -735,7 +739,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         p.totalOngkirGlobal = totalOngkir;
         p.totalPokok = p.records.reduce((acc: number, r: any) => acc + (Number(r.gajiPokok)||0), 0);
         p.totalBonus = p.records.reduce((acc: number, r: any) => acc + (r.gajiTambahan?.reduce((sum: number, t: any) => sum + (Number(t.nominal) || 0), 0) || 0), 0);
-        p.totalPotongan = p.records.reduce((acc: number, r: any) => acc + (r.gajiPengurangan?.reduce((sum: number, pg: any) => sum + (Number(pg.nominal) || 0), 0) || 0), 0);
+        p.totalPotongan = p.records.reduce((acc: number, r: any) => acc + (r.gajiPengurangan?.filter((pg: any) => !pg.isDibatalkan).reduce((sum: number, pg: any) => sum + (Number(pg.nominal) || 0), 0) || 0), 0);
         p.grandTotalPendapatan = p.totalPokok + p.totalBonus + p.totalOngkirGlobal - p.totalPotongan;
         
         // Re-sort records by bulantahun (assuming "MM/YY") so new stub records appear correctly
@@ -1044,7 +1048,11 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
           ...r,
           gajiPokok: Number(r.gajiPokok) || latestGajiPokok,
           gajiTambahan: (r.gajiTambahan || []).map((t: any) => ({ ...t, nominal: Number(t.nominal) || 0 })),
-          gajiPengurangan: (r.gajiPengurangan || []).map((p: any) => ({ ...p, nominal: Number(p.nominal) || 0 })),
+          gajiPengurangan: (r.gajiPengurangan || []).map((p: any) => ({ 
+            ...p, 
+            nominal: Number(p.nominal) || 0,
+            isDibatalkan: Boolean(p.isDibatalkan)
+          })),
           updatedAt: Date.now()
         }));
 
@@ -1773,7 +1781,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false }: any) => {
                 {records.map(r => {
                     const isExpanded = expandedRecordId === r.id;
                     const hitungTambahanBelumDibayar = (r.gajiTambahan || []).filter((t: any) => t.status !== 'sudah').reduce((sum: number, item: any) => sum + (Number(item.nominal) || 0), 0);
-                    const hitungPengurangan = (r.gajiPengurangan || []).reduce((sum: number, item: any) => sum + (Number(item.nominal) || 0), 0);
+                    const hitungPengurangan = (r.gajiPengurangan || []).filter((item: any) => !item.isDibatalkan).reduce((sum: number, item: any) => sum + (Number(item.nominal) || 0), 0);
                     const totalBersih = (Number(r.gajiPokok) || 0) + hitungTambahanBelumDibayar + (Number(r.ongkirMasukGajiBulanIni) || 0) - hitungPengurangan;
                     return (
                         <div key={r.id} className="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-zinc-50/50 dark:bg-black/30 transition-colors w-full">
@@ -1872,67 +1880,153 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false }: any) => {
                                         </div>
                                      </div>
                                    )}
-
-                                   {(Number(r.dendaTelat) > 0 || Number(r.dendaAbsen) > 0) && (
-                                     <div className="w-full bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/20 rounded-xl p-3 flex items-center justify-between">
-                                       <div className="flex flex-col">
-                                         <span className="text-[10px] font-bold uppercase tracking-wide text-rose-600 dark:text-rose-400">Total Denda Absensi (⚡ Auto)</span>
-                                         <span className="text-sm font-black text-rose-600 dark:text-rose-400">- Rp {((Number(r.dendaTelat) || 0) + (Number(r.dendaAbsen) || 0)).toLocaleString("id-ID")}</span>
+                                   {(() => {
+                                     const dendaTelatAktif = (r.gajiPengurangan || []).filter((pg: any) => pg._isAutoSistem && !pg.isDibatalkan).reduce((sum: number, pg: any) => sum + (Number(pg.nominal) || 0), 0);
+                                     const dendaAbsenAktif = Number(r.dendaAbsen) || 0;
+                                     const totalDendaAktif = dendaTelatAktif + dendaAbsenAktif;
+                                     if (totalDendaAktif <= 0) return null;
+                                     return (
+                                       <div className="w-full bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/20 rounded-xl p-3 flex items-center justify-between">
+                                         <div className="flex flex-col">
+                                           <span className="text-[10px] font-bold uppercase tracking-wide text-rose-600 dark:text-rose-400">Total Denda Absensi (⚡ Auto)</span>
+                                           <span className="text-sm font-black text-rose-600 dark:text-rose-400">- Rp {totalDendaAktif.toLocaleString("id-ID")}</span>
+                                         </div>
+                                         <span className="text-[9px] font-bold uppercase bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 px-2 py-1 rounded-md">
+                                           {dendaTelatAktif > 0 && `Telat: -Rp ${dendaTelatAktif.toLocaleString("id-ID")}`}
+                                           {dendaTelatAktif > 0 && dendaAbsenAktif > 0 && ' · '}
+                                           {dendaAbsenAktif > 0 && `Bolos/Pulang: -Rp ${dendaAbsenAktif.toLocaleString("id-ID")}`}
+                                         </span>
                                        </div>
-                                       <span className="text-[9px] font-bold uppercase bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 px-2 py-1 rounded-md">
-                                         {Number(r.dendaTelat) > 0 && `Telat: -Rp ${Number(r.dendaTelat).toLocaleString("id-ID")}`}
-                                         {Number(r.dendaTelat) > 0 && Number(r.dendaAbsen) > 0 && ' · '}
-                                         {Number(r.dendaAbsen) > 0 && `Bolos/Pulang: -Rp ${Number(r.dendaAbsen).toLocaleString("id-ID")}`}
-                                       </span>
-                                     </div>
-                                   )}
+                                     );
+                                   })()}
 
                                    <div className="w-full space-y-2">
                                        <div className="flex items-center justify-between">
                                            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500 block">Gaji Pengurangan</label>
-                                              <button onClick={() => {
-                                                  const newPg = [...(r.gajiPengurangan || []), { id: Date.now() + 'pg', nominal: 0, ket: "Pengurangan" }];
-                                                  handleUpdateRecord(r.id, { gajiPengurangan: newPg });
-                                              }} className="text-[10px] font-bold text-red-600 dark:text-red-400 flex items-center gap-1 bg-red-50 dark:bg-red-500/10 px-2 py-1 rounded-md">
-                                                <Plus size={10} strokeWidth={3} /> Tambah
-                                              </button>
+                                               <button onClick={() => {
+                                                   const newPg = [...(r.gajiPengurangan || []), { id: Date.now() + 'pg', nominal: 0, ket: "Pengurangan", isDibatalkan: false }];
+                                                   handleUpdateRecord(r.id, { gajiPengurangan: newPg });
+                                               }} className="text-[10px] font-bold text-red-600 dark:text-red-400 flex items-center gap-1 bg-red-50 dark:bg-red-500/10 px-2 py-1 rounded-md">
+                                                 <Plus size={10} strokeWidth={3} /> Tambah
+                                               </button>
                                        </div>
-                                       {(r.gajiPengurangan || []).map((pg: any, i: number) => (
-                                          <div key={pg.id || i} className="flex flex-col gap-2 w-full bg-zinc-50 dark:bg-zinc-900/30 p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800">
-                                              <div className="flex gap-2 items-center w-full">
-                                                  <input type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={pg.nominal} onChange={e => {
-                                                      const newPg = [...r.gajiPengurangan];
-                                                      newPg[i] = { ...newPg[i], nominal: e.target.value };
-                                                      handleUpdateRecord(r.id, { gajiPengurangan: newPg });
-                                                  }} className="flex-1 min-w-0 bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-bold text-red-500 outline-none" placeholder="Nominal" />
-                                                  <input type="text" value={pg.ket} onChange={e => {
-                                                      const newPg = [...r.gajiPengurangan];
-                                                      newPg[i] = { ...newPg[i], ket: e.target.value };
-                                                      handleUpdateRecord(r.id, { gajiPengurangan: newPg });
-                                                  }} className="flex-1 min-w-0 bg-white dark:bg-black border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-sm font-medium text-zinc-900 dark:text-white outline-none" placeholder="Keterangan" />
-                                              </div>
-                                              <div className="flex items-center gap-2 justify-end">
-                                                  {pg._isAutoSistem && (
-                                                    <span className="text-[9px] font-bold uppercase tracking-wider text-orange-500 bg-orange-50 dark:bg-orange-500/10 px-2 py-0.5 rounded-md mr-auto">{'\u26A1'} Auto-Sistem</span>
-                                                  )}
-                                                  {pg.photoUrl && (
-                                                    <a href={pg.photoUrl} target="_blank" rel="noreferrer" className="h-8 w-8 flex items-center justify-center shrink-0 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 dark:bg-blue-500/10 dark:text-blue-400 dark:hover:bg-blue-500/20 transition-colors" title="Lihat Foto Bukti Telat">
-                                                        <Camera size={14} />
-                                                    </a>
-                                                  )}
-                                                  {isOwner && (
-                                                   <button onClick={() => {
-                                                       if (confirm("Yakin ingin menghapus potongan ini?")) {
-                                                           const newPg = r.gajiPengurangan.filter((_: any, idx: number) => idx !== i);
-                                                           handleUpdateRecord(r.id, { gajiPengurangan: newPg });
-                                                       }
-                                                   }} className="h-8 px-3 flex items-center justify-center gap-1.5 shrink-0 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 transition-colors text-[11px] font-bold" title="Hapus Potongan (Owner Only)">
-                                                       <Trash2 size={12} /> Hapus
-                                                   </button>
-                                                  )}
-                                              </div>
-                                          </div>
-                                       ))}
+                                       {(r.gajiPengurangan || []).map((pg: any, i: number) => {
+                                          const isCanceled = Boolean(pg.isDibatalkan);
+                                          return (
+                                            <div 
+                                              key={pg.id || pg._idempKey || i} 
+                                              className={`flex flex-col gap-2 w-full p-2.5 rounded-xl border transition-all ${
+                                                isCanceled 
+                                                  ? 'bg-zinc-100/70 dark:bg-zinc-900/30 border-dashed border-zinc-300 dark:border-zinc-700/60 opacity-75' 
+                                                  : 'bg-zinc-50 dark:bg-zinc-900/30 border-zinc-200 dark:border-zinc-800'
+                                              }`}
+                                            >
+                                                <div className="flex gap-2 items-center w-full">
+                                                    <input 
+                                                      type="number" 
+                                                      inputMode="numeric" 
+                                                      pattern="[0-9]*" 
+                                                      min="0" 
+                                                      value={pg.nominal} 
+                                                      onChange={e => {
+                                                        const newPg = [...r.gajiPengurangan];
+                                                        newPg[i] = { ...newPg[i], nominal: e.target.value };
+                                                        handleUpdateRecord(r.id, { gajiPengurangan: newPg });
+                                                      }} 
+                                                      className={`flex-1 min-w-0 border rounded-lg px-3 py-2 text-sm font-bold outline-none transition-colors ${
+                                                        isCanceled
+                                                          ? 'line-through text-zinc-400 dark:text-zinc-500 bg-zinc-200/50 dark:bg-zinc-800/50 border-zinc-300 dark:border-zinc-700'
+                                                          : 'bg-white dark:bg-black border-zinc-200 dark:border-zinc-800 text-red-500'
+                                                      }`} 
+                                                      placeholder="Nominal" 
+                                                    />
+                                                    <input 
+                                                      type="text" 
+                                                      value={pg.ket} 
+                                                      onChange={e => {
+                                                        const newPg = [...r.gajiPengurangan];
+                                                        newPg[i] = { ...newPg[i], ket: e.target.value };
+                                                        handleUpdateRecord(r.id, { gajiPengurangan: newPg });
+                                                      }} 
+                                                      className={`flex-1 min-w-0 border rounded-lg px-3 py-2 text-sm font-medium outline-none transition-colors ${
+                                                        isCanceled
+                                                          ? 'line-through text-zinc-400 dark:text-zinc-500 bg-zinc-200/50 dark:bg-zinc-800/50 border-zinc-300 dark:border-zinc-700'
+                                                          : 'bg-white dark:bg-black border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white'
+                                                      }`} 
+                                                      placeholder="Keterangan" 
+                                                    />
+                                                </div>
+                                                <div className="flex items-center gap-2 justify-end flex-wrap">
+                                                    {pg._isAutoSistem && (
+                                                      <span className="text-[9px] font-bold uppercase tracking-wider text-orange-500 bg-orange-50 dark:bg-orange-500/10 px-2 py-0.5 rounded-md mr-auto">
+                                                        ⚡ Auto-Sistem
+                                                      </span>
+                                                    )}
+                                                    {isCanceled && (
+                                                      <span className="text-[9px] font-bold uppercase tracking-wider text-amber-700 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-0.5 rounded-md mr-auto flex items-center gap-1">
+                                                        <Ban size={10} /> Dicoret (Tidak Memotong Gaji)
+                                                      </span>
+                                                    )}
+                                                    {pg.photoUrl && (
+                                                      <a href={pg.photoUrl} target="_blank" rel="noreferrer" className="h-8 w-8 flex items-center justify-center shrink-0 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 dark:bg-blue-500/10 dark:text-blue-400 dark:hover:bg-blue-500/20 transition-colors" title="Lihat Foto Bukti Telat">
+                                                          <Camera size={14} />
+                                                      </a>
+                                                    )}
+                                                    {isOwner && (
+                                                      <>
+                                                        {isCanceled ? (
+                                                          <button 
+                                                            onClick={() => {
+                                                              const newPg = [...r.gajiPengurangan];
+                                                              newPg[i] = { ...newPg[i], isDibatalkan: false };
+                                                              handleUpdateRecord(r.id, { gajiPengurangan: newPg });
+                                                            }} 
+                                                            className="h-8 px-3 flex items-center justify-center gap-1.5 shrink-0 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20 transition-colors text-[11px] font-bold" 
+                                                            title="Lepas Coretan (Aktifkan Kembali Pemotongan)"
+                                                          >
+                                                              <RotateCcw size={12} /> Undo Coret
+                                                          </button>
+                                                        ) : (
+                                                          <button 
+                                                            onClick={() => {
+                                                              const isAuto = Boolean(pg._isAutoSistem);
+                                                              if (confirm(isAuto ? "Coret pengurangan otomatis ini? (Pengurangan tidak akan memotong gaji, dan bisa di-undo kapan saja)" : "Yakin ingin menghapus / mencoret pengurangan ini?")) {
+                                                                if (isAuto) {
+                                                                  const newPg = [...r.gajiPengurangan];
+                                                                  newPg[i] = { ...newPg[i], isDibatalkan: true };
+                                                                  handleUpdateRecord(r.id, { gajiPengurangan: newPg });
+                                                                } else {
+                                                                  const newPg = r.gajiPengurangan.filter((_: any, idx: number) => idx !== i);
+                                                                  handleUpdateRecord(r.id, { gajiPengurangan: newPg });
+                                                                }
+                                                              }
+                                                            }} 
+                                                            className="h-8 px-3 flex items-center justify-center gap-1.5 shrink-0 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 transition-colors text-[11px] font-bold" 
+                                                            title={pg._isAutoSistem ? "Coret Pengurangan Otomatis (Bisa di-Undo)" : "Hapus Pengurangan"}
+                                                          >
+                                                              <Trash2 size={12} /> {pg._isAutoSistem ? "Coret" : "Hapus"}
+                                                          </button>
+                                                        )}
+                                                        {isCanceled && !pg._isAutoSistem && (
+                                                          <button 
+                                                            onClick={() => {
+                                                              if (confirm("Hapus permanen pengurangan manual ini?")) {
+                                                                const newPg = r.gajiPengurangan.filter((_: any, idx: number) => idx !== i);
+                                                                handleUpdateRecord(r.id, { gajiPengurangan: newPg });
+                                                              }
+                                                            }} 
+                                                            className="h-8 w-8 flex items-center justify-center shrink-0 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-red-500 rounded-lg transition-colors text-[11px] font-bold" 
+                                                            title="Hapus Permanen Baris Manual"
+                                                          >
+                                                              <Trash2 size={12} />
+                                                          </button>
+                                                        )}
+                                                      </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                          );
+                                       })}
                                    </div>
 
                                    {/* NEW FIELD: Gaji yang harus saya bayar */}
@@ -2005,7 +2099,7 @@ const RangkumanBulanItem = ({ bulan, records }: { bulan: string, records: any[] 
     records.forEach(r => {
        const pokok = Number(r.gajiPokok) || 0;
        const tambahan = (r.gajiTambahan || []).reduce((sum: number, t: any) => sum + (Number(t.nominal)||0), 0);
-       const potongan = (r.gajiPengurangan || []).reduce((sum: number, pg: any) => sum + (Number(pg.nominal)||0), 0);
+       const potongan = (r.gajiPengurangan || []).filter((pg: any) => !pg.isDibatalkan).reduce((sum: number, pg: any) => sum + (Number(pg.nominal)||0), 0);
        const ongkirMasukGaji = Number(r.ongkirMasukGajiBulanIni) || 0;
        totalSatuBulan += Math.max(0, pokok + tambahan + ongkirMasukGaji - potongan);
     });
@@ -2038,7 +2132,7 @@ const RangkumanBulanItem = ({ bulan, records }: { bulan: string, records: any[] 
                        {records.map((r, i) => {
                            const pokok = Number(r.gajiPokok) || 0;
                            const tambahan = (r.gajiTambahan || []).reduce((sum: number, t: any) => sum + (Number(t.nominal)||0), 0);
-                           const potongan = (r.gajiPengurangan || []).reduce((sum: number, pg: any) => sum + (Number(pg.nominal)||0), 0);
+                           const potongan = (r.gajiPengurangan || []).filter((pg: any) => !pg.isDibatalkan).reduce((sum: number, pg: any) => sum + (Number(pg.nominal)||0), 0);
                            const ongkirMasukGaji = Number(r.ongkirMasukGajiBulanIni) || 0;
                            const ongkirDisplay = Number(r.ongkirBulanIni) || 0;
                            const bersih = Math.max(0, pokok + tambahan + ongkirMasukGaji - potongan);
