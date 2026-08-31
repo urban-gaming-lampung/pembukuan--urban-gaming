@@ -181,3 +181,23 @@ export function normalizeBulanTahun(str: string): string {
   }
   return trimmed;
 }
+
+/**
+ * Normalisasi format tanggal apapun ke standard YYYY-MM-DD
+ * Contoh: "31/08/2026", "31-08-2026", "2026-08-31", "2026/08/31" -> "2026-08-31"
+ */
+export function normalizeDateStr(str: any): string {
+  if (!str || typeof str !== 'string') return '';
+  const clean = str.trim().replace(/\//g, '-');
+  const parts = clean.split('-');
+  if (parts.length === 3) {
+    if (parts[0].length === 2 && parts[2].length === 4) {
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+    if (parts[0].length === 4) {
+      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    }
+  }
+  return clean;
+}
+

@@ -14,7 +14,7 @@ import { LS_KEY } from "../constants/storage";
 import { checkCatalogBaselineAndLogUpdates, isVersionLower, SavedCatalogState, startOfDay, endOfDay } from "../lib/catalog";
 import useStokData from "./useStokData";
 import { PdfExporterHandle } from "../components/PdfExporter";
-import { getAbsenCycleInfo, normalizeBulanTahun } from "../lib/absenPeriod";
+import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr } from "../lib/absenPeriod";
 
 type ImageQuality = "Tinggi" | "Hemat";
 type Price = { label: string; price: number };
@@ -354,68 +354,72 @@ export default function useAppController() {
     }
   }, [editingId, tanggal, user?.email]);
 
-  useEffect(() => {
-    if (!tanggal) return;
+  // ===== REALTIME SSOT ABSENSI LISTENER =====
+  const [allLogAbsensi, setAllLogAbsensi] = useState<any[]>([]);
 
-    const alreadySaved = historyRef.current.some(h => h.tanggal === tanggal);
-    if (alreadySaved && !editingId) {
-      setAbsenPagi("");
-      setAbsenSiang("");
-      return;
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "log_absensi"), (snap) => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setAllLogAbsensi(data);
+    }, (err) => console.error("Error fetching log_absensi:", err));
+    return () => unsub();
+  }, []);
+
+  // Sync absenPagi, absenSiang, shiftPegawai, and initial rukoBuka/Tutup with log_absensi SSOT
+  useEffect(() => {
+    if (!tanggal || editingId) return;
+
+    const normTgl = normalizeDateStr(tanggal);
+    const logsForToday = allLogAbsensi.filter((l: any) => {
+      const lTgl = normalizeDateStr(l.tanggal);
+      const lReal = normalizeDateStr(l.tanggalReal);
+      return (lTgl === normTgl || lReal === normTgl) && l.status !== "deleted";
+    });
+
+    let pagi = "";
+    let siang = "";
+    let shiftFromLog = "";
+
+    const currentUserEmail = user?.email?.toLowerCase().trim();
+    const masukLogs = logsForToday.filter(l => l.jenisAbsen === "Masuk" && l.waktu);
+    const pulangLogs = logsForToday.filter(l => l.jenisAbsen === "Pulang" && l.waktu);
+    const liburLogs = logsForToday.filter(l => l.jenisAbsen === "Libur" || l.shift === "Libur");
+
+    if (masukLogs.length > 0) {
+      const userLog = currentUserEmail ? masukLogs.find(l => l.email?.toLowerCase().trim() === currentUserEmail) : null;
+      const selected = userLog || (isSuperAdminOrOwner ? masukLogs[0] : masukLogs[0]);
+      if (selected) {
+        pagi = selected.waktu;
+        if (selected.shift && selected.shift !== "Libur") shiftFromLog = selected.shift;
+      }
     }
 
-    const q = query(
-      collection(db, "log_absensi"),
-      where("tanggal", "==", tanggal)
-    );
-    const unsub = onSnapshot(q, (snap) => {
-      if (editingId) return;
-      let pagi = "";
-      let siang = "";
-      let shiftFromLog = "";
-
-      const currentUserEmail = user?.email?.toLowerCase().trim();
-      const masukLogs: any[] = [];
-      const pulangLogs: any[] = [];
-
-      snap.forEach(d => {
-        const data = d.data();
-        if (data.jenisAbsen === "Masuk" && data.waktu) {
-          masukLogs.push(data);
-        }
-        if (data.jenisAbsen === "Pulang" && data.waktu) {
-          pulangLogs.push(data);
-        }
-      });
-
-      if (masukLogs.length > 0) {
-        const userLog = currentUserEmail ? masukLogs.find(l => l.email?.toLowerCase().trim() === currentUserEmail) : null;
-        const selected = userLog || masukLogs[0];
-        pagi = selected.waktu;
-        if (selected.shift) shiftFromLog = selected.shift;
-      }
-
-      if (pulangLogs.length > 0) {
-        const userLog = currentUserEmail ? pulangLogs.find(l => l.email?.toLowerCase().trim() === currentUserEmail) : null;
-        const selected = userLog || pulangLogs[pulangLogs.length - 1];
+    if (pulangLogs.length > 0) {
+      const userLog = currentUserEmail ? pulangLogs.find(l => l.email?.toLowerCase().trim() === currentUserEmail) : null;
+      const selected = userLog || (isSuperAdminOrOwner ? pulangLogs[pulangLogs.length - 1] : pulangLogs[pulangLogs.length - 1]);
+      if (selected) {
         siang = selected.waktu;
-        if (!shiftFromLog && selected.shift) shiftFromLog = selected.shift;
+        if (!shiftFromLog && selected.shift && selected.shift !== "Libur") shiftFromLog = selected.shift;
       }
+    }
 
-      setAbsenPagi(pagi);
-      setAbsenSiang(siang);
-      if (shiftFromLog) {
-        _setShiftPegawai(prev => prev || shiftFromLog);
+    if (liburLogs.length > 0 && masukLogs.length === 0) {
+      const userLog = currentUserEmail ? liburLogs.find(l => l.email?.toLowerCase().trim() === currentUserEmail) : null;
+      const selected = userLog || (isSuperAdminOrOwner ? liburLogs[0] : liburLogs[0]);
+      if (selected) {
+        shiftFromLog = "Libur";
       }
-    }, (err) => console.error("Error fetching absen: ", err));
-    return () => unsub();
-  }, [user?.email, tanggal, editingId]);
+    }
+
+    setAbsenPagi(pagi);
+    setAbsenSiang(siang);
+    if (shiftFromLog) {
+      _setShiftPegawai(prev => (prev === "Libur" && shiftFromLog !== "Libur" ? shiftFromLog : prev || shiftFromLog));
+    }
+  }, [allLogAbsensi, tanggal, user?.email, editingId, isSuperAdminOrOwner]);
 
   useEffect(() => {
     if (!user?.email || !tanggal || editingId) return;
-    
-    const alreadySaved = historyRef.current.some(h => h.tanggal === tanggal);
-    if (alreadySaved) return;
 
     const emailKey = user.email.toLowerCase().trim();
     const unsub = onSnapshot(doc(db, "data", `shift_${emailKey}`), (snap) => {
@@ -1071,9 +1075,9 @@ export default function useAppController() {
       if (data.tanggal !== undefined) setTanggal(data.tanggal);
       if (data.hari !== undefined) setHari(data.hari);
     }
-    if (data.shiftPegawai !== undefined && !editingId) _setShiftPegawai(data.shiftPegawai || "");
-    if (data.absenPagi !== undefined && !editingId) setAbsenPagi(data.absenPagi || "");
-    if (data.absenSiang !== undefined && !editingId) setAbsenSiang(data.absenSiang || "");
+    if (data.shiftPegawai && !editingId) _setShiftPegawai(data.shiftPegawai);
+    if (data.absenPagi && !editingId) setAbsenPagi(data.absenPagi);
+    if (data.absenSiang && !editingId) setAbsenSiang(data.absenSiang);
     if (data.rukoBuka !== undefined) _setRukoBuka(data.rukoBuka ? data.rukoBuka.split(" - ")[0] : "");
     if (data.rukoTutup !== undefined) _setRukoTutup(data.rukoTutup ? data.rukoTutup.split(" - ")[0] : "");
     if (data.catatan !== undefined) setCatatan(data.catatan);

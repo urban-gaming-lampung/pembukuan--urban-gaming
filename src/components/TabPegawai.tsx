@@ -9,7 +9,7 @@ import {
 import { Users, Activity, Banknote, Save, Plus, ChevronDown, ChevronUp, Trash2, X, Camera, UserPlus, Shield, UserCheck, AlertTriangle, CalendarDays, CalendarRange, RotateCcw, Ban } from "lucide-react";
 import Section from "./common/Section";
 import UserAvatar from "./common/UserAvatar";
-import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, BULAN_NAMES, normalizeBulanTahun } from "../lib/absenPeriod";
+import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, BULAN_NAMES, normalizeBulanTahun, normalizeDateStr } from "../lib/absenPeriod";
 
 // === KONSTANTA ABSENSI ===
 
@@ -302,17 +302,18 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         const em = log.email ? log.email.toLowerCase().trim() : "";
         if (isSuperAdminOrOwnerEmail(em) || isPegawaiNonaktif(em)) return;
 
+        const normDate = normalizeDateStr(log.tanggal);
         const empCutoff = getEmployeeCutoff(em);
-        const cycle = getAbsenCycleInfo(log.tanggal, empCutoff);
+        const cycle = getAbsenCycleInfo(normDate, empCutoff);
         const bulanTahun = cycle.bulanTahun;
         
         let hariIndo = "";
         try {
-           const d = new Date(log.tanggal);
+           const d = new Date(normDate);
            hariIndo = new Intl.DateTimeFormat("id-ID", { weekday: "long" }).format(d);
         } catch(e) { hariIndo = "" }
         
-        const tglStr = `${hariIndo} - ${log.tanggal}`;
+        const tglStr = `${hariIndo} - ${normDate}`;
 
         if (!rawMap.has(bulanTahun)) {
           rawMap.set(bulanTahun, { cycle, hariMap: new Map() });
