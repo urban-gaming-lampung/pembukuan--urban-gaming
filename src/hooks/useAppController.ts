@@ -372,7 +372,7 @@ export default function useAppController() {
     const isOwnerEmail = (em: string) => em.toLowerCase().trim() === "owner@gmail.com";
     const currentUserEmail = user?.email?.toLowerCase().trim() || "";
 
-    const logsForToday = allLogAbsensi.filter((l: any) => isLogForDate(l, tanggal) && l.status !== "deleted");
+    const logsForToday = allLogAbsensi.filter((l: any) => isLogForDate(l, tanggal) && l.status !== "deleted" && l.status !== "completed");
     if (logsForToday.length === 0) return;
 
     // Check if there are real employee logs vs owner test logs
@@ -1605,13 +1605,10 @@ export default function useAppController() {
     
     hasDataRef.current = false;
     
-    const q = query(collection(db, "log_absensi"), where("tanggal", "==", tanggal));
-    getDocs(q).then((snapshot) => {
-      snapshot.forEach((docSnap) => {
-        updateDoc(docSnap.ref, { status: "completed" }).catch(console.error);
-      });
-    }).catch((e) => {
-      console.error("Gagal update status log_absensi:", e);
+    allLogAbsensi.filter((l: any) => isLogForDate(l, tanggal) && l.status !== "deleted").forEach((l: any) => {
+      if (l.id) {
+        updateDoc(doc(db, "log_absensi", l.id), { status: "completed" }).catch(console.error);
+      }
     });
     const realNow = getWibDate();
     systemDateRef.current = realNow.getDate();
