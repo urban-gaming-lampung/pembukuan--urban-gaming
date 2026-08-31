@@ -244,7 +244,32 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
     return up?.status === "nonaktif";
   };
 
-  const cutoffDay = Number(absenConfig?.tanggalMulaiHitung) || 1;
+  // === Helper Tanggal Cutoff Per-Akun Pegawai (SSOT) ===
+  const getEmployeeCutoff = (email: string): number => {
+    if (!email) return 1;
+    const em = email.toLowerCase().trim();
+    const up = usersProfile.find(u => u.id?.toLowerCase().trim() === em);
+    if (up && typeof up.tanggalMulaiHitung === "number" && up.tanggalMulaiHitung >= 1 && up.tanggalMulaiHitung <= 31) {
+      return up.tanggalMulaiHitung;
+    }
+    return Number(absenConfig?.tanggalMulaiHitung) || 1;
+  };
+
+  const handleUpdateEmployeeCutoff = async (email: string, tanggal: number) => {
+    if (!email || email.toLowerCase().trim() === "owner@gmail.com") return;
+    try {
+      await setDoc(doc(db, "users", email), { tanggalMulaiHitung: Number(tanggal) || 1 }, { merge: true });
+    } catch (err) {
+      console.error("Gagal mengubah tanggal cutoff pegawai:", err);
+      alert("Gagal mengubah tanggal cutoff pegawai.");
+    }
+  };
+
+  const activeEmployees = useMemo(() => {
+    return usersProfile.filter(u => !isSuperAdminOrOwnerEmail(u.id) && u.status !== "nonaktif" && !u.id.toLowerCase().includes("fauzanazim56"));
+  }, [usersProfile]);
+
+  const [filterPegawaiAbsen, setFilterPegawaiAbsen] = useState<string>("all");
 
   // === Classify shift dari string shift field (SSOT) ===
   const classifyShift = (shiftStr: string): 'pagi' | 'sore' | 'libur' => {
@@ -255,7 +280,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
     return 'pagi';
   };
 
-  // Set-up grouping log_absensi by Bulan/Siklus -> Minggu -> Hari (SSOT)
+  // Set-up grouping log_absensi by Bulan/Siklus -> Minggu -> Hari (SSOT Per-Pegawai)
   type WeekData = {
     weekNum: number;
     weekLabel: string;
@@ -268,12 +293,17 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
      // Step 1: Group semua log ke siklus periode -> hari -> logs (Hanya akun aktif)
      const rawMap = new Map<string, { cycle: any; hariMap: Map<string, any[]> }>();
      
-     logAbsensi.forEach(log => {
+     const filteredLogs = filterPegawaiAbsen === "all"
+       ? logAbsensi
+       : logAbsensi.filter(l => l.email?.toLowerCase().trim() === filterPegawaiAbsen.toLowerCase().trim());
+
+     filteredLogs.forEach(log => {
         if (!log.tanggal) return;
         const em = log.email ? log.email.toLowerCase().trim() : "";
         if (isSuperAdminOrOwnerEmail(em) || isPegawaiNonaktif(em)) return;
 
-        const cycle = getAbsenCycleInfo(log.tanggal, cutoffDay);
+        const empCutoff = getEmployeeCutoff(em);
+        const cycle = getAbsenCycleInfo(log.tanggal, empCutoff);
         const bulanTahun = cycle.bulanTahun;
         
         let hariIndo = "";
@@ -414,7 +444,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
      });
 
      return finalData;
-  }, [logAbsensi, cutoffDay, usersProfile, isUsersLoaded]);
+  }, [logAbsensi, filterPegawaiAbsen, usersProfile, isUsersLoaded, absenConfig]);
 
   const [expandedLogBulan, setExpandedLogBulan] = useState<string[]>([]);
   const toggleLogBulan = (b: string) => setExpandedLogBulan(p => p.includes(b) ? p.filter(x => x !== b) : [...p, b]);
@@ -430,7 +460,6 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   // Merge Data
   const pegawaiData = useMemo(() => {
     const mergedMap = new Map();
-    const cutoffDay = Number(absenConfig?.tanggalMulaiHitung) || 1;
     
     // Inisialisasi HANYA dari profil yang aktif dan tidak dicoret
     usersProfile.forEach(u => {
@@ -438,7 +467,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
          if (u.status === "nonaktif") return; // Akun yang dicoret tidak dimasukkan
          const k = u.id.toLowerCase().trim();
          if (k.includes("fauzanazim56")) return;
-         mergedMap.set(k, { email: u.id, photoUrl: u.photoUrl || null, profileColor: u.profileColor || "#3b82f6", loginsCount: 0, records: [] });
+         mergedMap.set(k, { email: u.id, photoUrl: u.photoUrl || null, profileColor: u.profileColor || "#3b82f6", loginsCount: 0, records: [], cutoffDay: getEmployeeCutoff(u.id) });
       }
     });
 
@@ -453,20 +482,22 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
       }
     });
 
-    // 1. Kalkulasi Ongkir Otomatis dari history pembukuan (mengikuti siklus)
+    // 1. Kalkulasi Ongkir Otomatis dari history pembukuan (mengikuti siklus per pegawai)
     const ongkirMap = new Map(); // key: `email_MM/YY`, value: total_ongkir (tampilan saja)
     const ongkirMasukGajiMap = new Map(); // key: `email_MM/YY`, value: total ongkir yg benar-benar masuk Gaji Yang Harus Dibayar
 
     history.forEach((h) => {
        if (!h.tanggal) return;
-       const cycle = getAbsenCycleInfo(h.tanggal, cutoffDay);
-       const bulanTahun = cycle.bulanTahun;
 
        if (Array.isArray(h.rowsSewa)) {
            h.rowsSewa.forEach((r: any) => {
                if (r.isOngkir === "YA" && r._ongkir && r.diantarOleh) {
                    const email = r.diantarOleh.toLowerCase().trim();
                    if (isPegawaiNonaktif(email) || !mergedMap.has(email)) return;
+                   
+                   const empCutoff = getEmployeeCutoff(email);
+                   const cycle = getAbsenCycleInfo(h.tanggal, empCutoff);
+                   const bulanTahun = cycle.bulanTahun;
                    const key = `${email}_${bulanTahun}`;
                    const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
                    
@@ -497,6 +528,10 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                if (r._ongkir && r.diantarOleh) {
                    const email = r.diantarOleh.toLowerCase().trim();
                    if (isPegawaiNonaktif(email) || !mergedMap.has(email)) return;
+                   
+                   const empCutoff = getEmployeeCutoff(email);
+                   const cycle = getAbsenCycleInfo(h.tanggal, empCutoff);
+                   const bulanTahun = cycle.bulanTahun;
                    const key = `${email}_${bulanTahun}`;
                    const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
                    
@@ -521,7 +556,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
        }
     });
 
-    // 2. Kalkulasi Denda Keterlambatan Absen Masuk Otomatis dari log_absensi (mengikuti siklus)
+    // 2. Kalkulasi Denda Keterlambatan Absen Masuk Otomatis dari log_absensi (mengikuti siklus per pegawai)
     const latePenaltyMap = new Map<string, number>(); // key: `email_MM/YY`, value: total late denda
     const latePenaltyItemsMap = new Map<string, any[]>(); // key: `email_MM/YY`, value: array of denda items
 
@@ -534,7 +569,8 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         const em = l.email.toLowerCase().trim();
         if (isSuperAdminOrOwnerEmail(em) || isPegawaiNonaktif(em) || !mergedMap.has(em)) return;
 
-        const cycle = getAbsenCycleInfo(l.tanggal, cutoffDay);
+        const empCutoff = getEmployeeCutoff(em);
+        const cycle = getAbsenCycleInfo(l.tanggal, empCutoff);
         const bulanTahun = cycle.bulanTahun;
         const key = `${em}_${bulanTahun}`;
 
@@ -595,7 +631,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
       }
     });
 
-    // 3. Calculate auto-penalties for missing checkouts (mengikuti siklus)
+    // 3. Calculate auto-penalties for missing checkouts (mengikuti siklus per pegawai)
     const penaltyMap = new Map(); // key: `email_MM/YY`, value: count of missed checkouts * penalty
     logAbsensi.forEach(l => {
         if (l.jenisAbsen === "Masuk" && l.email && l.tanggal) {
@@ -603,7 +639,8 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
              if (isSuperAdminOrOwnerEmail(em) || isPegawaiNonaktif(em) || !mergedMap.has(em)) return;
              const sameDayPulang = logAbsensi.find(o => o.email === l.email && o.tanggal === l.tanggal && o.jenisAbsen === "Pulang");
              if (!sameDayPulang) {
-                 const cycle = getAbsenCycleInfo(l.tanggal, cutoffDay);
+                 const empCutoff = getEmployeeCutoff(em);
+                 const cycle = getAbsenCycleInfo(l.tanggal, empCutoff);
                  const bulanTahun = cycle.bulanTahun;
                  const key = `${em}_${bulanTahun}`;
                  penaltyMap.set(key, (penaltyMap.get(key) || 0) + (absenConfig.dendaTidakAbsenPulang ?? 40000));
@@ -618,7 +655,8 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
       if (records.length === 0 && (g.gajiPokok || g.bonus || g.potongan)) {
           // Migrasi data lama on the fly
           const d = new Date();
-          const cycle = getAbsenCycleInfo(d.toISOString().slice(0, 10), cutoffDay);
+          const empCutoff = getEmployeeCutoff(k);
+          const cycle = getAbsenCycleInfo(d.toISOString().slice(0, 10), empCutoff);
           const bulanTahun = cycle.bulanTahun;
           records = [{
              id: `migrated-${bulanTahun}`,
@@ -656,6 +694,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
             p.photoUrl = up.photoUrl || p.photoUrl || null;
             p.profileColor = up.profileColor || p.profileColor || "#3b82f6";
         }
+        p.cutoffDay = getEmployeeCutoff(p.email);
         if (!p.records) p.records = [];
 
         // Resolusi Gaji Pokok Dasar Pegawai yang cerdas dan konsisten
@@ -786,7 +825,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
       pegawaiData.forEach((p: any) => {
          p.records?.forEach((r: any) => {
              if (!map.has(r.bulanTahun)) map.set(r.bulanTahun, []);
-             map.get(r.bulanTahun)!.push({ email: p.email, photoUrl: p.photoUrl, profileColor: p.profileColor, ...r });
+             map.get(r.bulanTahun)!.push({ email: p.email, photoUrl: p.photoUrl, profileColor: p.profileColor, cutoffDay: p.cutoffDay, ...r });
          });
       });
       return Array.from(map.entries()).sort((a,b) => {
@@ -1219,7 +1258,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                         </div>
                       </div>
                       
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                         {/* ROLE PICKER */}
                         {isOwnerAccount ? (
                           <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/30 px-2 py-1 rounded-md">
@@ -1227,6 +1266,21 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                           </span>
                         ) : (
                           <>
+                            {/* CUTOFF SELECTOR */}
+                            <select
+                              value={getEmployeeCutoff(u.id)}
+                              onChange={(e) => handleUpdateEmployeeCutoff(u.id, Number(e.target.value))}
+                              className="text-[11px] font-bold bg-blue-50/80 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 text-blue-600 dark:text-blue-400 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                              title="Tanggal Cutoff Absensi & Gaji"
+                            >
+                              <option value={1}>Cutoff: Tgl 1</option>
+                              {Array.from({ length: 30 }, (_, i) => i + 2).map((tgl) => (
+                                <option key={tgl} value={tgl}>
+                                  Cutoff: Tgl {tgl}
+                                </option>
+                              ))}
+                            </select>
+
                             <select
                               value={u.role || "admin"}
                               onChange={(e) => handleChangeRole(u.id, e.target.value)}
@@ -1373,9 +1427,9 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
       {/* NEW WIDGET: MONITORING ABSEN */}
       <Section title="Monitoring Absen Pegawai">
-         {/* TOP CONTROL: TANGGAL MULAI HITUNG ABSENSI (CUTOFF) */}
+         {/* TOP CONTROL: TANGGAL MULAI HITUNG ABSENSI PER-AKUN PEGAWAI (CUTOFF) */}
          <div className="bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 dark:from-blue-500/15 dark:via-indigo-500/15 dark:to-purple-500/15 border border-blue-200/80 dark:border-blue-500/20 rounded-2xl p-4 sm:p-5 mb-4 shadow-sm w-full">
-           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+           <div className="flex items-start sm:items-center justify-between gap-4 mb-4">
              <div className="flex items-start sm:items-center gap-3">
                <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-md shadow-blue-500/20 shrink-0">
                  <CalendarDays className="w-5 h-5" />
@@ -1383,55 +1437,126 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                <div>
                  <div className="flex items-center gap-2 flex-wrap">
                    <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wide">
-                     Tanggal Mulai Hitung Absensi
+                     Tanggal Mulai Hitung Absensi (Per Pegawai)
                    </h4>
                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400">
                      Siklus 1 Bulan
                    </span>
                  </div>
                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                   {cutoffDay <= 1 
-                     ? "Absensi & potongan denda dihitung normal (Tanggal 1 s/d Akhir Bulan)."
-                     : `Absensi & potongan denda dihitung per siklus 1 bulan (Tgl ${cutoffDay} bulan lalu s/d Tgl ${cutoffDay - 1} bulan ini).`}
+                   Setiap pegawai dapat diset tanggal cutoff gajian / absensi masing-masing (misal Tgl 27, Tgl 1, dll).
                  </p>
                </div>
              </div>
+           </div>
 
-             {/* SELECTOR / CONTROLLER */}
-             <div className="flex items-center gap-3 self-end sm:self-center shrink-0">
-               <div className="flex flex-col items-end">
-                 <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Tanggal Cutoff</span>
-                 <div className="flex items-center gap-2 mt-1">
-                   {isOwner ? (
-                     <select
-                       value={cutoffDay}
-                       onChange={async (e) => {
-                         const val = Number(e.target.value);
-                         const newCfg = { ...absenConfig, tanggalMulaiHitung: val };
-                         setAbsenConfig(newCfg);
-                         try {
-                           await setDoc(doc(db, "data", "settings"), { absenConfig: newCfg }, { merge: true });
-                         } catch (err) {
-                           console.error("Gagal simpan tanggal cutoff:", err);
-                         }
-                       }}
-                       className="bg-white dark:bg-[#1C1C1E] border border-blue-300 dark:border-blue-500/40 text-blue-600 dark:text-blue-400 font-black text-sm rounded-xl px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                     >
-                       <option value={1}>Tgl 1 (Awal Bulan Normal)</option>
-                       {Array.from({ length: 30 }, (_, i) => i + 2).map((tgl) => (
-                         <option key={tgl} value={tgl}>
-                           Tanggal {tgl}
-                         </option>
-                       ))}
-                     </select>
-                   ) : (
-                     <span className="bg-white dark:bg-[#1C1C1E] border border-blue-300 dark:border-blue-500/40 text-blue-600 dark:text-blue-400 font-black text-sm rounded-xl px-3 py-2 shadow-sm">
-                       Tanggal {cutoffDay}
+           {/* DAFTAR CUTOFF PEGAWAI AKTIF */}
+           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+             {activeEmployees.map((emp) => {
+               const empCutoff = getEmployeeCutoff(emp.id);
+               const todayStr = new Date().toISOString().slice(0, 10);
+               const cycle = getAbsenCycleInfo(todayStr, empCutoff);
+               const name = emp.id.split("@")[0];
+
+               return (
+                 <div
+                   key={emp.id}
+                   className="bg-white/80 dark:bg-[#1C1C1E]/80 backdrop-blur-sm border border-zinc-200/80 dark:border-white/10 rounded-xl p-3.5 flex flex-col justify-between gap-2.5 shadow-sm hover:border-blue-300 dark:hover:border-blue-500/40 transition-all"
+                 >
+                   <div className="flex items-center justify-between gap-2">
+                     <div className="flex items-center gap-2.5 min-w-0">
+                       <UserAvatar
+                         photoUrl={emp.photoUrl}
+                         email={emp.id}
+                         name={name}
+                         profileColor={emp.profileColor}
+                         size="md"
+                       />
+                       <div className="min-w-0 flex flex-col">
+                         <span className="text-xs font-black text-zinc-900 dark:text-zinc-100 capitalize truncate">
+                           {name}
+                         </span>
+                         <span className="text-[10px] text-zinc-400 truncate">{emp.id}</span>
+                       </div>
+                     </div>
+
+                     {/* SELECTOR CUTOFF */}
+                     {isOwner ? (
+                       <div className="flex flex-col items-end shrink-0">
+                         <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider mb-0.5">Cutoff</label>
+                         <select
+                           value={empCutoff}
+                           onChange={(e) => handleUpdateEmployeeCutoff(emp.id, Number(e.target.value))}
+                           className="bg-white dark:bg-[#2C2C2E] border border-blue-300 dark:border-blue-500/40 text-blue-600 dark:text-blue-400 font-black text-xs rounded-lg px-2 py-1 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                         >
+                           <option value={1}>Tgl 1 (Normal)</option>
+                           {Array.from({ length: 30 }, (_, i) => i + 2).map((tgl) => (
+                             <option key={tgl} value={tgl}>
+                               Tgl {tgl}
+                             </option>
+                           ))}
+                         </select>
+                       </div>
+                     ) : (
+                       <span className="text-xs font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 px-2 py-1 rounded-lg shrink-0">
+                         Tgl {empCutoff}
+                       </span>
+                     )}
+                   </div>
+
+                   {/* ACTIVE CYCLE BADGE */}
+                   <div className="flex items-center justify-between text-[10px] bg-zinc-50 dark:bg-black/30 rounded-lg px-2 py-1 border border-zinc-100 dark:border-white/5">
+                     <span className="text-zinc-400 font-semibold">Siklus Berjalan:</span>
+                     <span className="font-extrabold text-indigo-600 dark:text-indigo-400">
+                       {cycle.shortLabelPeriode} ({cycle.bulanTahun})
                      </span>
-                   )}
+                   </div>
                  </div>
-               </div>
-             </div>
+               );
+             })}
+           </div>
+
+           {/* FILTER TAB BAR UNTUK RIWAYAT ABSENSI */}
+           <div className="mt-4 pt-3 border-t border-blue-200/60 dark:border-white/10 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+             <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider shrink-0 mr-1">
+               Tampilkan:
+             </span>
+             <button
+               type="button"
+               onClick={() => setFilterPegawaiAbsen("all")}
+               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                 filterPegawaiAbsen === "all"
+                   ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                   : "bg-white dark:bg-[#1C1C1E] text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-white/10 hover:border-blue-400"
+               }`}
+             >
+               Semua Pegawai ({activeEmployees.length})
+             </button>
+             {activeEmployees.map((emp) => {
+               const isSelected = filterPegawaiAbsen === emp.id;
+               const name = emp.id.split("@")[0];
+               const cutoff = getEmployeeCutoff(emp.id);
+
+               return (
+                 <button
+                   key={emp.id}
+                   type="button"
+                   onClick={() => setFilterPegawaiAbsen(emp.id)}
+                   className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                     isSelected
+                       ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                       : "bg-white dark:bg-[#1C1C1E] text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-white/10 hover:border-blue-400"
+                   }`}
+                 >
+                   <span className="capitalize">{name}</span>
+                   <span className={`text-[10px] px-1.5 py-0.2 rounded font-extrabold ${
+                     isSelected ? "bg-white/20 text-white" : "bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400"
+                   }`}>
+                     Tgl {cutoff}
+                   </span>
+                 </button>
+               );
+             })}
            </div>
          </div>
 
@@ -1685,7 +1810,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
             {pegawaiData.length === 0 && <p className="text-zinc-500 text-sm px-2">Belum ada pegawai terdeteksi di sistem.</p>}
             {pegawaiData.map((p, i) => (
-                <PegawaiCard key={i} pegawai={p} onSave={handleSaveGaji} isOwner={isOwner} />
+                <PegawaiCard key={i} pegawai={p} onSave={handleSaveGaji} isOwner={isOwner} onUpdateCutoff={handleUpdateEmployeeCutoff} />
             ))}
          </div>
       </Section>
@@ -1695,7 +1820,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
          <div className="flex flex-col gap-8 w-full">
             {groupedByMonth.length === 0 && <p className="text-zinc-500 text-sm px-2">Belum ada riwayat gaji di sistem.</p>}
             {groupedByMonth.map(([bulan, records]) => (
-                <RangkumanBulanItem key={bulan} bulan={bulan} records={records} cutoffDay={cutoffDay} />
+                <RangkumanBulanItem key={bulan} bulan={bulan} records={records} cutoffDay={Number(absenConfig?.tanggalMulaiHitung) || 1} />
             ))}
          </div>
       </Section>
@@ -1805,7 +1930,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   );
 }
 
-const PegawaiCard = ({ pegawai, onSave, isOwner = false }: any) => {
+const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) => {
     const [records, setRecords] = useState<any[]>(pegawai.records || []);
     const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
 
@@ -1870,11 +1995,15 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false }: any) => {
         onSave(pegawai.email, records);
     };
 
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const empCutoff = pegawai.cutoffDay || 1;
+    const currentCycle = getAbsenCycleInfo(todayStr, empCutoff);
+
     return (
         <div className="bg-white dark:bg-[#1C1C1E] rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col gap-4">
             
             {/* Header User */}
-            <div className="flex items-center justify-between pb-3">
+            <div className="flex items-center justify-between pb-1">
                 <div className="flex items-center gap-3 w-full">
                     <UserAvatar
                       photoUrl={pegawai.photoUrl}
@@ -1891,6 +2020,40 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false }: any) => {
                         <span className="text-sm font-black text-zinc-900 dark:text-white">{pegawai.loginsCount}</span>
                     </div>
                 </div>
+            </div>
+
+            {/* Cutoff Setting & Siklus Badge Row */}
+            <div className="flex items-center justify-between bg-zinc-50 dark:bg-black/30 rounded-xl px-3.5 py-2.5 border border-zinc-100 dark:border-white/5">
+                <div className="flex items-center gap-2 min-w-0">
+                    <CalendarDays className="w-4 h-4 text-blue-500 shrink-0" />
+                    <div className="flex flex-col min-w-0">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Tanggal Cutoff & Siklus</span>
+                        <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 truncate">
+                           {currentCycle.shortLabelPeriode}
+                        </span>
+                    </div>
+                </div>
+                {isOwner ? (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <select
+                          value={empCutoff}
+                          onChange={(e) => onUpdateCutoff?.(pegawai.email, Number(e.target.value))}
+                          className="bg-white dark:bg-[#2C2C2E] border border-blue-300 dark:border-blue-500/40 text-blue-600 dark:text-blue-400 font-black text-xs rounded-lg px-2.5 py-1 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                          title="Ubah Tanggal Cutoff Gaji & Absensi"
+                      >
+                          <option value={1}>Tgl 1 (Normal)</option>
+                          {Array.from({ length: 30 }, (_, i) => i + 2).map((tgl) => (
+                              <option key={tgl} value={tgl}>
+                                  Tgl {tgl}
+                              </option>
+                          ))}
+                      </select>
+                    </div>
+                ) : (
+                    <span className="text-xs font-black text-blue-600 dark:text-blue-400 bg-blue-100/50 dark:bg-blue-500/20 px-2 py-0.5 rounded-md shrink-0">
+                        Tgl {empCutoff}
+                    </span>
+                )}
             </div>
 
             {/* List Gaji with internal scrolling if too long */}
@@ -2285,9 +2448,14 @@ const RangkumanBulanItem = ({ bulan, records, cutoffDay = 1 }: { bulan: string, 
                                         size="xl"
                                       />
                                      <div className="flex flex-col flex-1 min-w-0">
-                                        <span className="text-base font-bold text-zinc-900 dark:text-zinc-100 truncate capitalize">{r.email.split("@")[0]}</span>
-                                        <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 truncate">{r.email}</span>
-                                     </div>
+                                         <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-base font-bold text-zinc-900 dark:text-zinc-100 truncate capitalize">{r.email.split("@")[0]}</span>
+                                            <span className="text-[9px] font-extrabold text-blue-600 dark:text-blue-400 bg-blue-100/60 dark:bg-blue-500/20 px-1.5 py-0.5 rounded">
+                                               Cutoff Tgl {r.cutoffDay || 1}
+                                            </span>
+                                         </div>
+                                         <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 truncate">{r.email}</span>
+                                      </div>
                                   </div>
                                   <div className="relative w-[140px] h-[140px] mx-auto mb-4">
                                      <ResponsiveContainer width="100%" height="100%">
