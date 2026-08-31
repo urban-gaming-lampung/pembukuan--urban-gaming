@@ -1591,8 +1591,13 @@ export default function useAppController() {
 
     if (editingId) setEditingId(null);
     
-    setRukoBuka("");
-    setRukoTutup("");
+    _setRukoBuka("");
+    _setRukoBukaDate("");
+    _setRukoTutup("");
+    _setRukoTutupDate("");
+    setAbsenPagi("");
+    setAbsenSiang("");
+    _setShiftPegawai("");
     setCatatan("");
     setRowsHarian(Array.from({ length: 5 }, () => ({ ...blankHarian })));
     setRowsJajanan(Array.from({ length: 5 }, () => ({ ...blankJajanan })));
@@ -1620,12 +1625,11 @@ export default function useAppController() {
     const nextHari = new Intl.DateTimeFormat("id-ID", { weekday: "long" }).format(realNow);
     setHari(nextHari.charAt(0).toUpperCase() + nextHari.slice(1));
 
-    setAbsenPagi("");
-    setAbsenSiang("");
-    setShiftPegawai("");
-
     setDoc(doc(db, "data", "draft"), {}).catch(console.error);
     setDoc(doc(db, "data", "ruko_status"), { rukoBuka: "", rukoBukaDate: "", rukoTutup: "", rukoTutupDate: "", tanggal: "" }, { merge: false }).catch(console.error);
+    if (user?.email) {
+      setDoc(doc(db, "data", `shift_${user.email.toLowerCase().trim()}`), { shift: "", tanggal: "" }, { merge: false }).catch(console.error);
+    }
 
     setSuccessMessage("Data berhasil disimpan secara real-time!");
     setShowSuccessAlert(true);

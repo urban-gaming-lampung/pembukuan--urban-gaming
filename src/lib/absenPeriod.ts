@@ -228,30 +228,32 @@ export function normalizeDateStr(str: any): string {
 }
 
 /**
- * Cek apakah log absensi cocok dengan tanggal target (baik dari field tanggal, tanggalReal, ataupun waktu string)
+ * Cek apakah log absensi cocok dengan tanggal target.
+ * SSOT: Jika log memiliki field `tanggal` (tanggal pembukuan/shift), maka `tanggal` adalah acuan mutlak.
+ * Field lain (tanggalReal, waktu, timestamp, id) hanya sebagai fallback jika field `tanggal` kosong.
  */
 export function isLogForDate(log: any, targetTanggal: string): boolean {
   if (!log || !targetTanggal) return false;
   const normTarget = normalizeDateStr(targetTanggal);
   if (!normTarget) return false;
 
-  // 1. Direct match with normalized tanggal
-  if (log.tanggal && normalizeDateStr(log.tanggal) === normTarget) return true;
-  // 2. Direct match with normalized tanggalReal
+  // 1. Primary SSOT: If log has an explicit `tanggal`, it MUST match targetTanggal
+  if (log.tanggal && typeof log.tanggal === 'string' && log.tanggal.trim()) {
+    return normalizeDateStr(log.tanggal) === normTarget;
+  }
+
+  // 2. Fallbacks only if log.tanggal is missing/empty:
   if (log.tanggalReal && normalizeDateStr(log.tanggalReal) === normTarget) return true;
-  // 3. Match from waktu string (e.g. "22:49 - 31/08/2026" or "31-08-2026")
   if (log.waktu && typeof log.waktu === 'string') {
     const parts = log.waktu.split(' - ');
     for (const p of parts) {
       if (normalizeDateStr(p.trim()) === normTarget) return true;
     }
   }
-  // 4. Match from timestamp if present
   if (log.timestamp && typeof log.timestamp === 'string') {
     const tsDate = log.timestamp.slice(0, 10);
     if (normalizeDateStr(tsDate) === normTarget) return true;
   }
-  // 5. Match from document id (e.g. "2026-08-31_Masuk_...")
   if (log.id && typeof log.id === 'string') {
     const idDate = log.id.slice(0, 10);
     if (normalizeDateStr(idDate) === normTarget) return true;
