@@ -564,7 +564,6 @@ const Input: React.FC<InputProps> = ({
               <div className="flex flex-col gap-1.5 mt-2.5 w-full">
                 <button 
                   onClick={() => {
-                    if (isAbsenBlocked) { setShowAbsenBlockedAlert(true); return; }
                     setPopupAbsen("Pulang");
                   }}
                   disabled={shiftPegawai === "Libur" || shiftPegawai === "" || !isSudahWaktuPulang}

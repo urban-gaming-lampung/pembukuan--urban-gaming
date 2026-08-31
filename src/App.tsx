@@ -442,7 +442,11 @@ export default function App() {
                   const h = wib.getHours();
                   const m = wib.getMinutes();
                   const totalMin = h * 60 + m;
+                  // Sebelum jam 03:00 dini hari (toleransi checkout shift sore): tidak diblok
+                  if (totalMin <= 180) return false;
+                  // Mulai jam 09:45 pagi ke atas (toko buka hari baru): tidak diblok
                   if (totalMin >= 585) return false;
+                  // Antara jam 03:00 s.d 09:45 pagi: blok jika data kemarin sudah disimpan
                   const yesterday = new Date(wib);
                   yesterday.setDate(yesterday.getDate() - 1);
                   const yStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;

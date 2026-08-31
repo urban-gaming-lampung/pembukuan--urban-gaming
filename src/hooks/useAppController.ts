@@ -440,7 +440,8 @@ export default function useAppController() {
       const timePart = activeEntry.pulang.waktu.split(" - ")[0]?.trim();
       if (timePart) {
         _setRukoTutup(timePart);
-        _setRukoTutupDate(normalizeDateStr(tanggal));
+        const datePart = activeEntry.pulang.waktu.split(" - ")[1]?.replace(/\//g, "-");
+        _setRukoTutupDate(datePart ? normalizeDateStr(datePart) : normalizeDateStr(tanggal));
       }
     } else {
       _setRukoTutup("");
