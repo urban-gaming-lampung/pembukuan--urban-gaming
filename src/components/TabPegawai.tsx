@@ -9,7 +9,7 @@ import {
 import { Users, Activity, Banknote, Save, Plus, ChevronDown, ChevronUp, Trash2, X, Camera, UserPlus, Shield, UserCheck, AlertTriangle, CalendarDays, CalendarRange, RotateCcw, Ban } from "lucide-react";
 import Section from "./common/Section";
 import UserAvatar from "./common/UserAvatar";
-import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, BULAN_NAMES } from "../lib/absenPeriod";
+import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, BULAN_NAMES, normalizeBulanTahun } from "../lib/absenPeriod";
 
 // === KONSTANTA ABSENSI ===
 
@@ -657,25 +657,34 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
           const d = new Date();
           const empCutoff = getEmployeeCutoff(k);
           const cycle = getAbsenCycleInfo(d.toISOString().slice(0, 10), empCutoff);
-          const bulanTahun = cycle.bulanTahun;
+          const bulanTahun = normalizeBulanTahun(cycle.bulanTahun);
           records = [{
              id: `migrated-${bulanTahun}`,
              bulanTahun: bulanTahun,
              gajiPokok: Number(g.gajiPokok) || 0,
-             gajiTambahan: (Number(g.bonus) || 0) > 0 ? [{ id: Date.now() + 'tb', nominal: Number(g.bonus) || 0, ket: g.ketPemasukan || g.ket || "Gaji Tambahan" }] : [],
-             gajiPengurangan: (Number(g.potongan) || 0) > 0 ? [{ id: Date.now() + 'pg', nominal: Number(g.potongan) || 0, ket: g.ketPengeluaran || "Gaji Pengurangan" }] : [],
+             gajiTambahan: (Number(g.bonus) || 0) > 0 ? [{ id: `tb_${Date.now()}_init`, nominal: Number(g.bonus) || 0, ket: g.ketPemasukan || g.ket || "Gaji Tambahan", status: "belum" }] : [],
+             gajiPengurangan: (Number(g.potongan) || 0) > 0 ? [{ id: `pg_${Date.now()}_init`, nominal: Number(g.potongan) || 0, ket: g.ketPengeluaran || "Gaji Pengurangan", isDibatalkan: false }] : [],
              buktiTransfer: g.buktiTransfer || "",
              updatedAt: g.updatedAt || Date.now()
           }];
       } else {
           // Transform if already array but using old schema internally
           records = records.map((r: any) => {
+              const normBulan = normalizeBulanTahun(r.bulanTahun);
               let tb = Array.isArray(r.gajiTambahan) ? [...r.gajiTambahan] : [];
               let pg = Array.isArray(r.gajiPengurangan) ? [...r.gajiPengurangan] : [];
-              if (r.bonus && tb.length === 0) tb.push({ id: Date.now() + 'tb', nominal: Number(r.bonus) || 0, ket: r.ketPemasukan || "Gaji Tambahan" });
-              if (r.potongan && pg.length === 0) pg.push({ id: Date.now() + 'tb2', nominal: Number(r.potongan) || 0, ket: r.ketPengeluaran || "Gaji Pengurangan" });
+              if (r.bonus && tb.length === 0) tb.push({ id: `tb_${normBulan}_init`, nominal: Number(r.bonus) || 0, ket: r.ketPemasukan || "Gaji Tambahan", status: "belum" });
+              if (r.potongan && pg.length === 0) pg.push({ id: `pg_${normBulan}_init`, nominal: Number(r.potongan) || 0, ket: r.ketPengeluaran || "Gaji Pengurangan", isDibatalkan: false });
               
-              const res = { ...r, gajiTambahan: tb, gajiPengurangan: pg };
+              // Ensure tb items have id and status
+              tb = tb.map((t: any, idx: number) => ({
+                id: t.id || `tb_${normBulan}_${idx}`,
+                nominal: Number(t.nominal) || 0,
+                ket: t.ket || "Gaji Tambahan",
+                status: t.status === "sudah" ? "sudah" : "belum"
+              }));
+
+              const res = { ...r, bulanTahun: normBulan, gajiTambahan: tb, gajiPengurangan: pg };
               delete res.bonus;
               delete res.potongan;
               delete res.ketPemasukan;
@@ -712,6 +721,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         
         // Populate ongkirBulanIni, late penalties to existing records
         p.records.forEach((rec: any) => {
+           rec.bulanTahun = normalizeBulanTahun(rec.bulanTahun);
            const k = `${p.email.toLowerCase()}_${rec.bulanTahun}`;
            rec.ongkirBulanIni = ongkirMap.get(k) || 0;
            rec.ongkirMasukGajiBulanIni = ongkirMasukGajiMap.get(k) || 0;
@@ -758,7 +768,9 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
         // Any remaining keys in ongkirMap, latePenaltyMap, or penaltyMap for this specific email
         // means there is activity in a month where owner hasn't created a 'gaji record' for yet!
-        // We create a stub "dummy" record automatically.
+        // We create a stub "dummy" record automatically IF AND ONLY IF it doesn't already exist.
+        const existingMonths = new Set(p.records.map((r: any) => normalizeBulanTahun(r.bulanTahun)));
+
         const allRemainingMonthKeys = new Set([
           ...Array.from(ongkirMap.keys()).filter(k => k.startsWith(`${p.email.toLowerCase()}_`)),
           ...Array.from(latePenaltyMap.keys()).filter(k => k.startsWith(`${p.email.toLowerCase()}_`)),
@@ -766,7 +778,20 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         ]);
 
         allRemainingMonthKeys.forEach((key) => {
-           const bTahun = key.split("_")[1];
+           const rawMonth = key.split("_")[1];
+           const bTahun = normalizeBulanTahun(rawMonth);
+           
+           if (existingMonths.has(bTahun)) {
+             // Already covered, just delete the map keys
+             ongkirMap.delete(key);
+             ongkirMasukGajiMap.delete(key);
+             penaltyMap.delete(key);
+             latePenaltyMap.delete(key);
+             latePenaltyItemsMap.delete(key);
+             return;
+           }
+           existingMonths.add(bTahun);
+
            const valOngkir = ongkirMap.get(key) || 0;
            const valMasukGaji = ongkirMasukGajiMap.get(key) || 0;
            const lateItems = (latePenaltyItemsMap.get(key) || []).map(li => ({ ...li, isDibatalkan: false }));
@@ -803,8 +828,8 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         
         // Re-sort records by bulantahun (assuming "MM/YY") so new stub records appear correctly
         p.records.sort((a: any, b: any) => {
-           const [ma, ya] = a.bulanTahun.split("/");
-           const [mb, yb] = b.bulanTahun.split("/");
+           const [ma, ya] = (a.bulanTahun || "").split("/");
+           const [mb, yb] = (b.bulanTahun || "").split("/");
            const da = new Date(2000 + parseInt(ya), parseInt(ma) - 1);
            const db = new Date(2000 + parseInt(yb), parseInt(mb) - 1);
            return db.getTime() - da.getTime();
@@ -824,8 +849,9 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
       const map = new Map<string, any[]>();
       pegawaiData.forEach((p: any) => {
          p.records?.forEach((r: any) => {
-             if (!map.has(r.bulanTahun)) map.set(r.bulanTahun, []);
-             map.get(r.bulanTahun)!.push({ email: p.email, photoUrl: p.photoUrl, profileColor: p.profileColor, cutoffDay: p.cutoffDay, ...r });
+             const normBulan = normalizeBulanTahun(r.bulanTahun);
+             if (!map.has(normBulan)) map.set(normBulan, []);
+             map.get(normBulan)!.push({ email: p.email, photoUrl: p.photoUrl, profileColor: p.profileColor, cutoffDay: p.cutoffDay, ...r });
          });
       });
       return Array.from(map.entries()).sort((a,b) => {
@@ -1033,10 +1059,9 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         const docRef = doc(db, "gaji_pegawai", entry.email);
         const docSnap = await getDoc(docRef);
 
-        const d = new Date(entry.tanggal);
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const yy = String(d.getFullYear()).slice(-2);
-        const currentBulanTahun = `${mm}/${yy}`;
+        const empCutoff = getEmployeeCutoff(entry.email);
+        const cycle = getAbsenCycleInfo(entry.tanggal, empCutoff);
+        const currentBulanTahun = normalizeBulanTahun(cycle.bulanTahun);
 
         const dendaItem = {
           id: `autoPulang_${entry.tanggal}_${Date.now()}`,
@@ -1067,7 +1092,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
           basePokok = 1500000;
         }
 
-        const monthIndex = records.findIndex((r: any) => r.bulanTahun === currentBulanTahun);
+        const monthIndex = records.findIndex((r: any) => normalizeBulanTahun(r.bulanTahun) === currentBulanTahun);
         if (monthIndex >= 0) {
           const pg = Array.isArray(records[monthIndex].gajiPengurangan) ? records[monthIndex].gajiPengurangan : [];
           records[monthIndex] = { ...records[monthIndex], gajiPengurangan: [...pg, dendaItem] };
@@ -1096,65 +1121,87 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         const docRef = doc(db, "gaji_pegawai", email);
         const docSnap = await getDoc(docRef);
         
-        let mergedRecords = [...records];
+        let dbRecords: any[] = [];
         let latestGajiPokok = 0;
 
-        // Find latest non-zero gajiPokok in the records being saved
+        if (docSnap.exists()) {
+          const dData = docSnap.data();
+          dbRecords = Array.isArray(dData.records) ? dData.records : [];
+          latestGajiPokok = Number(dData.gajiPokok) || 0;
+        }
+
+        // Find latest non-zero gajiPokok in local records being saved
         for (const r of records) {
           const v = Number(r.gajiPokok) || 0;
           if (v > 0) { latestGajiPokok = v; break; }
         }
+        if (latestGajiPokok === 0) latestGajiPokok = 1500000;
 
-        if (docSnap.exists()) {
-          const dbRecords = Array.isArray(docSnap.data().records) ? docSnap.data().records : [];
-          
-          if (latestGajiPokok === 0) {
-            latestGajiPokok = Number(docSnap.data().gajiPokok) || 1500000;
-          }
+        // 1. Process local records: sanitize and merge auto-items from db
+        const normalizedLocal = records.map(localRec => {
+          const normBulan = normalizeBulanTahun(localRec.bulanTahun);
+          const dbRec = dbRecords.find((dr: any) => normalizeBulanTahun(dr.bulanTahun) === normBulan);
 
-          // Smart merge: ensure auto-deductions from db are preserved if not explicitly deleted
-          mergedRecords = mergedRecords.map(localRec => {
-            const dbRec = dbRecords.find((dr: any) => dr.bulanTahun === localRec.bulanTahun);
-            if (!dbRec) return localRec;
+          const localPg = Array.isArray(localRec.gajiPengurangan) ? localRec.gajiPengurangan : [];
+          const dbPg = dbRec && Array.isArray(dbRec.gajiPengurangan) ? dbRec.gajiPengurangan : [];
 
-            const localPg = Array.isArray(localRec.gajiPengurangan) ? localRec.gajiPengurangan : [];
-            const dbPg = Array.isArray(dbRec.gajiPengurangan) ? dbRec.gajiPengurangan : [];
+          // Find auto-system items in DB that might have been added in real-time
+          const localIds = new Set(localPg.map((p: any) => p.id || p._idempKey));
+          const missingAutoItems = dbPg.filter((p: any) => p._isAutoSistem && p._idempKey && !localIds.has(p._idempKey) && !localIds.has(p.id));
+          const combinedPg = [...localPg, ...missingAutoItems];
 
-            // Find auto-system items in DB that might have been added in real-time
-            const localIds = new Set(localPg.map((p: any) => p.id || p._idempKey));
-            const missingAutoItems = dbPg.filter((p: any) => p._isAutoSistem && p._idempKey && !localIds.has(p._idempKey) && !localIds.has(p.id));
+          // Sanitize gajiTambahan: ensure every item has a unique id, numeric nominal, and valid status
+          const sanitizedTb = (localRec.gajiTambahan || []).map((t: any, idx: number) => ({
+            id: t.id || `tb_${normBulan}_${Date.now()}_${idx}`,
+            nominal: Number(t.nominal) || 0,
+            ket: String(t.ket || "").trim() || "Gaji Tambahan",
+            status: t.status === "sudah" ? "sudah" : "belum"
+          }));
 
-            // Merge any missing auto items that were added after local snapshot
-            const combinedPg = [...localPg, ...missingAutoItems];
-
-            return {
-              ...localRec,
-              gajiPokok: Number(localRec.gajiPokok) || latestGajiPokok,
-              gajiPengurangan: combinedPg
-            };
-          });
-        }
-
-        // Sanitize numbers
-        const sanitizedRecords = mergedRecords.map(r => ({
-          ...r,
-          gajiPokok: Number(r.gajiPokok) || latestGajiPokok,
-          gajiTambahan: (r.gajiTambahan || []).map((t: any) => ({ ...t, nominal: Number(t.nominal) || 0 })),
-          gajiPengurangan: (r.gajiPengurangan || []).map((p: any) => ({ 
-            ...p, 
+          // Sanitize gajiPengurangan: ensure isDibatalkan boolean is preserved
+          const sanitizedPg = combinedPg.map((p: any, idx: number) => ({
+            id: p.id || `pg_${normBulan}_${Date.now()}_${idx}`,
             nominal: Number(p.nominal) || 0,
-            isDibatalkan: Boolean(p.isDibatalkan)
-          })),
-          updatedAt: Date.now()
-        }));
+            ket: String(p.ket || "").trim() || "Pengurangan",
+            isDibatalkan: Boolean(p.isDibatalkan),
+            photoUrl: p.photoUrl || null,
+            _isAutoSistem: Boolean(p._isAutoSistem),
+            _idempKey: p._idempKey || null,
+            _tanggalAbsen: p._tanggalAbsen || null,
+            _shift: p._shift || null,
+            _waktuAbsen: p._waktuAbsen || null,
+            dateStr: p.dateStr || new Date().toISOString()
+          }));
+
+          return {
+            id: localRec.id || `rec_${normBulan}`,
+            bulanTahun: normBulan,
+            gajiPokok: Number(localRec.gajiPokok) || latestGajiPokok,
+            gajiTambahan: sanitizedTb,
+            gajiPengurangan: sanitizedPg,
+            buktiTransfer: localRec.buktiTransfer || "",
+            isAutoGenerated: false, // User explicitly saved this!
+            updatedAt: Date.now()
+          };
+        });
+
+        // 2. CRITICAL: Preserve any dbRecords whose month is NOT in local records
+        const localMonths = new Set(normalizedLocal.map(r => r.bulanTahun));
+        const preservedDbRecords = dbRecords.filter((dr: any) => !localMonths.has(normalizeBulanTahun(dr.bulanTahun)));
+
+        const finalRecordsToSave = [...normalizedLocal, ...preservedDbRecords].sort((a, b) => {
+          const [ma, ya] = (a.bulanTahun || "").split("/");
+          const [mb, yb] = (b.bulanTahun || "").split("/");
+          return new Date(2000 + parseInt(yb), parseInt(mb) - 1).getTime() - new Date(2000 + parseInt(ya), parseInt(ma) - 1).getTime();
+        });
 
         await setDoc(docRef, {
-          records: sanitizedRecords,
+          records: finalRecordsToSave,
           gajiPokok: latestGajiPokok,
           updatedAt: Date.now()
         }, { merge: true });
 
-        alert(`Gaji ${email.split("@")[0]} berhasil disimpan!`);
+        alert(`✅ Gaji ${email.split("@")[0]} berhasil disimpan!`);
       } catch (err) {
         console.error("Gagal menyimpan gaji pegawai:", err);
         alert("Gagal menyimpan gaji. Silakan coba lagi.");
@@ -1933,17 +1980,23 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) => {
     const [records, setRecords] = useState<any[]>(pegawai.records || []);
     const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
+    const isDirtyRef = React.useRef(false);
 
-    // Sync state when DB updates
+    // Sync state when DB updates ONLY IF user is not actively editing
     useEffect(() => {
-        setRecords(pegawai.records || []);
+        if (!isDirtyRef.current) {
+            setRecords(pegawai.records || []);
+        }
     }, [pegawai]);
 
     const handleAddRecord = () => {
+        isDirtyRef.current = true;
         const d = new Date();
         const mm = String(d.getMonth() + 1).padStart(2, '0');
         const yy = String(d.getFullYear()).slice(-2);
-        const newId = `rec-${Date.now()}`;
+        const newId = `rec-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
 
         let defaultPokok = Number(pegawai.gajiPokok) || 0;
         if (defaultPokok === 0 && records.length > 0) {
@@ -1958,12 +2011,8 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
              id: newId,
              bulanTahun: `${mm}/${yy}`,
              gajiPokok: defaultPokok,
-             bonus: 0,
-             potongan: 0,
              gajiTambahan: [],
              gajiPengurangan: [],
-             ketPemasukan: "",
-             ketPengeluaran: "",
              buktiTransfer: ""
         };
         setRecords([newRecord, ...records]);
@@ -1971,11 +2020,13 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
     };
 
     const handleUpdateRecord = (id: string, patch: any) => {
+        isDirtyRef.current = true;
         setRecords(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
     };
 
     const handleDeleteRecord = (id: string) => {
         if(confirm("Yakin ingin menghapus rekam gaji ini?")) {
+            isDirtyRef.current = true;
             setRecords(prev => prev.filter(r => r.id !== id));
         }
     };
@@ -1983,6 +2034,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
     const handleFileChange = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
+            isDirtyRef.current = true;
             const reader = new FileReader();
             reader.onloadend = () => handleUpdateRecord(id, { buktiTransfer: reader.result as string });
             reader.readAsDataURL(file);
@@ -1991,8 +2043,18 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
 
     const isChanged = JSON.stringify(records) !== JSON.stringify(pegawai.records || []);
 
-    const handleSave = () => {
-        onSave(pegawai.email, records);
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            await onSave(pegawai.email, records);
+            isDirtyRef.current = false;
+            setSaveSuccess(true);
+            setTimeout(() => setSaveSuccess(false), 3000);
+        } catch (err) {
+            console.error("Save error:", err);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -2000,7 +2062,9 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
     const currentCycle = getAbsenCycleInfo(todayStr, empCutoff);
 
     return (
-        <div className="bg-white dark:bg-[#1C1C1E] rounded-3xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm flex flex-col gap-4">
+        <div className={`bg-white dark:bg-[#1C1C1E] rounded-3xl p-5 border shadow-sm flex flex-col gap-4 transition-all ${
+            isChanged ? 'border-amber-400/80 dark:border-amber-500/50 ring-2 ring-amber-500/10' : 'border-zinc-200 dark:border-zinc-800'
+        }`}>
             
             {/* Header User */}
             <div className="flex items-center justify-between pb-1">
@@ -2012,7 +2076,14 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                       size="xl"
                     />
                     <div className="flex-1 min-w-0">
-                       <h3 className="text-sm font-bold text-zinc-900 dark:text-white truncate">{pegawai.email.split("@")[0].toUpperCase()}</h3>
+                       <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-sm font-bold text-zinc-900 dark:text-white truncate">{pegawai.email.split("@")[0].toUpperCase()}</h3>
+                          {saveSuccess && (
+                              <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-500/20 px-2 py-0.5 rounded-md flex items-center gap-1 animate-in fade-in">
+                                  ✓ Tersimpan
+                              </span>
+                          )}
+                       </div>
                        <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">{pegawai.email}</p>
                     </div>
                     <div className="flex flex-col items-end shrink-0 pl-2 border-l border-zinc-100 dark:border-white/5">
@@ -2021,6 +2092,22 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                     </div>
                 </div>
             </div>
+
+            {/* Unsaved Changes Banner */}
+            {isChanged && (
+                <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-300 px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between gap-2 animate-in fade-in">
+                    <span className="flex items-center gap-1.5 truncate">
+                        <AlertTriangle size={15} className="text-amber-500 shrink-0" /> Ada perubahan gaji belum disimpan
+                    </span>
+                    <button 
+                      onClick={handleSave} 
+                      disabled={isSaving}
+                      className="bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-black px-3 py-1.5 rounded-lg shrink-0 shadow-sm active:scale-95 transition-all"
+                    >
+                        {isSaving ? "Menyimpan..." : "Simpan Sekarang"}
+                    </button>
+                </div>
+            )}
 
             {/* Cutoff Setting & Siklus Badge Row */}
             <div className="flex items-center justify-between bg-zinc-50 dark:bg-black/30 rounded-xl px-3.5 py-2.5 border border-zinc-100 dark:border-white/5">
@@ -2105,7 +2192,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                        <div className="flex items-center justify-between">
                                            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500 block">Gaji Tambahan</label>
                                               <button onClick={() => {
-                                                  const newTb = [...(r.gajiTambahan || []), { id: Date.now() + 'tb', nominal: 0, ket: "Tambahan", status: "belum" }];
+                                                  const newTb = [...(r.gajiTambahan || []), { id: `tb_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, nominal: 0, ket: "Tambahan", status: "belum" }];
                                                   handleUpdateRecord(r.id, { gajiTambahan: newTb });
                                               }} className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-1 rounded-md">
                                                 <Plus size={10} strokeWidth={3} /> Tambah
@@ -2189,7 +2276,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                        <div className="flex items-center justify-between">
                                            <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500 block">Gaji Pengurangan</label>
                                                <button onClick={() => {
-                                                   const newPg = [...(r.gajiPengurangan || []), { id: Date.now() + 'pg', nominal: 0, ket: "Pengurangan", isDibatalkan: false }];
+                                                   const newPg = [...(r.gajiPengurangan || []), { id: `pg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, nominal: 0, ket: "Pengurangan", isDibatalkan: false }];
                                                    handleUpdateRecord(r.id, { gajiPengurangan: newPg });
                                                }} className="text-[10px] font-bold text-red-600 dark:text-red-400 flex items-center gap-1 bg-red-50 dark:bg-red-500/10 px-2 py-1 rounded-md">
                                                  <Plus size={10} strokeWidth={3} /> Tambah
@@ -2365,11 +2452,11 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                     <Plus size={14} strokeWidth={3} /> Gaji
                 </button>
                 <button 
-                  disabled={!isChanged} 
+                  disabled={!isChanged || isSaving} 
                   onClick={handleSave} 
                   className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:bg-zinc-300 dark:disabled:bg-zinc-800 transition-colors text-white text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-1.5 active:scale-95 shadow-md shadow-blue-500/20 disabled:shadow-none"
                 >
-                   <Save className="w-3.5 h-3.5" /> Simpan
+                   <Save className="w-3.5 h-3.5" /> {isSaving ? "Menyimpan..." : "Simpan"}
                 </button>
             </div>
             

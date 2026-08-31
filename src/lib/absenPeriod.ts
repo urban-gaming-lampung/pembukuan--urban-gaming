@@ -161,3 +161,23 @@ export function getCycleInfoFromBulanTahun(bulanTahun: string, cutoffDay: number
     endDate: new Date(endYear, endMonth - 1, actualEndDay, 23, 59, 59)
   };
 }
+
+/**
+ * Memastikan format bulanTahun selalu canonical MM/YY (contoh: "02/26")
+ */
+export function normalizeBulanTahun(str: string): string {
+  if (!str) return '';
+  const trimmed = str.trim();
+  const parts = trimmed.split('/');
+  if (parts.length === 2) {
+    const m = parseInt(parts[0], 10);
+    let y = parseInt(parts[1], 10);
+    if (!isNaN(m) && !isNaN(y) && m >= 1 && m <= 12) {
+      if (y >= 2000) y = y % 100;
+      const mm = String(m).padStart(2, '0');
+      const yy = String(y).padStart(2, '0');
+      return `${mm}/${yy}`;
+    }
+  }
+  return trimmed;
+}

@@ -3,6 +3,7 @@ import AbsenPopup from "./AbsenPopup";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadString, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "../lib/firebase";
+import { getAbsenCycleInfo, normalizeBulanTahun } from "../lib/absenPeriod";
 
 // === KONSTANTA ABSENSI ===
 // (Catatan: Konstanta di bawah sudah dipindah ke dinamis via absenConfig, kecuali yang tidak terkait denda keterlambatan per blok)
@@ -302,10 +303,19 @@ const Input: React.FC<InputProps> = ({
             _waktuAbsen: waktuAbsen
          };
 
-         const d = new Date(effectiveDate);
-         const mm = String(d.getMonth() + 1).padStart(2, '0');
-         const yy = String(d.getFullYear()).slice(-2);
-         const currentBulanTahun = `${mm}/${yy}`;
+         // Get employee cutoff
+         let empCutoff = 1;
+         try {
+            const userSnap = await getDoc(doc(db, "users", emailTrimmed));
+            if (userSnap.exists() && typeof userSnap.data()?.tanggalMulaiHitung === "number") {
+               empCutoff = userSnap.data().tanggalMulaiHitung;
+            }
+         } catch (e) {
+            console.warn("Gagal mengambil cutoff user:", e);
+         }
+
+         const cycle = getAbsenCycleInfo(effectiveDate, empCutoff);
+         const currentBulanTahun = normalizeBulanTahun(cycle.bulanTahun);
 
          let basePokok = 0;
          if (docSnap.exists()) {
@@ -327,7 +337,7 @@ const Input: React.FC<InputProps> = ({
             }
             if (basePokok === 0) basePokok = Number(data.gajiPokok) || 1500000;
             
-            const monthIndex = records.findIndex((r: any) => r.bulanTahun === currentBulanTahun);
+            const monthIndex = records.findIndex((r: any) => normalizeBulanTahun(r.bulanTahun) === currentBulanTahun);
             if (monthIndex >= 0) {
                const currentMonth = records[monthIndex];
                const gajiPengurangan = Array.isArray(currentMonth.gajiPengurangan) ? currentMonth.gajiPengurangan : [];
