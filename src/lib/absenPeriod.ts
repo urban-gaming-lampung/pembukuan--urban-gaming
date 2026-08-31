@@ -201,3 +201,19 @@ export function normalizeDateStr(str: any): string {
   return clean;
 }
 
+/**
+ * Cek apakah log absensi cocok dengan tanggal target (baik dari field tanggal, tanggalReal, ataupun waktu string)
+ */
+export function isLogForDate(log: any, targetTanggal: string): boolean {
+  if (!log || !targetTanggal) return false;
+  const normTarget = normalizeDateStr(targetTanggal);
+  if (log.tanggal && normalizeDateStr(log.tanggal) === normTarget) return true;
+  if (log.tanggalReal && normalizeDateStr(log.tanggalReal) === normTarget) return true;
+  if (log.waktu && typeof log.waktu === 'string') {
+    const parts = log.waktu.split(' - ');
+    if (parts.length > 1 && normalizeDateStr(parts[1]) === normTarget) return true;
+  }
+  return false;
+}
+
+

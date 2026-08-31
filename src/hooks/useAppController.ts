@@ -14,7 +14,7 @@ import { LS_KEY } from "../constants/storage";
 import { checkCatalogBaselineAndLogUpdates, isVersionLower, SavedCatalogState, startOfDay, endOfDay } from "../lib/catalog";
 import useStokData from "./useStokData";
 import { PdfExporterHandle } from "../components/PdfExporter";
-import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr } from "../lib/absenPeriod";
+import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr, isLogForDate } from "../lib/absenPeriod";
 
 type ImageQuality = "Tinggi" | "Hemat";
 type Price = { label: string; price: number };
@@ -369,12 +369,7 @@ export default function useAppController() {
   useEffect(() => {
     if (!tanggal || editingId) return;
 
-    const normTgl = normalizeDateStr(tanggal);
-    const logsForToday = allLogAbsensi.filter((l: any) => {
-      const lTgl = normalizeDateStr(l.tanggal);
-      const lReal = normalizeDateStr(l.tanggalReal);
-      return (lTgl === normTgl || lReal === normTgl) && l.status !== "deleted";
-    });
+    const logsForToday = allLogAbsensi.filter((l: any) => isLogForDate(l, tanggal) && l.status !== "deleted");
 
     let pagi = "";
     let siang = "";
@@ -385,28 +380,29 @@ export default function useAppController() {
     const pulangLogs = logsForToday.filter(l => l.jenisAbsen === "Pulang" && l.waktu);
     const liburLogs = logsForToday.filter(l => l.jenisAbsen === "Libur" || l.shift === "Libur");
 
+    let selectedMasuk: any = null;
+    let selectedPulang: any = null;
+    let selectedLibur: any = null;
+
     if (masukLogs.length > 0) {
-      const userLog = currentUserEmail ? masukLogs.find(l => l.email?.toLowerCase().trim() === currentUserEmail) : null;
-      const selected = userLog || (isSuperAdminOrOwner ? masukLogs[0] : masukLogs[0]);
-      if (selected) {
-        pagi = selected.waktu;
-        if (selected.shift && selected.shift !== "Libur") shiftFromLog = selected.shift;
+      selectedMasuk = currentUserEmail ? (masukLogs.find(l => l.email?.toLowerCase().trim() === currentUserEmail) || masukLogs[0]) : masukLogs[0];
+      if (selectedMasuk) {
+        pagi = selectedMasuk.waktu;
+        if (selectedMasuk.shift && selectedMasuk.shift !== "Libur") shiftFromLog = selectedMasuk.shift;
       }
     }
 
     if (pulangLogs.length > 0) {
-      const userLog = currentUserEmail ? pulangLogs.find(l => l.email?.toLowerCase().trim() === currentUserEmail) : null;
-      const selected = userLog || (isSuperAdminOrOwner ? pulangLogs[pulangLogs.length - 1] : pulangLogs[pulangLogs.length - 1]);
-      if (selected) {
-        siang = selected.waktu;
-        if (!shiftFromLog && selected.shift && selected.shift !== "Libur") shiftFromLog = selected.shift;
+      selectedPulang = currentUserEmail ? (pulangLogs.find(l => l.email?.toLowerCase().trim() === currentUserEmail) || pulangLogs[pulangLogs.length - 1]) : pulangLogs[pulangLogs.length - 1];
+      if (selectedPulang) {
+        siang = selectedPulang.waktu;
+        if (!shiftFromLog && selectedPulang.shift && selectedPulang.shift !== "Libur") shiftFromLog = selectedPulang.shift;
       }
     }
 
     if (liburLogs.length > 0 && masukLogs.length === 0) {
-      const userLog = currentUserEmail ? liburLogs.find(l => l.email?.toLowerCase().trim() === currentUserEmail) : null;
-      const selected = userLog || (isSuperAdminOrOwner ? liburLogs[0] : liburLogs[0]);
-      if (selected) {
+      selectedLibur = currentUserEmail ? (liburLogs.find(l => l.email?.toLowerCase().trim() === currentUserEmail) || liburLogs[0]) : liburLogs[0];
+      if (selectedLibur) {
         shiftFromLog = "Libur";
       }
     }
@@ -415,6 +411,24 @@ export default function useAppController() {
     setAbsenSiang(siang);
     if (shiftFromLog) {
       _setShiftPegawai(prev => (prev === "Libur" && shiftFromLog !== "Libur" ? shiftFromLog : prev || shiftFromLog));
+    }
+
+    // Realtime auto-fill Ruko Buka from Masuk attendance
+    if (selectedMasuk && selectedMasuk.waktu) {
+      const timePart = selectedMasuk.waktu.split(" - ")[0]?.trim();
+      if (timePart) {
+        _setRukoBuka(prev => prev || timePart);
+        _setRukoBukaDate(prev => prev || normalizeDateStr(tanggal));
+      }
+    }
+
+    // Realtime auto-fill Ruko Tutup from Pulang attendance
+    if (selectedPulang && selectedPulang.waktu) {
+      const timePart = selectedPulang.waktu.split(" - ")[0]?.trim();
+      if (timePart) {
+        _setRukoTutup(prev => prev || timePart);
+        _setRukoTutupDate(prev => prev || normalizeDateStr(tanggal));
+      }
     }
   }, [allLogAbsensi, tanggal, user?.email, editingId, isSuperAdminOrOwner]);
 
@@ -963,34 +977,7 @@ export default function useAppController() {
   
   useEffect(() => { historyRef.current = history; }, [history]);
 
-  const hasAutoCorrectRef = useRef(false);
-  useEffect(() => {
-    if (history.length === 0) return;
-    if (editingId) return;
-    if (hasAutoCorrectRef.current) return;
 
-    const alreadySaved = history.some(h => h.tanggal === tanggal);
-    if (alreadySaved) {
-      hasAutoCorrectRef.current = true;
-      
-      const realNow = getWibDate();
-      const realDateStr = `${realNow.getFullYear()}-${String(realNow.getMonth() + 1).padStart(2, "0")}-${String(realNow.getDate()).padStart(2, "0")}`;
-      
-      if (tanggal !== realDateStr) {
-        systemDateRef.current = realNow.getDate();
-        setTanggal(realDateStr);
-        const h = new Intl.DateTimeFormat("id-ID", { weekday: "long" }).format(realNow);
-        setHari(h.charAt(0).toUpperCase() + h.slice(1));
-      }
-      
-      setAbsenPagi("");
-      setAbsenSiang("");
-      setShiftPegawai("");
-      setRukoBuka("");
-      setRukoTutup("");
-      hasDataRef.current = false;
-    }
-  }, [history, tanggal, editingId]);
 
   const [filter, setFilter] = useState("Bulan Ini"); 
   const [filterMonth, setFilterMonth] = useState(today.getMonth() + 1);
