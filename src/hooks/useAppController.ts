@@ -369,14 +369,28 @@ export default function useAppController() {
   useEffect(() => {
     if (!tanggal || editingId) return;
 
-    const isOwnerEmail = (em: string) => em.toLowerCase().trim() === "owner@gmail.com";
+    const isSuperAdminOrOwner = (em: string) => {
+      if (!em) return false;
+      const lower = em.toLowerCase().trim();
+      return lower === "owner@gmail.com" || lower.includes("admin") || lower.includes("superadmin");
+    };
     const currentUserEmail = user?.email?.toLowerCase().trim() || "";
 
     const logsForToday = allLogAbsensi.filter((l: any) => isLogForDate(l, tanggal) && l.status !== "deleted" && l.status !== "completed");
-    if (logsForToday.length === 0) return;
+    
+    // If no active logs exist today (e.g. fresh day or owner reset logs), reset all attendance states
+    if (logsForToday.length === 0) {
+      setAbsenPagi("");
+      setAbsenSiang("");
+      _setRukoBuka("");
+      _setRukoBukaDate("");
+      _setRukoTutup("");
+      _setRukoTutupDate("");
+      return;
+    }
 
     // Check if there are real employee logs vs owner test logs
-    const hasEmployeeLogs = logsForToday.some((l: any) => l.email && !isOwnerEmail(l.email));
+    const hasEmployeeLogs = logsForToday.some((l: any) => l.email && !isSuperAdminOrOwner(l.email));
 
     // Aggregate logs per employee (SSOT identical to TabPegawai)
     const empMap = new Map<string, { email: string; masuk?: any; pulang?: any; libur?: any; shift?: string }>();
@@ -384,7 +398,7 @@ export default function useAppController() {
     logsForToday.forEach((l: any) => {
       const em = l.email ? l.email.toLowerCase().trim() : "";
       if (!em) return;
-      if (hasEmployeeLogs && isOwnerEmail(em)) return; // Filter out owner test logs when real employee logs exist
+      if (hasEmployeeLogs && isSuperAdminOrOwner(em)) return; // Filter out owner test logs when real employee logs exist
 
       if (!empMap.has(em)) {
         empMap.set(em, { email: em });
@@ -403,44 +417,67 @@ export default function useAppController() {
     });
 
     const entries = Array.from(empMap.values());
-    if (entries.length === 0) return;
 
-    // Pick active employee entry
+    // Determine active employee entry
     let activeEntry: { email: string; masuk?: any; pulang?: any; libur?: any; shift?: string } | undefined;
-    if (currentUserEmail && !isOwnerEmail(currentUserEmail) && empMap.has(currentUserEmail)) {
-      activeEntry = empMap.get(currentUserEmail);
+
+    if (currentUserEmail && !isSuperAdminOrOwner(currentUserEmail)) {
+      // CURRENT USER IS AN EMPLOYEE (e.g. galang@gmail.com, fauzan@gmail.com)
+      if (empMap.has(currentUserEmail)) {
+        // This specific employee HAS checked in today!
+        activeEntry = empMap.get(currentUserEmail);
+      } else {
+        // This employee has NOT checked in today!
+        // NEVER fall back to another employee! Keep attendance clean so they can check in.
+        activeEntry = undefined;
+        setAbsenPagi("");
+        setAbsenSiang("");
+      }
     } else {
-      // For Owner or shared screen: pick the latest employee shift entry
-      activeEntry = entries[entries.length - 1];
+      // CURRENT USER IS OWNER OR SUPER ADMIN
+      if (entries.length > 0) {
+        activeEntry = entries[entries.length - 1];
+      } else {
+        activeEntry = undefined;
+        setAbsenPagi("");
+        setAbsenSiang("");
+      }
     }
 
-    if (!activeEntry) return;
+    if (activeEntry) {
+      const pagi = activeEntry.masuk?.waktu || "";
+      const siang = activeEntry.pulang?.waktu || "";
+      const shiftFromLog = activeEntry.shift || (activeEntry.masuk?.shift) || (activeEntry.pulang?.shift) || "";
 
-    const pagi = activeEntry.masuk?.waktu || "";
-    const siang = activeEntry.pulang?.waktu || "";
-    const shiftFromLog = activeEntry.shift || (activeEntry.masuk?.shift) || (activeEntry.pulang?.shift) || "";
-
-    setAbsenPagi(pagi);
-    setAbsenSiang(siang);
-    if (shiftFromLog) {
-      _setShiftPegawai(shiftFromLog);
+      setAbsenPagi(pagi);
+      setAbsenSiang(siang);
+      if (shiftFromLog) {
+        _setShiftPegawai(shiftFromLog);
+      }
     }
 
-    // Realtime auto-fill Ruko Buka
-    if (activeEntry.masuk?.waktu) {
-      const timePart = activeEntry.masuk.waktu.split(" - ")[0]?.trim();
+    // Realtime auto-fill Ruko Buka (Earliest Masuk of the day store-wide)
+    const allMasukLogs = logsForToday.filter((l: any) => l.jenisAbsen === "Masuk" && l.waktu);
+    if (allMasukLogs.length > 0) {
+      const earliestMasuk = allMasukLogs[0];
+      const timePart = earliestMasuk.waktu.split(" - ")[0]?.trim();
       if (timePart) {
         _setRukoBuka(timePart);
         _setRukoBukaDate(normalizeDateStr(tanggal));
       }
+    } else {
+      _setRukoBuka("");
+      _setRukoBukaDate("");
     }
 
-    // Realtime auto-fill Ruko Tutup (hanya jika active employee sudah pulang)
-    if (activeEntry.pulang?.waktu) {
-      const timePart = activeEntry.pulang.waktu.split(" - ")[0]?.trim();
+    // Realtime auto-fill Ruko Tutup (Latest Pulang of the day store-wide, or active employee's pulang)
+    const allPulangLogs = logsForToday.filter((l: any) => l.jenisAbsen === "Pulang" && l.waktu);
+    if (allPulangLogs.length > 0) {
+      const latestPulang = allPulangLogs[allPulangLogs.length - 1];
+      const timePart = latestPulang.waktu.split(" - ")[0]?.trim();
       if (timePart) {
         _setRukoTutup(timePart);
-        const datePart = activeEntry.pulang.waktu.split(" - ")[1]?.replace(/\//g, "-");
+        const datePart = latestPulang.waktu.split(" - ")[1]?.replace(/\//g, "-");
         _setRukoTutupDate(datePart ? normalizeDateStr(datePart) : normalizeDateStr(tanggal));
       }
     } else {
@@ -1047,14 +1084,13 @@ export default function useAppController() {
   const currentFormSignature = useMemo(() => {
     return JSON.stringify({
       tanggal, hari, catatan,
-      shiftPegawai, absenPagi, absenSiang,
       rukoBuka, rukoTutup,
       rowsHarian, rowsJajanan, rowsJasaAks, rowsSewa,
       totalHarian, totalJajanan, totalJasaAks, totalSewa,
       totalCash, totalTransfer,
       rowsSetoran, rowsPengeluaran
     });
-  }, [tanggal, hari, shiftPegawai, absenPagi, absenSiang, rukoBuka, rukoTutup, catatan, rowsHarian, rowsJajanan, rowsJasaAks, rowsSewa, totalHarian, totalJajanan, totalJasaAks, totalSewa, totalCash, totalTransfer, rowsSetoran, rowsPengeluaran]);
+  }, [tanggal, hari, rukoBuka, rukoTutup, catatan, rowsHarian, rowsJajanan, rowsJasaAks, rowsSewa, totalHarian, totalJajanan, totalJasaAks, totalSewa, totalCash, totalTransfer, rowsSetoran, rowsPengeluaran]);
 
   useEffect(() => {
     if (isJustSavedOrLoaded.current) {
@@ -1072,9 +1108,8 @@ export default function useAppController() {
       if (data.tanggal !== undefined) setTanggal(data.tanggal);
       if (data.hari !== undefined) setHari(data.hari);
     }
-    if (data.shiftPegawai && !editingId) _setShiftPegawai(data.shiftPegawai);
-    if (data.absenPagi && !editingId) setAbsenPagi(data.absenPagi);
-    if (data.absenSiang && !editingId) setAbsenSiang(data.absenSiang);
+    // Catatan: shiftPegawai, absenPagi, absenSiang TIDAK disinkron via draft umum
+    // melainkan SSOT murni per-pegawai via log_absensi Firestore agar shift 1 tidak menimpa shift 2.
     if (data.rukoBuka !== undefined) _setRukoBuka(data.rukoBuka ? data.rukoBuka.split(" - ")[0] : "");
     if (data.rukoTutup !== undefined) _setRukoTutup(data.rukoTutup ? data.rukoTutup.split(" - ")[0] : "");
     if (data.catatan !== undefined) setCatatan(data.catatan);
@@ -2242,30 +2277,62 @@ export default function useAppController() {
 
   const handleResetAbsenPagi = useCallback(async () => {
     setAbsenPagi("");
+    _setRukoBuka("");
+    _setRukoBukaDate("");
     try {
+      // 1. Hapus dari log_absensi menggunakan SSOT isLogForDate
+      const targets = allLogAbsensi.filter((l: any) => isLogForDate(l, tanggal) && l.jenisAbsen === "Masuk");
+      for (const target of targets) {
+        if (target.id) {
+          await deleteDoc(doc(db, "log_absensi", target.id)).catch(console.error);
+        }
+      }
+      // Query fallback
       const q = query(collection(db, "log_absensi"), where("tanggal", "==", tanggal), where("jenisAbsen", "==", "Masuk"));
       const snapshot = await getDocs(q);
       snapshot.forEach((docSnap) => deleteDoc(docSnap.ref).catch(console.error));
+
+      // Reset ruko buka di database
+      await setDoc(doc(db, "data", "ruko_status"), { rukoBuka: "", rukoBukaDate: "" }, { merge: true }).catch(console.error);
     } catch (e) {
       console.error("Gagal reset absen pagi", e);
     }
-  }, [tanggal]);
+  }, [tanggal, allLogAbsensi]);
 
   const handleResetAbsenSiang = useCallback(async () => {
     setAbsenSiang("");
+    _setRukoTutup("");
+    _setRukoTutupDate("");
     try {
+      // 1. Hapus dari log_absensi menggunakan SSOT isLogForDate
+      const targets = allLogAbsensi.filter((l: any) => isLogForDate(l, tanggal) && l.jenisAbsen === "Pulang");
+      for (const target of targets) {
+        if (target.id) {
+          await deleteDoc(doc(db, "log_absensi", target.id)).catch(console.error);
+        }
+      }
+      // Query fallback
       const q = query(collection(db, "log_absensi"), where("tanggal", "==", tanggal), where("jenisAbsen", "==", "Pulang"));
       const snapshot = await getDocs(q);
       snapshot.forEach((docSnap) => deleteDoc(docSnap.ref).catch(console.error));
+
+      // Reset ruko tutup di database
+      await setDoc(doc(db, "data", "ruko_status"), { rukoTutup: "", rukoTutupDate: "" }, { merge: true }).catch(console.error);
     } catch (e) {
       console.error("Gagal reset absen siang", e);
     }
-  }, [tanggal]);
+  }, [tanggal, allLogAbsensi]);
 
   const handleResetForm = useCallback(async () => {
     setAbsenPagi(""); setAbsenSiang(""); setShiftPegawai(""); setRukoBuka(""); setRukoTutup(""); setCatatan(""); 
     try {
       await setDoc(doc(db, "data", "ruko_status"), { rukoBuka: "", rukoBukaDate: "", rukoTutup: "", rukoTutupDate: "", tanggal: "" }, { merge: false });
+      const targets = allLogAbsensi.filter((l: any) => isLogForDate(l, tanggal));
+      for (const target of targets) {
+        if (target.id) {
+          await deleteDoc(doc(db, "log_absensi", target.id)).catch(console.error);
+        }
+      }
       const q = query(collection(db, "log_absensi"), where("tanggal", "==", tanggal));
       const snapshot = await getDocs(q);
       snapshot.forEach((docSnap) => {
@@ -2274,7 +2341,7 @@ export default function useAppController() {
     } catch (e) {
       console.error("Gagal menghapus log_absensi/ruko_status:", e);
     }
-  }, [tanggal, setShiftPegawai, setRukoBuka, setRukoTutup]);
+  }, [tanggal, allLogAbsensi, setShiftPegawai]);
 
   return {
     rootRef,
