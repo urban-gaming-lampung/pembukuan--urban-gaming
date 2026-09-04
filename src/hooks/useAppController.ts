@@ -30,6 +30,25 @@ const getBusinessDate = () => {
   return wib;
 };
 
+/**
+ * Konversi string waktu (HH:MM atau HH.MM) ke skala menit operasional rental (06:00 s.d 03:00 keesokan harinya).
+ * - Waktu 06:00 - 23:59 -> jam * 60 + menit
+ * - Waktu 00:00 - 03:00 (dini hari cross-midnight) -> (24 + jam) * 60 + menit
+ * Hal ini memastikan jam 00:20 dini hari diperlakukan LEBIH MALAM daripada jam 23:50 malam.
+ */
+export const getBusinessMinutes = (waktuStr: string): number => {
+  if (!waktuStr) return -1;
+  const timePart = waktuStr.split(" - ")[0]?.trim().replace('.', ':');
+  if (!timePart) return -1;
+  const [h, m] = timePart.split(":").map(Number);
+  if (isNaN(h)) return -1;
+  const minuteVal = isNaN(m) ? 0 : m;
+  if (h <= 3) {
+    return (24 + h) * 60 + minuteVal;
+  }
+  return h * 60 + minuteVal;
+};
+
 export default function useAppController() {
   const rootRef = useRef<HTMLDivElement>(null);
   const appStokData = useStokData();
@@ -418,49 +437,53 @@ export default function useAppController() {
 
     const entries = Array.from(empMap.values());
 
-    // Determine active employee entry
-    let activeEntry: { email: string; masuk?: any; pulang?: any; libur?: any; shift?: string } | undefined;
+    // 1. Urutkan semua Absen Masuk hari ini secara kronologis: PALING PAGI ada di index 0
+    const allMasukLogs = logsForToday
+      .filter((l: any) => l.jenisAbsen === "Masuk" && l.waktu)
+      .sort((a: any, b: any) => getBusinessMinutes(a.waktu) - getBusinessMinutes(b.waktu));
+    const earliestMasukLog = allMasukLogs[0];
+
+    // 2. Urutkan semua Absen Pulang hari ini secara kronologis: PALING MALAM / DINI HARI (toleransi s.d 03:00) ada di index 0
+    const allPulangLogs = logsForToday
+      .filter((l: any) => l.jenisAbsen === "Pulang" && l.waktu)
+      .sort((a: any, b: any) => getBusinessMinutes(b.waktu) - getBusinessMinutes(a.waktu));
+    const latestPulangLog = allPulangLogs[0];
 
     if (currentUserEmail && !isSuperAdminOrOwner(currentUserEmail)) {
       // CURRENT USER IS AN EMPLOYEE (e.g. galang@gmail.com, fauzan@gmail.com)
       if (empMap.has(currentUserEmail)) {
         // This specific employee HAS checked in today!
-        activeEntry = empMap.get(currentUserEmail);
+        const empEntry = empMap.get(currentUserEmail)!;
+        setAbsenPagi(empEntry.masuk?.waktu || "");
+        setAbsenSiang(empEntry.pulang?.waktu || "");
+        if (empEntry.shift) {
+          _setShiftPegawai(empEntry.shift);
+        }
       } else {
         // This employee has NOT checked in today!
         // NEVER fall back to another employee! Keep attendance clean so they can check in.
-        activeEntry = undefined;
         setAbsenPagi("");
         setAbsenSiang("");
       }
     } else {
-      // CURRENT USER IS OWNER OR SUPER ADMIN
-      if (entries.length > 0) {
-        activeEntry = entries[entries.length - 1];
-      } else {
-        activeEntry = undefined;
-        setAbsenPagi("");
-        setAbsenSiang("");
-      }
-    }
+      // CURRENT USER IS OWNER OR SUPER ADMIN (Tampilan Utama Pembukuan Harian)
+      // Wajib mengambil:
+      // - Absen Masuk: PALING PAGI (earliest check-in of the day)
+      // - Absen Pulang: PALING MALAM / DINI HARI (latest check-out of the day s.d 03:00)
+      const pagiPalingPagi = earliestMasukLog?.waktu || "";
+      const siangPalingMalam = latestPulangLog?.waktu || "";
+      const shiftPagi = earliestMasukLog?.shift || entries[0]?.shift || "";
 
-    if (activeEntry) {
-      const pagi = activeEntry.masuk?.waktu || "";
-      const siang = activeEntry.pulang?.waktu || "";
-      const shiftFromLog = activeEntry.shift || (activeEntry.masuk?.shift) || (activeEntry.pulang?.shift) || "";
-
-      setAbsenPagi(pagi);
-      setAbsenSiang(siang);
-      if (shiftFromLog) {
-        _setShiftPegawai(shiftFromLog);
+      setAbsenPagi(pagiPalingPagi);
+      setAbsenSiang(siangPalingMalam);
+      if (shiftPagi) {
+        _setShiftPegawai(shiftPagi);
       }
     }
 
     // Realtime auto-fill Ruko Buka (Earliest Masuk of the day store-wide)
-    const allMasukLogs = logsForToday.filter((l: any) => l.jenisAbsen === "Masuk" && l.waktu);
-    if (allMasukLogs.length > 0) {
-      const earliestMasuk = allMasukLogs[0];
-      const timePart = earliestMasuk.waktu.split(" - ")[0]?.trim();
+    if (earliestMasukLog?.waktu) {
+      const timePart = earliestMasukLog.waktu.split(" - ")[0]?.trim().replace(':', '.');
       if (timePart) {
         _setRukoBuka(timePart);
         _setRukoBukaDate(normalizeDateStr(tanggal));
@@ -470,14 +493,12 @@ export default function useAppController() {
       _setRukoBukaDate("");
     }
 
-    // Realtime auto-fill Ruko Tutup (Latest Pulang of the day store-wide, or active employee's pulang)
-    const allPulangLogs = logsForToday.filter((l: any) => l.jenisAbsen === "Pulang" && l.waktu);
-    if (allPulangLogs.length > 0) {
-      const latestPulang = allPulangLogs[allPulangLogs.length - 1];
-      const timePart = latestPulang.waktu.split(" - ")[0]?.trim();
+    // Realtime auto-fill Ruko Tutup (Latest Pulang of the day store-wide)
+    if (latestPulangLog?.waktu) {
+      const timePart = latestPulangLog.waktu.split(" - ")[0]?.trim().replace(':', '.');
       if (timePart) {
         _setRukoTutup(timePart);
-        const datePart = latestPulang.waktu.split(" - ")[1]?.replace(/\//g, "-");
+        const datePart = latestPulangLog.waktu.split(" - ")[1]?.replace(/\//g, "-");
         _setRukoTutupDate(datePart ? normalizeDateStr(datePart) : normalizeDateStr(tanggal));
       }
     } else {
@@ -1525,10 +1546,32 @@ export default function useAppController() {
       ? crypto.randomUUID() 
       : Date.now().toString() + Math.random().toString(36).slice(2);
     
+    // Pastikan histori pembukuan harian menyimpan data yang valid & SSOT:
+    // - Absen Masuk PALING PAGI
+    // - Absen Pulang PALING MALAM / DINI HARI (toleransi s.d 03:00)
+    const logsForToday = allLogAbsensi.filter((l: any) => isLogForDate(l, tanggal) && l.status !== "deleted");
+    const sortedMasuk = logsForToday
+      .filter((l: any) => l.jenisAbsen === "Masuk" && l.waktu)
+      .sort((a: any, b: any) => getBusinessMinutes(a.waktu) - getBusinessMinutes(b.waktu));
+    const sortedPulang = logsForToday
+      .filter((l: any) => l.jenisAbsen === "Pulang" && l.waktu)
+      .sort((a: any, b: any) => getBusinessMinutes(b.waktu) - getBusinessMinutes(a.waktu));
+
+    const finalAbsenPagi = sortedMasuk[0]?.waktu || absenPagi;
+    const finalAbsenSiang = sortedPulang[0]?.waktu || absenSiang;
+    const finalRukoBuka = sortedMasuk[0]?.waktu ? sortedMasuk[0].waktu.split(" - ")[0]?.trim().replace(':', '.') : rukoBuka;
+    const finalRukoTutup = sortedPulang[0]?.waktu ? sortedPulang[0].waktu.split(" - ")[0]?.trim().replace(':', '.') : rukoTutup;
+    const finalShift = sortedMasuk[0]?.shift || shiftPegawai;
+
     const newItem = {
       id: uniqueId,
       tanggal, hari,
-      absenPagi, absenSiang, shiftPegawai, rukoBuka, rukoTutup, catatan,
+      absenPagi: finalAbsenPagi,
+      absenSiang: finalAbsenSiang,
+      shiftPegawai: finalShift,
+      rukoBuka: finalRukoBuka,
+      rukoTutup: finalRukoTutup,
+      catatan,
       totalHarian, totalJajanan, totalJasaAks, totalSewa, totalCash, totalTransfer,
       rowsHarian: JSON.parse(JSON.stringify(rowsHarian)),
       rowsJajanan: JSON.parse(JSON.stringify(rowsJajanan)),
