@@ -83,7 +83,18 @@ const DEFAULT_PRODUCTS: Omit<Product, "id">[] = [
   { name: "Jasa Downgrade Konsol PS3", price: 100000, category: "SERVIS", imageUrl: "" }
 ];
 
-function buildEscPosBytes(cart: CartItem[], buyerName: string, total: number, adminName: string, paymentMethod: string): Uint8Array {
+import { calculatePOSDiscount, PromosConfig, DEFAULT_PROMOS_CONFIG } from "../utils/promoDiscount";
+
+function buildEscPosBytes(
+  cart: CartItem[],
+  buyerName: string,
+  subtotal: number,
+  discountPercent: number,
+  discountAmount: number,
+  total: number,
+  adminName: string,
+  paymentMethod: string
+): Uint8Array {
   const encoder = new TextEncoder();
   const init = [0x1b, 0x40]; // ESC @
   const center = [0x1b, 0x61, 0x01]; // ESC a 1
@@ -127,16 +138,33 @@ function buildEscPosBytes(cart: CartItem[], buyerName: string, total: number, ad
     commands.push(...boldOff);
     
     const qtyPriceStr = `  ${item.quantity} x Rp ${item.price.toLocaleString("id-ID")}`;
-    const subtotal = item.price * item.quantity;
-    const subtotalStr = `Rp ${subtotal.toLocaleString("id-ID")}`;
+    const itemSub = item.price * item.quantity;
+    const itemSubStr = `Rp ${itemSub.toLocaleString("id-ID")}`;
     
-    const spacesNeeded = 48 - qtyPriceStr.length - subtotalStr.length;
+    const spacesNeeded = 48 - qtyPriceStr.length - itemSubStr.length;
     const padding = spacesNeeded > 0 ? " ".repeat(spacesNeeded) : " ";
-    commands = commands.concat(Array.from(encoder.encode(`${qtyPriceStr}${padding}${subtotalStr}\n`)));
+    commands = commands.concat(Array.from(encoder.encode(`${qtyPriceStr}${padding}${itemSubStr}\n`)));
   });
   
   commands = commands.concat(Array.from(encoder.encode("------------------------------------------------\n")));
   
+  // Subtotal & Diskon (Jika ada diskon)
+  if (discountAmount > 0) {
+    commands.push(...left);
+    const subLabel = "Subtotal";
+    const subValStr = `Rp ${subtotal.toLocaleString("id-ID")}`;
+    const subSpaces = 48 - subLabel.length - subValStr.length;
+    const subPadding = subSpaces > 0 ? " ".repeat(subSpaces) : " ";
+    commands = commands.concat(Array.from(encoder.encode(`${subLabel}${subPadding}${subValStr}\n`)));
+
+    const discLabel = `Diskon Promo (${discountPercent}%)`;
+    const discValStr = `-Rp ${discountAmount.toLocaleString("id-ID")}`;
+    const discSpaces = 48 - discLabel.length - discValStr.length;
+    const discPadding = discSpaces > 0 ? " ".repeat(discSpaces) : " ";
+    commands = commands.concat(Array.from(encoder.encode(`${discLabel}${discPadding}${discValStr}\n`)));
+    commands = commands.concat(Array.from(encoder.encode("------------------------------------------------\n")));
+  }
+
   // Total
   commands.push(...left, ...boldOn);
   const totalLabel = "TOTAL";
@@ -287,6 +315,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     const unsub = onSnapshot(q, (snap) => {
       const list: Product[] = [];
       snap.forEach((docSnap) => {
+        if (docSnap.id.startsWith('_')) return; // Filter dokumen sistem seperti _metadata_ dan _promos_
         const data = docSnap.data();
         const originalName = data.name || "";
         list.push({
@@ -307,10 +336,47 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     return () => unsub();
   }, []);
 
-  // Total price calculator
-  const total = useMemo(() => {
-    return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  }, [cart]);
+  const [promosConfig, setPromosConfig] = useState<PromosConfig>(DEFAULT_PROMOS_CONFIG);
+
+  // Real-time Firestore sync for promos (Single Source of Truth from list-game-digital)
+  useEffect(() => {
+    const promoDocRef = doc(listGameDb, "games", "_promos_");
+    const unsub = onSnapshot(
+      promoDocRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data() as PromosConfig;
+          setPromosConfig({
+            enabled: data.enabled ?? true,
+            targetPlatforms: data.targetPlatforms || DEFAULT_PROMOS_CONFIG.targetPlatforms,
+            rules: Array.isArray(data.rules) && data.rules.length > 0 ? data.rules : DEFAULT_PROMOS_CONFIG.rules,
+            updatedAt: data.updatedAt,
+          });
+        } else {
+          setPromosConfig(DEFAULT_PROMOS_CONFIG);
+        }
+      },
+      (err) => {
+        console.warn("Firestore onSnapshot error (promos from listGameDb):", err);
+        setPromosConfig(DEFAULT_PROMOS_CONFIG);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  // Total price & discount calculator (SSOT)
+  const {
+    subtotal,
+    discountPercent,
+    discountAmount,
+    total,
+    qualifyingCount,
+    activeRule,
+    nextRule,
+    gamesNeededForNext,
+  } = useMemo(() => {
+    return calculatePOSDiscount(cart, promosConfig);
+  }, [cart, promosConfig]);
 
   // Cart operations
   const addToCart = (product: Product) => {
@@ -525,7 +591,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
     // Generate PDF
     const itemHeight = 8;
-    const pageHeight = 75 + cart.length * itemHeight + 20;
+    const pageHeight = 75 + cart.length * itemHeight + (discountAmount > 0 ? 30 : 20);
     const docPdf = new jsPDF({ unit: "mm", format: [80, pageHeight] });
 
     docPdf.setFont("courier", "bold");
@@ -557,14 +623,26 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       y += 4;
       docPdf.setFont("courier", "normal");
       docPdf.text(`  ${item.quantity} x Rp ${item.price.toLocaleString("id-ID")}`, 5, y);
-      const subtotal = item.price * item.quantity;
-      docPdf.text(`Rp ${subtotal.toLocaleString("id-ID")}`, 75, y, { align: "right" });
+      const itemSub = item.price * item.quantity;
+      docPdf.text(`Rp ${itemSub.toLocaleString("id-ID")}`, 75, y, { align: "right" });
       y += 6;
     });
 
     docPdf.setFont("courier", "normal");
     docPdf.text("-".repeat(38), 40, y, { align: "center" });
     y += 4;
+
+    if (discountAmount > 0) {
+      docPdf.setFont("courier", "normal");
+      docPdf.text("Subtotal", 5, y);
+      docPdf.text(`Rp ${subtotal.toLocaleString("id-ID")}`, 75, y, { align: "right" });
+      y += 5;
+      docPdf.text(`Diskon (${discountPercent}%)`, 5, y);
+      docPdf.text(`-Rp ${discountAmount.toLocaleString("id-ID")}`, 75, y, { align: "right" });
+      y += 5;
+      docPdf.text("-".repeat(38), 40, y, { align: "center" });
+      y += 4;
+    }
 
     docPdf.setFont("courier", "bold");
     docPdf.text("TOTAL", 5, y);
@@ -589,7 +667,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     if (cart.length === 0) return;
     
     const finalBuyerName = window.prompt("Nama Pembeli / Pelanggan:", "Pelanggan") || "Pelanggan";
-    const bytes = buildEscPosBytes(cart, finalBuyerName, total, adminName, paymentMethod);
+    const bytes = buildEscPosBytes(cart, finalBuyerName, subtotal, discountPercent, discountAmount, total, adminName, paymentMethod);
     
     // 1. Web Bluetooth API Attempt
     if ((navigator as any).bluetooth) {
@@ -1181,14 +1259,49 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 </button>
               </div>
 
-              <div className="flex items-end justify-between">
-                <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
-                  TOTAL HARGA
-                </span>
-                <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono tracking-tighter">
-                  Rp {total.toLocaleString("id-ID")}
-                </span>
-              </div>
+              {/* Ringkasan Subtotal, Diskon Promo, & Total */}
+              {discountAmount > 0 ? (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+                    <span>Subtotal</span>
+                    <span className="font-mono">Rp {subtotal.toLocaleString("id-ID")}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-bold">
+                    <span className="flex items-center gap-1.5">
+                      <span>Diskon Promo</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 font-black">
+                        {discountPercent}% OFF
+                      </span>
+                    </span>
+                    <span className="font-mono">-Rp {discountAmount.toLocaleString("id-ID")}</span>
+                  </div>
+                  <div className="flex items-end justify-between pt-1 border-t border-zinc-200/80 dark:border-white/10">
+                    <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                      TOTAL BAYAR
+                    </span>
+                    <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono tracking-tighter">
+                      Rp {total.toLocaleString("id-ID")}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {qualifyingCount > 0 && nextRule && (
+                    <div className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1.5 rounded-xl font-medium flex items-center justify-between">
+                      <span>💡 Tambah {gamesNeededForNext} game {promosConfig.targetPlatforms.join('/')}</span>
+                      <span className="font-bold text-amber-600 dark:text-amber-300">Diskon {nextRule.percent}%</span>
+                    </div>
+                  )}
+                  <div className="flex items-end justify-between">
+                    <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
+                      TOTAL HARGA
+                    </span>
+                    <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono tracking-tighter">
+                      Rp {total.toLocaleString("id-ID")}
+                    </span>
+                  </div>
+                </div>
+              )}
               
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -1346,14 +1459,49 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 </button>
               </div>
 
-              <div className="flex items-end justify-between">
-                <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
-                  TOTAL HARGA
-                </span>
-                <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono">
-                  Rp {total.toLocaleString("id-ID")}
-                </span>
-              </div>
+              {/* Ringkasan Subtotal, Diskon Promo, & Total Mobile */}
+              {discountAmount > 0 ? (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+                    <span>Subtotal</span>
+                    <span className="font-mono">Rp {subtotal.toLocaleString("id-ID")}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-bold">
+                    <span className="flex items-center gap-1.5">
+                      <span>Diskon Promo</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 font-black">
+                        {discountPercent}% OFF
+                      </span>
+                    </span>
+                    <span className="font-mono">-Rp {discountAmount.toLocaleString("id-ID")}</span>
+                  </div>
+                  <div className="flex items-end justify-between pt-1 border-t border-zinc-200/80 dark:border-white/10">
+                    <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                      TOTAL BAYAR
+                    </span>
+                    <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono">
+                      Rp {total.toLocaleString("id-ID")}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {qualifyingCount > 0 && nextRule && (
+                    <div className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1.5 rounded-xl font-medium flex items-center justify-between">
+                      <span>💡 Tambah {gamesNeededForNext} game {promosConfig.targetPlatforms.join('/')}</span>
+                      <span className="font-bold text-amber-600 dark:text-amber-300">Diskon {nextRule.percent}%</span>
+                    </div>
+                  )}
+                  <div className="flex items-end justify-between">
+                    <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
+                      TOTAL HARGA
+                    </span>
+                    <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono">
+                      Rp {total.toLocaleString("id-ID")}
+                    </span>
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3 pb-4">
                 <button
                   onClick={handleSavePdf}
