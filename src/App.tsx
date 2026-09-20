@@ -27,6 +27,7 @@ import LiveCursors from "./components/LiveCursors";
 import Login from "./components/Login";
 import versionData from "./version.json";
 import ChallengeButton from "./games/components/ChallengeButton";
+import AdminNotes from "./components/AdminNotes";
 import { Package, AlertCircle, Bot } from "lucide-react";
 import { GAME_NAMES_ID } from "./games/constants";
 import useAppController from "./hooks/useAppController";
@@ -460,6 +461,11 @@ export default function App() {
                 isAbsenDone={absenPagi !== "" || isSuperAdminOrOwner}
                 activeGameName={gameConfig ? (GAME_NAMES_ID[gameConfig.activeGame] || gameConfig.activeGame) : ""}
                 onClick={() => setShowChallenge(true)}
+              />
+              <AdminNotes
+                isOwner={isSuperAdminOrOwner}
+                currentUserEmail={user?.email}
+                adminName={user?.email ? user.email.split("@")[0] : "Admin"}
               />
               <RincianHarian rows={rowsHarian} setRows={setRowsHarian} blank={{ ...blankHarian }} hargaItems={hargaHarian} isMobileTable={isMobileTable} />
               <RincianJajanan rows={rowsJajanan} setRows={setRowsJajanan} blank={{ ...blankJajanan }} hargaItems={hargaJajanan} isMobileTable={isMobileTable} />
