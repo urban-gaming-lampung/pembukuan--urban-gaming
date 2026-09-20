@@ -1,7 +1,5 @@
 import React, { useState } from "react";
 import {
-  StickyNote,
-  Plus,
   Pencil,
   Trash2,
   Pin,
@@ -15,7 +13,7 @@ import {
   ShieldCheck,
   Eye,
   AlertTriangle,
-  ArrowUpRight,
+  Plus,
 } from "lucide-react";
 import { useAdminNotes, AdminNote } from "../hooks/useAdminNotes";
 
@@ -33,8 +31,9 @@ export default function AdminNotes({
   const { notes, loading, addNote, updateNote, deleteNote, togglePin } =
     useAdminNotes();
 
-  // State Modal Pop-up Utama
+  // State Modal Pop-up Keseluruhan
   const [isOpenModal, setIsOpenModal] = useState(false);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
 
   // State Form Edit / Tambah Catatan
   const [isEditing, setIsEditing] = useState(false);
@@ -61,6 +60,7 @@ export default function AdminNotes({
     setIsPinned(false);
     setEditingNoteId(null);
     setIsEditing(true);
+    setIsOpenModal(true);
   };
 
   // Buka Form Edit Catatan yang sudah ada
@@ -72,6 +72,7 @@ export default function AdminNotes({
     setIsPinned(Boolean(note.isPinned));
     setEditingNoteId(note.id);
     setIsEditing(true);
+    setIsOpenModal(true);
   };
 
   // Simpan Catatan (Tambah / Update)
@@ -184,72 +185,112 @@ export default function AdminNotes({
     }
   };
 
-  // Ambil catatan teratas untuk ringkasan di tombol banner
-  const pinnedOrFirstNote = notes.length > 0 ? notes[0] : null;
+  // Maksimal 5 catatan untuk preview
+  const displayNotes = notes.slice(0, 5);
+
+  // Hitung layout grid kolom responsif
+  const totalCards = displayNotes.length + (isOwner && displayNotes.length < 5 ? 1 : 0);
+
+  const getGridColsClass = () => {
+    if (totalCards === 1) return "grid-cols-1 sm:grid-cols-2";
+    if (totalCards === 2) return "grid-cols-1 sm:grid-cols-2";
+    if (totalCards === 3) return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3";
+    if (totalCards === 4) return "grid-cols-2 sm:grid-cols-2 md:grid-cols-4";
+    return "grid-cols-2 sm:grid-cols-3 md:grid-cols-5";
+  };
+
+  if (!loading && notes.length === 0 && !isOwner) {
+    return null;
+  }
 
   return (
-    <>
+    <div className="w-full">
       {/* ========================================================================= */}
-      {/* BANNER UTAMA (UKURAN & PROPORSI DISESUAIKAN DENGAN CHALLENGE GAME BUTTON) */}
+      {/* PREVIEW WIDGET CARDS ALA GOOGLE KEEP (MAX 5 CATATAN, TEMA LIGHT / DARK)  */}
       {/* ========================================================================= */}
-      <button
-        type="button"
-        onClick={() => setIsOpenModal(true)}
-        className="group relative flex w-full items-center justify-between overflow-hidden rounded-3xl border border-amber-400/25 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 dark:from-amber-600 dark:via-amber-700 dark:to-yellow-800 p-5 text-white shadow-lg shadow-amber-500/20 transition-all duration-200 hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] font-sans text-left"
-        aria-label="Buka Catatan dan Tautan Penting Admin"
-      >
-        {/* Shimmer animation effect ala Apple */}
-        <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/10 to-transparent z-10" />
-
-        {/* Konten Kiri */}
-        <div className="flex items-center gap-4 relative z-20 min-w-0 pr-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white backdrop-blur-md shadow-inner">
-            <StickyNote className="h-6 w-6 animate-pulse" />
-          </div>
-
-          <div className="flex flex-col text-left min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-pixel text-[10px] tracking-wider text-amber-100 uppercase opacity-95">
-                CATATAN & INFORMASI ADMIN
-              </span>
-              {pinnedOrFirstNote?.isPinned && (
-                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md bg-amber-300/30 text-white text-[9px] font-bold">
-                  <Pin className="w-2.5 h-2.5" /> PIN
-                </span>
+      <div className={`grid gap-3 w-full ${getGridColsClass()}`}>
+        {displayNotes.map((note) => (
+          <div
+            key={note.id}
+            onClick={() => {
+              setSelectedNoteId(note.id);
+              setIsEditing(false);
+              setIsOpenModal(true);
+            }}
+            className={`group relative rounded-2xl p-4 transition-all duration-200 cursor-pointer text-left flex flex-col justify-between overflow-hidden shadow-sm hover:shadow-md hover:scale-[1.01] active:scale-[0.99] min-h-[90px] max-h-[145px] ${
+              note.isPinned
+                ? "bg-amber-50/60 dark:bg-amber-500/[0.06] border border-amber-300/70 dark:border-amber-500/30 ring-1 ring-amber-400/20"
+                : "bg-white dark:bg-[#1C1C1E] border border-zinc-200/90 dark:border-white/10 hover:border-zinc-300 dark:hover:border-white/20"
+            }`}
+            title="Klik untuk membuka catatan lengkap"
+          >
+            {/* Header & Isi Kartu */}
+            <div className="overflow-hidden">
+              {note.title && (
+                <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100 line-clamp-1 mb-1 leading-snug">
+                  {note.title}
+                </div>
+              )}
+              <p className="text-xs text-zinc-600 dark:text-zinc-300 line-clamp-3 leading-relaxed whitespace-pre-line break-words">
+                {note.content}
+              </p>
+              {note.linkUrl && (
+                <div className="text-[11px] text-blue-500 dark:text-blue-400 font-medium truncate mt-1.5 flex items-center gap-1">
+                  <span>🔗 {note.linkLabel || note.linkUrl}</span>
+                </div>
               )}
             </div>
 
-            <span className="text-base sm:text-lg font-black tracking-tight mt-0.5 truncate leading-tight">
-              {loading
-                ? "Memuat catatan..."
-                : pinnedOrFirstNote
-                ? pinnedOrFirstNote.title || pinnedOrFirstNote.content
-                : isOwner
-                ? "+ Tambah Catatan / Link Baru"
-                : "Belum Ada Catatan Khusus"}
-            </span>
-
-            {notes.length > 1 && (
-              <span className="text-[11px] text-amber-100/90 font-medium tracking-tight mt-0.5">
-                +{notes.length - 1} catatan penting lainnya
-              </span>
-            )}
+            {/* Footer Kartu Kecil */}
+            <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-zinc-100 dark:border-white/5 text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0">
+              <span className="truncate">{formatDateTime(note.createdAt)}</span>
+              {note.isPinned && (
+                <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 shrink-0 ml-1">
+                  📌 Pin
+                </span>
+              )}
+            </div>
           </div>
-        </div>
+        ))}
 
-        {/* Tombol Kanan (Badge Aksi) */}
-        <div className="flex h-8 shrink-0 items-center gap-1.5 justify-center rounded-xl bg-white/20 px-3.5 text-xs font-bold backdrop-blur-md relative z-20">
-          <span>{notes.length > 0 ? "Buka Catatan" : isOwner ? "Tulis Note" : "Lihat"}</span>
-          <ArrowUpRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+        {/* Slot Card Tambah Catatan untuk Super Admin jika card < 5 */}
+        {isOwner && displayNotes.length < 5 && (
+          <div
+            onClick={handleOpenAdd}
+            className="rounded-2xl p-4 transition-all duration-200 cursor-pointer text-center flex flex-col items-center justify-center border-2 border-dashed border-zinc-200 dark:border-white/10 hover:border-zinc-300 dark:hover:border-white/25 bg-zinc-50/50 hover:bg-zinc-100/60 dark:bg-white/[0.02] dark:hover:bg-white/[0.05] min-h-[90px] max-h-[145px] text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 group"
+            title="Tambah catatan baru"
+          >
+            <span className="text-2xl font-light leading-none mb-1 group-hover:scale-110 transition-transform">
+              +
+            </span>
+            <span className="text-xs font-semibold">Tambah Catatan</span>
+          </div>
+        )}
+      </div>
+
+      {/* Indikator jika ada lebih dari 5 catatan */}
+      {notes.length > 5 && (
+        <div className="mt-2 text-right">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedNoteId(null);
+              setIsEditing(false);
+              setIsOpenModal(true);
+            }}
+            className="text-xs text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white font-medium hover:underline"
+          >
+            Lihat semua {notes.length} catatan →
+          </button>
         </div>
-      </button>
+      )}
 
       {/* ========================================================================= */}
-      {/* MODAL POP-UP UTAMA (APPLE HIG PHILOSOPHY & LIGHT/DARK THEME)             */}
+      {/* MODAL POP-UP KESELURUHAN NOTE (APPLE / KEEP HIG PHILOSOPHY)              */}
       {/* ========================================================================= */}
       {isOpenModal && (
         <div className="fixed inset-0 z-[600] flex items-center justify-center p-3 sm:p-6 font-sans">
-          {/* Backdrop Frosted Glass Apple */}
+          {/* Backdrop Frosted Glass */}
           <div
             className="absolute inset-0 bg-black/60 dark:bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
             onClick={() => {
@@ -261,29 +302,24 @@ export default function AdminNotes({
           <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col rounded-[28px] bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-2xl shadow-2xl ring-1 ring-black/10 dark:ring-white/10 overflow-hidden animate-in zoom-in-95 duration-200">
             {/* Header Modal */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200/80 dark:border-white/10 bg-zinc-50/70 dark:bg-white/[0.03]">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/15 dark:bg-amber-400/20 text-amber-600 dark:text-amber-400 shadow-sm">
-                  <StickyNote className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-zinc-900 dark:text-white leading-tight">
-                    Catatan & Link Tim Admin
-                  </h3>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-                      Permanen • Tidak tereset saat tutup buku
+              <div>
+                <h3 className="text-lg font-black text-zinc-900 dark:text-white leading-tight">
+                  Catatan Admin
+                </h3>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+                    Permanen • Tidak tereset saat tutup buku
+                  </span>
+                  <span className="inline-block w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-600" />
+                  {isOwner ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full">
+                      <ShieldCheck className="w-3 h-3" /> Super Admin
                     </span>
-                    <span className="inline-block w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-600" />
-                    {isOwner ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full">
-                        <ShieldCheck className="w-3 h-3" /> Super Admin
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 bg-zinc-200/60 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full">
-                        <Eye className="w-3 h-3" /> Hanya Baca
-                      </span>
-                    )}
-                  </div>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 bg-zinc-200/60 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full">
+                      <Eye className="w-3 h-3" /> Hanya Baca
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -292,7 +328,7 @@ export default function AdminNotes({
                 {isOwner && !isEditing && (
                   <button
                     onClick={handleOpenAdd}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-bold shadow-sm transition-all"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900 hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-zinc-900 text-xs font-bold shadow-sm transition-all active:scale-95"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Tambah Catatan</span>
@@ -300,7 +336,7 @@ export default function AdminNotes({
                   </button>
                 )}
 
-                {/* Tombol Close Apple */}
+                {/* Tombol Close */}
                 <button
                   onClick={() => setIsOpenModal(false)}
                   className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-200/80 hover:bg-zinc-300/80 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white transition active:scale-95"
@@ -313,10 +349,10 @@ export default function AdminNotes({
 
             {/* Sub-Header / Editor Mode Bar (Jika Super Admin sedang mengedit/menambah) */}
             {isEditing && (
-              <div className="p-5 border-b border-zinc-200/80 dark:border-white/10 bg-amber-500/5 dark:bg-amber-500/[0.03]">
+              <div className="p-5 border-b border-zinc-200/80 dark:border-white/10 bg-zinc-50/50 dark:bg-white/[0.02]">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
-                    <Pencil className="w-3.5 h-3.5 text-amber-500" />
+                    <Pencil className="w-3.5 h-3.5 text-zinc-500" />
                     {editingNoteId ? "Edit Catatan" : "Tambah Catatan Baru"}
                   </h4>
                   <button
@@ -339,7 +375,7 @@ export default function AdminNotes({
                       placeholder="Judul Catatan (Opsional, misal: SOP Shift Pagi, Link Drive)"
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-[#2C2C2E] border border-zinc-200 dark:border-white/10 text-sm font-semibold text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                      className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-[#2C2C2E] border border-zinc-200 dark:border-white/10 text-sm font-semibold text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                     />
                   </div>
 
@@ -351,7 +387,7 @@ export default function AdminNotes({
                       placeholder="Tulis catatan, instruksi, nomor penting, atau paste URL link di sini..."
                       value={content}
                       onChange={(e) => setContent(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-[#2C2C2E] border border-zinc-200 dark:border-white/10 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 resize-y min-h-[90px]"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-[#2C2C2E] border border-zinc-200 dark:border-white/10 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-y min-h-[90px]"
                     />
                   </div>
 
@@ -364,16 +400,16 @@ export default function AdminNotes({
                         placeholder="https://... (Opsional)"
                         value={linkUrl}
                         onChange={(e) => setLinkUrl(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 rounded-xl bg-white dark:bg-[#2C2C2E] border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                        className="w-full pl-9 pr-3 py-2 rounded-xl bg-white dark:bg-[#2C2C2E] border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                       />
                     </div>
                     <div>
                       <input
                         type="text"
-                        placeholder="Label Tautan (misal: Buka Folder Google Drive)"
+                        placeholder="Label Tautan (misal: Buka Google Drive)"
                         value={linkLabel}
                         onChange={(e) => setLinkLabel(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#2C2C2E] border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#2C2C2E] border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                       />
                     </div>
                   </div>
@@ -385,7 +421,7 @@ export default function AdminNotes({
                         type="checkbox"
                         checked={isPinned}
                         onChange={(e) => setIsPinned(e.target.checked)}
-                        className="w-4 h-4 rounded text-amber-500 focus:ring-amber-400 cursor-pointer accent-amber-500"
+                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
                       />
                       <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
                         <Pin className="w-3.5 h-3.5 text-amber-500" /> Sematkan di paling atas
@@ -406,7 +442,7 @@ export default function AdminNotes({
                       <button
                         type="submit"
                         disabled={isSubmitting || !content.trim()}
-                        className="px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-xs font-bold text-white shadow-sm transition active:scale-95"
+                        className="px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-xs font-bold text-white shadow-sm transition active:scale-95"
                       >
                         {isSubmitting
                           ? "Menyimpan..."
@@ -425,147 +461,152 @@ export default function AdminNotes({
               {notes.length === 0 ? (
                 /* Empty State */
                 <div className="py-12 px-4 text-center flex flex-col items-center">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-zinc-100 dark:bg-zinc-800/80 text-zinc-400 dark:text-zinc-500 mb-3">
-                    <StickyNote className="w-7 h-7" />
-                  </div>
                   <h4 className="text-base font-bold text-zinc-800 dark:text-zinc-200">
                     Belum Ada Catatan
                   </h4>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mt-1 leading-relaxed">
                     {isOwner
-                      ? "Gunakan fitur ini untuk menulis memo, informasi SOP, link drive, atau instruksi kepada staf admin. Tekan tombol 'Tambah Catatan' di atas."
-                      : "Saat ini belum ada instruksi atau link catatan dari Super Admin."}
+                      ? "Tekan tombol 'Tambah Catatan' di atas untuk menulis catatan baru."
+                      : "Saat ini belum ada catatan dari Super Admin."}
                   </p>
                   {isOwner && !isEditing && (
                     <button
                       onClick={handleOpenAdd}
-                      className="mt-4 flex items-center gap-1.5 px-4 py-2 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-sm transition"
+                      className="mt-4 flex items-center gap-1.5 px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm transition"
                     >
                       <Plus className="w-3.5 h-3.5" /> Buat Catatan Pertama
                     </button>
                   )}
                 </div>
               ) : (
-                /* List Kartu Catatan */
-                notes.map((note) => (
-                  <div
-                    key={note.id}
-                    className={`relative rounded-2xl p-4 sm:p-5 transition-all duration-200 ${
-                      note.isPinned
-                        ? "bg-amber-50/70 dark:bg-amber-500/[0.08] border border-amber-300/60 dark:border-amber-500/25 ring-1 ring-amber-500/20"
-                        : "bg-zinc-50/90 dark:bg-[#2C2C2E]/60 border border-zinc-200/80 dark:border-white/5"
-                    } shadow-sm hover:shadow-md`}
-                  >
-                    {/* Header Item Catatan */}
-                    <div className="flex items-start justify-between gap-3 mb-2">
-                      <div className="space-y-1">
-                        {note.title && (
-                          <h4 className="text-base sm:text-lg font-black text-zinc-900 dark:text-white leading-tight">
-                            {note.title}
-                          </h4>
-                        )}
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                          {note.isPinned && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500 text-white font-bold text-[10px]">
-                              <Pin className="w-2.5 h-2.5" /> Disematkan
-                            </span>
+                /* List Kartu Catatan Lengkap */
+                notes.map((note) => {
+                  const isSelected = selectedNoteId === note.id;
+
+                  return (
+                    <div
+                      key={note.id}
+                      className={`relative rounded-2xl p-4 sm:p-5 transition-all duration-200 ${
+                        note.isPinned
+                          ? "bg-amber-50/60 dark:bg-amber-500/[0.06] border border-amber-300/60 dark:border-amber-500/25 ring-1 ring-amber-500/20"
+                          : "bg-zinc-50/90 dark:bg-[#2C2C2E]/60 border border-zinc-200/80 dark:border-white/5"
+                      } ${isSelected ? "ring-2 ring-blue-500/40" : ""} shadow-sm hover:shadow-md`}
+                    >
+                      {/* Header Item Catatan */}
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="space-y-1">
+                          {note.title && (
+                            <h4 className="text-base sm:text-lg font-black text-zinc-900 dark:text-white leading-tight">
+                              {note.title}
+                            </h4>
                           )}
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3 text-zinc-400" />
-                            {formatDateTime(note.createdAt)}
-                          </span>
-                          {note.authorName && (
-                            <span className="flex items-center gap-1 font-medium">
-                              <User className="w-3 h-3 text-zinc-400" />
-                              {note.authorName}
+                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                            {note.isPinned && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500 text-white font-bold text-[10px]">
+                                <Pin className="w-2.5 h-2.5" /> Disematkan
+                              </span>
+                            )}
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-zinc-400" />
+                              {formatDateTime(note.createdAt)}
                             </span>
+                            {note.authorName && (
+                              <span className="flex items-center gap-1 font-medium">
+                                <User className="w-3 h-3 text-zinc-400" />
+                                {note.authorName}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Tombol Aksi Kanan (Copy, Edit, Delete, Pin) */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          {/* Tombol Copy (Semua Akun) */}
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(note)}
+                            title="Salin isi catatan"
+                            className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-200/60 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 transition"
+                          >
+                            {copiedId === note.id ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-500" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+
+                          {/* Aksi Khusus Super Admin */}
+                          {isOwner && (
+                            <>
+                              {/* Toggle Pin */}
+                              <button
+                                type="button"
+                                onClick={() => togglePin(note.id, note.isPinned)}
+                                title={
+                                  note.isPinned
+                                    ? "Lepas sematan"
+                                    : "Sematkan di atas"
+                                }
+                                className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${
+                                  note.isPinned
+                                    ? "bg-amber-500 text-white"
+                                    : "bg-zinc-200/60 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300"
+                                }`}
+                              >
+                                <Pin className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Edit */}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEdit(note)}
+                                title="Edit catatan"
+                                className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-200/60 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 transition"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Delete */}
+                              <button
+                                type="button"
+                                onClick={() => setDeletingNote(note)}
+                                title="Hapus catatan permanen"
+                                className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100 hover:bg-red-200 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 transition"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
                           )}
                         </div>
                       </div>
 
-                      {/* Tombol Aksi Kanan (Copy, Edit, Delete, Pin) */}
-                      <div className="flex items-center gap-1 shrink-0">
-                        {/* Tombol Copy (Semua Akun) */}
-                        <button
-                          type="button"
-                          onClick={() => handleCopyText(note)}
-                          title="Salin isi catatan"
-                          className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-200/60 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 transition"
-                        >
-                          {copiedId === note.id ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-500" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5" />
-                          )}
-                        </button>
-
-                        {/* Aksi Khusus Super Admin */}
-                        {isOwner && (
-                          <>
-                            {/* Toggle Pin */}
-                            <button
-                              type="button"
-                              onClick={() => togglePin(note.id, note.isPinned)}
-                              title={note.isPinned ? "Lepas sematan" : "Sematkan di atas"}
-                              className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${
-                                note.isPinned
-                                  ? "bg-amber-500 text-white"
-                                  : "bg-zinc-200/60 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300"
-                              }`}
-                            >
-                              <Pin className="w-3.5 h-3.5" />
-                            </button>
-
-                            {/* Edit */}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEdit(note)}
-                              title="Edit catatan"
-                              className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-200/60 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 transition"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-
-                            {/* Delete */}
-                            <button
-                              type="button"
-                              onClick={() => setDeletingNote(note)}
-                              title="Hapus catatan permanen"
-                              className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100 hover:bg-red-200 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 transition"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </>
-                        )}
+                      {/* Isi Catatan Keseluruhan */}
+                      <div className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-200 whitespace-pre-line break-words pt-1 font-sans">
+                        {renderFormattedContent(note.content)}
                       </div>
-                    </div>
 
-                    {/* Isi Catatan */}
-                    <div className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-200 whitespace-pre-line break-words pt-1 font-sans">
-                      {renderFormattedContent(note.content)}
+                      {/* Tautan Cepat Khusus (Jika Ada linkUrl terpasang) */}
+                      {note.linkUrl && (
+                        <div className="pt-3">
+                          <a
+                            href={note.linkUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-xs font-bold transition group"
+                          >
+                            <Link2 className="w-3.5 h-3.5 text-blue-500" />
+                            <span>{note.linkLabel || note.linkUrl}</span>
+                            <ExternalLink className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                          </a>
+                        </div>
+                      )}
                     </div>
-
-                    {/* Tautan Cepat Khusus (Jika Ada linkUrl terpasang) */}
-                    {note.linkUrl && (
-                      <div className="pt-3">
-                        <a
-                          href={note.linkUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-xs font-bold transition group"
-                        >
-                          <Link2 className="w-3.5 h-3.5 text-blue-500" />
-                          <span>{note.linkLabel || note.linkUrl}</span>
-                          <ExternalLink className="w-3 h-3 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 
-            {/* Footer Modal Apple */}
+            {/* Footer Modal */}
             <div className="px-6 py-3.5 border-t border-zinc-200/80 dark:border-white/10 bg-zinc-50/70 dark:bg-white/[0.02] flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
               <span>
                 Total: <strong>{notes.length}</strong> Catatan
@@ -626,6 +667,6 @@ export default function AdminNotes({
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
