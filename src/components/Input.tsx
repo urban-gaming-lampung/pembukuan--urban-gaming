@@ -1,6 +1,7 @@
+import { runSalaryTransaction } from "../lib/salaryPersistence";
 import React, { useState, useEffect } from "react";
 import AbsenPopup from "./AbsenPopup";
-import { runTransaction, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadString, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "../lib/firebase";
 import { getAbsenCycleInfo, normalizeBulanTahun } from "../lib/absenPeriod";
@@ -317,7 +318,7 @@ const Input: React.FC<InputProps> = ({
          const cycle = getAbsenCycleInfo(effectiveDate, empCutoff);
          const currentBulanTahun = normalizeBulanTahun(cycle.bulanTahun);
 
-         await runTransaction(db, async transaction => {
+         await runSalaryTransaction(db, async transaction => {
               const docSnap = await transaction.get(docRef);
               let basePokok = 0;
          if (docSnap.exists()) {

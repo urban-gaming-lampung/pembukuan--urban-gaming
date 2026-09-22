@@ -1,3 +1,4 @@
+import { runSalaryTransaction } from "../lib/salaryPersistence";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { runTransaction, collection, doc, setDoc, deleteDoc, onSnapshot, addDoc, updateDoc, query, getDocs, getDoc, where, orderBy, serverTimestamp, arrayUnion, deleteField } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -1649,7 +1650,7 @@ export default function useAppController() {
               const cycle = getAbsenCycleInfo(tanggal || new Date().toISOString().slice(0, 10), empCutoff);
               const currentBulanTahun = normalizeBulanTahun(cycle.bulanTahun);
 
-              await runTransaction(db, async transaction => {
+              await runSalaryTransaction(db, async transaction => {
               const docSnap = await transaction.get(docRef);
               let basePokok = 0;
               if (docSnap.exists()) {

@@ -1,5 +1,6 @@
+import { mergeSalaryEdits, runSalaryTransaction } from "../lib/salaryPersistence";
 import React, { useState, useEffect, useMemo } from "react";
-import { runTransaction, collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc, getDocs, serverTimestamp } from "firebase/firestore";
+import { collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc, getDocs, serverTimestamp } from "firebase/firestore";
 import { db, firebaseConfig } from "../lib/firebase";
 import { initializeApp, getApp, getApps } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
@@ -975,7 +976,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
       autoPersistedRef.current.add(persistKey);
       try {
-      await runTransaction(db, async transaction => {
+      await runSalaryTransaction(db, async transaction => {
       const salaryRef = doc(db, "gaji_pegawai", p.email);
       const salarySnap = await transaction.get(salaryRef);
       // Read salary records inside the transaction, never from a UI snapshot.
@@ -1035,107 +1036,67 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
     });
   }, [pegawaiData, gaji, isGajiLoaded, isOwner]);
 
-  // === AUTO PENALTY: Tidak Absen Pulang ===
-  // Jika pegawai absen Masuk tapi tidak Pulang, dan sudah lewat 03:00 hari berikutnya
-  const autoPenaltyPulangRef = React.useRef<Set<string>>(new Set());
-
+  // Batch missing checkout penalties once per employee, rather than racing
+  // one transaction per historical attendance date against the same document.
+  const penaltyInFlight = React.useRef(new Set<string>());
   useEffect(() => {
     if (!isOwner || !isLogAbsensiLoaded || !isGajiLoaded) return;
-    if (logAbsensi.length === 0) return;
-
-    const now = new Date();
-    const currentHour = now.getHours();
-
-    // Group absen by email+tanggal
-    const absenMap = new Map<string, { masuk: boolean; pulang: boolean; shift: string; tanggal: string; email: string }>();
-    logAbsensi.forEach(l => {
-      const key = `${l.email.toLowerCase()}_${l.tanggal}`;
-      if (!absenMap.has(key)) absenMap.set(key, { masuk: false, pulang: false, shift: l.shift || "", tanggal: l.tanggal, email: l.email.toLowerCase() });
-      if (l.jenisAbsen === "Masuk") { absenMap.get(key)!.masuk = true; absenMap.get(key)!.shift = l.shift || ""; }
-      if (l.jenisAbsen === "Pulang") absenMap.get(key)!.pulang = true;
-    });
-
-    absenMap.forEach(async (entry, key) => {
-      // Only process if: has Masuk, no Pulang
-      if (!entry.masuk || entry.pulang) return;
-
-      // Check if the deadline has passed: 03:00 the NEXT day after absen date
-      const absenDate = new Date(entry.tanggal);
-      const deadline = new Date(absenDate);
+    const days = new Map<string, any>();
+    for (const log of logAbsensi) {
+      const email = String(log.email || '').toLowerCase().trim();
+      if (!email || !log.tanggal) continue;
+      const key = email + '_' + log.tanggal;
+      const day = days.get(key) || { email, tanggal: log.tanggal, shift: '', masuk: false, pulang: false };
+      if (log.jenisAbsen === 'Masuk') { day.masuk = true; day.shift = log.shift || ''; }
+      if (log.jenisAbsen === 'Pulang') day.pulang = true;
+      days.set(key, day);
+    }
+    const pending = new Map<string, any[]>();
+    for (const day of days.values()) {
+      const deadline = new Date(day.tanggal);
       deadline.setDate(deadline.getDate() + 1);
       deadline.setHours(3, 0, 0, 0);
-
-      if (now < deadline) return; // Belum lewat batas waktu
-
-      // Idempotency: skip if already processed
-      const idempKey = `noCheckOut_${entry.email}_${entry.tanggal}`;
-      if (autoPenaltyPulangRef.current.has(idempKey)) return;
-      autoPenaltyPulangRef.current.add(idempKey);
-
-      try {
-        const docRef = doc(db, "gaji_pegawai", entry.email);
-        await runTransaction(db, async transaction => {
-        const docSnap = await transaction.get(docRef);
-
-        const empCutoff = getEmployeeCutoff(entry.email);
-        const cycle = getAbsenCycleInfo(entry.tanggal, empCutoff);
-        const currentBulanTahun = normalizeBulanTahun(cycle.bulanTahun);
-
-        const dendaItem = {
-          id: `autoPulang_${entry.tanggal}_${Date.now()}`,
-          nominal: absenConfig.dendaTidakAbsenPulang ?? 40000,
-          ket: `[Auto-Sistem] Tidak absen pulang tanggal ${entry.tanggal}. Shift: ${entry.shift}`,
-          dateStr: new Date().toISOString(),
-          _isAutoSistem: true,
-          _idempKey: idempKey
-        };
-
-        let records: any[] = [];
-        let basePokok = 0;
-        if (docSnap.exists()) {
-          const dData = docSnap.data();
-          records = Array.isArray(dData.records) ? dData.records : [];
-          // Check if this penalty was already injected before
-          const alreadyInjected = records.some((r: any) => 
-            r.gajiPengurangan?.some((pg: any) => pg._idempKey === idempKey)
-          );
-          if (alreadyInjected) return;
-
-          for (const r of records) {
-            const v = Number(r.gajiPokok) || 0;
-            if (v > 0) { basePokok = v; break; }
+      if (!day.masuk || day.pulang || !Number.isFinite(deadline.getTime()) || new Date() < deadline) continue;
+      const idempKey = 'noCheckOut_' + day.email + '_' + day.tanggal;
+      const stored = gaji.find(g => g.id.toLowerCase().trim() === day.email);
+      if (stored?.records?.some((r: any) => r.gajiPengurangan?.some((p: any) => p._idempKey === idempKey))) continue;
+      const items = pending.get(day.email) || [];
+      items.push({ ...day, idempKey });
+      pending.set(day.email, items);
+    }
+    for (const [email, entries] of pending) {
+      if (penaltyInFlight.current.has(email)) continue;
+      penaltyInFlight.current.add(email);
+      const ref = doc(db, 'gaji_pegawai', email);
+      void runSalaryTransaction(db, async transaction => {
+        const snap = await transaction.get(ref);
+        const data = snap.data() || {};
+        const records = Array.isArray(data.records) ? data.records.map((r: any) => ({ ...r })) : [];
+        const basePokok = Number(data.gajiPokok) || Number(records.find((r: any) => Number(r.gajiPokok) > 0)?.gajiPokok) || 1500000;
+        let changed = false;
+        for (const entry of entries) {
+          if (records.some((r: any) => r.gajiPengurangan?.some((p: any) => p._idempKey === entry.idempKey))) continue;
+          const month = normalizeBulanTahun(getAbsenCycleInfo(entry.tanggal, getEmployeeCutoff(email)).bulanTahun);
+          let record = records.find((r: any) => normalizeBulanTahun(r.bulanTahun) === month);
+          if (!record) {
+            record = { id: 'rec-auto-' + month, bulanTahun: month, gajiPokok: basePokok, gajiTambahan: [], gajiPengurangan: [], isAutoGenerated: true };
+            records.push(record);
           }
-          if (basePokok === 0) basePokok = Number(dData.gajiPokok) || 1500000;
-        } else {
-          basePokok = 1500000;
+          record.gajiPengurangan = [...(record.gajiPengurangan || []), {
+            id: entry.idempKey, _idempKey: entry.idempKey, _isAutoSistem: true, _isDendaPulang: true,
+            _tanggalAbsen: entry.tanggal, nominal: absenConfig.dendaTidakAbsenPulang ?? 40000,
+            ket: '[Auto-Sistem] Tidak absen pulang tanggal ' + entry.tanggal + '. Shift: ' + entry.shift,
+            dateStr: new Date().toISOString(), isDibatalkan: false
+          }];
+          changed = true;
         }
+        if (changed) transaction.set(ref, { records, gajiPokok: basePokok, salaryRevision: (Number(data.salaryRevision) || 0) + 1, updatedAt: Date.now() }, { merge: true });
+      }).catch(error => console.error('Gagal menyimpan denda pulang:', error))
+        .finally(() => penaltyInFlight.current.delete(email));
+    }
+  }, [logAbsensi, gaji, isOwner, isLogAbsensiLoaded, isGajiLoaded, absenConfig, usersProfile]);
 
-        const monthIndex = records.findIndex((r: any) => normalizeBulanTahun(r.bulanTahun) === currentBulanTahun);
-        if (monthIndex >= 0) {
-          const pg = Array.isArray(records[monthIndex].gajiPengurangan) ? records[monthIndex].gajiPengurangan : [];
-          records[monthIndex] = { ...records[monthIndex], gajiPengurangan: [...pg, dendaItem] };
-        } else {
-          records.push({
-            id: `rec-auto-${Date.now()}`,
-            bulanTahun: currentBulanTahun,
-            gajiPokok: basePokok,
-            gajiTambahan: [],
-            gajiPengurangan: [dendaItem],
-            isAutoGenerated: true
-          });
-        }
-
-        transaction.set(docRef, { salaryRevision: (Number(docSnap.data()?.salaryRevision) || 0) + 1, records, gajiPokok: basePokok, updatedAt: Date.now() }, { merge: true });
-        });
-        console.log(`[Auto-Penalty] Tidak absen pulang: ${entry.email} tanggal ${entry.tanggal}`);
-      } catch (e) {
-        console.error("Auto penalty pulang error:", e);
-        autoPenaltyPulangRef.current.delete(idempKey); // Allow retry
-      }
-    });
-  }, [logAbsensi, isLogAbsensiLoaded, isGajiLoaded, isOwner, absenConfig, usersProfile]);
-
-  const handleSaveGaji = async (email: string, records: any[], sourceRecords: any[]) => {
+  const handleSaveGaji = async (email: string, records: any[], sourceRecords: any[], baseline: any[]) => {
       try {
         const cleanEmail = String(email || "").toLowerCase().trim();
         if (!cleanEmail) {
@@ -1144,7 +1105,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         if (!isOwner) throw new Error("Hanya super admin yang dapat mengubah gaji.");
 
         const docRef = doc(db, "gaji_pegawai", cleanEmail);
-        await runTransaction(db, async transaction => {
+        await runSalaryTransaction(db, async transaction => {
         const docSnap = await transaction.get(docRef);
 
         let dbRecords: any[] = [];
@@ -1156,91 +1117,8 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
           latestGajiPokok = Number(dData.gajiPokok) || 0;
         }
 
-        // Refuse a stale editor rather than erase changes made while it was open.
-        if (JSON.stringify(dbRecords) !== JSON.stringify(sourceRecords)) {
-          throw new Error("Data gaji berubah saat Anda mengedit. Perubahan Anda belum disimpan. Salin perubahan Anda, lalu buka ulang halaman untuk memuat data terbaru.");
-        }
-
-        // Find latest non-zero gajiPokok in local records being saved
-        for (const r of records) {
-          const v = Number(r.gajiPokok) || 0;
-          if (v > 0) { latestGajiPokok = v; break; }
-        }
-        if (latestGajiPokok === 0) latestGajiPokok = 1500000;
-
-        // 1. Process local records: sanitize and merge auto-items from db
-        const normalizedLocal = records.map(localRec => {
-          const normBulan = normalizeBulanTahun(localRec.bulanTahun);
-          const dbRec = dbRecords.find((dr: any) => normalizeBulanTahun(dr.bulanTahun) === normBulan);
-
-          const localPg = Array.isArray(localRec.gajiPengurangan) ? localRec.gajiPengurangan : [];
-          const dbPg = dbRec && Array.isArray(dbRec.gajiPengurangan) ? dbRec.gajiPengurangan : [];
-
-          // Find auto-system items in DB that might have been added in real-time
-          const localIds = new Set(localPg.map((p: any) => p.id || p._idempKey));
-          const missingAutoItems = dbPg.filter((p: any) => p._isAutoSistem && p._idempKey && !localIds.has(p._idempKey) && !localIds.has(p.id));
-          const combinedPg = [...localPg, ...missingAutoItems];
-
-          // Sanitize gajiTambahan: ensure every item has a unique id, numeric nominal, and valid status
-          const sanitizedTb = (localRec.gajiTambahan || []).map((t: any, idx: number) => ({
-            ...t,
-            id: t.id || `tb_${normBulan}_${Date.now()}_${idx}`,
-            nominal: Number(t.nominal) || 0,
-            ket: String(t.ket || "").trim() || "Gaji Tambahan",
-            status: t.status === "sudah" ? "sudah" : "belum"
-          }));
-
-          // Sanitize gajiPengurangan: ensure boolean flags and fields are valid
-          const sanitizedPg = combinedPg.map((p: any, idx: number) => ({
-            ...p,
-            id: p.id || `pg_${normBulan}_${Date.now()}_${idx}`,
-            nominal: Number(p.nominal) || 0,
-            ket: String(p.ket || "").trim() || "Pengurangan",
-            isDibatalkan: Boolean(p.isDibatalkan),
-            photoUrl: p.photoUrl || null,
-            _isAutoSistem: Boolean(p._isAutoSistem),
-            _isDendaPulang: Boolean(p._isDendaPulang),
-            _idempKey: p._idempKey || null,
-            _tanggalAbsen: p._tanggalAbsen || null,
-            _shift: p._shift || null,
-            _waktuAbsen: p._waktuAbsen || null,
-            dateStr: p.dateStr || new Date().toISOString()
-          }));
-
-          return {
-            ...dbRec,
-            id: localRec.id || `rec_${normBulan}`,
-            bulanTahun: normBulan,
-            gajiPokok: Number(localRec.gajiPokok) || latestGajiPokok,
-            gajiTambahan: sanitizedTb,
-            gajiPengurangan: sanitizedPg,
-            buktiTransfer: localRec.buktiTransfer || "",
-            isAutoGenerated: false, // User explicitly saved this!
-            updatedAt: Date.now()
-          };
-        });
-
-        // 2. CRITICAL: Preserve any dbRecords whose month is NOT in local records, safely sanitized
-        const localMonths = new Set(normalizedLocal.map(r => r.bulanTahun));
-        const preservedDbRecords = dbRecords
-          .filter((dr: any) => !localMonths.has(normalizeBulanTahun(dr.bulanTahun)))
-          .map((dr: any) => ({
-            ...dr,
-            id: dr.id || `rec_${normalizeBulanTahun(dr.bulanTahun)}`,
-            bulanTahun: normalizeBulanTahun(dr.bulanTahun),
-            gajiPokok: Number(dr.gajiPokok) || latestGajiPokok,
-            gajiTambahan: Array.isArray(dr.gajiTambahan) ? dr.gajiTambahan : [],
-            gajiPengurangan: Array.isArray(dr.gajiPengurangan) ? dr.gajiPengurangan : [],
-            buktiTransfer: dr.buktiTransfer || "",
-            isAutoGenerated: Boolean(dr.isAutoGenerated),
-            updatedAt: dr.updatedAt || Date.now()
-          }));
-
-        const finalRecordsToSave = [...normalizedLocal, ...preservedDbRecords].sort((a, b) => {
-          const [ma, ya] = (a.bulanTahun || "").split("/");
-          const [mb, yb] = (b.bulanTahun || "").split("/");
-          return new Date(2000 + (parseInt(yb) || 0), (parseInt(mb) || 1) - 1).getTime() - new Date(2000 + (parseInt(ya) || 0), (parseInt(ma) || 1) - 1).getTime();
-        });
+        const finalRecordsToSave = mergeSalaryEdits(sourceRecords, baseline, records, dbRecords);
+        latestGajiPokok = Number(finalRecordsToSave[0]?.gajiPokok) || latestGajiPokok || 1500000;
 
         transaction.set(docRef, {
           salaryRevision: (Number(docSnap.data()?.salaryRevision) || 0) + 1,
@@ -2034,12 +1912,14 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
     const [saveSuccess, setSaveSuccess] = useState(false);
     const isDirtyRef = React.useRef(false);
     const sourceRecordsRef = React.useRef(pegawai.sourceRecords || []);
+    const baselineRef = React.useRef(pegawai.records || []);
 
     // Sync state when DB updates ONLY IF user is not actively editing
     useEffect(() => {
         if (!isDirtyRef.current) {
             setRecords(pegawai.records || []);
             sourceRecordsRef.current = pegawai.sourceRecords || [];
+            baselineRef.current = pegawai.records || [];
         }
     }, [pegawai, isSaving]);
 
@@ -2099,7 +1979,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
         if (isSaving) return;
         setIsSaving(true);
         try {
-            await onSave(pegawai.email, records, sourceRecordsRef.current);
+            await onSave(pegawai.email, records, sourceRecordsRef.current, baselineRef.current);
             isDirtyRef.current = false;
             setSaveSuccess(true);
             setTimeout(() => setSaveSuccess(false), 3000);

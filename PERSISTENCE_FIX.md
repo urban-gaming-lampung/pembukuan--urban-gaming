@@ -1,5 +1,13 @@
 # Perbaikan penyimpanan gaji dan Edit Rincian
 
+## Koreksi 4.2.33 setelah laporan pengguna
+
+Pemeriksaan seluruh array dengan `JSON.stringify` pada 4.2.32 terlalu ketat: denda otomatis yang masuk saat mengedit menyebabkan simpan manual ditolak, dan urutan key map bisa dianggap perubahan. Log pengguna juga menunjukkan banyak transaksi denda historis ke dokumen yang sama, error precondition, serta permission-denied saat nomor revisi berubah sebelum commit.
+
+4.2.33 menggabungkan perubahan per field/item berdasarkan data asli, formulir sebelum diedit, perubahan pengguna, dan data server terbaru. Perubahan berbeda dipertahankan; konflik pada field yang sama tetap ditolak. Denda pulang dibatch per pegawai dan item yang sudah tersimpan dilewati sebelum transaksi. Error permission-denied hanya dicoba ulang jika pembacaan server membuktikan revisi berubah; penolakan izin sungguhan tetap diteruskan. Rules 4.2.32 tidak dilonggarkan.
+
+Pemeriksaan terarah `node scripts/check-salary-persistence.cjs`: 12 kasus lolos, termasuk denda baru bersamaan coret potongan/tambah bonus, bonus/pembatalan dari perangkat lain, konflik field sama, field berbeda, gaji nol, stub otomatis, bulan lain, hapus item bersamaan edit, dan retry hanya saat revisi berubah. Pemeriksaan ini melengkapi pemeriksaan rules sebelumnya yang belum mencakup alur konflik aplikasi.
+
 ## Temuan dari kode
 
 - `useAppController.ts`: penyimpanan otomatis semua daftar harga dipicu oleh `hydrated`, yang ditandai siap oleh listener **history_pembukuan**, bukan listener pengaturan. Jika history datang lebih dahulu, harga bawaan dapat menimpa rincian server. Pembacaan snapshot pengaturan juga memicu penulisan balik seluruh daftar dari setiap perangkat.
