@@ -531,7 +531,7 @@ export default function App() {
             title={getTitle(openEditRincian)}
             initialData={openEditRincian ? getPrices(openEditRincian) : []}
             onClose={() => setOpenEditRincian(null)}
-            onSave={(items) => openEditRincian && handleSavePrices(openEditRincian, items)}
+            onSave={async (items, baseline) => { if (openEditRincian) await handleSavePrices(openEditRincian, items, baseline); }}
             onResetDefault={() => openEditRincian && handleResetSpecificDefault(openEditRincian)}
           />
 

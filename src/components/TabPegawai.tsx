@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc, getDocs, getDoc, serverTimestamp } from "firebase/firestore";
+import { runTransaction, collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc, getDocs, serverTimestamp } from "firebase/firestore";
 import { db, firebaseConfig } from "../lib/firebase";
 import { initializeApp, getApp, getApps } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
@@ -178,14 +178,14 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
   const handleDeleteAccount = async (email: string) => {
     if (email.toLowerCase().trim() === "owner@gmail.com") return;
-    if (!confirm(`Apakah Anda yakin ingin menghapus akun ${email}? Pegawai ini tidak akan bisa login lagi dan seluruh datanya akan dibersihkan.`)) return;
-    
+    if (!confirm(`Apakah Anda yakin ingin menghapus profil akun ${email}? Riwayat gaji tetap disimpan untuk arsip.`)) return;
+
     setIsDeletingEmail(email);
     try {
       await deleteDoc(doc(db, "users", email));
       await deleteDoc(doc(db, "logs", email)).catch(() => {});
-      await deleteDoc(doc(db, "gaji_pegawai", email)).catch(() => {});
-      alert(`Akun ${email} dan seluruh datanya berhasil dihapus.`);
+      // Removing a profile must never delete the employee's financial history.
+      alert(`Profil akun ${email} berhasil dihapus. Riwayat gaji tetap disimpan.`);
     } catch (err: any) {
       console.error(err);
       alert(err.message || "Gagal menghapus akun.");
@@ -292,7 +292,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   const groupedLogAbsensi = useMemo(() => {
      // Step 1: Group semua log ke siklus periode -> hari -> logs (Hanya akun aktif)
      const rawMap = new Map<string, { cycle: any; hariMap: Map<string, any[]> }>();
-     
+
      const filteredLogs = filterPegawaiAbsen === "all"
        ? logAbsensi
        : logAbsensi.filter(l => l.email?.toLowerCase().trim() === filterPegawaiAbsen.toLowerCase().trim());
@@ -306,13 +306,13 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         const empCutoff = getEmployeeCutoff(em);
         const cycle = getAbsenCycleInfo(normDate, empCutoff);
         const bulanTahun = cycle.bulanTahun;
-        
+
         let hariIndo = "";
         try {
            const d = new Date(normDate);
            hariIndo = new Intl.DateTimeFormat("id-ID", { weekday: "long" }).format(d);
         } catch(e) { hariIndo = "" }
-        
+
         const tglStr = `${hariIndo} - ${normDate}`;
 
         if (!rawMap.has(bulanTahun)) {
@@ -342,7 +342,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         for (const [hari, logs] of hariMap.entries()) {
            const datePart = hari.split(' - ')[1] || hari;
            const dateObj = new Date(datePart);
-           
+
            // Hitung week number relatif terhadap awal siklus
            const diffDays = Math.max(0, Math.floor((dateObj.getTime() - cycle.startDate.getTime()) / (1000 * 60 * 60 * 24)));
            const wn = Math.min(4, Math.max(1, Math.floor(diffDays / 7) + 1));
@@ -449,7 +449,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
   const [expandedLogBulan, setExpandedLogBulan] = useState<string[]>([]);
   const toggleLogBulan = (b: string) => setExpandedLogBulan(p => p.includes(b) ? p.filter(x => x !== b) : [...p, b]);
-  
+
   const [expandedLogMinggu, setExpandedLogMinggu] = useState<string[]>([]);
   const toggleLogMinggu = (k: string) => setExpandedLogMinggu(p => p.includes(k) ? p.filter(x => x !== k) : [...p, k]);
 
@@ -461,7 +461,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   // Merge Data
   const pegawaiData = useMemo(() => {
     const mergedMap = new Map();
-    
+
     // Inisialisasi HANYA dari profil yang aktif dan tidak dicoret
     usersProfile.forEach(u => {
       if (!isSuperAdminOrOwnerEmail(u.id)) {
@@ -495,21 +495,21 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                if (r.isOngkir === "YA" && r._ongkir && r.diantarOleh) {
                    const email = r.diantarOleh.toLowerCase().trim();
                    if (isPegawaiNonaktif(email) || !mergedMap.has(email)) return;
-                   
+
                    const empCutoff = getEmployeeCutoff(email);
                    const cycle = getAbsenCycleInfo(h.tanggal, empCutoff);
                    const bulanTahun = cycle.bulanTahun;
                    const key = `${email}_${bulanTahun}`;
                    const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
-                   
+
                    if (r._isNewOngkirSystem) {
                        const fallbackPersen = r._ongkirPegawaiPersen ?? 70;
                        const fallbackNominal = Math.round((nominalAsli * fallbackPersen) / 100);
                        const pegawaiNominal = r._ongkirPegawaiNominal ?? fallbackNominal;
-                       
+
                        // Tampilan total ongkir di UI
                        ongkirMap.set(key, (ongkirMap.get(key) || 0) + pegawaiNominal);
-                       
+
                        // Jika toggle aktif, tambahkan ke yang wajib dibayar
                         const isMasukGaji = typeof ongkirConfig?.masukGaji === "boolean" ? ongkirConfig.masukGaji : Boolean(r._ongkirMasukGaji);
                        if (isMasukGaji) {
@@ -529,21 +529,21 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                if (r._ongkir && r.diantarOleh) {
                    const email = r.diantarOleh.toLowerCase().trim();
                    if (isPegawaiNonaktif(email) || !mergedMap.has(email)) return;
-                   
+
                    const empCutoff = getEmployeeCutoff(email);
                    const cycle = getAbsenCycleInfo(h.tanggal, empCutoff);
                    const bulanTahun = cycle.bulanTahun;
                    const key = `${email}_${bulanTahun}`;
                    const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
-                   
+
                    if (nominalAsli > 0) {
                        if (r._isNewOngkirSystem) {
                            const fallbackPersen = r._ongkirPegawaiPersen ?? 70;
                            const fallbackNominal = Math.round((nominalAsli * fallbackPersen) / 100);
                            const pegawaiNominal = r._ongkirPegawaiNominal ?? fallbackNominal;
-                           
+
                            ongkirMap.set(key, (ongkirMap.get(key) || 0) + pegawaiNominal);
-                           
+
                            const isMasukGaji = typeof ongkirConfig?.masukGaji === "boolean" ? ongkirConfig.masukGaji : Boolean(r._ongkirMasukGaji);
                            if (isMasukGaji) {
                                ongkirMasukGajiMap.set(key, (ongkirMasukGajiMap.get(key) || 0) + pegawaiNominal);
@@ -708,7 +708,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
               let pg = Array.isArray(r.gajiPengurangan) ? [...r.gajiPengurangan] : [];
               if (r.bonus && tb.length === 0) tb.push({ id: `tb_${normBulan}_init`, nominal: Number(r.bonus) || 0, ket: r.ketPemasukan || "Gaji Tambahan", status: "belum" });
               if (r.potongan && pg.length === 0) pg.push({ id: `pg_${normBulan}_init`, nominal: Number(r.potongan) || 0, ket: r.ketPengeluaran || "Gaji Pengurangan", isDibatalkan: false });
-              
+
               // Ensure tb items have id and status
               tb = tb.map((t: any, idx: number) => ({
                 id: t.id || `tb_${normBulan}_${idx}`,
@@ -726,6 +726,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
           });
       }
 
+      mergedMap.get(k).sourceRecords = g.records || [];
       mergedMap.get(k).records = records;
       mergedMap.get(k).gajiPokok = Number(g.gajiPokok) || 0;
     });
@@ -749,9 +750,9 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
             resolvedBasePokok = Number(p.gajiPokok) || 1500000;
         }
         p.gajiPokok = resolvedBasePokok;
-        
+
         let totalOngkir = 0;
-        
+
         // Populate ongkirBulanIni, late penalties to existing records
         p.records.forEach((rec: any) => {
            rec.bulanTahun = normalizeBulanTahun(rec.bulanTahun);
@@ -764,7 +765,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
            // Auto-merge late penalty items into rec.gajiPengurangan
            const lateItems = latePenaltyItemsMap.get(k) || [];
            let currentPg = Array.isArray(rec.gajiPengurangan) ? [...rec.gajiPengurangan] : [];
-           
+
            lateItems.forEach(lateItem => {
              const existingIdx = currentPg.findIndex((x: any) => 
                x._idempKey === lateItem._idempKey || 
@@ -813,7 +814,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         allRemainingMonthKeys.forEach((key) => {
            const rawMonth = key.split("_")[1];
            const bTahun = normalizeBulanTahun(rawMonth);
-           
+
            if (existingMonths.has(bTahun)) {
              // Already covered, just delete the map keys
              ongkirMap.delete(key);
@@ -858,7 +859,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         p.totalBonus = p.records.reduce((acc: number, r: any) => acc + (r.gajiTambahan?.reduce((sum: number, t: any) => sum + (Number(t.nominal) || 0), 0) || 0), 0);
         p.totalPotongan = p.records.reduce((acc: number, r: any) => acc + (r.gajiPengurangan?.filter((pg: any) => !pg.isDibatalkan).reduce((sum: number, pg: any) => sum + (Number(pg.nominal) || 0), 0) || 0), 0);
         p.grandTotalPendapatan = p.totalPokok + p.totalBonus + p.totalOngkirGlobal - p.totalPotongan;
-        
+
         // Re-sort records by bulantahun (assuming "MM/YY") so new stub records appear correctly
         p.records.sort((a: any, b: any) => {
            const [ma, ya] = (a.bulanTahun || "").split("/");
@@ -907,7 +908,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                     const email = r.diantarOleh.toLowerCase().trim();
                     if (isPegawaiNonaktif(email)) return;
                     const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
-                    
+
                     let amount = nominalAsli;
                     if (r._isNewOngkirSystem) {
                         const fallbackPersen = r._ongkirPegawaiPersen ?? 70;
@@ -925,7 +926,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                     const email = r.diantarOleh.toLowerCase().trim();
                     if (isPegawaiNonaktif(email)) return;
                     const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
-                    
+
                     if (nominalAsli > 0) {
                         let amount = nominalAsli;
                         if (r._isNewOngkirSystem) {
@@ -954,43 +955,16 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
      }).sort((a, b) => b.total - a.total);
   }, [history, ongkirStart, ongkirEnd, usersProfile, isUsersLoaded]);
 
-  // Auto-clean ghost records in Firestore (like deleted accounts fauzanazim56, etc.)
-  useEffect(() => {
-    if (!isOwner || !isUsersLoaded) return;
-    
-    // Check logs collection for deleted accounts
-    logs.forEach(async (l) => {
-      const email = l.id?.toLowerCase().trim() || "";
-      if (email.includes("fauzanazim56") || (!isSuperAdminOrOwnerEmail(email) && !usersProfile.some(u => u.id?.toLowerCase().trim() === email))) {
-        try {
-          await deleteDoc(doc(db, "logs", l.id));
-        } catch (err) {
-          console.warn("Auto cleanup logs error:", err);
-        }
-      }
-    });
-
-    // Check gaji_pegawai collection for deleted accounts
-    gaji.forEach(async (g) => {
-      const email = g.id?.toLowerCase().trim() || "";
-      if (email.includes("fauzanazim56") || (!isSuperAdminOrOwnerEmail(email) && !usersProfile.some(u => u.id?.toLowerCase().trim() === email))) {
-        try {
-          await deleteDoc(doc(db, "gaji_pegawai", g.id));
-        } catch (err) {
-          console.warn("Auto cleanup gaji error:", err);
-        }
-      }
-    });
-  }, [isOwner, isUsersLoaded, usersProfile, logs, gaji]);
+  // Never delete financial history based on missing/cached user profiles.
 
   // Auto-persist ongkir stub records to Firestore when detected
   const autoPersistedRef = React.useRef<Set<string>>(new Set());
-  
+
   useEffect(() => {
     // Guard: don't run if gaji hasn't loaded yet to avoid resetting existing data
-    if (!isGajiLoaded) return;
+    if (!isOwner || !isGajiLoaded) return;
     if (pegawaiData.length === 0) return;
-    
+
     pegawaiData.forEach(async (p: any) => {
       const autoRecords = p.records?.filter((r: any) => r.isAutoGenerated);
       if (!autoRecords || autoRecords.length === 0) return;
@@ -999,12 +973,17 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
       const persistKey = `${p.email}_${autoRecords.map((r: any) => r.bulanTahun).join(',')}`;
       if (autoPersistedRef.current.has(persistKey)) return;
 
-      // Get existing records DIRECTLY from the gaji Firestore snapshot (not computed data)
-      const existingGajiDoc = gaji.find(g => g.id === p.email);
+      autoPersistedRef.current.add(persistKey);
+      try {
+      await runTransaction(db, async transaction => {
+      const salaryRef = doc(db, "gaji_pegawai", p.email);
+      const salarySnap = await transaction.get(salaryRef);
+      // Read salary records inside the transaction, never from a UI snapshot.
+      const existingGajiDoc = salarySnap.data();
       const existingRecords: any[] = existingGajiDoc?.records || [];
 
       // Determine robust base salary
-      let basePokok = Number(p.gajiPokok) || 0;
+      let basePokok = Number(existingGajiDoc?.gajiPokok) || 0;
       if (basePokok === 0) {
         for (const r of existingRecords) {
           const v = Number(r.gajiPokok) || 0;
@@ -1024,7 +1003,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
       });
 
       autoRecords.forEach((autoRec: any) => {
-        const alreadyExists = updatedRecords.some((r: any) => r.bulanTahun === autoRec.bulanTahun);
+        const alreadyExists = updatedRecords.some((r: any) => normalizeBulanTahun(r.bulanTahun) === normalizeBulanTahun(autoRec.bulanTahun));
         if (!alreadyExists) {
           updatedRecords.push({
             id: autoRec.id,
@@ -1041,22 +1020,27 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
       });
 
       if (needsUpdate) {
-        autoPersistedRef.current.add(persistKey);
-        await setDoc(doc(db, "gaji_pegawai", p.email), {
+        transaction.set(salaryRef, {
+          salaryRevision: (Number(salarySnap.data()?.salaryRevision) || 0) + 1,
           records: updatedRecords,
           gajiPokok: basePokok,
           updatedAt: Date.now()
         }, { merge: true });
       }
+      });
+      } catch (error) {
+        autoPersistedRef.current.delete(persistKey);
+        console.error("Gagal menyimpan bulan gaji otomatis:", error);
+      }
     });
-  }, [pegawaiData, gaji, isGajiLoaded]);
+  }, [pegawaiData, gaji, isGajiLoaded, isOwner]);
 
   // === AUTO PENALTY: Tidak Absen Pulang ===
   // Jika pegawai absen Masuk tapi tidak Pulang, dan sudah lewat 03:00 hari berikutnya
   const autoPenaltyPulangRef = React.useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!isLogAbsensiLoaded || !isGajiLoaded) return;
+    if (!isOwner || !isLogAbsensiLoaded || !isGajiLoaded) return;
     if (logAbsensi.length === 0) return;
 
     const now = new Date();
@@ -1074,13 +1058,13 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
     absenMap.forEach(async (entry, key) => {
       // Only process if: has Masuk, no Pulang
       if (!entry.masuk || entry.pulang) return;
-      
+
       // Check if the deadline has passed: 03:00 the NEXT day after absen date
       const absenDate = new Date(entry.tanggal);
       const deadline = new Date(absenDate);
       deadline.setDate(deadline.getDate() + 1);
       deadline.setHours(3, 0, 0, 0);
-      
+
       if (now < deadline) return; // Belum lewat batas waktu
 
       // Idempotency: skip if already processed
@@ -1090,7 +1074,8 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
       try {
         const docRef = doc(db, "gaji_pegawai", entry.email);
-        const docSnap = await getDoc(docRef);
+        await runTransaction(db, async transaction => {
+        const docSnap = await transaction.get(docRef);
 
         const empCutoff = getEmployeeCutoff(entry.email);
         const cycle = getAbsenCycleInfo(entry.tanggal, empCutoff);
@@ -1140,26 +1125,28 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
           });
         }
 
-        await setDoc(docRef, { records, gajiPokok: basePokok, updatedAt: Date.now() }, { merge: true });
+        transaction.set(docRef, { salaryRevision: (Number(docSnap.data()?.salaryRevision) || 0) + 1, records, gajiPokok: basePokok, updatedAt: Date.now() }, { merge: true });
+        });
         console.log(`[Auto-Penalty] Tidak absen pulang: ${entry.email} tanggal ${entry.tanggal}`);
       } catch (e) {
         console.error("Auto penalty pulang error:", e);
         autoPenaltyPulangRef.current.delete(idempKey); // Allow retry
       }
     });
-  }, [logAbsensi, isLogAbsensiLoaded, isGajiLoaded]);
+  }, [logAbsensi, isLogAbsensiLoaded, isGajiLoaded, isOwner, absenConfig, usersProfile]);
 
-  const handleSaveGaji = async (email: string, records: any[]) => {
+  const handleSaveGaji = async (email: string, records: any[], sourceRecords: any[]) => {
       try {
         const cleanEmail = String(email || "").toLowerCase().trim();
         if (!cleanEmail) {
-          alert("Gagal: Email pegawai tidak valid.");
-          return;
+          throw new Error("Email pegawai tidak valid.");
         }
+        if (!isOwner) throw new Error("Hanya super admin yang dapat mengubah gaji.");
 
         const docRef = doc(db, "gaji_pegawai", cleanEmail);
-        const docSnap = await getDoc(docRef);
-        
+        await runTransaction(db, async transaction => {
+        const docSnap = await transaction.get(docRef);
+
         let dbRecords: any[] = [];
         let latestGajiPokok = 0;
 
@@ -1167,6 +1154,11 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
           const dData = docSnap.data();
           dbRecords = Array.isArray(dData.records) ? dData.records : [];
           latestGajiPokok = Number(dData.gajiPokok) || 0;
+        }
+
+        // Refuse a stale editor rather than erase changes made while it was open.
+        if (JSON.stringify(dbRecords) !== JSON.stringify(sourceRecords)) {
+          throw new Error("Data gaji berubah saat Anda mengedit. Perubahan Anda belum disimpan. Salin perubahan Anda, lalu buka ulang halaman untuk memuat data terbaru.");
         }
 
         // Find latest non-zero gajiPokok in local records being saved
@@ -1191,6 +1183,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
           // Sanitize gajiTambahan: ensure every item has a unique id, numeric nominal, and valid status
           const sanitizedTb = (localRec.gajiTambahan || []).map((t: any, idx: number) => ({
+            ...t,
             id: t.id || `tb_${normBulan}_${Date.now()}_${idx}`,
             nominal: Number(t.nominal) || 0,
             ket: String(t.ket || "").trim() || "Gaji Tambahan",
@@ -1199,6 +1192,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
           // Sanitize gajiPengurangan: ensure boolean flags and fields are valid
           const sanitizedPg = combinedPg.map((p: any, idx: number) => ({
+            ...p,
             id: p.id || `pg_${normBulan}_${Date.now()}_${idx}`,
             nominal: Number(p.nominal) || 0,
             ket: String(p.ket || "").trim() || "Pengurangan",
@@ -1214,6 +1208,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
           }));
 
           return {
+            ...dbRec,
             id: localRec.id || `rec_${normBulan}`,
             bulanTahun: normBulan,
             gajiPokok: Number(localRec.gajiPokok) || latestGajiPokok,
@@ -1230,6 +1225,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         const preservedDbRecords = dbRecords
           .filter((dr: any) => !localMonths.has(normalizeBulanTahun(dr.bulanTahun)))
           .map((dr: any) => ({
+            ...dr,
             id: dr.id || `rec_${normalizeBulanTahun(dr.bulanTahun)}`,
             bulanTahun: normalizeBulanTahun(dr.bulanTahun),
             gajiPokok: Number(dr.gajiPokok) || latestGajiPokok,
@@ -1246,16 +1242,19 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
           return new Date(2000 + (parseInt(yb) || 0), (parseInt(mb) || 1) - 1).getTime() - new Date(2000 + (parseInt(ya) || 0), (parseInt(ma) || 1) - 1).getTime();
         });
 
-        await setDoc(docRef, {
+        transaction.set(docRef, {
+          salaryRevision: (Number(docSnap.data()?.salaryRevision) || 0) + 1,
           records: finalRecordsToSave,
           gajiPokok: latestGajiPokok,
           updatedAt: Date.now()
         }, { merge: true });
 
+        });
         alert(`✅ Gaji ${cleanEmail.split("@")[0]} berhasil disimpan!`);
       } catch (err: any) {
         console.error("Gagal menyimpan gaji pegawai:", err);
         alert(`Gagal menyimpan gaji: ${err?.message || "Terjadi kesalahan jaringan."}`);
+        throw err;
       }
   };
 
@@ -1323,13 +1322,13 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                 <Users className="w-4 h-4 text-blue-500" />
                 <span>Akun Terdaftar ({usersProfile.length})</span>
               </h3>
-              
+
               <div className="flex flex-col gap-3 max-h-[360px] overflow-y-auto pr-1">
                 {usersProfile.map((u) => {
                   const isOwnerAccount = u.id.toLowerCase().trim() === "owner@gmail.com";
                   const roleLabel = u.role === "super admin" ? "Super Admin" : "Admin";
                   const initialName = u.id.split("@")[0].substring(0, 2).toUpperCase();
-                  
+
                   return (
                     <div key={u.id} className="flex items-center justify-between p-3.5 bg-zinc-50 dark:bg-black/30 border border-zinc-100 dark:border-white/5 rounded-xl shadow-sm hover:scale-[1.01] transition-transform">
                       <div className="flex items-center gap-3 min-w-0">
@@ -1355,7 +1354,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                           </div>
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                         {/* ROLE PICKER */}
                         {isOwnerAccount ? (
@@ -1424,7 +1423,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                   <UserPlus className="w-4 h-4 text-green-500" />
                   <span>Daftarkan Akun Baru</span>
                 </h3>
-                
+
                 <form onSubmit={handleCreateAccount} className="space-y-4">
                   <div>
                     <label className="block text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1 ml-0.5">Email Akun</label>
@@ -1677,13 +1676,13 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                       <p className="text-zinc-500 font-medium">Belum ada rekam jejak absensi (waktu dan foto).</p>
                    </div>
                )}
-            
+
                {groupedLogAbsensi.map(([bulan, weeks, totalDays, monthlySummary, labelPeriode]) => {
                  const isBulanExpanded = expandedLogBulan.includes(bulan);
 
                  return (
                     <div key={bulan} className="bg-white dark:bg-[#1C1C1E] rounded-3xl border border-zinc-200 dark:border-white/10 overflow-hidden shadow-sm transition-all duration-300">
-                       
+
                        {/* HEADER BULAN / SIKLUS */}
                        <div 
                           onClick={() => toggleLogBulan(bulan)}
@@ -1712,7 +1711,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                        {/* LIST WEEK */}
                        {isBulanExpanded && (
                           <div className="flex flex-col gap-3 p-5 pt-0 bg-zinc-50/50 dark:bg-black/10 border-t border-zinc-200 dark:border-white/5 animate-in fade-in slide-in-from-top-2 duration-300">
-                             
+
                              {/* MONTHLY SUMMARY TABLE */}
                              {monthlySummary && monthlySummary.size > 0 && (
                                 <div className="mt-4 mb-2 bg-gradient-to-br from-indigo-50/80 to-blue-50/50 dark:from-indigo-500/10 dark:to-blue-500/5 rounded-2xl border border-indigo-100/80 dark:border-indigo-500/20 overflow-hidden shadow-sm">
@@ -1790,7 +1789,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                                       {/* WEEK CONTENT: Summary + Days */}
                                       {isMingguExpanded && (
                                          <div className="border-t border-zinc-100 dark:border-white/5 animate-in fade-in slide-in-from-top-2 duration-300">
-                                            
+
                                             {/* LIST HARI DALAM WEEK */}
                                             <div className="flex flex-col gap-2.5 p-4">
                                                {Array.from(week.days.entries()).map(([hari, listPegawai]) => {
@@ -1828,7 +1827,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
                                                                     {/* Status Absen */}
                                                                     <div className="flex w-full items-center gap-3 bg-zinc-50 dark:bg-[#252528] rounded-xl border border-zinc-200/50 dark:border-white/5 p-1.5 flex-1 overflow-x-auto min-w-0">
-                                                                        
+
                                                                         {pData.isLibur ? (
                                                                            <div className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg w-full bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-[13px] italic">
                                                                                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 11-1 9"></path><path d="m19 11-4-7"></path><path d="M2 11h20"></path><path d="m3 11 1.67-5.38a2 2 0 0 1 1.9-1.39h7.18a2 2 0 0 1 1.8 1.11L19 11"></path><path d="m9 11 1 9"></path></svg>
@@ -1907,8 +1906,8 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
       <Section title="Manajemen Gaji Pegawai">
          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
             {pegawaiData.length === 0 && <p className="text-zinc-500 text-sm px-2">Belum ada pegawai terdeteksi di sistem.</p>}
-            {pegawaiData.map((p, i) => (
-                <PegawaiCard key={i} pegawai={p} onSave={handleSaveGaji} isOwner={isOwner} onUpdateCutoff={handleUpdateEmployeeCutoff} />
+            {pegawaiData.map((p) => (
+                <PegawaiCard key={p.email} pegawai={p} onSave={handleSaveGaji} isOwner={isOwner} onUpdateCutoff={handleUpdateEmployeeCutoff} />
             ))}
          </div>
       </Section>
@@ -1966,7 +1965,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                       <span>Pegawai</span>
                       <span>Total Ongkir</span>
                    </div>
-                   
+
                    <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] border border-zinc-200 dark:border-white/10 overflow-hidden divide-y divide-zinc-200 dark:divide-white/5">
                       {ongkirReport.map((item) => (
                          <div key={item.email} className="flex items-center justify-between px-6 py-4 hover:bg-zinc-50 dark:hover:bg-zinc-900/30 transition-colors">
@@ -2034,13 +2033,15 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
     const [isSaving, setIsSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
     const isDirtyRef = React.useRef(false);
+    const sourceRecordsRef = React.useRef(pegawai.sourceRecords || []);
 
     // Sync state when DB updates ONLY IF user is not actively editing
     useEffect(() => {
         if (!isDirtyRef.current) {
             setRecords(pegawai.records || []);
+            sourceRecordsRef.current = pegawai.sourceRecords || [];
         }
-    }, [pegawai]);
+    }, [pegawai, isSaving]);
 
     const handleAddRecord = () => {
         isDirtyRef.current = true;
@@ -2095,9 +2096,10 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
     const isChanged = JSON.stringify(records) !== JSON.stringify(pegawai.records || []);
 
     const handleSave = async () => {
+        if (isSaving) return;
         setIsSaving(true);
         try {
-            await onSave(pegawai.email, records);
+            await onSave(pegawai.email, records, sourceRecordsRef.current);
             isDirtyRef.current = false;
             setSaveSuccess(true);
             setTimeout(() => setSaveSuccess(false), 3000);
@@ -2113,10 +2115,10 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
     const currentCycle = getAbsenCycleInfo(todayStr, empCutoff);
 
     return (
-        <div className={`bg-white dark:bg-[#1C1C1E] rounded-3xl p-5 border shadow-sm flex flex-col gap-4 transition-all ${
+        <fieldset disabled={isSaving} className={`min-w-0 bg-white dark:bg-[#1C1C1E] rounded-3xl p-5 border shadow-sm flex flex-col gap-4 transition-all ${
             isChanged ? 'border-amber-400/80 dark:border-amber-500/50 ring-2 ring-amber-500/10' : 'border-zinc-200 dark:border-zinc-800'
         }`}>
-            
+
             {/* Header User */}
             <div className="flex items-center justify-between pb-1">
                 <div className="flex items-center gap-3 w-full">
@@ -2223,7 +2225,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
 
                             {isExpanded && (
                                 <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 space-y-4 animate-in slide-in-from-top-2 duration-200">
-                                   
+
                                    <div className="flex justify-between items-end gap-3 w-full">
                                       <div className="flex-1">
                                         <label className="text-[10px] font-bold uppercase tracking-wide text-zinc-500 mb-1.5 block">Bulan & Tahun</label>
@@ -2514,15 +2516,15 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                    <Save className="w-3.5 h-3.5" /> {isSaving ? "Menyimpan..." : isChanged ? "Simpan Perubahan" : "Simpan Gaji"}
                 </button>
             </div>
-            
-        </div>
+
+        </fieldset>
     );
 };
 
 const RangkumanBulanItem = ({ bulan, records, cutoffDay = 1 }: { bulan: string, records: any[], cutoffDay?: number }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const cycleInfo = useMemo(() => getCycleInfoFromBulanTahun(bulan, cutoffDay), [bulan, cutoffDay]);
-    
+
     let totalSatuBulan = 0;
     records.forEach(r => {
        const pokok = Number(r.gajiPokok) || 0;
@@ -2560,7 +2562,7 @@ const RangkumanBulanItem = ({ bulan, records, cutoffDay = 1 }: { bulan: string, 
                    </div>
                </div>
            </div>
-           
+
            {isExpanded && (
                <>
                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-top-4 duration-300">
@@ -2615,7 +2617,7 @@ const RangkumanBulanItem = ({ bulan, records, cutoffDay = 1 }: { bulan: string, 
                                         <span className="text-[12px] font-black text-emerald-500">{rupiah(bersih)}</span>
                                      </div>
                                   </div>
-                                  
+
                                   <div className="grid grid-cols-2 gap-2 w-full mt-2">
                                      <div className="bg-white dark:bg-zinc-900/50 p-2.5 rounded-xl border border-zinc-100 dark:border-white/5 flex flex-col">
                                         <div className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider mb-0.5">Gaji Pokok</div>

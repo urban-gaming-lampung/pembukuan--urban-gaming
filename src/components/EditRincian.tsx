@@ -43,7 +43,7 @@ interface PriceItem {
 interface EditRincianProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (items: PriceItem[]) => void;
+  onSave: (items: PriceItem[], baseline: PriceItem[]) => void | Promise<void>;
   title: string;
   initialData: PriceItem[];
   onResetDefault?: () => void;
@@ -59,19 +59,23 @@ const EditRincian: React.FC<EditRincianProps> = ({
 }) => {
   useBodyScrollLock(isOpen);
   const [items, setItems] = useState<PriceItem[]>([]);
+  const baselineRef = React.useRef<PriceItem[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [isClosing, setIsClosing] = useState(false);
 
   // Sync data & Reset Animation State
   useEffect(() => {
     if (isOpen) {
-      setItems(JSON.parse(JSON.stringify(initialData)));
+      baselineRef.current = JSON.parse(JSON.stringify(initialData));
+      setItems(baselineRef.current);
       setSearch("");
       setIsClosing(false);
     }
-  }, [isOpen, initialData]);
+  }, [isOpen, title]);
 
   const handleClose = () => {
+    if (isSaving) return;
     setIsClosing(true);
     setTimeout(() => {
       onClose();
@@ -94,9 +98,15 @@ const EditRincian: React.FC<EditRincianProps> = ({
     setItems(newItems);
   };
 
-  const handleSave = () => {
-    onSave(items);
-    handleClose();
+  const handleSave = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      await onSave(items, baselineRef.current);
+      handleClose();
+    } catch (error: any) {
+      alert(error?.message || "Gagal menyimpan rincian. Perubahan Anda masih ada di formulir.");
+    } finally { setIsSaving(false); }
   };
 
   const filteredIndices = useMemo(() => {
@@ -123,7 +133,7 @@ const EditRincian: React.FC<EditRincianProps> = ({
       />
 
       {/* Modal Container - Mimicking iOS Modal / macOS Sheet */}
-      <div 
+      <fieldset disabled={isSaving}
         className={`relative w-full h-full sm:h-auto sm:max-h-[85vh] sm:max-w-[640px] 
           bg-[#F2F2F7] dark:bg-[#1C1C1E] 
           sm:rounded-[18px] shadow-2xl overflow-hidden flex flex-col
@@ -151,6 +161,7 @@ const EditRincian: React.FC<EditRincianProps> = ({
 
           <button
             onClick={handleSave}
+            disabled={isSaving}
             className="text-[17px] font-semibold text-[#007AFF] hover:opacity-70 active:opacity-50 transition-opacity"
           >
             Selesai
@@ -291,7 +302,7 @@ const EditRincian: React.FC<EditRincianProps> = ({
           )}
 
         </div>
-      </div>
+      </fieldset>
     </div>
   );
 };

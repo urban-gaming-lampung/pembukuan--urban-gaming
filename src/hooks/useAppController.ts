@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { collection, doc, setDoc, deleteDoc, onSnapshot, addDoc, updateDoc, query, getDocs, getDoc, where, orderBy, serverTimestamp, arrayUnion, deleteField } from "firebase/firestore";
+import { runTransaction, collection, doc, setDoc, deleteDoc, onSnapshot, addDoc, updateDoc, query, getDocs, getDoc, where, orderBy, serverTimestamp, arrayUnion, deleteField } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth, listGameDb } from "../lib/firebase";
 import { usePresence } from "./usePresence";
@@ -193,10 +193,10 @@ export default function useAppController() {
                 setDark(data.dark);
              }
              if (data.profileColor) setUserProfileColor(data.profileColor);
-             
+
              if (data.kualitasGambar) setKualitasGambar(data.kualitasGambar as ImageQuality);
              if (data.tableMode) setTableMode(data.tableMode as "Lama" | "Baru");
-             
+
              if (data.posCatalogState) {
                 setDbCatalogState(data.posCatalogState);
              } else {
@@ -260,13 +260,13 @@ export default function useAppController() {
   useEffect(() => {
     const interval = setInterval(() => {
       if (hasDataRef.current) return;
-      
+
       const bizDate = getBusinessDate();
       const bizDateStr = `${bizDate.getFullYear()}-${String(bizDate.getMonth() + 1).padStart(2, "0")}-${String(bizDate.getDate()).padStart(2, "0")}`;
-      
+
       const bizAlreadySaved = historyRef.current.some(h => h.tanggal === bizDateStr);
       const targetDate = bizAlreadySaved ? getWibDate() : bizDate;
-      
+
       if (targetDate.getDate() !== systemDateRef.current) {
         systemDateRef.current = targetDate.getDate();
         const yyyy = targetDate.getFullYear();
@@ -396,7 +396,7 @@ export default function useAppController() {
     const currentUserEmail = user?.email?.toLowerCase().trim() || "";
 
     const logsForToday = allLogAbsensi.filter((l: any) => isLogForDate(l, tanggal) && l.status !== "deleted" && l.status !== "completed");
-    
+
     // If no active logs exist today (e.g. fresh day or owner reset logs), reset all attendance states
     if (logsForToday.length === 0) {
       setAbsenPagi("");
@@ -724,7 +724,7 @@ export default function useAppController() {
     });
     return () => unsub();
   }, [tanggal, editingId]);
-  
+
   // State untuk Alert (UI Apple Style)
   const [showDownloadAlert, setShowDownloadAlert] = useState(false);
   const [showDuplicateDateAlert, setShowDuplicateDateAlert] = useState(false);
@@ -805,9 +805,9 @@ export default function useAppController() {
               targetId = "section-rincian";
               break;
       }
-      
+
       setValidationAlert({ title, message });
-      
+
       if (targetId) {
           setTimeout(() => {
               const el = document.getElementById(targetId);
@@ -830,7 +830,7 @@ export default function useAppController() {
   const [hargaJajanan, setHargaJajanan] = useState<Price[]>(DEFAULT_HARGA_JAJANAN as Price[]);
   const [hargaJasaAks, setHargaJasaAks] = useState<Price[]>(DEFAULT_HARGA_JASA_AKS as Price[]);
   const [hargaSewa, setHargaSewa] = useState<Price[]>(DEFAULT_HARGA_SEWA as Price[]);
-  
+
   const [ongkirConfig, setOngkirConfig] = useState({ pegawaiPersen: 70, masukGaji: false });
   const [absenConfig, setAbsenConfig] = useState({ durasiWaktuPotongan: 15, waktuToleransi: 15, nominalDenda: 1500, dendaTidakAbsenPulang: 40000, tanggalMulaiHitung: 1 });
 
@@ -864,22 +864,42 @@ export default function useAppController() {
     }
   };
 
-  const handleSavePrices = (key: PriceListKey, next: Price[]) => {
-    if (key === "harian") setHargaHarian(next);
-    else if (key === "jajanan") setHargaJajanan(next);
-    else if (key === "jasaAks") setHargaJasaAks(next);
-    else setHargaSewa(next);
+  // Write only explicit edits; snapshots and initial defaults never trigger writes.
+  const priceDefaults = { hargaHarian: DEFAULT_HARGA_HARIAN, hargaJajanan: DEFAULT_HARGA_JAJANAN, hargaJasaAks: DEFAULT_HARGA_JASA_AKS, hargaSewa: DEFAULT_HARGA_SEWA };
+  const priceFields = { harian: "hargaHarian", jajanan: "hargaJajanan", jasaAks: "hargaJasaAks", sewa: "hargaSewa" } as const;
+  const persistPrices = async (patch: Partial<Record<keyof typeof priceDefaults, Price[]>>, expected = { hargaHarian, hargaJajanan, hargaJasaAks, hargaSewa }) => {
+    if (!user || !isSuperAdminOrOwner) {
+      throw new Error("Hanya super admin yang dapat mengubah rincian harga.");
+    }
+    const settingsRef = doc(db, "data", "settings");
+    await runTransaction(db, async transaction => {
+      const snap = await transaction.get(settingsRef);
+      const data = snap.data() || {};
+      const current = { ...data.settings?.priceLists, ...data.priceLists };
+      for (const field of Object.keys(patch) as (keyof typeof priceDefaults)[]) {
+        if (!Array.isArray(patch[field])) throw new Error("Format rincian harga tidak valid.");
+        if (JSON.stringify(current[field] ?? priceDefaults[field]) !== JSON.stringify(expected[field])) {
+          throw new Error("Rincian berubah di perangkat lain. Salin perubahan Anda dan buka ulang Edit Rincian sebelum menyimpan.");
+        }
+      }
+      transaction.set(settingsRef, { priceLists: patch, priceListsRevision: (Number(data.priceListsRevision) || 0) + 1 }, { merge: true });
+    });
+  };
+
+  const handleSavePrices = async (key: PriceListKey, next: Price[], baseline: Price[]) => {
+    const field = priceFields[key];
+    await persistPrices({ [field]: next }, { hargaHarian, hargaJajanan, hargaJasaAks, hargaSewa, [field]: baseline });
     setOpenEditRincian(null);
   };
 
-  const handleResetSpecificDefault = (key: PriceListKey) => {
-    if (key === "harian") setHargaHarian(DEFAULT_HARGA_HARIAN as Price[]);
-    else if (key === "jajanan") setHargaJajanan(DEFAULT_HARGA_JAJANAN as Price[]);
-    else if (key === "jasaAks") setHargaJasaAks(DEFAULT_HARGA_JASA_AKS as Price[]);
-    else setHargaSewa(DEFAULT_HARGA_SEWA as Price[]);
-    
-    setSuccessMessage(`List ${getTitle(key)} berhasil di-reset ke default!`);
-    setShowSuccessAlert(true);
+  const handleResetSpecificDefault = async (key: PriceListKey) => {
+    try {
+      const field = priceFields[key];
+      await persistPrices({ [field]: priceDefaults[field] });
+      setOpenEditRincian(null);
+      setSuccessMessage(`List ${getTitle(key)} berhasil di-reset ke default!`);
+      setShowSuccessAlert(true);
+    } catch (error: any) { alert(error?.message || "Gagal menyimpan rincian."); }
   };
 
   // ===== TABLE ROWS STATE =====
@@ -963,7 +983,7 @@ export default function useAppController() {
       const baseExpenseCash = totalPengeluaranCash - ongkirExpenseCash;
       sisaKas = Math.max(0, baseIncomeCash - baseExpenseCash);
     }
-    
+
     setRowsSetoran(prev => {
         const newRows = [...prev];
         if (newRows.length > 0) {
@@ -1042,7 +1062,7 @@ export default function useAppController() {
 
   // ===== HISTORY & FILTER =====
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  
+
   useEffect(() => { historyRef.current = history; }, [history]);
 
 
@@ -1134,7 +1154,7 @@ export default function useAppController() {
     if (data.rukoBuka !== undefined) _setRukoBuka(data.rukoBuka ? data.rukoBuka.split(" - ")[0] : "");
     if (data.rukoTutup !== undefined) _setRukoTutup(data.rukoTutup ? data.rukoTutup.split(" - ")[0] : "");
     if (data.catatan !== undefined) setCatatan(data.catatan);
-    
+
     const cleanRows = (rows: any[], min: number) => {
        if (!Array.isArray(rows)) return [];
        const res = [...rows];
@@ -1183,19 +1203,19 @@ export default function useAppController() {
                  durationHours = 24;
              }
           }
-          
+
           if (durationHours > 0) {
              const [hStr, mStr] = r.jamMasukSewa.split(":");
              const jamNum = parseInt(hStr || "0");
              const startD = new Date();
              startD.setHours(jamNum, parseInt(mStr || "0"), 0, 0);
-             
+
              if (startD.getTime() > timeNowMs + 12 * 3600000) {
                  startD.setDate(startD.getDate() - 1);
              }
-             
+
              const endD = new Date(startD.getTime() + durationHours * 3600000);
-             
+
              unverified.push({
                 isLive: true,
                 sourceIdx: idx,
@@ -1243,9 +1263,9 @@ export default function useAppController() {
                             const jamNum = parseInt(hStr || "0");
                             const parts = h.tanggal.split("-");
                             const startD = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]), jamNum, parseInt(mStr || "0"), 0, 0);
-                            
+
                             const endD = new Date(startD.getTime() + durationHours * 3600000);
-                            
+
                             unverified.push({
                                 isLive: false,
                                 historyId: h.id,
@@ -1272,7 +1292,7 @@ export default function useAppController() {
             uniq.push(item);
         }
     }
-    
+
     return uniq;
   }, [rowsSewa, history, user, activeTab]);
 
@@ -1288,7 +1308,7 @@ export default function useAppController() {
          }
          return false;
       });
-      
+
       setUnverifiedRentals(prev => {
          if (prev.length === needsNotify.length && prev.every((v,i) => v._rawRow._historyId === needsNotify[i]._rawRow._historyId && v._rawRow._sourceIdx === needsNotify[i]._rawRow._sourceIdx)) {
              return prev;
@@ -1296,7 +1316,7 @@ export default function useAppController() {
          return needsNotify;
       });
     }, 15000);
-    
+
     const nowMsInit = Date.now();
     const initNotify = unverifiedListMemo.filter(item => {
        if (nowMsInit >= item.endTimeMs) {
@@ -1440,9 +1460,9 @@ export default function useAppController() {
           const isCustom = r.lamaSewa === "Isi Sendiri";
           basePrice = isCustom ? toNum((r as any)._customBase) : getHargaSewa(r);
       }
-      
+
       if (basePrice <= 0) return "harga_sewa_empty";
-      
+
       if (!r.isOngkir) return "ongkir_empty";
       if (r.isOngkir === "YA" && r.isPaid !== "TIDAK") {
           const ong = toNum(r._ongkir);
@@ -1496,7 +1516,7 @@ export default function useAppController() {
       const uniqueLogId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
         ? crypto.randomUUID() 
         : Date.now().toString() + Math.random().toString(36).slice(2);
-      
+
       const data = recordData || {};
       const totalHarian = data.totalHarian || 0;
       const totalJajanan = data.totalJajanan || 0;
@@ -1545,7 +1565,7 @@ export default function useAppController() {
     const uniqueId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
       ? crypto.randomUUID() 
       : Date.now().toString() + Math.random().toString(36).slice(2);
-    
+
     // Pastikan histori pembukuan harian menyimpan data yang valid & SSOT:
     // - Absen Masuk PALING PAGI
     // - Absen Pulang PALING MALAM / DINI HARI (toleransi s.d 03:00)
@@ -1598,14 +1618,14 @@ export default function useAppController() {
 
     setDoc(doc(db, "history_pembukuan", newItem.id), newItem).catch(console.error);
     logActivity("CREATE", tanggal, hari, newItem);
-    
+
     if (!editingId && shiftPegawai !== "Libur" && user?.email) {
       if (!absenPagi || !absenSiang || !shiftPegawai) {
         const dendaAmount = absenConfig?.dendaTidakAbsenPulang ?? 40000;
         if (dendaAmount > 0) {
           try {
-             const docRef = doc(db, "gaji_pegawai", user.email);
-             const docSnap = await getDoc(docRef);
+             const docRef = doc(db, "gaji_pegawai", user.email.toLowerCase().trim());
+
              const idempKey = `dendaBolos_${tanggal}_${user.email}`;
              const newDenda = {
                   id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
@@ -1629,15 +1649,17 @@ export default function useAppController() {
               const cycle = getAbsenCycleInfo(tanggal || new Date().toISOString().slice(0, 10), empCutoff);
               const currentBulanTahun = normalizeBulanTahun(cycle.bulanTahun);
 
+              await runTransaction(db, async transaction => {
+              const docSnap = await transaction.get(docRef);
               let basePokok = 0;
               if (docSnap.exists()) {
                   const data = docSnap.data();
                   let records = Array.isArray(data.records) ? data.records : [];
-                  
+
                   const alreadyInjected = records.some((r: any) => 
                       r.gajiPengurangan?.some((pg: any) => pg._idempKey === idempKey)
                   );
-                  
+
                   if (!alreadyInjected) {
                        for (const r of records) {
                            const v = Number(r.gajiPokok) || 0;
@@ -1653,13 +1675,15 @@ export default function useAppController() {
                        } else {
                            records = [{ id: `rec-${Date.now()}`, bulanTahun: currentBulanTahun, gajiPokok: basePokok, gajiTambahan: [], gajiPengurangan: [newDenda], isAutoGenerated: true }, ...records];
                        }
-                       await setDoc(docRef, { records, gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
+                       transaction.set(docRef, { salaryRevision: (Number(docSnap.data()?.salaryRevision) || 0) + 1, records, gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
                   }
               } else {
                   basePokok = 1500000;
                   const newMonth = { id: `rec-${Date.now()}`, bulanTahun: currentBulanTahun, gajiPokok: basePokok, gajiTambahan: [], gajiPengurangan: [newDenda], isAutoGenerated: true };
-                  await setDoc(docRef, { records: [newMonth], gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
+                  transaction.set(docRef, { salaryRevision: 1, records: [newMonth], gajiPokok: basePokok, lastUpdated: new Date().toISOString() }, { merge: true });
               }
+              });
+
           } catch (err) {
               console.error("Gagal menerapkan denda bolos/lupa absen:", err);
           }
@@ -1668,7 +1692,7 @@ export default function useAppController() {
     }
 
     if (editingId) setEditingId(null);
-    
+
     _setRukoBuka("");
     _setRukoBukaDate("");
     _setRukoTutup("");
@@ -1686,9 +1710,9 @@ export default function useAppController() {
 
     setSavedSignature(currentFormSignature);
     isJustSavedOrLoaded.current = false; 
-    
+
     hasDataRef.current = false;
-    
+
     allLogAbsensi.filter((l: any) => isLogForDate(l, tanggal) && l.status !== "deleted").forEach((l: any) => {
       if (l.id) {
         updateDoc(doc(db, "log_absensi", l.id), { status: "completed" }).catch(console.error);
@@ -1750,11 +1774,11 @@ export default function useAppController() {
         rowsSetoran: JSON.parse(JSON.stringify(rowsSetoran)),
         rowsPengeluaran: JSON.parse(JSON.stringify(rowsPengeluaran)),
     };
-    
+
     if (!isSuperAdminOrOwner) {
       const requestId = Date.now().toString() + Math.random().toString(36).substring(2, 6);
       const originalData = history.find(h => h.id === editingId) || null;
-      
+
       const requestDoc = {
         id: requestId,
         historyId: editingId,
@@ -1782,16 +1806,16 @@ export default function useAppController() {
         });
       return;
     }
-    
+
     setDoc(doc(db, "history_pembukuan", editingId), updatedData, { merge: true }).catch(console.error);
     logActivity("UPDATE", tanggal, hari, updatedData);
-    
+
     setSavedSignature(currentFormSignature);
     isJustSavedOrLoaded.current = false;
 
     setSuccessMessage("Perubahan berhasil disimpan! Mengembalikan form...");
     setShowSuccessAlert(true);
-    
+
     setTimeout(() => window.location.reload(), 1500);
   };
 
@@ -1808,7 +1832,7 @@ export default function useAppController() {
     setRowsJajanan(item.rowsJajanan || Array.from({ length: 5 }, () => ({ ...blankJajanan })));
     setRowsJasaAks(item.rowsJasaAks || Array.from({ length: 5 }, () => ({ ...blankJasaAks })));
     setRowsSewa(item.rowsSewa || Array.from({ length: 5 }, () => newBlankSewa()));
-    
+
     const setoranData = (item.rowsSetoran || [{ ket: "", harga: "", bayar: "" }]).map((r: any) => ({
        ket: r.ket || "",
        harga: r.harga ?? r.nominal ?? "",
@@ -1826,7 +1850,7 @@ export default function useAppController() {
     setRowsPengeluaran(pengeluaranData);
 
     isJustSavedOrLoaded.current = true;
-    
+
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -1865,11 +1889,12 @@ export default function useAppController() {
 
   // HYDRATION & FIREBASE REALTIME SYNC
   useEffect(() => {
+    if (!user) return;
     const settingsRef = doc(db, "data", "settings");
     const unsubSettings = onSnapshot(settingsRef, (snap) => {
       if (snap.exists()) {
         const data = snap.data();
-        const pl = data.priceLists;
+        const pl = { ...data.settings?.priceLists, ...data.priceLists };
         if (pl) {
            if (Array.isArray(pl.hargaHarian)) setHargaHarian(pl.hargaHarian);
            if (Array.isArray(pl.hargaJajanan)) setHargaJajanan(pl.hargaJajanan);
@@ -1885,30 +1910,15 @@ export default function useAppController() {
         if (data.absenConfig) {
            setAbsenConfig(data.absenConfig);
         }
-      } else {
-        setDoc(settingsRef, {
-            settings: { 
-                priceLists: { hargaHarian: DEFAULT_HARGA_HARIAN, hargaJajanan: DEFAULT_HARGA_JAJANAN, hargaJasaAks: DEFAULT_HARGA_JASA_AKS, hargaSewa: DEFAULT_HARGA_SEWA }
-            },
-            ongkirConfig: { pegawaiPersen: 70, masukGaji: false },
-            absenConfig: { durasiWaktuPotongan: 15, waktuToleransi: 15, nominalDenda: 1500, dendaTidakAbsenPulang: 40000, tanggalMulaiHitung: 1 }
-        }, { merge: true });
-        try {
-            const raw = localStorage.getItem(LS_KEY);
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (parsed.settings) setDoc(settingsRef, parsed.settings, { merge: true });
-            }
-        } catch(e) {}
       }
     }, (err) => console.error(err));
 
     return () => { unsubSettings(); };
-  }, []);
+  }, [user?.uid]);
 
   useEffect(() => {
     let q = collection(db, "history_pembukuan") as any;
-    
+
     if (filter === "Semua Bulan") {
        q = query(q, orderBy("tanggal", "desc"));
     } else if (filter === "Pilih Bulan") {
@@ -1943,7 +1953,7 @@ export default function useAppController() {
         } as HistoryItem);
       });
       items.sort((a,b) => b.tanggal.localeCompare(a.tanggal) || b.id.localeCompare(a.id));
-      
+
       if (items.length === 0 && filter === "Bulan Ini") {
           try {
             const raw = localStorage.getItem(LS_KEY);
@@ -1957,7 +1967,7 @@ export default function useAppController() {
             }
           } catch(e) {}
       }
-      
+
       setHistory(items);
       setHydrated(true);
     }, (err: any) => console.error(err));
@@ -1965,18 +1975,9 @@ export default function useAppController() {
     return () => { unsubHistory(); };
   }, [filter, filterMonth, rangeStart, rangeEnd]);
 
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      setDoc(doc(db, "data", "settings"), {
-        priceLists: { hargaHarian, hargaJajanan, hargaJasaAks, hargaSewa }
-      }, { merge: true }).catch(console.error);
-    } catch { }
-  }, [hydrated, hargaHarian, hargaJajanan, hargaJasaAks, hargaSewa]);
-
   // ===== BACKUP / RESTORE =====
   const restoreInputRef = useRef<HTMLInputElement>(null);
-  
+
   const doBackup = () => {
     const payload = {
       build: "v3.0 Alpha",
@@ -2000,7 +2001,7 @@ export default function useAppController() {
       setKualitasGambar(json?.settings?.kualitasGambar ?? kualitasGambar);
       const restoredHistory = json?.data?.history ?? [];
       setHistory(restoredHistory);
-      
+
       restoredHistory.forEach((h: any) => {
         if (h && h.id) {
           setDoc(doc(db, "history_pembukuan", h.id), h);
@@ -2009,14 +2010,15 @@ export default function useAppController() {
 
       const pl = json?.settings?.priceLists;
       if (pl) {
-        if (pl.hargaHarian) setHargaHarian(pl.hargaHarian);
-        if (pl.hargaJajanan) setHargaJajanan(pl.hargaJajanan);
-        if (pl.hargaJasaAks) setHargaJasaAks(pl.hargaJasaAks);
-        if (pl.hargaSewa) setHargaSewa(pl.hargaSewa);
+        const patch: Partial<Record<keyof typeof priceDefaults, Price[]>> = {};
+        for (const field of Object.keys(priceDefaults) as (keyof typeof priceDefaults)[]) {
+          if (pl[field] !== undefined) patch[field] = pl[field];
+        }
+        await persistPrices(patch);
       }
       setSuccessMessage("Restore data berhasil!");
       setShowSuccessAlert(true);
-    } catch (e) { alert("File restore invalid / corrupt ❌"); } 
+    } catch (e: any) { alert(e?.message || "File restore invalid / corrupt ❌"); }
     finally { if (restoreInputRef.current) restoreInputRef.current.value = ""; }
   };
 
@@ -2039,12 +2041,12 @@ export default function useAppController() {
     try {
       const txt = await downloadBackupFromDrive();
       const json = JSON.parse(txt);
-      
+
       setDark(json?.settings?.dark ?? dark);
       setKualitasGambar(json?.settings?.kualitasGambar ?? kualitasGambar);
       const restoredHistory = json?.data?.history ?? [];
       setHistory(restoredHistory);
-      
+
       restoredHistory.forEach((h: any) => {
         if (h && h.id) {
           setDoc(doc(db, "history_pembukuan", h.id), h);
@@ -2053,10 +2055,11 @@ export default function useAppController() {
 
       const pl = json?.settings?.priceLists;
       if (pl) {
-        if (pl.hargaHarian) setHargaHarian(pl.hargaHarian);
-        if (pl.hargaJajanan) setHargaJajanan(pl.hargaJajanan);
-        if (pl.hargaJasaAks) setHargaJasaAks(pl.hargaJasaAks);
-        if (pl.hargaSewa) setHargaSewa(pl.hargaSewa);
+        const patch: Partial<Record<keyof typeof priceDefaults, Price[]>> = {};
+        for (const field of Object.keys(priceDefaults) as (keyof typeof priceDefaults)[]) {
+          if (pl[field] !== undefined) patch[field] = pl[field];
+        }
+        await persistPrices(patch);
       }
       setSuccessMessage("Restore data dari Google Drive berhasil!");
       setShowSuccessAlert(true);
@@ -2172,7 +2175,7 @@ export default function useAppController() {
 
     const raw = paymentVerifyPrompt._rawRow || {};
     setPaymentVerifyPrompt(null);
-    
+
     setActiveTab("USAHA RENTAL");
     setRowsSewa(prev => {
         const newRows = [...prev];
@@ -2242,7 +2245,7 @@ export default function useAppController() {
     });
 
     const raw = paymentVerifyPrompt._rawRow || {};
-    
+
     let getHarga = 0;
     const isCustom = raw.lamaSewa === "Isi Sendiri";
     if (isCustom) {
@@ -2255,7 +2258,7 @@ export default function useAppController() {
     if (raw.isOngkir === "YA") {
         getHarga += parseInt(String(raw._ongkir).replace(/\D/g, "")) || 0;
     }
-    
+
     setPaymentVerifyPrompt(null);
 
     setActiveTab("USAHA RENTAL");
@@ -2288,7 +2291,9 @@ export default function useAppController() {
     }, 100);
   }, [paymentVerifyPrompt, handleVerifyReturn, setRowsSewa, newBlankSewa, setCatatan, setActiveTab, hargaSewa]);
 
-  const resetSetting = () => {
+  const resetSetting = async () => {
+    try { await persistPrices(priceDefaults); }
+    catch (error: any) { alert(error?.message || "Gagal reset pengaturan."); return; }
     setDark(true); setKualitasGambar("Tinggi");
     setHargaHarian(DEFAULT_HARGA_HARIAN as Price[]);
     setHargaJajanan(DEFAULT_HARGA_JAJANAN as Price[]);
@@ -2296,7 +2301,7 @@ export default function useAppController() {
     setHargaSewa(DEFAULT_HARGA_SEWA as Price[]);
     setFilter("Bulan Ini"); 
     setFilterMonth(new Date().getMonth() + 1);
-    
+
     setSuccessMessage("Semua pengaturan telah di-reset.");
     setShowSuccessAlert(true);
   };

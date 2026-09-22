@@ -1,6 +1,11 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isSalaryAdmin() {
+      return request.auth != null && (request.auth.token.email == "owner@gmail.com"
+        || (exists(/databases/$(database)/documents/users/$(request.auth.token.email))
+          && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin"));
+    }
     
     // ==========================================
     // Aturan Profil Pegawai (users & logs)
@@ -24,16 +29,17 @@ service cloud.firestore {
     // ==========================================
     match /gaji_pegawai/{email} {
       allow read: if request.auth != null;
-      
-      // Karyawan hanya bisa CREATE / UPDATE dokumennya Murni untuk menyuntik data telat.
-      // Mereka DILARANG KERAS mendelete (menghapus blok array history mereka sendiri)
-      allow create, update: if request.auth.token.email.lower() == email.lower();
-      allow delete: if request.auth.token.email == "owner@gmail.com"
-                    || (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin");
-      
-      // Owner Bebas Edit
-      allow write: if request.auth.token.email == "owner@gmail.com"
-                   || (exists(/databases/$(database)/documents/users/$(request.auth.token.email)) && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.role == "super admin");
+      // Revision checks reject old application versions that replace salary arrays.
+      // Staff still write their own attendance penalties using a transaction.
+      allow create: if request.auth != null
+        && (request.auth.token.email.lower() == email.lower() || isSalaryAdmin())
+        && request.resource.data.salaryRevision == 1;
+      allow update: if request.auth != null
+        && (request.auth.token.email.lower() == email.lower() || isSalaryAdmin())
+        && request.resource.data.salaryRevision == resource.data.get('salaryRevision', 0) + 1;
+      // Keep financial history even after a user profile is removed, and block
+      // automatic document deletion from older application versions.
+      allow delete: if false;
     }
 
     // ==========================================
@@ -61,7 +67,21 @@ service cloud.firestore {
     // ==========================================
     match /data/{docId} {
       // Kasir butuh baca & nulis data Stok Jajanan/Rental, draft, dan setting bahasa
-      allow read, write: if request.auth != null;
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && docId != 'settings';
+    }
+
+    match /data/settings {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && (!request.resource.data.keys().hasAny(['priceLists', 'priceListsRevision', 'settings'])
+          || (isSalaryAdmin() && request.resource.data.priceListsRevision == 1));
+      allow update: if request.auth != null
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['priceLists', 'priceListsRevision', 'settings'])
+          || (isSalaryAdmin()
+            && request.resource.data.priceListsRevision == resource.data.get('priceListsRevision', 0) + 1));
+      // Settings reset uses an explicit update, never document deletion.
+      allow delete: if false;
     }
 
     // ==========================================
@@ -166,9 +186,10 @@ service cloud.firestore {
     // ==========================================
     // Aturan Sisa / Fallback (Menutup semua yang tidak terdaftar)
     // ==========================================
-    match /{document=**} {
+    match /{collectionId}/{document=**} {
       // Data apa pun yang belum dideklarasikan di atas hanya bisa diakses oleh Owner
-      allow read, write: if request.auth != null && request.auth.token.email == "owner@gmail.com";
+      allow read, write: if request.auth != null && request.auth.token.email == "owner@gmail.com"
+        && collectionId != 'gaji_pegawai' && collectionId != 'data';
     }
     
   }
