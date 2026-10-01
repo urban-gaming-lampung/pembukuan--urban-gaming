@@ -771,7 +771,12 @@ export default function TableEditor<T extends AnyRow>(props: {
                                  disabled={rowAny.isPaid === "TIDAK"}
                                  onClick={() => {
                                    if (rowAny.isPaid === "TIDAK") return;
-                                   updateRow(i, { bayar: bayarSet.has("Cash") ? "" : "Cash" } as any)
+                                   const nextVal = bayarSet.has("Cash") ? "" : "Cash";
+                                   const patch: any = { bayar: nextVal };
+                                   if (rowAny.jenisPS === "Hanya Ongkir") {
+                                     patch._bayarOngkir = nextVal;
+                                   }
+                                   updateRow(i, patch as any);
                                  }}
                                  className={`inline-flex items-center justify-center transition-all duration-200 active:scale-95 ${
                                    isMobile 
@@ -797,10 +802,14 @@ export default function TableEditor<T extends AnyRow>(props: {
                                    onClick={() => {
                                      if (rowAny.isPaid === "TIDAK") return;
                                      const nextVal = bayarSet.has("Transfer") ? "" : "Transfer";
-                                     updateRow(i, { 
+                                     const patch: any = { 
                                        bayar: nextVal,
                                        ...(nextVal === "" ? { buktiTransfer: "" } : {})
-                                     } as any);
+                                     };
+                                     if (rowAny.jenisPS === "Hanya Ongkir") {
+                                       patch._bayarOngkir = nextVal;
+                                     }
+                                     updateRow(i, patch as any);
                                    }}
                                    className={`inline-flex items-center justify-center transition-all duration-200 active:scale-95 ${
                                      isMobile 

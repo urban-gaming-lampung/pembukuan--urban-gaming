@@ -845,14 +845,26 @@ export default function useAppController() {
   };
 
   const getHargaSewa = (r: RowSewa): number => {
-    if (!r.jenisPS || !r.lamaSewa) return 0;
+    if (!r.jenisPS) return 0;
+    if (r.jenisPS === "Hanya Ongkir") return toNum(r._ongkir);
+    if (!r.lamaSewa) return 0;
     const s1 = r.jenisPS.toLowerCase().replace(/\s+/g, "");
     const s2 = r.lamaSewa.toLowerCase().replace(/\s+/g, "");
     const item = hargaSewa.find(x => {
         const lbl = x.label.toLowerCase().replace(/\s+/g, "");
-        return lbl.includes(s1) && lbl.includes(s2);
+        const matchJenis = lbl.includes(s1);
+        const matchLama = lbl.includes(s2) || (s2.includes("24jam") && lbl.includes("1hari")) || (s2.includes("1hari") && lbl.includes("24jam"));
+        return matchJenis && matchLama;
     });
-    return item ? item.price : 0;
+    if (item) return item.price;
+
+    // Fallbacks untuk PS5 sesuai request
+    if (s1 === "ps5" && s2.includes("12jam")) return 140000;
+    if (s1.includes("ps5") && s1.includes("tv") && s2.includes("12jam")) return 160000;
+    if (s1 === "ps5" && (s2.includes("24jam") || s2.includes("1hari"))) return 250000;
+    if (s1.includes("ps5") && s1.includes("tv") && (s2.includes("24jam") || s2.includes("1hari"))) return 280000;
+
+    return 0;
   };
 
   const getTitle = (key: PriceListKey | null) => {
@@ -1453,6 +1465,13 @@ export default function useAppController() {
     for (const r of rowsSewa) {
       const isFilled = r.ket || r.jenisPS || r.lamaSewa || r.jamMasukSewa || toNum(r.harga) > 0 || r.isPaid === "TIDAK";
       if (!isFilled) continue;
+
+      if (r.jenisPS === "Hanya Ongkir") {
+        const ong = toNum(r._ongkir);
+        if (ong <= 0 || !r._bayarOngkir) return "ongkir_invalid";
+        if (!(r as any).diantarOleh) return "diantar_oleh_empty";
+        continue;
+      }
 
       if (!r.isPaid) return "isPaid_empty";
 

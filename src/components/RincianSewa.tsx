@@ -84,21 +84,88 @@ function buildSewaTableFromHarga(items?: PriceItem[]) {
     lamaSet.add(lama);
   }
 
-  const jenisOptions = Array.from(jenisSet).sort();
-  const lamaOptions = Array.from(lamaSet).sort();
+  // Tambahkan pilihan "Hanya Ongkir" ke daftar Jenis Sewa
+  jenisSet.add("Hanya Ongkir");
+
+  // Pastikan durasi standar tersedia
+  lamaSet.add("12 JAM");
+  lamaSet.add("24 JAM");
+
+  // Setup default / requested pricing
+  if (!table["12 JAM"]) table["12 JAM"] = {};
+  table["12 JAM"]["PS5"] = table["12 JAM"]["PS5"] || 140000;
+  table["12 JAM"]["PS5 + TV"] = table["12 JAM"]["PS5 + TV"] || 160000;
+
+  if (!table["24 JAM"]) table["24 JAM"] = {};
+  table["24 JAM"]["PS5"] = table["24 JAM"]["PS5"] || 250000;
+  table["24 JAM"]["PS5 + TV"] = table["24 JAM"]["PS5 + TV"] || 280000;
+
+  if (table["1 HARI"]) {
+    table["1 HARI"]["PS5"] = table["1 HARI"]["PS5"] || 250000;
+    table["1 HARI"]["PS5 + TV"] = table["1 HARI"]["PS5 + TV"] || 280000;
+    // Sinkronkan 1 HARI ke 24 JAM
+    Object.entries(table["1 HARI"]).forEach(([k, v]) => {
+      if (!table["24 JAM"][k]) table["24 JAM"][k] = v;
+    });
+  }
+  if (table["24 JAM"]) {
+    if (!table["1 HARI"]) table["1 HARI"] = {};
+    Object.entries(table["24 JAM"]).forEach(([k, v]) => {
+      if (!table["1 HARI"][k]) table["1 HARI"][k] = v;
+    });
+  }
+
+  const preferredJenisOrder = [
+    "PS3", "PS3 + TV", "PS3 Portable",
+    "PS4", "PS4 + TV", "PS4 Portable",
+    "PS5", "PS5 + TV", "PS5 Portable",
+    "Hanya TV", "Hanya Ongkir"
+  ];
+  const jenisOptions = Array.from(jenisSet).sort((a, b) => {
+    const ia = preferredJenisOrder.indexOf(a);
+    const ib = preferredJenisOrder.indexOf(b);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return a.localeCompare(b);
+  });
+
+  const preferredLamaOrder = ["12 JAM", "24 JAM", "1 HARI", "2 HARI", "3 HARI"];
+  const lamaOptions = Array.from(lamaSet).sort((a, b) => {
+    const ia = preferredLamaOrder.indexOf(a);
+    const ib = preferredLamaOrder.indexOf(b);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return a.localeCompare(b);
+  });
 
   return { table, jenisOptions, lamaOptions };
 }
 
 function getHargaAuto(row: any, table: Record<string, Record<string, number>>) {
-  const jenisKey = pickKey(row, ["jenis ps", "jenisps", "jenis", "ps"]);
+  const jenisKey = pickKey(row, ["jenis sewa", "jenissewa", "jenis ps", "jenisps", "jenis", "ps"]);
   const lamaKey = pickKey(row, ["lama sewa", "lamasewa", "lama", "durasi", "waktu"]);
   const jenis = String(jenisKey ? row[jenisKey] : "");
   const lama = String(lamaKey ? row[lamaKey] : "");
-  if (!jenis || !lama) return 0;
+  if (!jenis) return 0;
+  if (jenis === "Hanya Ongkir") {
+    return toInt(row._ongkir || 0);
+  }
+  if (!lama) return 0;
 
   const fromSetting = table?.[lama]?.[jenis];
   if (typeof fromSetting === "number" && fromSetting > 0) return fromSetting;
+
+  // Cek alias 24 JAM <-> 1 HARI
+  if (lama === "24 JAM" && table?.["1 HARI"]?.[jenis]) return table["1 HARI"][jenis];
+  if (lama === "1 HARI" && table?.["24 JAM"]?.[jenis]) return table["24 JAM"][jenis];
+
+  // Fallbacks harga PS5 sesuai request
+  if (jenis === "PS5" && lama === "12 JAM") return 140000;
+  if (jenis === "PS5 + TV" && lama === "12 JAM") return 160000;
+  if (jenis === "PS5" && (lama === "24 JAM" || lama === "1 HARI")) return 250000;
+  if (jenis === "PS5 + TV" && (lama === "24 JAM" || lama === "1 HARI")) return 280000;
 
   return 0;
 }
@@ -146,7 +213,7 @@ const RincianSewa: React.FC<{
   return (
     <TableEditor<RowSewa>
       title="4. Rincian Pemasukan SEWA PS"
-      columns={["No.", "Jenis PS", "Lama Sewa", "Jam Sewa", "Nama Penyewa", "Apakah sudah dibayar?", "Harga (Rp)", "Apakah di antar?", "Siapa Yang antar?", "Cash", "Transfer"]}
+      columns={["No.", "Jenis Sewa", "Lama Sewa", "Jam Sewa", "Nama Penyewa", "Apakah sudah dibayar?", "Harga (Rp)", "Apakah di antar?", "Siapa Yang antar?", "Cash", "Transfer"]}
       rows={rows}
       setRows={setRows}
       blank={blank}
@@ -154,32 +221,51 @@ const RincianSewa: React.FC<{
       onClear={() => { }}
       getHarga={(r) => toInt(String((r as any).harga))}
       renderCell={({ keyName, value, row, rowIndex, inputBase, onKeyNav, updateRow }) => {
-        const jenisKey = pickKey(row, ["jenis ps", "jenisps", "jenis", "ps"]);
+        const jenisKey = pickKey(row, ["jenis sewa", "jenissewa", "jenis ps", "jenisps", "jenis", "ps"]);
         const lamaKey = pickKey(row, ["lama sewa", "lamasewa", "lama", "durasi", "waktu"]);
+        const isHanyaOngkir = String(jenisKey ? (row as any)[jenisKey] : "") === "Hanya Ongkir";
 
         if (jenisKey && keyName === jenisKey) {
           return (
             <SelectWrapper>
               <select
                 data-fieldid={`sewa-${rowIndex}-jenis`}
-                className={`${inputBase} appearance-none pr-8 cursor-pointer`}
+                className={`${inputBase} appearance-none pr-8 cursor-pointer font-medium`}
                 value={String(value || "")}
                 onKeyDown={onKeyNav}
                 onChange={(e) => {
                   const nextJenis = e.target.value;
                   const patch: any = { [jenisKey]: nextJenis };
-                  const nextRow = { ...(row as any), ...patch };
-                  const base = getHargaAuto(nextRow, table);
-                  const isCustom = nextRow.lamaSewa === "Isi Sendiri";
-                  const ongkir = nextRow.isOngkir === "YA" ? toInt(nextRow._ongkir) : 0;
-
-                  if (nextRow.isPaid === "TIDAK") {
+                  if (nextJenis === "Hanya Ongkir") {
+                    patch.lamaSewa = "-";
+                    patch.jamMasukSewa = "-";
+                    patch.ket = "Hanya Ongkir";
+                    patch.isPaid = "YA";
+                    patch.isOngkir = "YA";
+                    patch.harga = toInt((row as any)._ongkir || 0);
+                  } else if ((row as any).jenisPS === "Hanya Ongkir" || (row as any)[jenisKey] === "Hanya Ongkir") {
+                    patch.lamaSewa = "";
+                    patch.jamMasukSewa = "";
+                    patch.ket = "";
+                    patch.isPaid = "";
+                    patch.isOngkir = "TIDAK";
+                    patch._ongkir = "";
+                    patch._bayarOngkir = "";
                     patch.harga = 0;
                   } else {
-                    if (isCustom) {
-                      patch.harga = toInt(nextRow._customBase) + ongkir;
+                    const nextRow = { ...(row as any), ...patch };
+                    const base = getHargaAuto(nextRow, table);
+                    const isCustom = nextRow.lamaSewa === "Isi Sendiri";
+                    const ongkir = nextRow.isOngkir === "YA" ? toInt(nextRow._ongkir) : 0;
+
+                    if (nextRow.isPaid === "TIDAK") {
+                      patch.harga = 0;
                     } else {
-                      patch.harga = base > 0 ? base + ongkir : ongkir;
+                      if (isCustom) {
+                        patch.harga = toInt(nextRow._customBase) + ongkir;
+                      } else {
+                        patch.harga = base > 0 ? base + ongkir : ongkir;
+                      }
                     }
                   }
 
@@ -187,7 +273,7 @@ const RincianSewa: React.FC<{
                   updateRow(rowIndex, patch);
                 }}
               >
-                <option value="">Pilih PS...</option>
+                <option value="">Pilih Jenis Sewa...</option>
                 {jenisOptions.length > 0 ? (
                   jenisOptions.map((m) => (
                     <option key={m} value={m}>
@@ -203,6 +289,19 @@ const RincianSewa: React.FC<{
         }
 
         if (lamaKey && keyName === lamaKey) {
+          if (isHanyaOngkir) {
+            return (
+              <div className="min-w-[100px]">
+                <input
+                  disabled
+                  className={`${inputBase} bg-zinc-100 dark:bg-black/40 text-zinc-400 cursor-not-allowed border-dashed text-center font-bold`}
+                  value="-"
+                  readOnly
+                />
+              </div>
+            );
+          }
+
           if (row.lamaSewa === "Isi Sendiri") {
             return (
               <div className="flex items-center gap-1.5 min-w-[120px]">
@@ -279,6 +378,18 @@ const RincianSewa: React.FC<{
         }
 
         if (keyName === "jamMasukSewa") {
+          if (isHanyaOngkir) {
+            return (
+              <div className="min-w-[110px]">
+                <input
+                  disabled
+                  className={`${inputBase} w-full text-center bg-zinc-100 dark:bg-black/40 text-zinc-400 cursor-not-allowed border-dashed font-bold`}
+                  value="-"
+                  readOnly
+                />
+              </div>
+            );
+          }
           const isPelunasan = row.lamaSewa === "PELUNASAN";
           return (
             <div className="min-w-[110px]">
@@ -297,6 +408,18 @@ const RincianSewa: React.FC<{
         }
 
         if (keyName === "ket") {
+          if (isHanyaOngkir) {
+            return (
+              <div className="min-w-[140px]">
+                <input
+                  disabled
+                  className={`${inputBase} bg-zinc-100 dark:bg-black/40 text-zinc-400 cursor-not-allowed border-dashed text-center font-medium`}
+                  value="Hanya Ongkir"
+                  readOnly
+                />
+              </div>
+            );
+          }
           return (
             <div className="min-w-[140px]">
               <input
@@ -317,6 +440,18 @@ const RincianSewa: React.FC<{
         }
 
         if (keyName === "isPaid") {
+          if (isHanyaOngkir) {
+            return (
+              <div className="min-w-[80px]">
+                <input
+                  disabled
+                  className={`${inputBase} bg-zinc-100 dark:bg-black/40 text-emerald-500 font-bold cursor-not-allowed border-dashed text-center`}
+                  value="YA"
+                  readOnly
+                />
+              </div>
+            );
+          }
           return (
             <SelectWrapper>
               <select
@@ -360,7 +495,9 @@ const RincianSewa: React.FC<{
               <div className="flex items-center gap-1 bg-zinc-100/50 dark:bg-zinc-800/50 p-1 rounded-lg shrink-0">
                 <button
                   type="button"
+                  disabled={isHanyaOngkir}
                   onClick={() => {
+                    if (isHanyaOngkir) return;
                     const patch: any = { isOngkir: "YA" };
                     const autoPrice = getHargaAuto(row, table);
                     const isCustom = row.lamaSewa === "Isi Sendiri";
@@ -378,7 +515,9 @@ const RincianSewa: React.FC<{
                     updateRow(rowIndex, patch);
                   }}
                   className={`flex items-center justify-center px-4 py-1.5 rounded-md transition-all duration-200 ${(row as any).isOngkir === "YA"
-                    ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/20"
+                    ? isHanyaOngkir
+                      ? "bg-emerald-500/70 text-white cursor-not-allowed shadow-none"
+                      : "bg-emerald-500 text-white shadow-sm shadow-emerald-500/20"
                     : "hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 font-medium"
                     }`}
                 >
@@ -386,7 +525,9 @@ const RincianSewa: React.FC<{
                 </button>
                 <button
                   type="button"
+                  disabled={isHanyaOngkir}
                   onClick={() => {
+                    if (isHanyaOngkir) return;
                     const patch: any = { isOngkir: "TIDAK", _ongkir: "", _bayarOngkir: "" };
                     const autoPrice = getHargaAuto(row, table);
                     const isCustom = row.lamaSewa === "Isi Sendiri";
@@ -403,15 +544,18 @@ const RincianSewa: React.FC<{
                     patch._addedBy = (row as any)._addedBy || userEmail;
                     updateRow(rowIndex, patch);
                   }}
-                  className={`flex items-center justify-center px-3 py-1.5 rounded-md transition-all duration-200 ${(row as any).isOngkir === "TIDAK"
-                    ? "bg-red-500 text-white shadow-sm shadow-red-500/20"
-                    : "hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 font-medium"
+                  className={`flex items-center justify-center px-3 py-1.5 rounded-md transition-all duration-200 ${
+                    isHanyaOngkir
+                      ? "opacity-30 cursor-not-allowed text-zinc-400"
+                      : (row as any).isOngkir === "TIDAK"
+                        ? "bg-red-500 text-white shadow-sm shadow-red-500/20"
+                        : "hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 font-medium"
                     }`}
                 >
                   <span className="text-[10px] font-bold tracking-tight">TIDAK</span>
                 </button>
               </div>
-              {value === "YA" && (row as any).isPaid !== "TIDAK" && (
+              {((value === "YA" || isHanyaOngkir) && (row as any).isPaid !== "TIDAK") && (
                 <div className="flex items-center gap-1.5 ml-1 animate-in slide-in-from-left-2 fade-in duration-200">
                   <div className="relative">
                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-400 font-bold">
@@ -425,15 +569,19 @@ const RincianSewa: React.FC<{
                       onChange={(e) => {
                         const val = toInt(e.target.value);
                         const patch: any = { _ongkir: val };
-                        const autoPrice = getHargaAuto(row, table);
-                        const isCustom = row.lamaSewa === "Isi Sendiri";
-                        const currentHarga = toInt((row as any).harga);
-                        const currentOngkir = (row as any).isOngkir === "YA" ? toInt((row as any)._ongkir) : 0;
-                        const base = isCustom ? toInt((row as any)._customBase) : (autoPrice > 0 ? autoPrice : Math.max(0, currentHarga - currentOngkir));
-                        if (row.isPaid === "TIDAK") {
-                          patch.harga = 0;
+                        if (isHanyaOngkir) {
+                          patch.harga = val;
                         } else {
-                          patch.harga = base + val;
+                          const autoPrice = getHargaAuto(row, table);
+                          const isCustom = row.lamaSewa === "Isi Sendiri";
+                          const currentHarga = toInt((row as any).harga);
+                          const currentOngkir = (row as any).isOngkir === "YA" ? toInt((row as any)._ongkir) : 0;
+                          const base = isCustom ? toInt((row as any)._customBase) : (autoPrice > 0 ? autoPrice : Math.max(0, currentHarga - currentOngkir));
+                          if (row.isPaid === "TIDAK") {
+                            patch.harga = 0;
+                          } else {
+                            patch.harga = base + val;
+                          }
                         }
                         patch._addedBy = (row as any)._addedBy || userEmail;
                         updateRow(rowIndex, patch);
@@ -447,7 +595,13 @@ const RincianSewa: React.FC<{
                       type="button"
                       onClick={() => {
                         const current = (row as any)._bayarOngkir;
-                        updateRow(rowIndex, { _bayarOngkir: current === "Cash" ? "" : "Cash", _addedBy: (row as any)._addedBy || userEmail } as any);
+                        const next = current === "Cash" ? "" : "Cash";
+                        const patch: any = { _bayarOngkir: next };
+                        if (isHanyaOngkir) {
+                          patch.bayar = next;
+                        }
+                        patch._addedBy = (row as any)._addedBy || userEmail;
+                        updateRow(rowIndex, patch);
                       }}
                       className={`flex items-center justify-center p-1.5 rounded-md transition-all duration-200 ${(row as any)._bayarOngkir === "Cash"
                         ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/20"
@@ -461,7 +615,13 @@ const RincianSewa: React.FC<{
                       type="button"
                       onClick={() => {
                         const current = (row as any)._bayarOngkir;
-                        updateRow(rowIndex, { _bayarOngkir: current === "Transfer" ? "" : "Transfer", _addedBy: (row as any)._addedBy || userEmail } as any);
+                        const next = current === "Transfer" ? "" : "Transfer";
+                        const patch: any = { _bayarOngkir: next };
+                        if (isHanyaOngkir) {
+                          patch.bayar = next;
+                        }
+                        patch._addedBy = (row as any)._addedBy || userEmail;
+                        updateRow(rowIndex, patch);
                       }}
                       className={`flex items-center justify-center p-1.5 rounded-md transition-all duration-200 ${(row as any)._bayarOngkir === "Transfer"
                         ? "bg-blue-600 text-white shadow-sm shadow-blue-500/20"
@@ -478,9 +638,9 @@ const RincianSewa: React.FC<{
           );
         }
 
-        // ✅ Harga menyesuaikan Readonly Kecuali Isi Sendiri
+        // ✅ Diantar Oleh
         if (keyName === "diantarOleh") {
-          const isOngkirTidak = (row as any).isOngkir === "TIDAK";
+          const isOngkirTidak = (row as any).isOngkir === "TIDAK" && !isHanyaOngkir;
           return (
             <SelectWrapper>
               <select
@@ -508,6 +668,17 @@ const RincianSewa: React.FC<{
         if (keyName === "harga") {
           const currentTotal = toInt(String((row as any).harga ?? ""));
           const isCustom = row.lamaSewa === "Isi Sendiri";
+
+          if (isHanyaOngkir) {
+            const fmtStr = (n: number | string) => new Intl.NumberFormat("id-ID").format(Number(n) || 0);
+            return (
+              <div className="relative px-2 py-1.5 min-w-[120px] bg-zinc-100/50 dark:bg-black/20 rounded-lg border border-dashed border-zinc-200/80 dark:border-zinc-800">
+                <span className="font-bold text-zinc-400 dark:text-zinc-500">
+                  {currentTotal > 0 ? `Rp ${fmtStr(currentTotal)}` : "-"}
+                </span>
+              </div>
+            );
+          }
 
           if (isCustom) {
             const fmt = (n: number | string) =>

@@ -111,7 +111,7 @@ const generateLaporanText = (history: HistoryItem[], currentData: Props['data'])
         });
     }
 
-    const saldoBelumSetor = Math.max(0, (Number(todayItem.totalCash) || 0) - hariIniSetorYa);
+    const saldoHarusSetor = Math.max(0, Number(todayItem.totalCash) || 0);
     const totalSaldoBulanIni = (monthTotalCash + monthTotalTransfer) - monthTotalPengeluaran;
 
     const monthsIndo = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -161,7 +161,7 @@ const generateLaporanText = (history: HistoryItem[], currentData: Props['data'])
     text += `PENGELUARAN HARI INI : -${formatRp(hariIniPengeluaran)}\n`;
     text += `PEMASUKAN KOTOR HARI INI : ${formatRp(hariIniPemasukanKotor)}\n`;
     text += `PEMASUKAN BERSIH HARI INI : ${formatRp(hariIniPemasukanKotor - hariIniPengeluaran)}\n`;
-    text += `SALDO YANG BELUM DI SETOR : ${formatRp(saldoBelumSetor)}\n`;
+    text += `SALDO YANG HARUS DI SETOR : ${formatRp(saldoHarusSetor)}\n`;
     text += `TOTAL SALDO BULAN INI = ${formatRp(totalSaldoBulanIni)}`;
     
     return text;

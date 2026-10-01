@@ -192,9 +192,9 @@ export default function AdminNotes({
   const totalCards = displayNotes.length + (isOwner && displayNotes.length < 5 ? 1 : 0);
 
   const getGridColsClass = () => {
-    if (totalCards === 1) return "grid-cols-1 sm:grid-cols-2";
-    if (totalCards === 2) return "grid-cols-1 sm:grid-cols-2";
-    if (totalCards === 3) return "grid-cols-1 sm:grid-cols-2 md:grid-cols-3";
+    if (totalCards <= 1) return "grid-cols-1 sm:grid-cols-2";
+    if (totalCards === 2) return "grid-cols-2 sm:grid-cols-2";
+    if (totalCards === 3) return "grid-cols-2 sm:grid-cols-3";
     if (totalCards === 4) return "grid-cols-2 sm:grid-cols-2 md:grid-cols-4";
     return "grid-cols-2 sm:grid-cols-3 md:grid-cols-5";
   };
@@ -208,7 +208,7 @@ export default function AdminNotes({
       {/* ========================================================================= */}
       {/* PREVIEW WIDGET CARDS ALA GOOGLE KEEP (MAX 5 CATATAN, TEMA LIGHT / DARK)  */}
       {/* ========================================================================= */}
-      <div className={`grid gap-3 w-full ${getGridColsClass()}`}>
+      <div className={`grid gap-2 sm:gap-3 w-full ${getGridColsClass()}`}>
         {displayNotes.map((note) => (
           <div
             key={note.id}
@@ -217,7 +217,7 @@ export default function AdminNotes({
               setIsEditing(false);
               setIsOpenModal(true);
             }}
-            className={`group relative rounded-2xl p-4 transition-all duration-200 cursor-pointer text-left flex flex-col justify-between overflow-hidden shadow-sm hover:shadow-md hover:scale-[1.01] active:scale-[0.99] min-h-[90px] max-h-[145px] ${
+            className={`group relative rounded-xl sm:rounded-2xl p-3 sm:p-4 transition-all duration-200 cursor-pointer text-left flex flex-col justify-between overflow-hidden shadow-sm hover:shadow-md hover:scale-[1.01] active:scale-[0.99] min-h-[85px] sm:min-h-[90px] max-h-[140px] sm:max-h-[145px] ${
               note.isPinned
                 ? "bg-amber-50/60 dark:bg-amber-500/[0.06] border border-amber-300/70 dark:border-amber-500/30 ring-1 ring-amber-400/20"
                 : "bg-white dark:bg-[#1C1C1E] border border-zinc-200/90 dark:border-white/10 hover:border-zinc-300 dark:hover:border-white/20"
@@ -227,25 +227,25 @@ export default function AdminNotes({
             {/* Header & Isi Kartu */}
             <div className="overflow-hidden">
               {note.title && (
-                <div className="text-sm font-bold text-zinc-900 dark:text-zinc-100 line-clamp-1 mb-1 leading-snug">
+                <div className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100 line-clamp-1 mb-1 leading-snug">
                   {note.title}
                 </div>
               )}
-              <p className="text-xs text-zinc-600 dark:text-zinc-300 line-clamp-3 leading-relaxed whitespace-pre-line break-words">
+              <p className="text-[11px] sm:text-xs text-zinc-600 dark:text-zinc-300 line-clamp-2 sm:line-clamp-3 leading-relaxed whitespace-pre-line break-words">
                 {note.content}
               </p>
               {note.linkUrl && (
-                <div className="text-[11px] text-blue-500 dark:text-blue-400 font-medium truncate mt-1.5 flex items-center gap-1">
+                <div className="text-[10px] sm:text-[11px] text-blue-500 dark:text-blue-400 font-medium truncate mt-1 sm:mt-1.5 flex items-center gap-1">
                   <span>🔗 {note.linkLabel || note.linkUrl}</span>
                 </div>
               )}
             </div>
 
             {/* Footer Kartu Kecil */}
-            <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-zinc-100 dark:border-white/5 text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0">
+            <div className="flex items-center justify-between mt-1.5 sm:mt-2 pt-1 sm:pt-1.5 border-t border-zinc-100 dark:border-white/5 text-[9px] sm:text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0">
               <span className="truncate">{formatDateTime(note.createdAt)}</span>
               {note.isPinned && (
-                <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 shrink-0 ml-1">
+                <span className="text-[9px] sm:text-[10px] font-bold text-amber-600 dark:text-amber-400 shrink-0 ml-1">
                   📌 Pin
                 </span>
               )}
@@ -257,13 +257,13 @@ export default function AdminNotes({
         {isOwner && displayNotes.length < 5 && (
           <div
             onClick={handleOpenAdd}
-            className="rounded-2xl p-4 transition-all duration-200 cursor-pointer text-center flex flex-col items-center justify-center border-2 border-dashed border-zinc-200 dark:border-white/10 hover:border-zinc-300 dark:hover:border-white/25 bg-zinc-50/50 hover:bg-zinc-100/60 dark:bg-white/[0.02] dark:hover:bg-white/[0.05] min-h-[90px] max-h-[145px] text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 group"
+            className="rounded-xl sm:rounded-2xl p-3 sm:p-4 transition-all duration-200 cursor-pointer text-center flex flex-col items-center justify-center border-2 border-dashed border-zinc-200 dark:border-white/10 hover:border-zinc-300 dark:hover:border-white/25 bg-zinc-50/50 hover:bg-zinc-100/60 dark:bg-white/[0.02] dark:hover:bg-white/[0.05] min-h-[85px] sm:min-h-[90px] max-h-[140px] sm:max-h-[145px] text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 group"
             title="Tambah catatan baru"
           >
-            <span className="text-2xl font-light leading-none mb-1 group-hover:scale-110 transition-transform">
+            <span className="text-xl sm:text-2xl font-light leading-none mb-1 group-hover:scale-110 transition-transform">
               +
             </span>
-            <span className="text-xs font-semibold">Tambah Catatan</span>
+            <span className="text-[11px] sm:text-xs font-semibold">Tambah Catatan</span>
           </div>
         )}
       </div>
@@ -301,26 +301,25 @@ export default function AdminNotes({
           {/* Modal Container */}
           <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col rounded-[28px] bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-2xl shadow-2xl ring-1 ring-black/10 dark:ring-white/10 overflow-hidden animate-in zoom-in-95 duration-200">
             {/* Header Modal */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200/80 dark:border-white/10 bg-zinc-50/70 dark:bg-white/[0.03]">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-zinc-200/80 dark:border-white/10 bg-zinc-50/70 dark:bg-white/[0.03]">
               <div>
-                <h3 className="text-lg font-black text-zinc-900 dark:text-white leading-tight">
-                  Catatan Admin
-                </h3>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-                    Permanen • Tidak tereset saat tutup buku
-                  </span>
-                  <span className="inline-block w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-600" />
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-black text-zinc-900 dark:text-white leading-tight">
+                    Catatan Admin
+                  </h3>
                   {isOwner ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded-full">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full">
                       <ShieldCheck className="w-3 h-3" /> Super Admin
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 bg-zinc-200/60 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 bg-zinc-200/60 dark:bg-zinc-800 px-2.5 py-0.5 rounded-full">
                       <Eye className="w-3 h-3" /> Hanya Baca
                     </span>
                   )}
                 </div>
+                <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Permanen • Tidak tereset saat tutup buku
+                </p>
               </div>
 
               <div className="flex items-center gap-2">

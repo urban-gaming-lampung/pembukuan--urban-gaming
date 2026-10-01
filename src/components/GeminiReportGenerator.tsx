@@ -170,21 +170,9 @@ export default function GeminiReportGenerator({
       // Hitung Pemasukan Bersih Hari Ini
       const hariIniPemasukanBersih = hariIniPemasukanKotor - hariIniPengeluaran;
 
-      // Hitung Saldo Belum Setor (Hanya Hari Ini)
-      // KEBIJAKAN BARU (≥ 29 April 2026): Setoran = Total Cash, tanpa dikurangi pengeluaran
-      const POLICY_DATE = "2026-04-29";
-      const isNewPolicy = currentDate >= POLICY_DATE;
-      
-      let hariIniBelumSetor: number;
-      if (isNewPolicy) {
-        // Kebijakan baru: cash - pengeluaran manual cash - sudah setor
-        hariIniBelumSetor = hariIniCash - hariIniPengeluaranManualCash - hariIniSetorYa;
-      } else {
-        // Kebijakan lama: cash - pengeluaran cash - sudah setor
-        hariIniBelumSetor = hariIniCash - hariIniSetorYa - hariIniPengeluaranCash;
-      }
-      if (hariIniBelumSetor < 0) hariIniBelumSetor = 0;
-
+      // Hitung Saldo Yang Harus Disetor (Hanya Hari Ini)
+      // Logika: saldo hari itu yang harus disetor (total cash) tanpa memperdulikan apakah sudah disetor atau belum
+      const hariIniHarusSetor = Math.max(0, hariIniCash);
 
       // --- GENERATE STRING HEADER ---
       // Format tanggal header: dd MMMM yyyy (ex: 17 Februari 2026) -> Menggunakan Anchor Date
@@ -243,7 +231,7 @@ export default function GeminiReportGenerator({
       text += `PENGELUARAN HARI INI : -${formatRp(hariIniPengeluaran).replace("Rp", "Rp")}\n`;
       text += `PEMASUKAN KOTOR HARI INI : ${formatRp(hariIniPemasukanKotor)}\n`;
       text += `PEMASUKAN BERSIH HARI INI : ${formatRp(hariIniPemasukanBersih)}\n`;
-      text += `SALDO YANG BELUM DI SETOR : ${formatRp(hariIniBelumSetor)}\n`;
+      text += `SALDO YANG HARUS DI SETOR : ${formatRp(hariIniHarusSetor)}\n`;
       text += `TOTAL SALDO BULAN INI = ${formatRp(totalSaldoBulanIni)}\n`;
 
       setReport(text);
