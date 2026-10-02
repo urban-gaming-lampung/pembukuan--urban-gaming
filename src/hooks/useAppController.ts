@@ -863,6 +863,10 @@ export default function useAppController() {
     if (s1.includes("ps5") && s1.includes("tv") && s2.includes("12jam")) return 160000;
     if (s1 === "ps5" && (s2.includes("24jam") || s2.includes("1hari"))) return 250000;
     if (s1.includes("ps5") && s1.includes("tv") && (s2.includes("24jam") || s2.includes("1hari"))) return 280000;
+    if (s1 === "ps5" && s2.includes("2hari")) return 400000;
+    if (s1.includes("ps5") && s1.includes("tv") && s2.includes("2hari")) return 480000;
+    if (s1 === "ps5" && s2.includes("3hari")) return 600000;
+    if (s1.includes("ps5") && s1.includes("tv") && s2.includes("3hari")) return 720000;
 
     return 0;
   };

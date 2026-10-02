@@ -5,6 +5,7 @@ import TableEditor from "./TableEditor";
 import { RowSewa } from "../lib/types";
 import { toInt } from "../lib/format";
 import { ChevronDown } from "lucide-react";
+import { DEFAULT_HARGA_SEWA } from "../constants/prices";
 
 type PriceItem = { label: string; price: number };
 
@@ -69,11 +70,21 @@ function normalizeHargaItems(items?: PriceItem[]) {
 
 function buildSewaTableFromHarga(items?: PriceItem[]) {
   const cleaned = normalizeHargaItems(items);
+  const defaultCleaned = normalizeHargaItems(DEFAULT_HARGA_SEWA);
+
+  // Gabungkan items database dengan DEFAULT_HARGA_SEWA untuk label yang belum tersimpan
+  const combined = [...cleaned];
+  for (const def of defaultCleaned) {
+    if (!combined.some((x) => normText(x.label) === normText(def.label))) {
+      combined.push(def);
+    }
+  }
+
   const table: Record<string, Record<string, number>> = {};
   const jenisSet = new Set<string>();
   const lamaSet = new Set<string>();
 
-  for (const it of cleaned) {
+  for (const it of combined) {
     const jenis = normalizeJenisFromLabel(it.label);
     const lama = normalizeLamaFromLabel(it.label);
     if (!jenis || !lama) continue;
@@ -84,12 +95,15 @@ function buildSewaTableFromHarga(items?: PriceItem[]) {
     lamaSet.add(lama);
   }
 
-  // Tambahkan pilihan "Hanya Ongkir" ke daftar Jenis Sewa
+  // Tambahkan pilihan standar ke daftar Jenis Sewa secara eksplisit
+  jenisSet.add("PS5");
+  jenisSet.add("PS5 + TV");
   jenisSet.add("Hanya Ongkir");
 
   // Pastikan durasi standar tersedia
   lamaSet.add("12 JAM");
   lamaSet.add("24 JAM");
+  lamaSet.add("1 HARI");
 
   // Setup default / requested pricing
   if (!table["12 JAM"]) table["12 JAM"] = {};
@@ -100,16 +114,23 @@ function buildSewaTableFromHarga(items?: PriceItem[]) {
   table["24 JAM"]["PS5"] = table["24 JAM"]["PS5"] || 250000;
   table["24 JAM"]["PS5 + TV"] = table["24 JAM"]["PS5 + TV"] || 280000;
 
-  if (table["1 HARI"]) {
-    table["1 HARI"]["PS5"] = table["1 HARI"]["PS5"] || 250000;
-    table["1 HARI"]["PS5 + TV"] = table["1 HARI"]["PS5 + TV"] || 280000;
-    // Sinkronkan 1 HARI ke 24 JAM
-    Object.entries(table["1 HARI"]).forEach(([k, v]) => {
-      if (!table["24 JAM"][k]) table["24 JAM"][k] = v;
-    });
-  }
+  if (!table["1 HARI"]) table["1 HARI"] = {};
+  table["1 HARI"]["PS5"] = table["1 HARI"]["PS5"] || 250000;
+  table["1 HARI"]["PS5 + TV"] = table["1 HARI"]["PS5 + TV"] || 280000;
+
+  if (!table["2 HARI"]) table["2 HARI"] = {};
+  table["2 HARI"]["PS5"] = table["2 HARI"]["PS5"] || 400000;
+  table["2 HARI"]["PS5 + TV"] = table["2 HARI"]["PS5 + TV"] || 480000;
+
+  if (!table["3 HARI"]) table["3 HARI"] = {};
+  table["3 HARI"]["PS5"] = table["3 HARI"]["PS5"] || 600000;
+  table["3 HARI"]["PS5 + TV"] = table["3 HARI"]["PS5 + TV"] || 720000;
+
+  // Sinkronkan 1 HARI ke 24 JAM
+  Object.entries(table["1 HARI"]).forEach(([k, v]) => {
+    if (!table["24 JAM"][k]) table["24 JAM"][k] = v;
+  });
   if (table["24 JAM"]) {
-    if (!table["1 HARI"]) table["1 HARI"] = {};
     Object.entries(table["24 JAM"]).forEach(([k, v]) => {
       if (!table["1 HARI"][k]) table["1 HARI"][k] = v;
     });
@@ -166,6 +187,10 @@ function getHargaAuto(row: any, table: Record<string, Record<string, number>>) {
   if (jenis === "PS5 + TV" && lama === "12 JAM") return 160000;
   if (jenis === "PS5" && (lama === "24 JAM" || lama === "1 HARI")) return 250000;
   if (jenis === "PS5 + TV" && (lama === "24 JAM" || lama === "1 HARI")) return 280000;
+  if (jenis === "PS5" && lama === "2 HARI") return 400000;
+  if (jenis === "PS5 + TV" && lama === "2 HARI") return 480000;
+  if (jenis === "PS5" && lama === "3 HARI") return 600000;
+  if (jenis === "PS5 + TV" && lama === "3 HARI") return 720000;
 
   return 0;
 }
