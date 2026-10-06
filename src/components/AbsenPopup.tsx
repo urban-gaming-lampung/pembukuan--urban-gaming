@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { X, MapPin, Camera, AlertCircle } from "lucide-react";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
@@ -14,11 +14,63 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png"
 });
 
+export interface AbsenEvidence {
+  key: string;
+  label: string;
+  foto: string;
+}
+
+interface EvidenceItem {
+  key: string;
+  label: string;
+  facing: "user" | "environment";
+}
+
 interface AbsenPopupProps {
   jenisAbsen: "Masuk" | "Pulang" | null;
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (waktu: string, fotoBase64: string, koordinat: {lat: number, lng: number}) => void;
+  onSubmit: (waktu: string, fotoBase64: string, koordinat: {lat: number, lng: number}, evidence: AbsenEvidence[]) => void | Promise<void>;
+  /** Nama shift aktif, mis. "Shift Pagi" / "Shift Sore" */
+  shift?: string;
+  /** Tanggal pembukuan (YYYY-MM-DD), dipakai untuk menentukan hari Jumat */
+  tanggal?: string;
+}
+
+/**
+ * SSOT daftar evidence absen. Absen Masuk hanya Identitas.
+ * Absen Pulang menambah evidence kebersihan sesuai shift, dan Jumat ditambah Area Plafon.
+ */
+export function getEvidenceItems(jenis: "Masuk" | "Pulang" | null, shift?: string, tanggal?: string): EvidenceItem[] {
+  const items: EvidenceItem[] = [{ key: "identitas", label: "Identitas", facing: "user" }];
+  if (jenis !== "Pulang") return items;
+
+  const s = (shift || "").toLowerCase();
+  if (s.includes("pagi")) {
+    items.push(
+      { key: "halaman_depan", label: "Kebersihan Halaman Depan", facing: "environment" },
+      { key: "area_komputer", label: "Kebersihan Area Komputer", facing: "environment" },
+      { key: "meja_ps", label: "Kebersihan Meja PS", facing: "environment" }
+    );
+  } else if (s.includes("sore") || s.includes("siang")) {
+    items.push(
+      { key: "halaman_belakang", label: "Kebersihan Halaman Belakang", facing: "environment" },
+      { key: "area_wc", label: "Kebersihan Area WC", facing: "environment" },
+      { key: "area_dapur", label: "Kebersihan Area Dapur", facing: "environment" }
+    );
+  } else {
+    return items;
+  }
+
+  // Hari Jumat (berdasarkan tanggal pembukuan, fallback ke hari ini WIB)
+  const ymd = /^\d{4}-\d{2}-\d{2}$/.test(tanggal || "")
+    ? (tanggal as string)
+    : new Date().toLocaleString("en-CA", { timeZone: "Asia/Jakarta" }).slice(0, 10);
+  const [y, m, d] = ymd.split("-").map(Number);
+  if (new Date(Date.UTC(y, m - 1, d)).getUTCDay() === 5) {
+    items.push({ key: "area_plafon", label: "Kebersihan Area Plafon", facing: "environment" });
+  }
+  return items;
 }
 
 const TOKO_COORD = { lat: -5.3953862, lng: 105.2367764 }; // URBAN Gaming Lampung
@@ -44,13 +96,19 @@ function FlyToUser({ coord }: { coord: {lat: number, lng: number} | null }) {
   return null;
 }
 
-const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, onSubmit }) => {
+const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, onSubmit, shift, tanggal }) => {
   useBodyScrollLock(isOpen);
   const [userCoord, setUserCoord] = useState<{lat: number, lng: number} | null>(null);
   const [isLocationMatched, setIsLocationMatched] = useState<boolean>(false);
   const [locationError, setLocationError] = useState("");
-  const [fotoBase64, setFotoBase64] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<Record<string, string>>({});
+  const [activeKey, setActiveKey] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const evidenceItems = useMemo(
+    () => getEvidenceItems(jenisAbsen, shift, tanggal),
+    [jenisAbsen, shift, tanggal]
+  );
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -71,7 +129,8 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
       setUserCoord(null);
       setIsLocationMatched(false);
       setLocationError("");
-      setFotoBase64(null);
+      setPhotos({});
+      setActiveKey(null);
       setSubmitting(false);
     }
   }, [isOpen]);
@@ -115,13 +174,23 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
     );
   };
 
-  const startCamera = async () => {
+  const startCamera = async (key: string) => {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       alert("Akses kamera gagal: Perangkat atau peramban ini tidak mendukung akses kamera (pastikan menggunakan koneksi aman/HTTPS).");
       return;
     }
+    stopCamera();
+    const item = evidenceItems.find(i => i.key === key);
+    const facing = item?.facing || "user";
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing } });
+      } catch {
+        // Fallback: kamera apa pun yang tersedia (misal perangkat tanpa kamera belakang)
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
+      setActiveKey(key);
       // Set camera active FIRST so the <video> element renders in the DOM
       setIsCameraActive(true);
       // Store stream as pending — the useEffect will assign it to videoRef once available
@@ -154,8 +223,11 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
       const ctx = canvas.getContext('2d');
       if (ctx) {
          // Apply horizontal flip to match standard selfie mirror view just like regular photos
-         ctx.translate(width, 0);
-         ctx.scale(-1, 1);
+         const activeItem = evidenceItems.find(i => i.key === activeKey);
+         if (activeItem?.facing === "user") {
+           ctx.translate(width, 0);
+           ctx.scale(-1, 1);
+         }
          ctx.drawImage(video, 0, 0, width, height);
          
          // Reset transform for watermark drawing (no flip)
@@ -195,7 +267,7 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
          // Absen type badge (top-left of banner)
          const badgePadX = 8;
          const badgePadY = 4;
-         const badgeText = absenLabel.toUpperCase();
+         const badgeText = (activeKey && activeKey !== 'identitas' ? (evidenceItems.find(i => i.key === activeKey)?.label || absenLabel) : absenLabel).toUpperCase();
          ctx.font = `bold ${baseFontSize - 2}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
          const badgeWidth = ctx.measureText(badgeText).width + badgePadX * 2;
          const badgeX = Math.round(width * 0.04);
@@ -241,14 +313,17 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
          ctx.fillText(dateText, badgeX, height - Math.round(bannerHeight * 0.08));
          
          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-         setFotoBase64(dataUrl);
+         if (activeKey) setPhotos(p => ({ ...p, [activeKey]: dataUrl }));
          stopCamera();
       }
     }
   };
 
+  const missingCount = evidenceItems.filter(it => !photos[it.key]).length;
+  const canSubmit = !submitting && isLocationMatched && !!userCoord && missingCount === 0;
+
   const handleSubmit = async () => {
-    if (submitting || !isLocationMatched || !fotoBase64 || !userCoord) return;
+    if (!canSubmit || !photos.identitas) return;
     setSubmitting(true);
     try {
       const now = new Date();
@@ -257,7 +332,10 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
       const dd = String(now.getDate()).padStart(2, '0');
       const mo = String(now.getMonth() + 1).padStart(2, '0');
       const yyyy = now.getFullYear();
-      await onSubmit(`${hh}:${mm} - ${dd}/${mo}/${yyyy}`, fotoBase64, userCoord);
+      const evidence: AbsenEvidence[] = evidenceItems
+        .filter(it => it.key !== "identitas")
+        .map(it => ({ key: it.key, label: it.label, foto: photos[it.key] }));
+      await onSubmit(`${hh}:${mm} - ${dd}/${mo}/${yyyy}`, photos.identitas, userCoord!, evidence);
     } finally {
       setSubmitting(false);
     }
@@ -323,55 +401,70 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
              </button>
           </div>
 
-          {/* Kamera Section */}
-          <div className="bg-zinc-50 dark:bg-[#2C2C2E]/50 rounded-[20px] p-4 border border-black/5 dark:border-white/5 shadow-inner">
-             <div className="flex justify-between items-center mb-3">
-                <span className="text-[13px] font-semibold text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
-                   <Camera className="w-4 h-4 text-emerald-500" /> Identitas
-                </span>
-             </div>
+          {/* Kamera Sections: Identitas + Evidence Kebersihan (hanya Absen Pulang) */}
+          {evidenceItems.map((item, idx) => {
+            const foto = photos[item.key];
+            const isActive = isCameraActive && activeKey === item.key;
+            const mirror = item.facing === "user";
+            return (
+              <div key={item.key} className="bg-zinc-50 dark:bg-[#2C2C2E]/50 rounded-[20px] p-4 border border-black/5 dark:border-white/5 shadow-inner">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-[13px] font-semibold text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
+                    <Camera className="w-4 h-4 text-emerald-500" /> {item.label}
+                  </span>
+                  {idx > 0 && (
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${foto ? "text-emerald-500" : "text-red-500"}`}>
+                      {foto ? "Terisi" : "Wajib"}
+                    </span>
+                  )}
+                </div>
 
-             {fotoBase64 ? (
-               <div className="relative w-full aspect-[4/3] rounded-xl overflow-hidden border-2 border-emerald-400 dark:border-emerald-500/50 shadow-sm">
-                 <img src={fotoBase64} alt="Hasil Foto" className="w-full h-full object-cover" />
-                 <button onClick={() => { setFotoBase64(null); startCamera(); }} className="absolute bottom-3 right-3 bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-md px-3 py-1.5 rounded-lg text-[12px] font-semibold text-zinc-800 dark:text-zinc-200 active:scale-95 transition-transform shadow-md">Ulangi</button>
-               </div>
-             ) : isCameraActive ? (
-               <div className="relative w-full aspect-[4/3] rounded-xl overflow-hidden bg-black shadow-inner ring-1 ring-black/10">
-                 <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
-                 
-                 {/* Apple-style shutter button */}
-                 <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-                    <button onClick={capturePhoto} className="w-16 h-16 bg-white/30 backdrop-blur-md flex items-center justify-center rounded-full active:scale-90 transition-transform">
-                      <div className="w-[52px] h-[52px] bg-white rounded-full shadow-sm" />
-                    </button>
-                 </div>
-               </div>
-             ) : (
-                <button 
-                  onClick={startCamera}
-                  disabled={!isLocationMatched}
-                  className={`w-full py-6 text-[14px] font-semibold rounded-xl transition-all shadow-sm flex flex-col items-center justify-center gap-2 border border-dashed
-                    ${isLocationMatched 
-                       ? "bg-emerald-50/50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/30" 
-                       : "bg-zinc-100/50 text-zinc-400 border-zinc-300 dark:bg-[#1C1C1E] dark:border-white/10 dark:text-zinc-500 opacity-60 cursor-not-allowed"}`}
-                >
-                  <Camera className="w-7 h-7 mb-1 opacity-80" /> 
-                  Buka Kamera
-                </button>
-             )}
-             <canvas ref={canvasRef} className="hidden" />
-          </div>
+                {foto ? (
+                  <div className="relative w-full aspect-[4/3] rounded-xl overflow-hidden border-2 border-emerald-400 dark:border-emerald-500/50 shadow-sm">
+                    <img src={foto} alt={`Foto ${item.label}`} className="w-full h-full object-cover" />
+                    <button onClick={() => { setPhotos(p => { const n = { ...p }; delete n[item.key]; return n; }); startCamera(item.key); }} className="absolute bottom-3 right-3 bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-md px-3 py-1.5 rounded-lg text-[12px] font-semibold text-zinc-800 dark:text-zinc-200 active:scale-95 transition-transform shadow-md">Ulangi</button>
+                  </div>
+                ) : isActive ? (
+                  <div className="relative w-full aspect-[4/3] rounded-xl overflow-hidden bg-black shadow-inner ring-1 ring-black/10">
+                    <video ref={videoRef} autoPlay playsInline muted className={`w-full h-full object-cover ${mirror ? "scale-x-[-1]" : ""}`} />
+                    <div className="absolute bottom-4 left-0 right-0 flex justify-center">
+                      <button onClick={capturePhoto} className="w-16 h-16 bg-white/30 backdrop-blur-md flex items-center justify-center rounded-full active:scale-90 transition-transform">
+                        <div className="w-[52px] h-[52px] bg-white rounded-full shadow-sm" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => startCamera(item.key)}
+                    disabled={!isLocationMatched}
+                    className={`w-full py-6 text-[14px] font-semibold rounded-xl transition-all shadow-sm flex flex-col items-center justify-center gap-2 border border-dashed
+                      ${isLocationMatched
+                        ? "bg-emerald-50/50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/30"
+                        : "bg-zinc-100/50 text-zinc-400 border-zinc-300 dark:bg-[#1C1C1E] dark:border-white/10 dark:text-zinc-500 opacity-60 cursor-not-allowed"}`}
+                  >
+                    <Camera className="w-7 h-7 mb-1 opacity-80" />
+                    Buka Kamera
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          <canvas ref={canvasRef} className="hidden" />
 
         </div>
 
         {/* Footer Action */}
         <div className="p-5 border-t border-gray-200/50 dark:border-white/10 bg-zinc-50/80 dark:bg-[#1C1C1E]/80 backdrop-blur-xl">
+           {missingCount > 0 && isLocationMatched && (
+             <p className="text-[12px] text-center text-red-500 font-medium mb-3">
+               {missingCount} foto wajib belum diisi
+             </p>
+           )}
            <button 
              onClick={handleSubmit}
-             disabled={submitting || !isLocationMatched || !fotoBase64}
+             disabled={!canSubmit}
              className={`w-full py-3.5 text-[16px] font-semibold rounded-[14px] transition-all flex items-center justify-center gap-2
-               ${(!submitting && isLocationMatched && fotoBase64) 
+               ${canSubmit
                  ? "bg-blue-500 text-white hover:bg-blue-600 shadow-md shadow-blue-500/20 active:scale-[0.98]" 
                  : "bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500 cursor-not-allowed"}`}
            >

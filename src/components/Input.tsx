@@ -1,6 +1,6 @@
 import { runSalaryTransaction } from "../lib/salaryPersistence";
 import React, { useState, useEffect } from "react";
-import AbsenPopup from "./AbsenPopup";
+import AbsenPopup, { AbsenEvidence } from "./AbsenPopup";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadString, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "../lib/firebase";
@@ -209,14 +209,14 @@ const Input: React.FC<InputProps> = ({
     }
   };
 
-  const handlePotongGaji = async (waktuAbsen: string, fotoBase64: string, jenisAbsen: "Masuk" | "Pulang") => {
-    if (shiftPegawai === "Libur") return;
+  const handlePotongGaji = async (waktuAbsen: string, fotoBase64: string, jenisAbsen: "Masuk" | "Pulang", evidence: AbsenEvidence[] = []): Promise<boolean> => {
+    if (shiftPegawai === "Libur") return true;
 
     // Default the active email, with fallback check
     const currentUserEmail = auth.currentUser?.email;
     if (!currentUserEmail) {
        console.warn("User email belum tersedia, menggunakan mode lokal.");
-       return;
+       return true;
     }
 
     const emailTrimmed = currentUserEmail.toLowerCase().trim();
@@ -229,6 +229,16 @@ const Input: React.FC<InputProps> = ({
       const imageRef = ref(storage, `absensi/${emailTrimmed}/${dateStr}_${jenisAbsen}_${safeTimeStr}.jpg`);
       await uploadString(imageRef, fotoBase64, 'data_url');
       const imageUrl = await getDownloadURL(imageRef);
+
+      // 1.1. Upload evidence kebersihan (hanya Absen Pulang), paralel. Gagal satu = gagal semua.
+      const evidenceUrls: { key: string; label: string; url: string }[] = await Promise.all(
+        evidence.map(async (ev) => {
+          const evRef = ref(storage, `absensi/${emailTrimmed}/${dateStr}_${jenisAbsen}_${safeTimeStr}_${ev.key}.jpg`);
+          await uploadString(evRef, ev.foto, 'data_url');
+          const url = await getDownloadURL(evRef);
+          return { key: ev.key, label: ev.label, url };
+        })
+      );
 
       // 1.2. Hitung keterlambatan jika jenisAbsen === "Masuk"
       let lateMinutes = 0;
@@ -265,6 +275,7 @@ const Input: React.FC<InputProps> = ({
            jenisAbsen: jenisAbsen,
            waktu: waktuAbsen,
            photoUrl: imageUrl,
+            evidence: evidenceUrls,
            lateMinutes: lateMinutes,
            effectiveLate: effectiveLate,
            blockDenda: blockDenda,
@@ -279,6 +290,7 @@ const Input: React.FC<InputProps> = ({
         await setDoc(doc(db, "log_absensi", logId), logData);
       } catch(e) {
         console.error("Gagal menyimpan log_absensi", e);
+        if (jenisAbsen === "Pulang" && evidenceUrls.length > 0) throw e; // evidence wajib tersinkron
       }
 
       // 2. Kalkulasi Denda Keterlambatan Absen Masuk & Injeksi ke gaji_pegawai
@@ -372,10 +384,12 @@ const Input: React.FC<InputProps> = ({
               });
          alert(`🚨 PERINGATAN SISTEM\nAnda telat absen ${lateMinutes} menit (toleransi ${toleransi}m, efektif telat ${effectiveLate}m)!\nGaji Anda otomatis dipotong Rp ${denda.toLocaleString("id-ID")}`);
       }
+      return true;
 
     } catch (err) {
       console.error("Gagal memproses backend absen:", err);
       alert("Terjadi kendala saat upload foto/denda. Silakan coba lagi.");
+      return false;
     } finally {
       setIsProcessingAbsen(false);
     }
@@ -724,7 +738,9 @@ const Input: React.FC<InputProps> = ({
         isOpen={popupAbsen !== null}
         jenisAbsen={popupAbsen}
         onClose={() => setPopupAbsen(null)}
-        onSubmit={async (waktu, fotoBase64, coord) => {
+        shift={shiftPegawai}
+        tanggal={tanggal}
+        onSubmit={async (waktu, fotoBase64, coord, evidence) => {
            const currentMode = popupAbsen;
            setPopupAbsen(null);
            if (onAbsenSubmit) onAbsenSubmit(); // Clear suppress flag — admin aktif absen
@@ -744,8 +760,14 @@ const Input: React.FC<InputProps> = ({
              return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
            };
 
-           if (currentMode === "Masuk") {
-              setAbsenPagi(waktu);
+            // Absen Pulang: upload evidence wajib berhasil dulu sebelum jam pulang tercatat
+            if (currentMode === "Pulang") {
+               const ok = await handlePotongGaji(waktu, fotoBase64, "Pulang", evidence);
+               if (ok === false) return;
+            }
+
+            if (currentMode === "Masuk") {
+               setAbsenPagi(waktu);
               // Auto-fill Ruko Buka: selalu isi saat Masuk (ambil yang paling awal)
               const timeOnly = waktu.split(" - ")[0];
               const dateOnly = waktu.split(" - ")[1]?.replace(/\//g, "-");
@@ -776,7 +798,7 @@ const Input: React.FC<InputProps> = ({
                }
                // else: waktu baru lebih awal dari yang existing → abaikan
             }
-           if (currentMode) {
+           if (currentMode === "Masuk") {
               await handlePotongGaji(waktu, fotoBase64, currentMode);
            }
         }}
