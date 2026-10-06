@@ -742,7 +742,12 @@ const Input: React.FC<InputProps> = ({
         tanggal={tanggal}
         onSubmit={async (waktu, fotoBase64, coord, evidence) => {
            const currentMode = popupAbsen;
-           setPopupAbsen(null);
+           if (!currentMode) return;
+
+           // 1. Eksekusi backend & upload foto (storage + log_absensi + denda)
+           const ok = await handlePotongGaji(waktu, fotoBase64, currentMode, evidence);
+           if (ok === false) return; // Jika gagal, popup tetap terbuka dan foto tidak hilang
+
            if (onAbsenSubmit) onAbsenSubmit(); // Clear suppress flag — admin aktif absen
 
            const toMinutes = (timeStr: string) => {
@@ -760,14 +765,8 @@ const Input: React.FC<InputProps> = ({
              return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
            };
 
-            // Absen Pulang: upload evidence wajib berhasil dulu sebelum jam pulang tercatat
-            if (currentMode === "Pulang") {
-               const ok = await handlePotongGaji(waktu, fotoBase64, "Pulang", evidence);
-               if (ok === false) return;
-            }
-
-            if (currentMode === "Masuk") {
-               setAbsenPagi(waktu);
+           if (currentMode === "Masuk") {
+              setAbsenPagi(waktu);
               // Auto-fill Ruko Buka: selalu isi saat Masuk (ambil yang paling awal)
               const timeOnly = waktu.split(" - ")[0];
               const dateOnly = waktu.split(" - ")[1]?.replace(/\//g, "-");
@@ -775,32 +774,32 @@ const Input: React.FC<InputProps> = ({
                  setRukoBuka(timeOnly, convertToYmd(dateOnly));
               }
            } else if (currentMode === "Pulang") {
-               setAbsenSiang(waktu);
-               // Auto-fill Ruko Tutup: ambil yang paling akhir (date-aware)
-               // SSOT: bandingkan tanggal aktual + waktu, bukan hanya waktu saja.
-               // Ini mencegah waktu 00:00 (tanggal beda) menimpa 20:25 (tanggal pembukuan).
-               const timeOnly = waktu.split(" - ")[0];
-               const dateOnly = waktu.split(" - ")[1]?.replace(/\//g, "-");
-               const newDateYmd = dateOnly ? convertToYmd(dateOnly) : "";
+              setAbsenSiang(waktu);
+              // Auto-fill Ruko Tutup: ambil yang paling akhir (date-aware)
+              // SSOT: bandingkan tanggal aktual + waktu, bukan hanya waktu saja.
+              // Ini mencegah waktu 00:00 (tanggal beda) menimpa 20:25 (tanggal pembukuan).
+              const timeOnly = waktu.split(" - ")[0];
+              const dateOnly = waktu.split(" - ")[1]?.replace(/\//g, "-");
+              const newDateYmd = dateOnly ? convertToYmd(dateOnly) : "";
 
-               // Bandingkan dengan tanggal+waktu existing
-               const existingDateYmd = rukoTutupDate || tanggal; // fallback ke tanggal pembukuan
+              // Bandingkan dengan tanggal+waktu existing
+              const existingDateYmd = rukoTutupDate || tanggal; // fallback ke tanggal pembukuan
 
-               if (!rukoTutup) {
-                  // Belum ada ruko tutup → langsung set
-                  setRukoTutup(timeOnly, newDateYmd);
-               } else if (newDateYmd > existingDateYmd) {
-                  // Tanggal aktual lebih baru → pasti lebih larut (cross-midnight)
-                  setRukoTutup(timeOnly, newDateYmd);
-               } else if (newDateYmd === existingDateYmd && toMinutes(timeOnly) > toMinutes(rukoTutup)) {
-                  // Tanggal sama → bandingkan waktu (ambil yang lebih malam)
-                  setRukoTutup(timeOnly, newDateYmd);
-               }
-               // else: waktu baru lebih awal dari yang existing → abaikan
-            }
-           if (currentMode === "Masuk") {
-              await handlePotongGaji(waktu, fotoBase64, currentMode);
+              if (!rukoTutup) {
+                 // Belum ada ruko tutup → langsung set
+                 setRukoTutup(timeOnly, newDateYmd);
+              } else if (newDateYmd > existingDateYmd) {
+                 // Tanggal aktual lebih baru → pasti lebih larut (cross-midnight)
+                 setRukoTutup(timeOnly, newDateYmd);
+              } else if (newDateYmd === existingDateYmd && toMinutes(timeOnly) > toMinutes(rukoTutup)) {
+                 // Tanggal sama → bandingkan waktu (ambil yang lebih malam)
+                 setRukoTutup(timeOnly, newDateYmd);
+              }
+              // else: waktu baru lebih awal dari yang existing → abaikan
            }
+
+           // 2. Tutup popup hanya setelah backend dan local state sukses tersimpan
+           setPopupAbsen(null);
         }}
       />
 

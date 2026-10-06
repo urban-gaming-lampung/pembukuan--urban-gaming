@@ -368,6 +368,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                } else if (l.jenisAbsen === "Pulang") {
                   emailMap.get(em).waktuPulang = l.waktu;
                   emailMap.get(em).photoPulang = l.photoUrl;
+                  emailMap.get(em).evidencePulang = Array.isArray(l.evidence) ? l.evidence : [];
                } else if (l.jenisAbsen === "Libur") {
                   emailMap.get(em).isLibur = true;
                   emailMap.get(em).shift = "Libur";
@@ -457,7 +458,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   const [expandedLogHari, setExpandedLogHari] = useState<string[]>([]);
   const toggleLogHari = (k: string) => setExpandedLogHari(p => p.includes(k) ? p.filter(x => x !== k) : [...p, k]);
 
-  const [photoPopup, setPhotoPopup] = useState<string | null>(null);
+  const [photoPopup, setPhotoPopup] = useState<any | null>(null);
 
   // Merge Data
   const pegawaiData = useMemo(() => {
@@ -1747,9 +1748,24 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                                                                                            {pData.waktuPulang === '-' ? 'Belum' : pData.waktuPulang}
                                                                                        </span>
                                                                                        {pData.photoPulang && (
-                                                                                           <button onClick={() => setPhotoPopup(pData.photoPulang)} className="group flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 transition-colors cursor-pointer" title="Lihat Foto Bukti">
-                                                                                              <Camera className="w-3 h-3 group-active:scale-95 transition-transform" />
-                                                                                           </button>
+                                                                                           <button 
+                                                                                                onClick={() => {
+                                                                                                    const items = [{ label: 'Identitas', url: pData.photoPulang }];
+                                                                                                    if (Array.isArray(pData.evidencePulang)) {
+                                                                                                        pData.evidencePulang.forEach((e: any) => {
+                                                                                                            if (e?.url) items.push({ label: e.label || 'Evidence', url: e.url });
+                                                                                                        });
+                                                                                                    }
+                                                                                                    setPhotoPopup(items.length > 1 ? { title: `Foto Absen Pulang (${pData.shift || 'Shift'})`, items } : pData.photoPulang);
+                                                                                                }} 
+                                                                                                className="group flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 transition-colors cursor-pointer" 
+                                                                                                title="Lihat Foto Bukti"
+                                                                                            >
+                                                                                                <Camera className="w-3 h-3 group-active:scale-95 transition-transform" />
+                                                                                                {Array.isArray(pData.evidencePulang) && pData.evidencePulang.length > 0 && (
+                                                                                                    <span className="text-[9px] font-bold">+{pData.evidencePulang.length}</span>
+                                                                                                )}
+                                                                                            </button>
                                                                                        )}
                                                                                    </div>
                                                                                 </div>
@@ -1883,20 +1899,44 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
       {/* POPUP FOTO BUKTI */}
       {photoPopup && (
-        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 font-sans">
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setPhotoPopup(null)} />
-          <div className="relative w-full max-w-sm bg-white dark:bg-[#1C1C1E] rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="relative w-full max-w-sm bg-white dark:bg-[#1C1C1E] rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
             <button 
               onClick={() => setPhotoPopup(null)}
-              className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center bg-black/50 text-white rounded-full hover:bg-black/70 backdrop-blur-md transition-all z-10"
+              className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center bg-black/50 text-white rounded-full hover:bg-black/70 backdrop-blur-md transition-all z-20"
             >
               <X size={18} strokeWidth={2.5} />
             </button>
-            <img src={photoPopup} alt="Bukti Absen" className="w-full object-contain" style={{ maxHeight: '70vh' }} />
-            <div className="p-4 text-center bg-zinc-50 dark:bg-[#252528] border-t border-zinc-200 dark:border-white/5">
-              <p className="text-sm font-bold text-zinc-900 dark:text-white">Foto Bukti Kehadiran</p>
-              <p className="text-[11px] font-medium text-zinc-500 mt-0.5">Disimpan secara real-time saat absen</p>
-            </div>
+            {typeof photoPopup === "string" ? (
+              <>
+                <img src={photoPopup} alt="Bukti Absen" className="w-full object-contain" style={{ maxHeight: '70vh' }} />
+                <div className="p-4 text-center bg-zinc-50 dark:bg-[#252528] border-t border-zinc-200 dark:border-white/5 shrink-0">
+                  <p className="text-sm font-bold text-zinc-900 dark:text-white">Foto Bukti Kehadiran</p>
+                  <p className="text-[11px] font-medium text-zinc-500 mt-0.5">Disimpan secara real-time saat absen</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="p-4 text-center bg-zinc-50 dark:bg-[#252528] border-b border-zinc-200 dark:border-white/5 shrink-0">
+                  <p className="text-sm font-bold text-zinc-900 dark:text-white">{photoPopup.title || "Foto Bukti Kehadiran"}</p>
+                  <p className="text-[11px] font-medium text-zinc-500 mt-0.5">{photoPopup.items?.length || 0} Foto Bukti Lengkap</p>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {photoPopup.items?.map((it: any, idx: number) => (
+                    <div key={idx} className="bg-zinc-100 dark:bg-[#2C2C2E]/60 rounded-2xl p-2.5 border border-black/5 dark:border-white/5">
+                      <div className="text-[12px] font-bold text-zinc-800 dark:text-zinc-200 mb-2 px-1 flex items-center justify-between">
+                        <span>{it.label}</span>
+                        <span className="text-[10px] text-zinc-400 font-medium">#{idx + 1}</span>
+                      </div>
+                      <div className="rounded-xl overflow-hidden aspect-[4/3] bg-black">
+                        <img src={it.url} alt={it.label} className="w-full h-full object-cover" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

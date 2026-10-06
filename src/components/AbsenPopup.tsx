@@ -345,7 +345,7 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
 
   const popupContent = (
     <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 font-sans">
-      <div className="absolute inset-0 bg-black/40 dark:bg-black/70 backdrop-blur-[4px] transition-opacity" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40 dark:bg-black/70 backdrop-blur-[4px] transition-opacity" onClick={submitting ? undefined : onClose} />
       
       <div className="relative w-full max-w-[340px] sm:max-w-[380px] overflow-hidden rounded-[28px] bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-2xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
         
@@ -354,8 +354,9 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
           <h3 className="text-[19px] font-semibold tracking-tight text-zinc-900 dark:text-white">Absen {jenisAbsen}</h3>
           <p className="text-[13px] text-zinc-500 dark:text-zinc-400 mt-1">Konfirmasi lokasi dan foto Anda.</p>
           <button 
-            onClick={onClose} 
-            className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 dark:bg-white/10 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-white/20 transition-colors"
+            onClick={submitting ? undefined : onClose} 
+            disabled={submitting}
+            className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 dark:bg-white/10 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-white/20 transition-colors disabled:opacity-40"
           >
             <X className="w-5 h-5" />
           </button>
