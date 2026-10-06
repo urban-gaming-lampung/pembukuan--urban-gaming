@@ -10,7 +10,7 @@ import {
 import { Users, Activity, Banknote, Save, Plus, ChevronDown, ChevronUp, Trash2, X, Camera, UserPlus, Shield, UserCheck, AlertTriangle, CalendarDays, CalendarRange, RotateCcw, Ban } from "lucide-react";
 import Section from "./common/Section";
 import UserAvatar from "./common/UserAvatar";
-import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, BULAN_NAMES, normalizeBulanTahun, normalizeDateStr } from "../lib/absenPeriod";
+import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, getTodayYmd, BULAN_NAMES, normalizeBulanTahun, normalizeDateStr } from "../lib/absenPeriod";
 
 // === KONSTANTA ABSENSI ===
 
@@ -304,8 +304,8 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         if (isSuperAdminOrOwnerEmail(em) || isPegawaiNonaktif(em)) return;
 
         const normDate = normalizeDateStr(log.tanggal);
-        const empCutoff = getEmployeeCutoff(em);
-        const cycle = getAbsenCycleInfo(normDate, empCutoff);
+        // Monitoring absen = SSOT bulan kalender untuk SEMUA pegawai (cutoff gaji tidak dipakai di sini)
+        const cycle = getAbsenCycleInfo(normDate, 1);
         const bulanTahun = cycle.bulanTahun;
 
         let hariIndo = "";
@@ -1242,21 +1242,6 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                           </span>
                         ) : (
                           <>
-                            {/* CUTOFF SELECTOR */}
-                            <select
-                              value={getEmployeeCutoff(u.id)}
-                              onChange={(e) => handleUpdateEmployeeCutoff(u.id, Number(e.target.value))}
-                              className="text-[11px] font-bold bg-blue-50/80 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 text-blue-600 dark:text-blue-400 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
-                              title="Tanggal Cutoff Absensi & Gaji"
-                            >
-                              <option value={1}>Cutoff: Tgl 1</option>
-                              {Array.from({ length: 30 }, (_, i) => i + 2).map((tgl) => (
-                                <option key={tgl} value={tgl}>
-                                  Cutoff: Tgl {tgl}
-                                </option>
-                              ))}
-                            </select>
-
                             <select
                               value={u.role || "admin"}
                               onChange={(e) => handleChangeRole(u.id, e.target.value)}
@@ -1403,137 +1388,40 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
       {/* NEW WIDGET: MONITORING ABSEN */}
       <Section title="Monitoring Absen Pegawai">
-         {/* TOP CONTROL: TANGGAL MULAI HITUNG ABSENSI PER-AKUN PEGAWAI (CUTOFF) */}
-         <div className="bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 dark:from-blue-500/15 dark:via-indigo-500/15 dark:to-purple-500/15 border border-blue-200/80 dark:border-blue-500/20 rounded-2xl p-4 sm:p-5 mb-4 shadow-sm w-full">
-           <div className="flex items-start sm:items-center justify-between gap-4 mb-4">
-             <div className="flex items-start sm:items-center gap-3">
-               <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-md shadow-blue-500/20 shrink-0">
-                 <CalendarDays className="w-5 h-5" />
-               </div>
-               <div>
-                 <div className="flex items-center gap-2 flex-wrap">
-                   <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wide">
-                     Tanggal Mulai Hitung Absensi (Per Pegawai)
-                   </h4>
-                   <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400">
-                     Siklus 1 Bulan
-                   </span>
-                 </div>
-                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                   Setiap pegawai dapat diset tanggal cutoff gajian / absensi masing-masing (misal Tgl 27, Tgl 1, dll).
-                 </p>
-               </div>
-             </div>
-           </div>
-
-           {/* DAFTAR CUTOFF PEGAWAI AKTIF */}
-           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-             {activeEmployees.map((emp) => {
-               const empCutoff = getEmployeeCutoff(emp.id);
-               const todayStr = new Date().toISOString().slice(0, 10);
-               const cycle = getAbsenCycleInfo(todayStr, empCutoff);
-               const name = emp.id.split("@")[0];
-
-               return (
-                 <div
-                   key={emp.id}
-                   className="bg-white/80 dark:bg-[#1C1C1E]/80 backdrop-blur-sm border border-zinc-200/80 dark:border-white/10 rounded-xl p-3.5 flex flex-col justify-between gap-2.5 shadow-sm hover:border-blue-300 dark:hover:border-blue-500/40 transition-all"
-                 >
-                   <div className="flex items-center justify-between gap-2">
-                     <div className="flex items-center gap-2.5 min-w-0">
-                       <UserAvatar
-                         photoUrl={emp.photoUrl}
-                         email={emp.id}
-                         name={name}
-                         profileColor={emp.profileColor}
-                         size="md"
-                       />
-                       <div className="min-w-0 flex flex-col">
-                         <span className="text-xs font-black text-zinc-900 dark:text-zinc-100 capitalize truncate">
-                           {name}
-                         </span>
-                         <span className="text-[10px] text-zinc-400 truncate">{emp.id}</span>
-                       </div>
-                     </div>
-
-                     {/* SELECTOR CUTOFF */}
-                     {isOwner ? (
-                       <div className="flex flex-col items-end shrink-0">
-                         <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider mb-0.5">Cutoff</label>
-                         <select
-                           value={empCutoff}
-                           onChange={(e) => handleUpdateEmployeeCutoff(emp.id, Number(e.target.value))}
-                           className="bg-white dark:bg-[#2C2C2E] border border-blue-300 dark:border-blue-500/40 text-blue-600 dark:text-blue-400 font-black text-xs rounded-lg px-2 py-1 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                         >
-                           <option value={1}>Tgl 1 (Normal)</option>
-                           {Array.from({ length: 30 }, (_, i) => i + 2).map((tgl) => (
-                             <option key={tgl} value={tgl}>
-                               Tgl {tgl}
-                             </option>
-                           ))}
-                         </select>
-                       </div>
-                     ) : (
-                       <span className="text-xs font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 px-2 py-1 rounded-lg shrink-0">
-                         Tgl {empCutoff}
-                       </span>
-                     )}
-                   </div>
-
-                   {/* ACTIVE CYCLE BADGE */}
-                   <div className="flex items-center justify-between text-[10px] bg-zinc-50 dark:bg-black/30 rounded-lg px-2 py-1 border border-zinc-100 dark:border-white/5">
-                     <span className="text-zinc-400 font-semibold">Siklus Berjalan:</span>
-                     <span className="font-extrabold text-indigo-600 dark:text-indigo-400">
-                       {cycle.shortLabelPeriode} ({cycle.bulanTahun})
-                     </span>
-                   </div>
-                 </div>
-               );
-             })}
-           </div>
-
-           {/* FILTER TAB BAR UNTUK RIWAYAT ABSENSI */}
-           <div className="mt-4 pt-3 border-t border-blue-200/60 dark:border-white/10 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-             <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider shrink-0 mr-1">
-               Tampilkan:
-             </span>
-             <button
-               type="button"
-               onClick={() => setFilterPegawaiAbsen("all")}
-               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                 filterPegawaiAbsen === "all"
-                   ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
-                   : "bg-white dark:bg-[#1C1C1E] text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-white/10 hover:border-blue-400"
-               }`}
-             >
-               Semua Pegawai ({activeEmployees.length})
-             </button>
-             {activeEmployees.map((emp) => {
-               const isSelected = filterPegawaiAbsen === emp.id;
-               const name = emp.id.split("@")[0];
-               const cutoff = getEmployeeCutoff(emp.id);
-
-               return (
-                 <button
-                   key={emp.id}
-                   type="button"
-                   onClick={() => setFilterPegawaiAbsen(emp.id)}
-                   className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                     isSelected
-                       ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
-                       : "bg-white dark:bg-[#1C1C1E] text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-white/10 hover:border-blue-400"
-                   }`}
-                 >
-                   <span className="capitalize">{name}</span>
-                   <span className={`text-[10px] px-1.5 py-0.2 rounded font-extrabold ${
-                     isSelected ? "bg-white/20 text-white" : "bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400"
-                   }`}>
-                     Tgl {cutoff}
-                   </span>
-                 </button>
-               );
-             })}
-           </div>
+         {/* FILTER PEGAWAI UNTUK RIWAYAT ABSENSI (periode = bulan kalender, sama untuk semua pegawai) */}
+         <div className="mb-4 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+           <span className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider shrink-0 mr-1">
+             Tampilkan:
+           </span>
+           <button
+             type="button"
+             onClick={() => setFilterPegawaiAbsen("all")}
+             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+               filterPegawaiAbsen === "all"
+                 ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                 : "bg-white dark:bg-[#1C1C1E] text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-white/10 hover:border-blue-400"
+             }`}
+           >
+             Semua Pegawai ({activeEmployees.length})
+           </button>
+           {activeEmployees.map((emp) => {
+             const isSelected = filterPegawaiAbsen === emp.id;
+             const name = emp.id.split("@")[0];
+             return (
+               <button
+                 key={emp.id}
+                 type="button"
+                 onClick={() => setFilterPegawaiAbsen(emp.id)}
+                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 capitalize ${
+                   isSelected
+                     ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                     : "bg-white dark:bg-[#1C1C1E] text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-white/10 hover:border-blue-400"
+                 }`}
+               >
+                 {name}
+               </button>
+             );
+           })}
          </div>
 
          {!isLogAbsensiLoaded ? (
@@ -1811,7 +1699,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
          <div className="flex flex-col gap-8 w-full">
             {groupedByMonth.length === 0 && <p className="text-zinc-500 text-sm px-2">Belum ada riwayat gaji di sistem.</p>}
             {groupedByMonth.map(([bulan, records]) => (
-                <RangkumanBulanItem key={bulan} bulan={bulan} records={records} cutoffDay={Number(absenConfig?.tanggalMulaiHitung) || 1} />
+                <RangkumanBulanItem key={bulan} bulan={bulan} records={records} />
             ))}
          </div>
       </Section>
@@ -1965,10 +1853,8 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
 
     const handleAddRecord = () => {
         isDirtyRef.current = true;
-        const d = new Date();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const yy = String(d.getFullYear()).slice(-2);
         const newId = `rec-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+        const newBulanTahun = normalizeBulanTahun(getAbsenCycleInfo(getTodayYmd(), pegawai.cutoffDay || 1).bulanTahun);
 
         let defaultPokok = Number(pegawai.gajiPokok) || 0;
         if (defaultPokok === 0 && records.length > 0) {
@@ -1981,7 +1867,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
 
         const newRecord = {
              id: newId,
-             bulanTahun: `${mm}/${yy}`,
+             bulanTahun: newBulanTahun,
              gajiPokok: defaultPokok,
              gajiTambahan: [],
              gajiPengurangan: [],
@@ -2030,7 +1916,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
         }
     };
 
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getTodayYmd();
     const empCutoff = pegawai.cutoffDay || 1;
     const currentCycle = getAbsenCycleInfo(todayStr, empCutoff);
 
@@ -2087,9 +1973,9 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                 <div className="flex items-center gap-2 min-w-0">
                     <CalendarDays className="w-4 h-4 text-blue-500 shrink-0" />
                     <div className="flex flex-col min-w-0">
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Tanggal Cutoff & Siklus</span>
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">Tanggal Mulai Hitung Absensi & Gaji</span>
                         <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 truncate">
-                           {currentCycle.shortLabelPeriode}
+                           {currentCycle.shortLabelPeriode} (Gaji {currentCycle.bulanTahun})
                         </span>
                     </div>
                 </div>
@@ -2441,9 +2327,13 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
     );
 };
 
-const RangkumanBulanItem = ({ bulan, records, cutoffDay = 1 }: { bulan: string, records: any[], cutoffDay?: number }) => {
+const RangkumanBulanItem = ({ bulan, records }: { bulan: string, records: any[] }) => {
     const [isExpanded, setIsExpanded] = useState(false);
-    const cycleInfo = useMemo(() => getCycleInfoFromBulanTahun(bulan, cutoffDay), [bulan, cutoffDay]);
+    // Periode header hanya ditampilkan jika semua pegawai di bulan ini memakai cutoff yang sama.
+    const cycleInfo = useMemo(() => {
+        const cutoffs = Array.from(new Set(records.map((r: any) => Number(r.cutoffDay) || 1)));
+        return cutoffs.length === 1 ? getCycleInfoFromBulanTahun(bulan, cutoffs[0]) : null;
+    }, [bulan, records]);
 
     let totalSatuBulan = 0;
     records.forEach(r => {
@@ -2466,9 +2356,9 @@ const RangkumanBulanItem = ({ bulan, records, cutoffDay = 1 }: { bulan: string, 
                    </div>
                    <div className="flex items-center gap-2 flex-wrap">
                        <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-wide">GAJI {bulan}</h3>
-                       {cycleInfo.labelPeriode && (
+                       {cycleInfo?.labelPeriode && (
                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800">
-                               {cycleInfo.labelPeriode}
+                               {cycleInfo?.labelPeriode}
                            </span>
                        )}
                    </div>
@@ -2515,7 +2405,7 @@ const RangkumanBulanItem = ({ bulan, records, cutoffDay = 1 }: { bulan: string, 
                                          <div className="flex items-center gap-2 flex-wrap">
                                             <span className="text-base font-bold text-zinc-900 dark:text-zinc-100 truncate capitalize">{r.email.split("@")[0]}</span>
                                             <span className="text-[9px] font-extrabold text-blue-600 dark:text-blue-400 bg-blue-100/60 dark:bg-blue-500/20 px-1.5 py-0.5 rounded">
-                                               Cutoff Tgl {r.cutoffDay || 1}
+                                               {getCycleInfoFromBulanTahun(bulan, Number(r.cutoffDay) || 1).shortLabelPeriode}
                                             </span>
                                          </div>
                                          <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 truncate">{r.email}</span>

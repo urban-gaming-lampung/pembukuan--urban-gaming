@@ -18,133 +18,51 @@ export interface AbsenCycleInfo {
 }
 
 /**
- * Menghitung siklus absensi 1 bulan penuh berdasarkan tanggal dan tanggal mulai (cutoff).
- * Contoh: Jika cutoff = 27:
- * - 2026-01-27 s/d 2026-02-26 -> Masuk siklus 02/26 ("27 Jan 2026 - 26 Feb 2026")
- * - 2026-02-27 s/d 2026-03-26 -> Masuk siklus 03/26 ("27 Feb 2026 - 26 Mar 2026")
+ * Batas tanggal cutoff yang namanya mengikuti bulan AWAL siklus.
+ * - Cutoff 1          : siklus = bulan kalender penuh (1 - akhir bulan).
+ * - Cutoff 2 s/d 15   : siklus dinamai bulan tempat siklus DIMULAI.
+ *                       Contoh cutoff 2: 2 Okt - 1 Nov  -> Oktober (10/26).
+ * - Cutoff 16 s/d 31  : siklus dinamai bulan tempat siklus BERAKHIR.
+ *                       Contoh cutoff 27: 27 Sep - 26 Okt -> Oktober (10/26).
+ * Aturan ini mengikuti bulan yang memuat mayoritas hari dalam siklus,
+ * sehingga absensi dan gaji tidak pernah "loncat" ke bulan berikutnya.
  */
-export function getAbsenCycleInfo(dateStr: string, cutoffDay: number = 1): AbsenCycleInfo {
-  // dateStr format: YYYY-MM-DD
-  const parts = (dateStr || '').split('-');
-  const y = parseInt(parts[0], 10) || new Date().getFullYear();
-  const m = parseInt(parts[1], 10) || (new Date().getMonth() + 1); // 1 - 12
-  const d = parseInt(parts[2], 10) || new Date().getDate(); // 1 - 31
+export const CYCLE_LABEL_AS_START_MAX_CUTOFF = 15;
 
-  const cutoff = Math.max(1, Math.min(31, Number(cutoffDay) || 1));
-
-  if (cutoff <= 1) {
-    const mm = String(m).padStart(2, '0');
-    const yy = String(y).slice(-2);
-    const lastDay = new Date(y, m, 0).getDate();
-    const startDate = new Date(y, m - 1, 1);
-    const endDate = new Date(y, m - 1, lastDay, 23, 59, 59);
-
-    return {
-      bulanTahun: `${mm}/${yy}`,
-      labelPeriode: `1 - ${lastDay} ${BULAN_NAMES[m - 1]} ${y}`,
-      shortLabelPeriode: `1 - ${lastDay} ${BULAN_NAMES[m - 1]}`,
-      startYear: y,
-      startMonth: m,
-      startDay: 1,
-      endYear: y,
-      endMonth: m,
-      endDay: lastDay,
-      startDate,
-      endDate
-    };
-  }
-
-  // Jika cutoff > 1 (misal 27):
-  // Tanggal yang >= cutoff masuk ke siklus bulan berikutnya (contoh: 27 Jan -> siklus 02/26)
-  let endYear = y;
-  let endMonth = m;
-  if (d >= cutoff) {
-    endMonth = m + 1;
-    if (endMonth > 12) {
-      endMonth = 1;
-      endYear = y + 1;
-    }
-  }
-
-  let startYear = endYear;
-  let startMonth = endMonth - 1;
-  if (startMonth < 1) {
-    startMonth = 12;
-    startYear = endYear - 1;
-  }
-
-  const mm = String(endMonth).padStart(2, '0');
-  const yy = String(endYear).slice(-2);
-  const bulanTahun = `${mm}/${yy}`;
-
-  const maxDaysStart = new Date(startYear, startMonth, 0).getDate();
-  const maxDaysEnd = new Date(endYear, endMonth, 0).getDate();
-
-  const actualStartDay = Math.min(cutoff, maxDaysStart);
-  const actualEndDay = Math.min(cutoff - 1, maxDaysEnd);
-
-  const startDate = new Date(startYear, startMonth - 1, actualStartDay);
-  const endDate = new Date(endYear, endMonth - 1, actualEndDay, 23, 59, 59);
-
-  const labelPeriode = `${actualStartDay} ${BULAN_NAMES[startMonth - 1]} ${startYear !== endYear ? startYear : ''} - ${actualEndDay} ${BULAN_NAMES[endMonth - 1]} ${endYear}`.trim();
-  const shortLabelPeriode = `${actualStartDay} ${BULAN_NAMES[startMonth - 1]} - ${actualEndDay} ${BULAN_NAMES[endMonth - 1]}`;
-
-  return {
-    bulanTahun,
-    labelPeriode,
-    shortLabelPeriode,
-    startYear,
-    startMonth,
-    startDay: actualStartDay,
-    endYear,
-    endMonth,
-    endDay: actualEndDay,
-    startDate,
-    endDate
-  };
+function normalizeCutoff(cutoffDay: number): number {
+  return Math.max(1, Math.min(31, Number(cutoffDay) || 1));
 }
 
 /**
- * Menghitung info siklus dari key MM/YY dan cutoffDay
+ * Tanggal hari ini (WIB) dalam format YYYY-MM-DD.
  */
-export function getCycleInfoFromBulanTahun(bulanTahun: string, cutoffDay: number = 1): AbsenCycleInfo {
-  const [mmStr, yyStr] = (bulanTahun || '').split('/');
-  const endMonth = parseInt(mmStr, 10) || (new Date().getMonth() + 1);
-  const endYear = 2000 + (parseInt(yyStr, 10) || (new Date().getFullYear() % 100));
+export function getTodayYmd(): string {
+  return new Date().toLocaleString('en-CA', { timeZone: 'Asia/Jakarta' }).slice(0, 10);
+}
 
-  const cutoff = Math.max(1, Math.min(31, Number(cutoffDay) || 1));
-
-  if (cutoff <= 1) {
-    const lastDay = new Date(endYear, endMonth, 0).getDate();
-    return {
-      bulanTahun,
-      labelPeriode: `1 - ${lastDay} ${BULAN_NAMES[endMonth - 1]} ${endYear}`,
-      shortLabelPeriode: `1 - ${lastDay} ${BULAN_NAMES[endMonth - 1]}`,
-      startYear: endYear,
-      startMonth: endMonth,
-      startDay: 1,
-      endYear,
-      endMonth,
-      endDay: lastDay,
-      startDate: new Date(endYear, endMonth - 1, 1),
-      endDate: new Date(endYear, endMonth - 1, lastDay, 23, 59, 59)
-    };
-  }
-
-  let startYear = endYear;
-  let startMonth = endMonth - 1;
-  if (startMonth < 1) {
-    startMonth = 12;
-    startYear = endYear - 1;
+function buildCycle(
+  startYear: number,
+  startMonth: number,
+  cutoff: number,
+  labelAsStart: boolean
+): AbsenCycleInfo {
+  let endYear = startYear;
+  let endMonth = startMonth + 1;
+  if (endMonth > 12) {
+    endMonth = 1;
+    endYear = startYear + 1;
   }
 
   const maxDaysStart = new Date(startYear, startMonth, 0).getDate();
   const maxDaysEnd = new Date(endYear, endMonth, 0).getDate();
-
   const actualStartDay = Math.min(cutoff, maxDaysStart);
   const actualEndDay = Math.min(cutoff - 1, maxDaysEnd);
 
-  const labelPeriode = `${actualStartDay} ${BULAN_NAMES[startMonth - 1]} ${startYear !== endYear ? startYear : ''} - ${actualEndDay} ${BULAN_NAMES[endMonth - 1]} ${endYear}`.trim();
+  const labelYear = labelAsStart ? startYear : endYear;
+  const labelMonth = labelAsStart ? startMonth : endMonth;
+  const bulanTahun = `${String(labelMonth).padStart(2, '0')}/${String(labelYear).slice(-2)}`;
+
+  const labelPeriode = `${actualStartDay} ${BULAN_NAMES[startMonth - 1]} ${startYear !== endYear ? startYear : ''} - ${actualEndDay} ${BULAN_NAMES[endMonth - 1]} ${endYear}`.replace(/\s+/g, ' ').trim();
   const shortLabelPeriode = `${actualStartDay} ${BULAN_NAMES[startMonth - 1]} - ${actualEndDay} ${BULAN_NAMES[endMonth - 1]}`;
 
   return {
@@ -160,6 +78,82 @@ export function getCycleInfoFromBulanTahun(bulanTahun: string, cutoffDay: number
     startDate: new Date(startYear, startMonth - 1, actualStartDay),
     endDate: new Date(endYear, endMonth - 1, actualEndDay, 23, 59, 59)
   };
+}
+
+function buildCalendarMonthCycle(y: number, m: number): AbsenCycleInfo {
+  const mm = String(m).padStart(2, '0');
+  const yy = String(y).slice(-2);
+  const lastDay = new Date(y, m, 0).getDate();
+  return {
+    bulanTahun: `${mm}/${yy}`,
+    labelPeriode: `1 - ${lastDay} ${BULAN_NAMES[m - 1]} ${y}`,
+    shortLabelPeriode: `1 - ${lastDay} ${BULAN_NAMES[m - 1]}`,
+    startYear: y,
+    startMonth: m,
+    startDay: 1,
+    endYear: y,
+    endMonth: m,
+    endDay: lastDay,
+    startDate: new Date(y, m - 1, 1),
+    endDate: new Date(y, m - 1, lastDay, 23, 59, 59)
+  };
+}
+
+/**
+ * Menghitung siklus absensi 1 bulan penuh berdasarkan tanggal dan tanggal mulai (cutoff).
+ * Penamaan siklus (bulanTahun) mengikuti bulan yang memuat mayoritas hari:
+ * - cutoff 1  : 1 Okt - 31 Okt          -> 10/26
+ * - cutoff 2  : 2 Okt - 1 Nov           -> 10/26
+ * - cutoff 27 : 27 Sep - 26 Okt         -> 10/26
+ */
+export function getAbsenCycleInfo(dateStr: string, cutoffDay: number = 1): AbsenCycleInfo {
+  // dateStr format: YYYY-MM-DD
+  const parts = (dateStr || '').split('-');
+  const y = parseInt(parts[0], 10) || new Date().getFullYear();
+  const m = parseInt(parts[1], 10) || (new Date().getMonth() + 1); // 1 - 12
+  const d = parseInt(parts[2], 10) || new Date().getDate(); // 1 - 31
+
+  const cutoff = normalizeCutoff(cutoffDay);
+  if (cutoff <= 1) return buildCalendarMonthCycle(y, m);
+
+  // Siklus dimulai di bulan ini jika tanggal >= cutoff, selain itu dimulai di bulan sebelumnya.
+  let startYear = y;
+  let startMonth = m;
+  if (d < cutoff) {
+    startMonth = m - 1;
+    if (startMonth < 1) {
+      startMonth = 12;
+      startYear = y - 1;
+    }
+  }
+
+  return buildCycle(startYear, startMonth, cutoff, cutoff <= CYCLE_LABEL_AS_START_MAX_CUTOFF);
+}
+
+/**
+ * Menghitung info siklus dari key MM/YY dan cutoffDay
+ */
+export function getCycleInfoFromBulanTahun(bulanTahun: string, cutoffDay: number = 1): AbsenCycleInfo {
+  const [mmStr, yyStr] = (bulanTahun || '').split('/');
+  const labelMonth = parseInt(mmStr, 10) || (new Date().getMonth() + 1);
+  const labelYear = 2000 + (parseInt(yyStr, 10) || (new Date().getFullYear() % 100));
+
+  const cutoff = normalizeCutoff(cutoffDay);
+  if (cutoff <= 1) return buildCalendarMonthCycle(labelYear, labelMonth);
+
+  if (cutoff <= CYCLE_LABEL_AS_START_MAX_CUTOFF) {
+    // Label = bulan awal siklus
+    return buildCycle(labelYear, labelMonth, cutoff, true);
+  }
+
+  // Label = bulan akhir siklus
+  let startYear = labelYear;
+  let startMonth = labelMonth - 1;
+  if (startMonth < 1) {
+    startMonth = 12;
+    startYear = labelYear - 1;
+  }
+  return buildCycle(startYear, startMonth, cutoff, false);
 }
 
 /**
