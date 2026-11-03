@@ -304,3 +304,7 @@ export const rotateMonthlyGame = onSchedule(
     }
   }
 );
+
+// ProsperoEden (Nintendo Switch Mod) Cloud Backend
+export * from './prosperoEden';
+

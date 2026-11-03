@@ -32,6 +32,9 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.rotateMonthlyGame = exports.validateAndSubmitScore = exports.getServerTime = void 0;
 exports.getJakartaMonthKey = getJakartaMonthKey;
@@ -297,4 +300,6 @@ exports.rotateMonthlyGame = (0, scheduler_1.onSchedule)({
         console.error('Error during monthly rotation process:', err);
     }
 });
+// ProsperoEden (Nintendo Switch Mod) Cloud Backend
+__exportStar(require("./prosperoEden"), exports);
 //# sourceMappingURL=index.js.map

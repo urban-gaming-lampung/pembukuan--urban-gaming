@@ -28,3 +28,4 @@ BACKUP/
 *.tar.gz
 
 
+firebase-debug.log
