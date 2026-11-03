@@ -6,6 +6,7 @@ import { RowSewa } from "../lib/types";
 import { toInt } from "../lib/format";
 import { ChevronDown } from "lucide-react";
 import { DEFAULT_HARGA_SEWA } from "../constants/prices";
+import { isUrbanUserDocId } from "../lib/urbanUsers";
 
 type PriceItem = { label: string; price: number };
 
@@ -222,6 +223,8 @@ const RincianSewa: React.FC<{
       const arr = snap.docs
         .filter(d => {
           const data = d.data();
+          // Abaikan akun ProsperoEden (ID dokumen = UID, bukan email)
+          if (!isUrbanUserDocId(d.id)) return false;
           const email = d.id.toLowerCase().trim();
           if (email === "owner@gmail.com" || email.includes("fauzanazim56")) return false;
           if (data && (data.role === "super admin" || data.status === "nonaktif")) return false;

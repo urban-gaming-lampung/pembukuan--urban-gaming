@@ -454,12 +454,32 @@ const captureVideoThumbnail = (file: File): Promise<{ blob: Blob; previewUrl: st
    MEDIA BLOB CACHE FOR INSTANT NATIVE FULL FILE SHARING
    ============================================================ */
 const mediaBlobCache = new Map<string, Blob>();
+const mediaBlobInflight = new Map<string, Promise<Blob | null>>();
 
-const prefetchMediaBlob = async (item: MediaItem): Promise<Blob | null> => {
-  if (!item.mediaUrl) return null;
-  if (mediaBlobCache.has(item.mediaUrl)) {
-    return mediaBlobCache.get(item.mediaUrl)!;
-  }
+// Tipe file yang diizinkan Web Share API (Chrome Android/Safari) + ekstensinya.
+// Tipe lain (mis. .mov dari iPhone) dikirim sebagai mp4/jpeg supaya tetap bisa di-share.
+const SHAREABLE_MIME_EXT: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "video/mp4": "mp4",
+  "video/webm": "webm",
+};
+
+// Satu unduhan per URL: kalau prefetch otomatis masih jalan, pemanggil berikutnya ikut menunggu
+const prefetchMediaBlob = (item: MediaItem): Promise<Blob | null> => {
+  if (!item.mediaUrl) return Promise.resolve(null);
+  const cached = mediaBlobCache.get(item.mediaUrl);
+  if (cached) return Promise.resolve(cached);
+  const inflight = mediaBlobInflight.get(item.mediaUrl);
+  if (inflight) return inflight;
+  const p = fetchMediaBlob(item).finally(() => mediaBlobInflight.delete(item.mediaUrl));
+  mediaBlobInflight.set(item.mediaUrl, p);
+  return p;
+};
+
+const fetchMediaBlob = async (item: MediaItem): Promise<Blob | null> => {
 
   // Method 1: Firebase Storage SDK getBlob (Direct binary download without browser CORS block)
   try {
@@ -546,11 +566,27 @@ export default function GalleryModal({
     setToastMsg(msg);
   };
 
+  // Siapkan file media untuk share (harus sudah di cache sebelum tombol Kirim ditekan)
+  const [sharePrepState, setSharePrepState] = useState<"idle" | "preparing" | "ready" | "error">("idle");
+  const [shareRetryKey, setShareRetryKey] = useState(0);
   useEffect(() => {
-    if (shareTargetItem?.mediaUrl) {
-      prefetchMediaBlob(shareTargetItem);
+    if (!shareTargetItem?.mediaUrl) {
+      setSharePrepState("idle");
+      return;
     }
-  }, [shareTargetItem]);
+    if (mediaBlobCache.has(shareTargetItem.mediaUrl)) {
+      setSharePrepState("ready");
+      return;
+    }
+    let cancelled = false;
+    setSharePrepState("preparing");
+    prefetchMediaBlob(shareTargetItem).then((blob) => {
+      if (!cancelled) setSharePrepState(blob ? "ready" : "error");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [shareTargetItem, shareRetryKey]);
 
   useEffect(() => {
     if (openPreview?.mediaUrl) {
@@ -906,9 +942,8 @@ export default function GalleryModal({
     const filename = `URBAN_GAMING_${(item.title || "media").replace(/\s+/g, "_")}.${ext}`;
     try {
       showToast("Mengunduh media...");
-      const response = await fetch(item.mediaUrl, { mode: "cors" });
-      if (!response.ok) throw new Error("CORS or fetch error");
-      const blob = await response.blob();
+      const blob = await prefetchMediaBlob(item);
+      if (!blob) throw new Error("CORS or fetch error");
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -929,135 +964,108 @@ export default function GalleryModal({
     }
   };
 
-  const shareFileDirectly = async (item: MediaItem): Promise<boolean> => {
-    if (typeof navigator === "undefined" || typeof navigator.share !== "function") {
-      return false;
-    }
+  // ============================================================
+  // SHARE → STORY WHATSAPP BUSINESS (gambar/video + caption)
+  // ============================================================
+  // Catatan teknis (penting, jangan diubah sembarangan):
+  // 1. Dari web, satu-satunya cara mengirim FILE ke aplikasi lain adalah Web Share API
+  //    (navigator.share). HP akan menampilkan menu share → pilih "WhatsApp Business" →
+  //    pilih "Status saya". Web tidak bisa melompati 2 pilihan itu.
+  // 2. navigator.share WAJIB dipanggil saat "user activation" masih aktif (langsung dari tap).
+  //    Kalau kita menunggu download file dulu, browser menolak (NotAllowedError) — ini bug
+  //    lama. Karena itu file disiapkan dulu ke cache, baru tombol "Kirim" aktif.
+  // 3. Caption dikirim sebagai `text` (dipakai WhatsApp sebagai caption) DAN disalin ke
+  //    clipboard sebagai cadangan, jadi kalau caption kosong tinggal tekan lama → Tempel.
+  const supportsFileShare =
+    typeof navigator !== "undefined" &&
+    typeof navigator.share === "function" &&
+    typeof navigator.canShare === "function";
 
+  const buildShareFile = (item: MediaItem): File | null => {
+    const blob = mediaBlobCache.get(item.mediaUrl);
+    if (!blob) return null;
+    const isVideo = item.mediaType === "video";
+    const blobType = (blob.type || "").toLowerCase().split(";")[0].trim();
+    const mimeType = SHAREABLE_MIME_EXT[blobType] ? blobType : isVideo ? "video/mp4" : "image/jpeg";
+    const ext = SHAREABLE_MIME_EXT[mimeType];
+    const cleanTitle = (item.title || "media").replace(/[^a-zA-Z0-9]/g, "_").slice(0, 60);
+    return new File([blob], `URBAN_${cleanTitle}.${ext}`, { type: mimeType });
+  };
+
+  const copyCaptionQuietly = async (caption: string): Promise<boolean> => {
+    if (!caption) return false;
     try {
-      let blob = mediaBlobCache.get(item.mediaUrl);
-      if (!blob) {
-        showToast("Menyiapkan file media... ⏳");
-        blob = (await prefetchMediaBlob(item)) || undefined;
-      }
-
-      if (blob) {
-        const ext = item.mediaType === "video" ? "mp4" : "jpg";
-        const mimeType = item.mediaType === "video" ? "video/mp4" : "image/jpeg";
-        const cleanTitle = (item.title || "media").replace(/[^a-zA-Z0-9]/g, "_");
-        const file = new File([blob], `URBAN_${cleanTitle}.${ext}`, { type: mimeType });
-
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: item.title,
-          });
-          showToast("Berhasil membagikan media asli! 🚀");
-          setShareTargetItem(null);
-          return true;
-        }
-      }
-
-      // Fallback: If device doesn't support binary file share, save full media to gallery!
-      await handleDownloadMedia(item);
-      showToast("Media tersimpan di galeri HP! Silakan pasang ke WhatsApp / Story 📸");
+      // Dibatasi 400ms supaya tidak menghabiskan waktu "user activation" untuk navigator.share
+      await Promise.race([
+        navigator.clipboard.writeText(caption),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("clipboard-timeout")), 400)),
+      ]);
       return true;
+    } catch {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = caption;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        ta.setSelectionRange(0, caption.length);
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        return ok;
+      } catch {
+        return false;
+      }
+    }
+  };
+
+  const shareToWAStory = async (item: MediaItem) => {
+    const file = buildShareFile(item);
+    if (!supportsFileShare || !file) {
+      // File belum siap / browser tidak mendukung → buka lembar share (menyiapkan file dulu)
+      setShareTargetItem(item);
+      return;
+    }
+
+    const caption = (item.caption || "").trim();
+    const withCaption: ShareData = caption ? { files: [file], text: caption } : { files: [file] };
+    const filesOnly: ShareData = { files: [file] };
+    const data = navigator.canShare(withCaption) ? withCaption : filesOnly;
+    if (!navigator.canShare(data)) {
+      setShareTargetItem(item);
+      showToast("HP/browser ini belum bisa kirim file langsung. Pakai Simpan Media + Salin Caption.");
+      return;
+    }
+
+    const copied = await copyCaptionQuietly(caption);
+    try {
+      await navigator.share(data);
+      setShareTargetItem(null);
+      showToast(
+        copied
+          ? "Pilih Status saya di WA Business. Caption juga sudah disalin 📋"
+          : "Pilih Status saya di WA Business 🚀"
+      );
     } catch (err: any) {
-      if (err.name === "AbortError") {
-        return true; // User intentionally cancelled share sheet
-      }
-      console.warn("Direct file share error:", err);
+      if (err?.name === "AbortError") return; // user menutup menu share
+      console.warn("navigator.share error:", err);
+      setShareTargetItem(item);
+      showToast(
+        err?.name === "NotAllowedError"
+          ? "File sudah siap — ketuk tombol Kirim sekali lagi"
+          : "Gagal membuka menu share. Coba lagi."
+      );
     }
-
-    return false;
   };
 
-  const shareToWhatsAppBusiness = async (item: MediaItem) => {
-    // 1. Native OS File Share (Passes actual video/photo into WhatsApp)
-    const success = await shareFileDirectly(item);
-    if (success) return;
-
-    // 2. Fallback: Download the real media file to gallery first, then open WhatsApp!
-    showToast("Mengunduh foto/video ke Galeri HP... ⏳");
-    await handleDownloadMedia(item);
-
-    const isAndroid = /android/i.test(navigator.userAgent || "");
-    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent || "");
-
-    setTimeout(() => {
-      if (isAndroid) {
-        window.location.href = "intent://#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end";
-      } else if (isIOS) {
-        window.location.href = "whatsapp://";
-      } else {
-        window.open("https://web.whatsapp.com", "_blank");
-      }
-      showToast("Media tersimpan di galeri! Buka Status WA untuk memilih foto/video 📸");
-    }, 800);
-  };
-
-  const shareToWhatsAppRegular = async (item: MediaItem) => {
-    const success = await shareFileDirectly(item);
-    if (success) return;
-
-    showToast("Mengunduh foto/video ke Galeri HP... ⏳");
-    await handleDownloadMedia(item);
-
-    const isAndroid = /android/i.test(navigator.userAgent || "");
-
-    setTimeout(() => {
-      if (isAndroid) {
-        window.location.href = "intent://#Intent;package=com.whatsapp;scheme=whatsapp;end";
-      } else {
-        window.open("https://api.whatsapp.com", "_blank");
-      }
-      showToast("Media tersimpan di galeri! Buka Status WA untuk memilih foto/video 📸");
-    }, 800);
-  };
-
-  const shareToInstagram = async (item: MediaItem) => {
-    const success = await shareFileDirectly(item);
-    if (success) return;
-
-    showToast("Mengunduh foto/video ke Galeri HP... ⏳");
-    await handleDownloadMedia(item);
-
-    const isMobile = /android|iphone|ipad|ipod/i.test(navigator.userAgent || "");
-    setTimeout(() => {
-      if (isMobile) {
-        window.location.href = "instagram://app";
-      } else {
-        window.open("https://instagram.com", "_blank");
-      }
-      showToast("Media tersimpan di galeri! Silakan pasang Story Instagram 📸");
-    }, 800);
-  };
-
-  const shareToFacebook = async (item: MediaItem) => {
-    const success = await shareFileDirectly(item);
-    if (success) return;
-
-    const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(item.mediaUrl)}`;
-    window.open(fbUrl, "_blank");
-    showToast("Membuka Facebook... 🔵");
-  };
-
-  const shareToTikTok = async (item: MediaItem) => {
-    const success = await shareFileDirectly(item);
-    if (success) return;
-
-    await handleDownloadMedia(item);
-    window.open("https://www.tiktok.com/upload", "_blank");
-    showToast("Media tersimpan di galeri! Silakan upload ke TikTok 🎵");
-  };
-
-  const handleShareClick = async (item: MediaItem) => {
-    // Directly launch native Web Share API on click
-    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
-      const handled = await shareFileDirectly(item);
-      if (handled) return;
+  const handleShareClick = (item: MediaItem) => {
+    // File sudah ada di cache → langsung buka menu share (masih dalam tap yang sama).
+    if (supportsFileShare && mediaBlobCache.has(item.mediaUrl)) {
+      void shareToWAStory(item);
+      return;
     }
-    // If Web Share API is not supported on this device/browser:
+    // Belum siap → tampilkan lembar share yang menyiapkan file, lalu tombol Kirim aktif.
     setShareTargetItem(item);
   };
 
@@ -1558,38 +1566,36 @@ export default function GalleryModal({
       )}
 
       {/* ============================================================
-          SHARE HUB (APPLE ACTION SHEET + PRIORITIZED CHANNELS)
+          SHARE SHEET → STORY WHATSAPP BUSINESS
           ============================================================ */}
       {shareTargetItem && (
-        <div className="fixed inset-0 z-[145] flex items-center justify-center p-3.5 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 font-sans">
-          <div className="relative w-full max-w-lg bg-white dark:bg-[#1C1C1E] border border-black/10 dark:border-white/10 rounded-[28px] sm:rounded-[32px] overflow-hidden shadow-2xl flex flex-col max-h-[92vh] text-zinc-900 dark:text-white">
-            
-            <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-black/5 dark:border-white/5 bg-black/5 dark:bg-black/30">
+        <div className="fixed inset-0 z-[145] flex items-end sm:items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200 font-sans">
+          <div className="relative w-full max-w-md bg-white dark:bg-[#1C1C1E] border border-black/10 dark:border-white/10 rounded-[28px] overflow-hidden shadow-2xl flex flex-col max-h-[92vh] text-zinc-900 dark:text-white">
+
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-black/5 dark:border-white/5">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-[10px] bg-gradient-to-tr from-emerald-500 to-teal-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/20">
-                  <Icons.Share className="w-4 h-4 stroke-[2.2]" />
+                <div className="w-8 h-8 rounded-[10px] bg-[#25D366] text-white flex items-center justify-center shadow-md shadow-emerald-500/20">
+                  <Icons.WhatsAppBusiness className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-xs sm:text-base font-black tracking-tight uppercase">
-                    Bagikan ke Sosial Media
-                  </h3>
-                  <p className="text-[9px] sm:text-[10px] text-zinc-500 dark:text-zinc-400">
-                    Pilih saluran tujuan atau buka Web Share API
-                  </p>
+                  <h3 className="text-sm font-black tracking-tight">Kirim ke Story WA Business</h3>
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400">Gambar/video + caption sekaligus</p>
                 </div>
               </div>
               <button
                 onClick={() => setShareTargetItem(null)}
                 className="w-8 h-8 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:bg-black/10 dark:hover:bg-white/20 transition-all"
+                aria-label="Tutup"
               >
                 <Icons.X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-4 sm:p-6 overflow-y-auto space-y-3.5 sm:space-y-4 flex-1 scrollbar-ios">
-              
-              <div className="flex items-center gap-3 p-2.5 sm:p-3 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/5">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl overflow-hidden bg-black shrink-0 border border-black/10 dark:border-white/10 relative">
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-3.5 flex-1 scrollbar-ios">
+
+              {/* Pratinjau media + caption yang akan terkirim */}
+              <div className="flex gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/5">
+                <div className="w-16 h-16 rounded-xl overflow-hidden bg-black shrink-0 border border-black/10 dark:border-white/10 relative">
                   {shareTargetItem.mediaType === "video" ? (
                     <div className="w-full h-full flex items-center justify-center bg-zinc-900">
                       {shareTargetItem.thumbnailUrl ? (
@@ -1606,197 +1612,74 @@ export default function GalleryModal({
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="px-1.5 py-0.2 rounded text-[8px] sm:text-[9px] font-black uppercase bg-pink-500/10 text-pink-600 dark:text-pink-400">
-                      {shareTargetItem.category}
-                    </span>
-                    {shareTargetItem.mediaType === "video" && (
-                      <span className="px-1.5 py-0.2 rounded text-[8px] sm:text-[9px] font-black bg-purple-600 text-white uppercase">
-                        Video
-                      </span>
-                    )}
-                    <span className="text-[9px] sm:text-[10px] text-zinc-400 font-medium">
-                      {shareTargetItem.aspectRatio}
-                    </span>
-                  </div>
-                  <h4 className="font-bold text-xs truncate text-zinc-900 dark:text-white">
-                    {shareTargetItem.title}
-                  </h4>
-                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                    Media siap dibagikan langsung
+                  <h4 className="font-bold text-xs truncate">{shareTargetItem.title}</h4>
+                  <p className="text-[11px] leading-snug text-zinc-600 dark:text-zinc-300 mt-1 line-clamp-3 whitespace-pre-line">
+                    {shareTargetItem.caption?.trim() || "Tanpa caption"}
                   </p>
                 </div>
               </div>
 
-              <button
-                onClick={() => shareFileDirectly(shareTargetItem)}
-                className="w-full flex items-center justify-between p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-[#007AFF] via-[#5856D6] to-[#AF52DE] hover:opacity-95 text-white shadow-lg shadow-blue-500/25 active:scale-[0.98] transition-all group"
-              >
-                <div className="flex items-center gap-2.5 sm:gap-3 text-left min-w-0">
-                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0">
-                    <Icons.Smartphone className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-black text-xs sm:text-sm tracking-tight">Buka Menu Share HP Sistem</span>
-                      <span className="px-1.5 py-0.2 rounded text-[8px] sm:text-[9px] font-black bg-white/25 uppercase">Semua App</span>
-                    </div>
-                    <p className="text-[10px] sm:text-[11px] text-white/80 truncate">
-                      Kirim file foto / video langsung ke aplikasi pilihan Anda
-                    </p>
-                  </div>
+              {!supportsFileShare ? (
+                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
+                  Browser ini tidak bisa mengirim file langsung ke aplikasi (biasanya di laptop/PC).
+                  Buka Galeri dari <b>HP</b> untuk kirim ke Story, atau pakai <b>Simpan Media</b> + <b>Salin Caption</b> di bawah.
                 </div>
-                <Icons.External className="w-4 h-4 text-white/70 group-hover:text-white transition-colors shrink-0 ml-2" />
-              </button>
-
-              <div className="pt-1">
-                <div className="flex items-center justify-between mb-2 px-1">
-                  <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-                    Saluran Favorit
-                  </span>
-                  <span className="text-[9px] sm:text-[10px] font-bold text-zinc-400">1-Tap Direct Action</span>
-                </div>
-
-                <div className="grid grid-cols-1 gap-2 sm:gap-2.5">
+              ) : (
+                <>
                   <button
-                    onClick={() => shareToWhatsAppBusiness(shareTargetItem)}
-                    className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border-2 border-emerald-500/40 text-left transition-all active:scale-[0.99] group shadow-sm shadow-emerald-500/10"
+                    onClick={() => shareToWAStory(shareTargetItem)}
+                    disabled={sharePrepState !== "ready"}
+                    className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl bg-[#25D366] hover:bg-[#1fbe5a] disabled:bg-zinc-300 dark:disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-black text-sm shadow-lg shadow-emerald-500/25 disabled:shadow-none active:scale-[0.98] transition-all"
                   >
-                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/30">
-                        <Icons.WhatsAppBusiness className="w-4 h-4 sm:w-5 sm:h-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                          <span className="font-bold text-xs text-zinc-900 dark:text-white">
-                            WhatsApp Business (WA Bisnis)
-                          </span>
-                          <span className="px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[9px] font-black bg-[#25D366] text-white uppercase tracking-wider">
-                            Prioritas #1
-                          </span>
-                        </div>
-                        <p className="text-[9px] sm:text-[10px] text-zinc-600 dark:text-zinc-300 truncate mt-0.5">
-                          Kirim gambar / video ke WhatsApp Business
-                        </p>
-                      </div>
-                    </div>
-                    <Icons.External className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 ml-2" />
+                    {sharePrepState === "preparing" ? (
+                      <>
+                        <span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                        <span>Menyiapkan file{shareTargetItem.mediaType === "video" ? " video" : ""}…</span>
+                      </>
+                    ) : sharePrepState === "error" ? (
+                      <span>File gagal disiapkan</span>
+                    ) : (
+                      <>
+                        <Icons.WhatsAppBusiness className="w-5 h-5" />
+                        <span>Kirim ke Story WA Business</span>
+                      </>
+                    )}
                   </button>
 
-                  <button
-                    onClick={() => shareToInstagram(shareTargetItem)}
-                    className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-pink-500/10 hover:bg-pink-500/15 border border-pink-500/20 text-left transition-all active:scale-[0.99] group"
-                  >
-                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-pink-500/20">
-                        <Icons.Instagram className="w-4 h-4 sm:w-5 sm:h-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                          <span className="font-bold text-xs text-zinc-900 dark:text-white">
-                            Instagram Story & Feed
-                          </span>
-                          <span className="px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[9px] font-black bg-pink-500 text-white uppercase tracking-wider">
-                            Prioritas #2
-                          </span>
-                        </div>
-                        <p className="text-[9px] sm:text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                          Download gambar / video & buka Instagram
-                        </p>
-                      </div>
+                  {sharePrepState === "error" && (
+                    <div className="flex items-center justify-between gap-2 p-3 rounded-2xl bg-red-500/10 border border-red-500/30 text-[11px] text-red-700 dark:text-red-300">
+                      <span>File tidak bisa diunduh dari server. Cek koneksi lalu coba lagi.</span>
+                      <button
+                        onClick={() => setShareRetryKey(k => k + 1)}
+                        className="shrink-0 px-3 py-1.5 rounded-lg bg-red-500 text-white font-bold"
+                      >
+                        Coba lagi
+                      </button>
                     </div>
-                    <Icons.External className="w-3.5 h-3.5 text-pink-500 shrink-0 ml-2" />
-                  </button>
+                  )}
 
-                  <button
-                    onClick={() => shareToFacebook(shareTargetItem)}
-                    className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-blue-500/10 hover:bg-blue-500/15 border border-blue-500/20 text-left transition-all active:scale-[0.99] group"
-                  >
-                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#1877F2] text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-600/20">
-                        <Icons.Facebook className="w-4 h-4 sm:w-5 sm:h-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                          <span className="font-bold text-xs text-zinc-900 dark:text-white">
-                            Facebook Story & Post
-                          </span>
-                          <span className="px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[9px] font-black bg-[#1877F2] text-white uppercase tracking-wider">
-                            Prioritas #3
-                          </span>
-                        </div>
-                        <p className="text-[9px] sm:text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                          Bagikan gambar / video ke Facebook
-                        </p>
-                      </div>
-                    </div>
-                    <Icons.External className="w-3.5 h-3.5 text-blue-500 shrink-0 ml-2" />
-                  </button>
-
-                  <button
-                    onClick={() => shareToTikTok(shareTargetItem)}
-                    className="w-full flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 text-left transition-all active:scale-[0.99] group"
-                  >
-                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-black dark:bg-white text-white dark:text-black flex items-center justify-center shrink-0 shadow-md">
-                        <Icons.TikTok className="w-4 h-4 sm:w-5 sm:h-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 sm:gap-2">
-                          <span className="font-bold text-xs text-zinc-900 dark:text-white">
-                            TikTok Video & Foto Slide
-                          </span>
-                          <span className="px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full text-[8px] sm:text-[9px] font-black bg-zinc-700 dark:bg-zinc-300 text-white dark:text-black uppercase tracking-wider">
-                            Prioritas #4
-                          </span>
-                        </div>
-                        <p className="text-[9px] sm:text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
-                          Download gambar / video & buka TikTok
-                        </p>
-                      </div>
-                    </div>
-                    <Icons.External className="w-3.5 h-3.5 text-zinc-500 shrink-0 ml-2" />
-                  </button>
-
-                  <button
-                    onClick={() => shareToWhatsAppRegular(shareTargetItem)}
-                    className="w-full flex items-center justify-between p-2.5 sm:p-3 rounded-2xl bg-zinc-100/70 dark:bg-zinc-800/50 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200/50 dark:border-zinc-700/50 text-left transition-all active:scale-[0.99] group mt-0.5"
-                  >
-                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-600/80 text-white flex items-center justify-center shrink-0">
-                        <Icons.WhatsApp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-medium text-xs text-zinc-700 dark:text-zinc-300">
-                            WhatsApp Biasa (Personal)
-                          </span>
-                        </div>
-                        <p className="text-[9px] text-zinc-400 truncate">
-                          Kirim gambar / video ke WhatsApp pribadi
-                        </p>
-                      </div>
-                    </div>
-                    <Icons.External className="w-3.5 h-3.5 text-zinc-400 shrink-0 ml-2" />
-                  </button>
-                </div>
-              </div>
+                  <ol className="space-y-1.5 text-[11px] text-zinc-600 dark:text-zinc-300 px-1">
+                    <li><b className="text-zinc-900 dark:text-white">1.</b> Ketuk <b>Kirim</b>, lalu pilih <b>WhatsApp Business</b> di menu share HP.</li>
+                    <li><b className="text-zinc-900 dark:text-white">2.</b> Pilih <b>Status saya</b> (paling atas), lalu kirim.</li>
+                    <li><b className="text-zinc-900 dark:text-white">3.</b> Caption terisi otomatis. Kalau kosong: tekan lama kolom caption → <b>Tempel</b> (sudah disalin).</li>
+                  </ol>
+                </>
+              )}
 
               <div className="grid grid-cols-2 gap-2 pt-2 border-t border-black/5 dark:border-white/5">
                 <button
                   onClick={() => handleCopyCaption(shareTargetItem.caption)}
-                  className="flex items-center justify-center gap-1.5 py-2 sm:py-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-bold text-xs transition-all active:scale-95"
+                  className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-bold text-xs transition-all active:scale-95"
                 >
                   <Icons.Copy className="w-3.5 h-3.5" />
                   <span>Salin Caption</span>
                 </button>
-
                 <button
                   onClick={() => handleDownloadMedia(shareTargetItem)}
-                  className="flex items-center justify-center gap-1.5 py-2 sm:py-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-bold text-xs transition-all active:scale-95"
+                  className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-bold text-xs transition-all active:scale-95"
                 >
                   <Icons.Download className="w-3.5 h-3.5" />
-                  <span>Download Media</span>
+                  <span>Simpan Media</span>
                 </button>
               </div>
 

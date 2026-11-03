@@ -11,6 +11,7 @@ import { Users, Activity, Banknote, Save, Plus, ChevronDown, ChevronUp, Trash2, 
 import Section from "./common/Section";
 import UserAvatar from "./common/UserAvatar";
 import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, getTodayYmd, BULAN_NAMES, normalizeBulanTahun, normalizeDateStr } from "../lib/absenPeriod";
+import { isUrbanUserDocId } from "../lib/urbanUsers";
 
 // === KONSTANTA ABSENSI ===
 
@@ -76,7 +77,10 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   const [isUsersLoaded, setIsUsersLoaded] = useState(false);
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "users"), (snap) => {
-      const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Hanya akun URBAN (ID dokumen = email). Akun ProsperoEden (ID = UID) diabaikan.
+      const data = snap.docs
+        .filter(doc => isUrbanUserDocId(doc.id))
+        .map(doc => ({ id: doc.id, ...doc.data() }));
       setUsersProfile(data);
       setIsUsersLoaded(true);
     });

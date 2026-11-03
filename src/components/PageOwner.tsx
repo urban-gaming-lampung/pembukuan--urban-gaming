@@ -13,6 +13,7 @@ import { StokData, StokItemValue } from "../hooks/useStokData";
 import FilterComp from "./Filter";
 import TabPegawai from "./TabPegawai";
 import WidgetMonitoringStatus from "./WidgetMonitoringStatus";
+import RupiahIcon from "./common/RupiahIcon";
 import WidgetMonitoringDevice from "./WidgetMonitoringDevice";
 import {
   ResponsiveContainer,
@@ -1025,6 +1026,47 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     return arr;
   }, [ownerExpenses, formExpense.kategori]);
 
+  // --- Relasi Nama Pengeluaran -> Kategori (dipelajari dari riwayat input owner) ---
+  // Untuk setiap nama (tidak peka huruf besar/kecil), ambil kategori yang PALING SERING
+  // dipakai owner. Seri -> pakai yang paling baru. "Lainnya" hanya dipakai kalau memang
+  // tidak ada kategori lain, karena "Lainnya" adalah isian otomatis saat kategori kosong.
+  const kategoriByNama = useMemo(() => {
+    const stats = new Map<string, Map<string, { label: string; count: number; last: number }>>();
+    ownerExpenses.forEach(e => {
+      const namaKey = (e.nama || "").trim().toLowerCase();
+      const kat = (e.kategori || "").trim();
+      if (!namaKey || !kat) return;
+      const katKey = kat.toLowerCase();
+      const ts = Number(e.timestamp) || Date.parse(e.tanggal) || 0;
+      if (!stats.has(namaKey)) stats.set(namaKey, new Map());
+      const perNama = stats.get(namaKey)!;
+      const cur = perNama.get(katKey);
+      if (cur) {
+        cur.count += 1;
+        if (ts >= cur.last) { cur.last = ts; cur.label = kat; }
+      } else {
+        perNama.set(katKey, { label: kat, count: 1, last: ts });
+      }
+    });
+
+    const result = new Map<string, string>();
+    stats.forEach((perNama, namaKey) => {
+      const ranked = Array.from(perNama.entries())
+        .sort((a, b) => (b[1].count - a[1].count) || (b[1].last - a[1].last));
+      const best = ranked.find(([k]) => k !== "lainnya") || ranked[0];
+      if (best) result.set(namaKey, best[1].label);
+    });
+    return result;
+  }, [ownerExpenses]);
+
+  const [kategoriAuto, setKategoriAuto] = useState(false);
+
+  const handlePickNamaSuggestion = (n: string) => {
+    const kat = kategoriByNama.get(n.trim().toLowerCase());
+    setFormExpense(prev => ({ ...prev, nama: n, kategori: kat ?? prev.kategori }));
+    setKategoriAuto(!!kat);
+  };
+
   const handleSimpanOwnerExpense = async () => {
     if (!formExpense.nama || !formExpense.harga || !formExpense.tanggal) return;
     setLoadingEx(true);
@@ -1047,6 +1089,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
         });
       }
       setFormExpense({ nama: "", harga: "", kategori: "", tanggal: new Date().toISOString().split("T")[0] });
+      setKategoriAuto(false);
     } catch (e) { console.error(e); }
     setLoadingEx(false);
   };
@@ -1059,6 +1102,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
       tanggal: o.tanggal
     });
     setEditingExpenseId(o.id);
+    setKategoriAuto(false);
     
     const section = document.getElementById("input-pengeluaran-section");
     if (section) section.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1109,7 +1153,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
       {activeTabOwner === "INPUT PENGELUARAN" && (
         <div id="input-pengeluaran-section" className="bg-white dark:bg-[#1C1C1E] rounded-3xl p-6 border border-zinc-200 dark:border-white/10 shadow-sm">
           <h2 className="text-xl font-black text-purple-600 dark:text-purple-400 mb-6 flex items-center gap-2">
-            <DollarSign /> Input Pengeluaran
+            <RupiahIcon /> Input Pengeluaran
           </h2>
           <div className="grid grid-cols-1 gap-4 mb-6">
             <div className="flex flex-col gap-2">
@@ -1128,7 +1172,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
               {uniqueNames.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-1">
                   {uniqueNames.map(n => (
-                    <button key={`nama-${n}`} onClick={() => setFormExpense({ ...formExpense, nama: n })} className="px-3 py-1.5 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 dark:bg-purple-500/10 dark:hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 rounded-lg transition-colors border border-purple-200/50 dark:border-purple-500/20 active:scale-95">
+                    <button key={`nama-${n}`} type="button" onClick={() => handlePickNamaSuggestion(n)} title={kategoriByNama.get(n.trim().toLowerCase()) ? `Kategori otomatis: ${kategoriByNama.get(n.trim().toLowerCase())}` : undefined} className="px-3 py-1.5 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 dark:bg-purple-500/10 dark:hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 rounded-lg transition-colors border border-purple-200/50 dark:border-purple-500/20 active:scale-95">
                       {n}
                     </button>
                   ))}
@@ -1137,12 +1181,19 @@ const PageOwner: React.FC<PageOwnerProps> = ({
             </div>
 
             <div className="flex flex-col gap-2">
-              <label className="text-xs font-bold text-zinc-500 uppercase">Kategori</label>
-              <input type="text" value={formExpense.kategori} onChange={e => setFormExpense({ ...formExpense, kategori: e.target.value })} className="bg-zinc-50 dark:bg-black rounded-xl px-4 py-3 border border-zinc-200 dark:border-zinc-800 text-sm font-bold w-full" placeholder="Ketik kategori pengeluaran..." />
+              <label className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-2">
+                Kategori
+                {kategoriAuto && formExpense.kategori && (
+                  <span className="normal-case px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400 border border-purple-200/50 dark:border-purple-500/20">
+                    Otomatis dari riwayat
+                  </span>
+                )}
+              </label>
+              <input type="text" value={formExpense.kategori} onChange={e => { setKategoriAuto(false); setFormExpense({ ...formExpense, kategori: e.target.value }); }} className="bg-zinc-50 dark:bg-black rounded-xl px-4 py-3 border border-zinc-200 dark:border-zinc-800 text-sm font-bold w-full" placeholder="Ketik kategori pengeluaran..." />
               {uniqueCategories.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-1">
                   {uniqueCategories.map(c => (
-                    <button key={`cat-${c}`} onClick={() => setFormExpense({ ...formExpense, kategori: c })} className="px-3 py-1.5 text-[11px] font-bold bg-zinc-100 hover:bg-zinc-200 dark:bg-[#2C2C2E] dark:hover:bg-white/10 text-zinc-600 dark:text-zinc-300 rounded-lg transition-colors border border-zinc-200/50 dark:border-white/5 active:scale-95">
+                    <button key={`cat-${c}`} type="button" onClick={() => { setKategoriAuto(false); setFormExpense({ ...formExpense, kategori: c }); }} className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-colors border active:scale-95 ${c.toLowerCase() === formExpense.kategori.trim().toLowerCase() ? "bg-purple-600 text-white border-purple-600 dark:bg-purple-500 dark:border-purple-500" : "bg-zinc-100 hover:bg-zinc-200 dark:bg-[#2C2C2E] dark:hover:bg-white/10 text-zinc-600 dark:text-zinc-300 border-zinc-200/50 dark:border-white/5"}`}>
                       {c}
                     </button>
                   ))}
@@ -1155,7 +1206,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
               {loadingEx ? "Menyimpan..." : editingExpenseId ? "Simpan Perubahan" : "Simpan Pengeluaran"}
             </button>
             {editingExpenseId && (
-              <button onClick={() => { setEditingExpenseId(null); setFormExpense({ nama: "", harga: "", kategori: "", tanggal: new Date().toISOString().split("T")[0] }); }} className="px-6 bg-zinc-200 hover:bg-zinc-300 dark:bg-white/10 dark:hover:bg-white/20 text-zinc-700 dark:text-zinc-300 font-bold rounded-xl py-3.5 transition-all active:scale-95">
+              <button onClick={() => { setEditingExpenseId(null); setKategoriAuto(false); setFormExpense({ nama: "", harga: "", kategori: "", tanggal: new Date().toISOString().split("T")[0] }); }} className="px-6 bg-zinc-200 hover:bg-zinc-300 dark:bg-white/10 dark:hover:bg-white/20 text-zinc-700 dark:text-zinc-300 font-bold rounded-xl py-3.5 transition-all active:scale-95">
                 Batal
               </button>
             )}

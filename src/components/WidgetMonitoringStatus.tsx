@@ -5,6 +5,11 @@ import { db, auth } from "../lib/firebase";
 import { HistoryItem, RowSewa } from "../lib/types";
 import Section from "./common/Section";
 
+// Baris "Hanya Ongkir" = pemasukan jasa antar saja, TIDAK ada unit yang keluar.
+// Jadi tidak boleh muncul sebagai BILING / unit jalan di monitoring.
+const isHanyaOngkirRow = (r: any): boolean =>
+  String(r?.jenisPS ?? "").trim().toLowerCase() === "hanya ongkir";
+
 type WidgetMonitoringStatusProps = {
   history: HistoryItem[];
   rowsSewa: RowSewa[];
@@ -106,6 +111,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
         if (h.rowsSewa && h.rowsSewa.length > 0) {
           h.rowsSewa.forEach((r: any) => {
             if (r.lamaSewa === "PELUNASAN") return;
+            if (isHanyaOngkirRow(r)) return;
             const price = parseInt(String(r.harga).replace(/\D/g, "")) || 0;
             if ((price > 0 || r.isPaid === "TIDAK") && r.jenisPS && r.jamMasukSewa && r.lamaSewa) {
               const key = `${String(r.jenisPS).trim()}-${String(r.jamMasukSewa).trim()}-${String(r.ket || "").trim()}-${h.tanggal}`;
@@ -118,6 +124,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
 
     rowsSewa.forEach((r: any, idx) => {
       if (r.lamaSewa === "PELUNASAN") return;
+      if (isHanyaOngkirRow(r)) return;
       const price = parseInt(String(r.harga).replace(/\D/g, "")) || 0;
       if ((price > 0 || r.isPaid === "TIDAK") && r.jenisPS && r.jamMasukSewa && r.lamaSewa) {
         const tgl = activeDate || timeNow.toISOString().slice(0, 10);

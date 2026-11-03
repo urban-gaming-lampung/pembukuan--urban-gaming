@@ -73,7 +73,10 @@ export function getEvidenceItems(jenis: "Masuk" | "Pulang" | null, shift?: strin
   return items;
 }
 
-const TOKO_COORD = { lat: -5.3953862, lng: 105.2367764 }; // URBAN Gaming Lampung
+// Lokasi toko baru (pindah Nov 2026): Jl. Purnawirawan Raya No.114, Gn. Terang, Langkapura, Bandar Lampung
+// Sumber: pin Google Maps "URBAN Gaming Lampung, Pusat Sewa PlayStation" (!3d-5.3794733!4d105.2410961)
+// Lokasi lama (ruko sebelumnya): -5.3953862, 105.2367764
+const TOKO_COORD = { lat: -5.3794733, lng: 105.2410961 }; // URBAN Gaming Lampung
 const MAX_DISTANCE_METERS = 50;
 
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
