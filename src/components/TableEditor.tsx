@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "../lib/firebase";
+import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
 
 // --- TYPES & UTILS ---
 
@@ -180,7 +181,7 @@ export const UploadTransferProof: React.FC<UploadTransferProofProps> = ({ value,
     try {
       setUploading(true);
 
-      const dateStr = new Date().toISOString().split("T")[0];
+      const dateStr = toLocalYmd();
       const timeStr = Date.now();
       const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
       const path = `bukti_transfer/${dateStr}/${timeStr}_${safeName}`;

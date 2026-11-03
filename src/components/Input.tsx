@@ -5,6 +5,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadString, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "../lib/firebase";
 import { getAbsenCycleInfo, normalizeBulanTahun } from "../lib/absenPeriod";
+import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
 
 // === KONSTANTA ABSENSI ===
 // (Catatan: Konstanta di bawah sudah dipindah ke dinamis via absenConfig, kecuali yang tidak terkait denda keterlambatan per blok)
@@ -298,7 +299,7 @@ const Input: React.FC<InputProps> = ({
          const docRef = doc(db, "gaji_pegawai", emailTrimmed);
 
 
-         const dateStrToday = new Date().toISOString().split("T")[0];
+         const dateStrToday = toLocalYmd();
          const effectiveDate = tanggal || dateStrToday;
          const idempKey = `lateCheckin_${emailTrimmed}_${effectiveDate}_${shiftPegawai.replace(/\s+/g, '')}`;
 

@@ -28,6 +28,8 @@ import {
   Pie,
   Legend
 } from "recharts";
+import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
+import { useIsDark } from "../hooks/useIsDark";
 
 type OwnerExpense = {
   id: string;
@@ -269,7 +271,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     if (filterMode === "Semua Bulan") {
        q = query(q, orderBy("tanggal", "desc"));
     } else if (filterMode === "Pilih Bulan") {
-       const yyyy = new Date().getFullYear();
+       const yyyy = resolveMonthYear(filterMonth);
        const mm = String(filterMonth).padStart(2, "0");
        const startD = `${yyyy}-${mm}-01`;
        const endD = `${yyyy}-${mm}-31`;
@@ -315,7 +317,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     if (filterMode === "Pilih Bulan") {
       return ownerExpenses.filter((o) => {
         const d = new Date(o.tanggal);
-        return (d.getMonth() + 1) === filterMonth && d.getFullYear() === now.getFullYear();
+        return (d.getMonth() + 1) === Number(filterMonth) && d.getFullYear() === resolveMonthYear(filterMonth);
       });
     }
     if (filterMode === "Rentang" && rangeStart && rangeEnd) {
@@ -500,7 +502,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
       const weekKey = `${monthLabel}-Week-${weekNum}`;
       
       const dayLabel = formatDayLabel(date);
-      const dayKey = date.toISOString().split("T")[0]; // YYYY-MM-DD
+      const dayKey = toLocalYmd(date); // YYYY-MM-DD
       
       if (!monthsMap.has(monthLabel)) {
         monthsMap.set(monthLabel, { key: monthLabel, weeksMap: new Map() });
@@ -983,9 +985,9 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     return isDark ? "#30d158" : "#34c759";
   };
 
-  const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+  const isDark = useIsDark();
 
-  const [formExpense, setFormExpense] = useState({ nama: "", harga: "", kategori: "", tanggal: new Date().toISOString().split("T")[0] });
+  const [formExpense, setFormExpense] = useState({ nama: "", harga: "", kategori: "", tanggal: toLocalYmd() });
   const [loadingEx, setLoadingEx] = useState(false);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
 
@@ -1088,7 +1090,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
           timestamp: Date.now()
         });
       }
-      setFormExpense({ nama: "", harga: "", kategori: "", tanggal: new Date().toISOString().split("T")[0] });
+      setFormExpense({ nama: "", harga: "", kategori: "", tanggal: toLocalYmd() });
       setKategoriAuto(false);
     } catch (e) { console.error(e); }
     setLoadingEx(false);
@@ -1206,7 +1208,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
               {loadingEx ? "Menyimpan..." : editingExpenseId ? "Simpan Perubahan" : "Simpan Pengeluaran"}
             </button>
             {editingExpenseId && (
-              <button onClick={() => { setEditingExpenseId(null); setKategoriAuto(false); setFormExpense({ nama: "", harga: "", kategori: "", tanggal: new Date().toISOString().split("T")[0] }); }} className="px-6 bg-zinc-200 hover:bg-zinc-300 dark:bg-white/10 dark:hover:bg-white/20 text-zinc-700 dark:text-zinc-300 font-bold rounded-xl py-3.5 transition-all active:scale-95">
+              <button onClick={() => { setEditingExpenseId(null); setKategoriAuto(false); setFormExpense({ nama: "", harga: "", kategori: "", tanggal: toLocalYmd() }); }} className="px-6 bg-zinc-200 hover:bg-zinc-300 dark:bg-white/10 dark:hover:bg-white/20 text-zinc-700 dark:text-zinc-300 font-bold rounded-xl py-3.5 transition-all active:scale-95">
                 Batal
               </button>
             )}

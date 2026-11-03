@@ -4,6 +4,7 @@ import { doc, setDoc, onSnapshot } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
 import { HistoryItem, RowSewa } from "../lib/types";
 import Section from "./common/Section";
+import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
 
 // Baris "Hanya Ongkir" = pemasukan jasa antar saja, TIDAK ada unit yang keluar.
 // Jadi tidak boleh muncul sebagai BILING / unit jalan di monitoring.
@@ -38,7 +39,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
   const [isEditingMaster, setIsEditingMaster] = useState(false);
 
   const [now, setNow] = useState(Date.now());
-  const notifiedRefs = React.useRef<Set<number>>(new Set());
+  const notifiedRefs = React.useRef<Set<string>>(new Set());
   const [selectedUnit, setSelectedUnit] = useState<any | null>(null);
 
   // Sync auth state
@@ -101,6 +102,8 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
     const timeNow = new Date(now);
 
     const allRowsMap = new Map<string, any>();
+    const histSeen = new Map<string, number>();
+    const liveSeen = new Map<string, number>();
 
     if (history && history.length > 0) {
       history.forEach(h => {
@@ -114,8 +117,12 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
             if (isHanyaOngkirRow(r)) return;
             const price = parseInt(String(r.harga).replace(/\D/g, "")) || 0;
             if ((price > 0 || r.isPaid === "TIDAK") && r.jenisPS && r.jamMasukSewa && r.lamaSewa) {
-              const key = `${String(r.jenisPS).trim()}-${String(r.jamMasukSewa).trim()}-${String(r.ket || "").trim()}-${h.tanggal}`;
-              allRowsMap.set(key, { ...r, _tanggal: h.tanggal, _historyId: h.id });
+              // Nomor urut kemunculan: 2 unit identik (jenis, jam, penyewa, tanggal sama) tetap dihitung 2
+              const baseKey = `${String(r.jenisPS).trim()}-${String(r.jamMasukSewa).trim()}-${String(r.ket || "").trim()}-${h.tanggal}`;
+              const n = histSeen.get(baseKey) || 0;
+              histSeen.set(baseKey, n + 1);
+              const key = `${baseKey}#${n}`;
+              allRowsMap.set(key, { ...r, _tanggal: h.tanggal, _historyId: h.id, _mapKey: key });
             }
           });
         }
@@ -127,9 +134,13 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
       if (isHanyaOngkirRow(r)) return;
       const price = parseInt(String(r.harga).replace(/\D/g, "")) || 0;
       if ((price > 0 || r.isPaid === "TIDAK") && r.jenisPS && r.jamMasukSewa && r.lamaSewa) {
-        const tgl = activeDate || timeNow.toISOString().slice(0, 10);
-        const key = `${String(r.jenisPS).trim()}-${String(r.jamMasukSewa).trim()}-${String(r.ket || "").trim()}-${tgl}`;
-        allRowsMap.set(key, { ...r, _tanggal: tgl, _isActiveSession: true, _sourceIdx: idx });
+        const tgl = activeDate || toLocalYmd(timeNow);
+        // Baris form aktif menimpa baris histori ke-n yang sama (data tanggal yang sedang diedit)
+        const baseKey = `${String(r.jenisPS).trim()}-${String(r.jamMasukSewa).trim()}-${String(r.ket || "").trim()}-${tgl}`;
+        const n = liveSeen.get(baseKey) || 0;
+        liveSeen.set(baseKey, n + 1);
+        const key = `${baseKey}#${n}`;
+        allRowsMap.set(key, { ...r, _tanggal: tgl, _isActiveSession: true, _sourceIdx: idx, _mapKey: key });
       }
     });
 
@@ -203,10 +214,8 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
         }
 
         if (!isDone || !(r as any)._verifiedReturn) {
-          if (isDone && endD) {
-            const diffEndDays = (timeNow.getTime() - endD.getTime()) / (1000 * 3600 * 24);
-            if (diffEndDays > 2) return;
-          }
+          // Unit yang belum dikonfirmasi kembali TETAP dihitung jalan (tidak otomatis READY),
+          // sampai pegawai/owner memverifikasi pengembalian.
 
           const s = String(r.jenisPS).toLowerCase();
 
@@ -245,6 +254,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
 
           rentals.push({
             id: idx + 1,
+            uid: (r as any)._mapKey || `${idx}`,
             jenis: r.jenisPS,
             isTv: hasTV,
             start: r.jamMasukSewa,
@@ -287,14 +297,14 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
     if (!("Notification" in window) || Notification.permission !== "granted" || !currentUserEmail) return;
 
     activeRentals.forEach(r => {
-      if (r.isDone && !r.isVerified && r.addedBy === currentUserEmail && !notifiedRefs.current.has(r.id)) {
+      if (r.isDone && !r.isVerified && r.addedBy === currentUserEmail && !notifiedRefs.current.has(r.uid)) {
         try {
           new Notification(`Waktu Sewa Habis!`, {
             body: `BILING ${r.id}: PS ${r.jenis} a.n ${r.namaPenyewa} telah habis durasinya. Mohon konfirmasi pengembalian.`,
             icon: "/favicon.ico"
           });
         } catch (e) { }
-        notifiedRefs.current.add(r.id);
+        notifiedRefs.current.add(r.uid);
       }
     });
   }, [activeRentals, currentUserEmail]);
@@ -506,15 +516,15 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
               </div>
 
               <div
-                className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto overflow-x-hidden pr-2 custom-scrollbar w-full items-start max-h-[600px]"
+                className="grid grid-cols-[repeat(auto-fill,minmax(124px,1fr))] gap-3 overflow-y-auto overflow-x-hidden pr-2 custom-scrollbar w-full items-start max-h-[600px]"
               >
                 {activeRentals.map(u => {
                   const adminName = u.addedBy ? u.addedBy.split('@')[0].toUpperCase() : 'ADMIN';
                   return (
                     <div
-                      key={u.id}
+                      key={u.uid}
                       onClick={() => setSelectedUnit(u)}
-                      className={`relative bg-white dark:bg-black border rounded-[18px] p-3 shadow-md overflow-hidden flex flex-col min-w-[140px] max-w-full group cursor-pointer hover:-translate-y-1 hover:shadow-lg transition-all duration-300 ${u.isDone && !u.isVerified ? "border-amber-400 dark:border-amber-500/50 hover:shadow-amber-500/20" : "border-red-200 dark:border-red-500/30 hover:shadow-red-500/20"}`}
+                      className={`relative bg-white dark:bg-black border rounded-[18px] p-3 shadow-md overflow-hidden flex flex-col min-w-0 max-w-full group cursor-pointer hover:-translate-y-1 hover:shadow-lg transition-all duration-300 ${u.isDone && !u.isVerified ? "border-amber-400 dark:border-amber-500/50 hover:shadow-amber-500/20" : "border-red-200 dark:border-red-500/30 hover:shadow-red-500/20"}`}
                     >
                       <div className="absolute top-0 left-0 w-full h-1 bg-zinc-100 dark:bg-zinc-800">
                         <div className={`h-full transition-all duration-1000 ease-linear ${u.isDone && !u.isVerified ? "bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]" : "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]"}`} style={{ width: `${u.progress}%` }} />
@@ -571,31 +581,31 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
                 })}
 
                 {Array.from({ length: readyPS3 }).map((_, i) => (
-                  <div key={`ready3-${i}`} className="bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-[18px] p-3 shadow-sm flex flex-col justify-center items-center min-w-[140px] max-w-full opacity-80 hover:opacity-100 transition-opacity min-h-[110px]">
+                  <div key={`ready3-${i}`} className="bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-[18px] p-3 shadow-sm flex flex-col justify-center items-center min-w-0 max-w-full opacity-80 hover:opacity-100 transition-opacity min-h-[110px]">
                     <ShieldCheck className="w-8 h-8 text-emerald-400 dark:text-emerald-500 mb-2" />
                     <h4 className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest text-center">PS3 READY</h4>
                   </div>
                 ))}
                 {Array.from({ length: readyPS4 }).map((_, i) => (
-                  <div key={`ready4-${i}`} className="bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-[18px] p-3 shadow-sm flex flex-col justify-center items-center min-w-[140px] max-w-full opacity-80 hover:opacity-100 transition-opacity min-h-[110px]">
+                  <div key={`ready4-${i}`} className="bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-[18px] p-3 shadow-sm flex flex-col justify-center items-center min-w-0 max-w-full opacity-80 hover:opacity-100 transition-opacity min-h-[110px]">
                     <ShieldCheck className="w-8 h-8 text-emerald-400 dark:text-emerald-500 mb-2" />
                     <h4 className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest text-center">PS4 READY</h4>
                   </div>
                 ))}
                 {Array.from({ length: readyPS5 }).map((_, i) => (
-                  <div key={`ready5-${i}`} className="bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-[18px] p-3 shadow-sm flex flex-col justify-center items-center min-w-[140px] max-w-full opacity-80 hover:opacity-100 transition-opacity min-h-[110px]">
+                  <div key={`ready5-${i}`} className="bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-[18px] p-3 shadow-sm flex flex-col justify-center items-center min-w-0 max-w-full opacity-80 hover:opacity-100 transition-opacity min-h-[110px]">
                     <ShieldCheck className="w-8 h-8 text-emerald-400 dark:text-emerald-500 mb-2" />
                     <h4 className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest text-center">PS5 READY</h4>
                   </div>
                 ))}
                 {Array.from({ length: readyPortabel }).map((_, i) => (
-                  <div key={`readyptb-${i}`} className="bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-[18px] p-3 shadow-sm flex flex-col justify-center items-center min-w-[140px] max-w-full opacity-80 hover:opacity-100 transition-opacity min-h-[110px]">
+                  <div key={`readyptb-${i}`} className="bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-[18px] p-3 shadow-sm flex flex-col justify-center items-center min-w-0 max-w-full opacity-80 hover:opacity-100 transition-opacity min-h-[110px]">
                     <Smartphone className="w-8 h-8 text-emerald-400 dark:text-emerald-500 mb-2" />
                     <h4 className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest text-center">PORTABEL READY</h4>
                   </div>
                 ))}
                 {Array.from({ length: readyTV }).map((_, i) => (
-                  <div key={`readytv-${i}`} className="bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-[18px] p-3 shadow-sm flex flex-col justify-center items-center min-w-[140px] max-w-full opacity-80 hover:opacity-100 transition-opacity min-h-[110px]">
+                  <div key={`readytv-${i}`} className="bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-[18px] p-3 shadow-sm flex flex-col justify-center items-center min-w-0 max-w-full opacity-80 hover:opacity-100 transition-opacity min-h-[110px]">
                     <Monitor className="w-8 h-8 text-emerald-400 dark:text-emerald-500 mb-2" />
                     <h4 className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest text-center">TV READY</h4>
                   </div>

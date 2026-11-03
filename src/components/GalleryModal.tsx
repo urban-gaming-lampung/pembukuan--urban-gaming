@@ -596,7 +596,8 @@ export default function GalleryModal({
 
   useEffect(() => {
     if (mediaList.length > 0) {
-      mediaList.slice(0, 15).forEach((item) => {
+      // Hanya gambar & dibatasi, supaya tidak menguras kuota HP (video diunduh saat mau di-share)
+      mediaList.filter((item) => item.mediaType !== "video").slice(0, 8).forEach((item) => {
         prefetchMediaBlob(item);
       });
     }
@@ -610,6 +611,7 @@ export default function GalleryModal({
       const galleryRef = collection(db, "media_gallery");
       const q = query(galleryRef, orderBy("createdAt", "desc"));
       
+      let unsubFallback: (() => void) | null = null;
       const unsub = onSnapshot(q, (snapshot) => {
         const items: MediaItem[] = [];
         snapshot.forEach((d) => {
@@ -619,7 +621,8 @@ export default function GalleryModal({
         setLoading(false);
       }, (err) => {
         console.warn("Firestore gallery query fallback to simple collection:", err);
-        const unsubFallback = onSnapshot(galleryRef, (snapshot) => {
+        unsubFallback?.();
+        unsubFallback = onSnapshot(galleryRef, (snapshot) => {
           const items: MediaItem[] = [];
           snapshot.forEach((d) => {
             items.push({ id: d.id, ...(d.data() as any) });
@@ -627,11 +630,13 @@ export default function GalleryModal({
           items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
           setMediaList(items);
           setLoading(false);
+        }, (fallbackErr) => {
+          console.error("Gagal memuat galeri:", fallbackErr);
+          setLoading(false);
         });
-        return () => unsubFallback();
       });
 
-      return () => unsub();
+      return () => { unsub(); unsubFallback?.(); };
     } catch (e) {
       console.error("Error loading media gallery:", e);
       setLoading(false);

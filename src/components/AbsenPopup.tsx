@@ -78,6 +78,8 @@ export function getEvidenceItems(jenis: "Masuk" | "Pulang" | null, shift?: strin
 // Lokasi lama (ruko sebelumnya): -5.3953862, 105.2367764
 const TOKO_COORD = { lat: -5.3794733, lng: 105.2410961 }; // URBAN Gaming Lampung
 const MAX_DISTANCE_METERS = 50;
+// GPS di dalam ruko sering meleset 20–60 m. Akurasi GPS dipakai sebagai toleransi (maks 30 m).
+const MAX_GPS_TOLERANCE_METERS = 30;
 
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const p = 0.017453292519943295;
@@ -163,11 +165,13 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
         const coord = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserCoord(coord);
         const dist = getDistance(coord.lat, coord.lng, TOKO_COORD.lat, TOKO_COORD.lng);
-        if (dist <= MAX_DISTANCE_METERS) {
+        const accuracy = Math.round(pos.coords.accuracy || 0);
+        const tolerance = Math.min(accuracy, MAX_GPS_TOLERANCE_METERS);
+        if (dist - tolerance <= MAX_DISTANCE_METERS) {
            setIsLocationMatched(true);
         } else {
            setIsLocationMatched(false);
-           setLocationError(`Terlalu jauh! (${Math.round(dist)}m dari toko)`);
+           setLocationError(`Terlalu jauh! (${Math.round(dist)}m dari toko, akurasi GPS ±${accuracy}m). Coba dekat pintu/jendela lalu ulangi.`);
         }
       },
       (err) => {

@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { HistoryItem } from "../lib/types";
 import { rupiah } from "../lib/format";
+import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
 
 // ─── UTILS ──────────────────────────────────────────
 const HARI = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
@@ -168,7 +169,7 @@ const Grafik: React.FC<GrafikProps> = ({ history, filterMode = "Bulan Ini" }) =>
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
-      const iso = d.toISOString().slice(0, 10);
+      const iso = toLocalYmd(d);
       const dayName = HARI[d.getDay()];
       const dd = String(d.getDate()).padStart(2, "0");
       const mm = String(d.getMonth() + 1).padStart(2, "0");

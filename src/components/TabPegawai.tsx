@@ -12,6 +12,7 @@ import Section from "./common/Section";
 import UserAvatar from "./common/UserAvatar";
 import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, getTodayYmd, BULAN_NAMES, normalizeBulanTahun, normalizeDateStr } from "../lib/absenPeriod";
 import { isUrbanUserDocId } from "../lib/urbanUsers";
+import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
 
 // === KONSTANTA ABSENSI ===
 
@@ -640,7 +641,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
     // 3. Calculate auto-penalties for missing checkouts (mengikuti siklus per pegawai)
     const penaltyMap = new Map(); // key: `email_MM/YY`, value: count of missed checkouts * penalty
-    const todayNorm = normalizeDateStr(new Date().toISOString().slice(0, 10));
+    const todayNorm = normalizeDateStr(toLocalYmd());
 
     logAbsensi.forEach(l => {
         if (l.jenisAbsen === "Masuk" && l.email && l.tanggal) {
@@ -695,7 +696,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
           // Migrasi data lama on the fly
           const d = new Date();
           const empCutoff = getEmployeeCutoff(k);
-          const cycle = getAbsenCycleInfo(d.toISOString().slice(0, 10), empCutoff);
+          const cycle = getAbsenCycleInfo(toLocalYmd(d), empCutoff);
           const bulanTahun = normalizeBulanTahun(cycle.bulanTahun);
           records = [{
              id: `migrated-${bulanTahun}`,

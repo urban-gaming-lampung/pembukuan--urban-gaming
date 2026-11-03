@@ -2,7 +2,8 @@ import { runSalaryTransaction } from "../lib/salaryPersistence";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { runTransaction, collection, doc, setDoc, deleteDoc, onSnapshot, addDoc, updateDoc, query, getDocs, getDoc, where, orderBy, serverTimestamp, arrayUnion, deleteField } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { db, auth, listGameDb } from "../lib/firebase";
+import { db, auth, listGameDb, storage } from "../lib/firebase";
+import { ref as storageRef, uploadString, getDownloadURL } from "firebase/storage";
 import { usePresence } from "./usePresence";
 import { useFormDraft } from "./useFormDraft";
 import { useBodyScrollLock } from "./useBodyScrollLock";
@@ -16,6 +17,7 @@ import { checkCatalogBaselineAndLogUpdates, isVersionLower, SavedCatalogState, s
 import useStokData from "./useStokData";
 import { PdfExporterHandle } from "../components/PdfExporter";
 import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr, isLogForDate } from "../lib/absenPeriod";
+import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
 
 type ImageQuality = "Tinggi" | "Hemat";
 type Price = { label: string; price: number };
@@ -228,10 +230,26 @@ export default function useAppController() {
     }
   }, [user?.email]);
 
+  // Simpan gambar ke Storage lalu simpan URL-nya (bukan base64) di dokumen users, supaya
+  // koleksi users tetap ringan. Kalau upload gagal, jatuh ke cara lama (base64).
+  const persistUserImage = async (kind: "avatar" | "bg", dataUrl: string): Promise<string> => {
+    if (!user?.email || !dataUrl || !dataUrl.startsWith("data:image/")) return dataUrl;
+    try {
+      const email = user.email.toLowerCase().trim();
+      const r = storageRef(storage, `profile_photos/${email}/${kind}_${Date.now()}.jpg`);
+      await uploadString(r, dataUrl, "data_url");
+      return await getDownloadURL(r);
+    } catch (e) {
+      console.warn("Upload gambar profil gagal, simpan base64:", e);
+      return dataUrl;
+    }
+  };
+
   const handleProfilePicChange = async (dataUrl: string) => {
     setUserProfilePic(dataUrl);
     if (user?.email) {
-      setDoc(doc(db, "users", user.email), { photoUrl: dataUrl }, { merge: true }).catch(console.error);
+      const photoUrl = await persistUserImage("avatar", dataUrl);
+      setDoc(doc(db, "users", user.email), { photoUrl }, { merge: true }).catch(console.error);
     }
   };
 
@@ -243,7 +261,9 @@ export default function useAppController() {
     } catch(e) { console.error(e); }
 
     if (user?.email) {
-      setDoc(doc(db, "users", user.email), { customBgDark: dataUrl || null }, { merge: true }).catch(console.error);
+      persistUserImage("bg", dataUrl || "").then((url) =>
+        setDoc(doc(db, "users", user.email!), { customBgDark: url || null }, { merge: true })
+      ).catch(console.error);
     }
   };
 
@@ -377,24 +397,43 @@ export default function useAppController() {
   // ===== REALTIME SSOT ABSENSI LISTENER =====
   const [allLogAbsensi, setAllLogAbsensi] = useState<any[]>([]);
 
+  // Hanya ambil log beberapa hari di sekitar tanggal pembukuan aktif (bukan seluruh koleksi
+  // yang terus membesar). Semua pemakai allLogAbsensi memfilter per `tanggal`.
+  const logWindowStart = useMemo(() => {
+    const now = new Date();
+    const base = /^\d{4}-\d{2}-\d{2}$/.test(tanggal || "") ? new Date(`${tanggal}T00:00:00`) : now;
+    const start = new Date(Math.min(base.getTime(), now.getTime()));
+    start.setDate(start.getDate() - 3);
+    return toLocalYmd(start);
+  }, [tanggal]);
+
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "log_absensi"), (snap) => {
+    const q = query(
+      collection(db, "log_absensi"),
+      where("timestamp", ">=", new Date(`${logWindowStart}T00:00:00`).toISOString())
+    );
+    const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setAllLogAbsensi(data);
     }, (err) => console.error("Error fetching log_absensi:", err));
     return () => unsub();
-  }, []);
+  }, [logWindowStart]);
 
   // Sync absenPagi, absenSiang, shiftPegawai, and initial rukoBuka/Tutup with log_absensi SSOT (Identical to TabPegawai)
   useEffect(() => {
     if (!tanggal || editingId) return;
 
+    const currentUserEmail = user?.email?.toLowerCase().trim() || "";
+    // Owner / super admin / akun tes. JANGAN pakai includes("admin"): pegawai yang emailnya
+    // mengandung "admin" ikut tersaring.
     const isSuperAdminOrOwner = (em: string) => {
       if (!em) return false;
       const lower = em.toLowerCase().trim();
-      return lower === "owner@gmail.com" || lower.includes("admin") || lower.includes("superadmin");
+      return lower === "owner@gmail.com"
+        || lower.includes("superadmin")
+        || lower.includes("fauzanazim56")
+        || (lower === currentUserEmail && userRole === "super admin");
     };
-    const currentUserEmail = user?.email?.toLowerCase().trim() || "";
 
     const logsForToday = allLogAbsensi.filter((l: any) => isLogForDate(l, tanggal) && l.status !== "deleted" && l.status !== "completed");
 
@@ -506,7 +545,7 @@ export default function useAppController() {
       _setRukoTutup("");
       _setRukoTutupDate("");
     }
-  }, [allLogAbsensi, tanggal, user?.email, editingId]);
+  }, [allLogAbsensi, tanggal, user?.email, editingId, userRole]);
 
   useEffect(() => {
     if (!user?.email || !tanggal || editingId) return;
@@ -1110,7 +1149,7 @@ export default function useAppController() {
     if (filter === "Pilih Bulan") {
       return history.filter((h) => {
         const d = new Date(h.tanggal);
-        return (d.getMonth() + 1) === filterMonth && d.getFullYear() === now.getFullYear();
+        return (d.getMonth() + 1) === Number(filterMonth) && d.getFullYear() === resolveMonthYear(filterMonth);
       });
     }
     if (filter === "Rentang" && rangeStart && rangeEnd) {
@@ -1670,7 +1709,7 @@ export default function useAppController() {
                   console.warn("Gagal mengambil cutoff user:", e);
               }
 
-              const cycle = getAbsenCycleInfo(tanggal || new Date().toISOString().slice(0, 10), empCutoff);
+              const cycle = getAbsenCycleInfo(tanggal || toLocalYmd(), empCutoff);
               const currentBulanTahun = normalizeBulanTahun(cycle.bulanTahun);
 
               await runSalaryTransaction(db, async transaction => {
@@ -1946,7 +1985,7 @@ export default function useAppController() {
     if (filter === "Semua Bulan") {
        q = query(q, orderBy("tanggal", "desc"));
     } else if (filter === "Pilih Bulan") {
-       const yyyy = new Date().getFullYear();
+       const yyyy = resolveMonthYear(filterMonth);
        const mm = String(filterMonth).padStart(2, "0");
        const startD = `${yyyy}-${mm}-01`;
        const endD = `${yyyy}-${mm}-31`;

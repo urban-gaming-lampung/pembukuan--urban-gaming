@@ -43,6 +43,7 @@ import {
 import versionData from "../version.json";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, BULAN_NAMES, normalizeBulanTahun, normalizeDateStr } from "../lib/absenPeriod";
+import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
 
 interface Price {
   label: string;
@@ -595,7 +596,7 @@ const Pengaturan: React.FC<Props> = ({
 
         // 2. Kalkulasi Denda Tidak Absen Pulang
         const penaltyMap = new Map();
-        const todayNorm = normalizeDateStr(new Date().toISOString().slice(0, 10));
+        const todayNorm = normalizeDateStr(toLocalYmd());
 
         logs.forEach((l: any) => {
           if (l.jenisAbsen === "Masuk" && l.email && l.email.toLowerCase().trim() === emailTrimmed && l.tanggal) {

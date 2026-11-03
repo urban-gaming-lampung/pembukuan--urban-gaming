@@ -14,6 +14,7 @@ import Section from "./common/Section";
 import jsPDF from "jspdf";
 
 import useStokData, { RegisteredDevice, DeviceType } from "../hooks/useStokData";
+import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
 
 interface WidgetMonitoringDeviceProps {
   isOwner?: boolean;
@@ -718,7 +719,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       setPdfLoadingText("Menyimpan PDF...");
       setPdfProgress(98);
       
-      pdf.save(`stiker_all_urban_gaming_${new Date().toISOString().slice(0, 10)}.pdf`);
+      pdf.save(`stiker_all_urban_gaming_${toLocalYmd()}.pdf`);
       setPdfProgress(100);
       
       setTimeout(() => {

@@ -1,35 +1,76 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    
-    // Aturan Folder Foto Absensi Karyawan
-    match /absensi/{email}/{fileName} {
-      // 1. Karyawan HANYA diizinkan Upload (CREATE) ke folder emailnya sendiri.
-      allow create: if request.auth != null && request.auth.token.email.lower() == email.lower();
-      
-      // 2. Karyawan diizinkan melihat data fotonya sendiri (READ)
-      allow read: if request.auth != null && request.auth.token.email.lower() == email.lower();
-      
-      // 3. Karyawan DILARANG update / delete fotonya (Untuk menghindari Kecurangan)
-      allow update, delete: if false; 
+
+    // Staf URBAN = owner atau punya dokumen Firestore users/{email} (bukan akun ProsperoEden).
+    function isOwner() {
+      return request.auth != null && request.auth.token.email == "owner@gmail.com";
+    }
+    function isUrbanStaff() {
+      return isOwner()
+        || (request.auth != null && request.auth.token.email != null
+            && firestore.exists(/databases/(default)/documents/users/$(request.auth.token.email.lower())));
+    }
+    function isUrbanAdmin() {
+      return isOwner()
+        || (request.auth != null && request.auth.token.email != null
+            && firestore.get(/databases/(default)/documents/users/$(request.auth.token.email.lower())).data.role == "super admin");
+    }
+    function isOwnEmail(email) {
+      return request.auth != null && request.auth.token.email.lower() == email.lower();
+    }
+    function isImageUnder(mb) {
+      return request.resource.contentType.matches('image/.*') && request.resource.size < mb * 1024 * 1024;
     }
 
-    // Aturan Folder Bukti Transfer Pemasukan & Pengeluaran
-    match /bukti_transfer/{dateStr}/{fileName} {
-      // 1. Semua karyawan ter-autentikasi diizinkan Upload (CREATE)
-      allow create: if request.auth != null;
-      
-      // 2. Semua karyawan ter-autentikasi diizinkan melihat (READ)
-      allow read: if request.auth != null;
-      
-      // 3. Dilarang update / delete
+    // Foto Absensi Karyawan: upload ke folder email sendiri, tidak bisa diubah/dihapus
+    match /absensi/{email}/{allPaths=**} {
+      allow create: if isUrbanStaff() && isOwnEmail(email);
+      allow read: if isUrbanAdmin() || (isUrbanStaff() && isOwnEmail(email));
       allow update, delete: if false;
     }
-    
-    // Akses Super Administrator (Owner)
-    match /{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.token.email == "owner@gmail.com";
+
+    // Bukti Transfer Pemasukan & Pengeluaran
+    match /bukti_transfer/{dateStr}/{fileName} {
+      allow create: if isUrbanStaff();
+      allow read: if isUrbanStaff();
+      allow update, delete: if false;
     }
 
+    // Foto Profil Pegawai
+    match /profile_photos/{email}/{fileName} {
+      allow read: if isUrbanStaff();
+      allow write: if isUrbanStaff() && isOwnEmail(email) && isImageUnder(2);
+    }
+
+    // Galeri Media Sosial
+    match /gallery_media/{allPaths=**} {
+      allow read: if isUrbanStaff();
+      allow write: if isUrbanAdmin();
+    }
+
+    // Foto Produk POS
+    match /products/{allPaths=**} {
+      allow read: if isUrbanStaff();
+      allow write: if isUrbanAdmin();
+    }
+
+    // Save Data Cloud ProsperoEden (Switch Mod) — tidak diubah
+    match /saves/{uid}/{titleId} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isOwner());
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Share Postingan Screenshot ProsperoEden — tidak diubah
+    match /share/{uid}/{fileName} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && request.auth.uid == uid;
+      allow delete: if request.auth != null && (request.auth.uid == uid || isOwner());
+    }
+
+    // Akses Owner
+    match /{allPaths=**} {
+      allow read, write: if isOwner();
+    }
   }
 }
