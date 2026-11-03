@@ -479,20 +479,25 @@ const prefetchMediaBlob = (item: MediaItem): Promise<Blob | null> => {
   return p;
 };
 
+// Batas waktu: SDK Storage mencoba ulang sampai ±2 menit kalau jaringan/CORS gagal,
+// yang membuat tombol share "loading terus". Lebih baik cepat gagal lalu tampilkan "Coba lagi".
+const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+  Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))]);
+
 const fetchMediaBlob = async (item: MediaItem): Promise<Blob | null> => {
 
   // Method 1: Firebase Storage SDK getBlob (Direct binary download without browser CORS block)
   try {
     if (item.storagePath) {
       const storageRef = ref(storage, item.storagePath);
-      const blob = await getBlob(storageRef);
+      const blob = await withTimeout(getBlob(storageRef), 20000);
       if (blob) {
         mediaBlobCache.set(item.mediaUrl, blob);
         return blob;
       }
     } else if (item.mediaUrl.includes("firebasestorage.googleapis.com")) {
       const storageRef = ref(storage, item.mediaUrl);
-      const blob = await getBlob(storageRef);
+      const blob = await withTimeout(getBlob(storageRef), 20000);
       if (blob) {
         mediaBlobCache.set(item.mediaUrl, blob);
         return blob;
@@ -504,7 +509,9 @@ const fetchMediaBlob = async (item: MediaItem): Promise<Blob | null> => {
 
   // Method 2: Standard fetch fallback
   try {
-    const response = await fetch(item.mediaUrl);
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 20000);
+    const response = await fetch(item.mediaUrl, { signal: ctrl.signal }).finally(() => clearTimeout(t));
     if (response.ok) {
       const blob = await response.blob();
       mediaBlobCache.set(item.mediaUrl, blob);
