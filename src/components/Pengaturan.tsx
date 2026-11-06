@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { collection, addDoc, deleteDoc, onSnapshot, query, doc, updateDoc } from "firebase/firestore";
+import { collection, addDoc, deleteDoc, onSnapshot, query, doc, updateDoc, where } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import {
   Settings,
@@ -92,6 +92,8 @@ interface Props {
   onOpenEditJajanan?: () => void;
   onOpenEditJasaAks?: () => void;
   onOpenEditSewa?: () => void;
+  rincianVisibility?: Record<string, boolean>;
+  onRincianVisibilityChange?: (key: "harian" | "jajanan" | "jasaAks" | "sewa" | "pengeluaran" | "setoran", visible: boolean) => void;
   userEmail?: string;
   userProfilePic?: string;
   onProfilePicChange?: (dataUrl: string) => void;
@@ -332,6 +334,8 @@ const Pengaturan: React.FC<Props> = ({
   onOpenEditJajanan,
   onOpenEditJasaAks,
   onOpenEditSewa,
+  rincianVisibility,
+  onRincianVisibilityChange,
   userEmail,
   userProfilePic,
   onProfilePicChange,
@@ -423,15 +427,19 @@ const Pengaturan: React.FC<Props> = ({
   }, [isOwner]);
 
   const handleAddAsisten = async () => {
-    if (!formAsisten.nama_pengeluaran) return;
+    if (!formAsisten.nama_pengeluaran.trim()) return;
+    // Tanggal kosong/di luar 1-31 dulu tersimpan NaN sehingga pengingat tidak pernah jalan
+    const tgl = Math.min(31, Math.max(1, parseInt(formAsisten.tanggal, 10) || 1));
+    const nominal = Math.max(0, parseInt(String((formAsisten as any).nominal || "0").replace(/\D/g, ""), 10) || 0);
     setIsLoading(true);
+    try {
     if (editingAsistenId) {
       // Update existing
       await updateDoc(doc(db, "owner_assistants", editingAsistenId), {
         nama_pengeluaran: formAsisten.nama_pengeluaran,
         kategori: formAsisten.kategori || "Lainnya",
-        tanggal: parseInt(formAsisten.tanggal),
-        nominal: parseInt((formAsisten as any).nominal || "0"),
+        tanggal: tgl,
+        nominal,
       });
       setEditingAsistenId(null);
     } else {
@@ -439,14 +447,18 @@ const Pengaturan: React.FC<Props> = ({
       await addDoc(collection(db, "owner_assistants"), {
         nama_pengeluaran: formAsisten.nama_pengeluaran,
         kategori: formAsisten.kategori || "Lainnya",
-        tanggal: parseInt(formAsisten.tanggal),
-        nominal: parseInt((formAsisten as any).nominal || "0"),
+        tanggal: tgl,
+        nominal,
         status: "aktif",
         last_triggered: 0
       });
     }
     setFormAsisten({ nama_pengeluaran: "", kategori: "", tanggal: "1" });
-    setIsLoading(false);
+    } catch (e: any) {
+      alert("Gagal menyimpan pengingat: " + (e?.message || e));
+    } finally {
+      setIsLoading(false);
+    }
   };
   const handleEditAsisten = (a: any) => {
     setFormAsisten({
@@ -458,21 +470,23 @@ const Pengaturan: React.FC<Props> = ({
     setEditingAsistenId(a.id);
   };
   const handleDeleteAsisten = async (id: string) => {
-    if (confirm("Hapus pengingat asisten ini?")) await deleteDoc(doc(db, "owner_assistants", id));
+    if (!confirm("Hapus pengingat asisten ini?")) return;
+    try { await deleteDoc(doc(db, "owner_assistants", id)); } catch (e: any) { alert("Gagal menghapus: " + (e?.message || e)); }
   };
   // --- Google Drive State ---
   const [driveConnected, setDriveConnected] = useState(false);
 
   const [gajiKu, setGajiKu] = useState<{ records?: any[] } | null>(null);
   const [gajiExpandedId, setGajiExpandedId] = useState<string | null>(null);
+  // Data mentah Gaji Saya (diisi listener Firestore di bawah). Perhitungan ulang dipisah dari
+  // listener supaya perubahan `history` tidak membuat 3 listener berlangganan ulang terus-menerus.
+  const gajiSrcRef = React.useRef<{ data: any; logs: any[]; uDoc: any }>({ data: { records: [] }, logs: [], uDoc: {} });
+  const recomputeGajiRef = React.useRef<() => void>(() => {});
   useEffect(() => {
     if (open && userEmail && !isOwner) {
       const emailTrimmed = userEmail.toLowerCase().trim();
-      let latestDocData: any = { records: [] };
-      let latestLogAbsensi: any[] = [];
-      let latestUserDoc: any = {};
 
-      const updateGajiKuState = (data: any, logs: any[], uDoc: any = latestUserDoc) => {
+      const updateGajiKuState = (data: any, logs: any[], uDoc: any = gajiSrcRef.current.uDoc) => {
         let recs = Array.isArray(data.records) ? data.records : [];
         const cutoffDay = (typeof uDoc?.tanggalMulaiHitung === "number" && uDoc.tanggalMulaiHitung >= 1 && uDoc.tanggalMulaiHitung <= 31)
           ? uDoc.tanggalMulaiHitung
@@ -738,28 +752,33 @@ const Pengaturan: React.FC<Props> = ({
         setGajiKu({ ...data });
       };
 
-      const unsubUser = onSnapshot(doc(db, "users", emailTrimmed), userSnap => {
-        latestUserDoc = userSnap.exists() ? userSnap.data() : {};
-        updateGajiKuState(latestDocData, latestLogAbsensi, latestUserDoc);
-      });
-
-      const unsubGaji = onSnapshot(doc(db, "gaji_pegawai", emailTrimmed), docSnap => {
-        latestDocData = docSnap.exists() ? docSnap.data() : { records: [] };
-        updateGajiKuState(latestDocData, latestLogAbsensi, latestUserDoc);
-      });
-
-      const unsubLogs = onSnapshot(collection(db, "log_absensi"), snap => {
-        latestLogAbsensi = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        updateGajiKuState(latestDocData, latestLogAbsensi, latestUserDoc);
-      });
-
-      return () => {
-        unsubUser();
-        unsubGaji();
-        unsubLogs();
+      recomputeGajiRef.current = () => {
+        const src = gajiSrcRef.current;
+        updateGajiKuState(src.data, src.logs, src.uDoc);
       };
+      recomputeGajiRef.current();
     }
-  }, [open, userEmail, isOwner, history, absenConfig]);
+  }, [open, userEmail, isOwner, history, absenConfig, ongkirConfig]);
+
+  useEffect(() => {
+    if (!(open && userEmail && !isOwner)) return;
+    const emailTrimmed = userEmail.toLowerCase().trim();
+    gajiSrcRef.current = { data: { records: [] }, logs: [], uDoc: {} };
+    const unsubUser = onSnapshot(doc(db, "users", emailTrimmed), userSnap => {
+      gajiSrcRef.current.uDoc = userSnap.exists() ? userSnap.data() : {};
+      recomputeGajiRef.current();
+    }, (err) => console.error("Gaji Saya (users):", err));
+    const unsubGaji = onSnapshot(doc(db, "gaji_pegawai", emailTrimmed), docSnap => {
+      gajiSrcRef.current.data = docSnap.exists() ? docSnap.data() : { records: [] };
+      recomputeGajiRef.current();
+    }, (err) => console.error("Gaji Saya (gaji):", err));
+    // Hanya log absensi milik pegawai ini, bukan seluruh koleksi
+    const unsubLogs = onSnapshot(query(collection(db, "log_absensi"), where("email", "==", emailTrimmed)), snap => {
+      gajiSrcRef.current.logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      recomputeGajiRef.current();
+    }, (err) => console.error("Gaji Saya (log_absensi):", err));
+    return () => { unsubUser(); unsubGaji(); unsubLogs(); };
+  }, [open, userEmail, isOwner]);
 
   const runOrAlert = (fn?: () => void, msg?: string) => {
     if (fn) return fn();
@@ -1417,6 +1436,40 @@ const Pengaturan: React.FC<Props> = ({
             <IOSRow label="Jasa & Aksesoris" value={`${sJasa.count} Item`} icon={<Wrench size={16} />} iconColor="bg-slate-500" onClick={() => openEditModal(onOpenEditJasaAks)} />
             <IOSRow label="Sewa PS" value={`${sSewa.count} Item`} icon={<Truck size={16} />} iconColor="bg-green-500" isLast onClick={() => openEditModal(onOpenEditSewa)} />
           </IOSGroup>
+
+          <IOSGroup title="Tampilkan Tabel di Usaha Rental">
+            {([
+              { key: "harian", label: "1. Pemasukan Harian" },
+              { key: "jajanan", label: "2. Pemasukan Jajanan" },
+              { key: "jasaAks", label: "3. Jasa & Aksesoris" },
+              { key: "sewa", label: "4. Sewa PS" },
+              { key: "pengeluaran", label: "Rincian Pengeluaran" },
+              { key: "setoran", label: "Rincian Setoran" },
+            ] as const).map((t, i, arr) => {
+              const on = rincianVisibility?.[t.key] !== false;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  role="switch"
+                  aria-checked={on}
+                  onClick={() => runOrAlert(onRincianVisibilityChange && (() => onRincianVisibilityChange(t.key, !on)))}
+                  className={`w-full px-4 py-3 flex items-center justify-between text-left select-none ${i < arr.length - 1 ? "border-b border-zinc-100 dark:border-zinc-700/50" : ""}`}
+                >
+                  <div className="space-y-0.5">
+                    <div className="text-[15px] font-medium text-zinc-900 dark:text-zinc-100">{t.label}</div>
+                    <div className="text-xs text-zinc-500">{on ? "Tampil di halaman Usaha Rental" : "Disembunyikan"}</div>
+                  </div>
+                  <div className={`w-12 h-7 rounded-full transition-colors flex items-center px-[3px] shrink-0 ${on ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"}`}>
+                    <div className={`w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform ${on ? "translate-x-[20px]" : "translate-x-0"}`} />
+                  </div>
+                </button>
+              );
+            })}
+          </IOSGroup>
+          <div className="px-1 -mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+            Tabel yang disembunyikan tidak tampil untuk semua admin. Data yang sudah terisi tetap tersimpan & ikut terhitung di rekap.
+          </div>
         </>
       )}
 

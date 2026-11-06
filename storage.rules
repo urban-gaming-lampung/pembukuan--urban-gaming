@@ -41,16 +41,21 @@ service firebase.storage {
       allow write: if isOwnEmail(email) && isImageUnder(3);
     }
 
-    // Galeri Media Sosial (upload oleh owner)
+    // Galeri Media Sosial. Upload baru boleh oleh akun login (UI hanya menampilkannya ke
+    // owner/super admin; Firestore media_gallery tetap dikunci super admin). Ubah/hapus: owner.
     match /gallery_media/{allPaths=**} {
       allow get: if request.auth != null;
-      allow list, write: if isOwner();
+      allow create: if request.auth != null && request.auth.token.email != null
+        && request.resource.contentType.matches('(image|video)/.*')
+        && request.resource.size < 200 * 1024 * 1024;
+      allow list, update, delete: if isOwner();
     }
 
-    // Foto Produk POS
+    // Foto Produk POS (Firestore products dikunci super admin)
     match /products/{allPaths=**} {
       allow get: if request.auth != null;
-      allow list, write: if isOwner();
+      allow create: if request.auth != null && request.auth.token.email != null && isImageUnder(2);
+      allow list, update, delete: if isOwner();
     }
 
     // Save Data Cloud ProsperoEden (Switch Mod) — tidak diubah

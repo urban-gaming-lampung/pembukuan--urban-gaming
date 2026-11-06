@@ -4,6 +4,7 @@ import { doc, setDoc, onSnapshot } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
 import { HistoryItem, RowSewa } from "../lib/types";
 import Section from "./common/Section";
+import { buildSewaTable, getSewaPrice } from "../lib/priceLists";
 import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
 
 // Baris "Hanya Ongkir" = pemasukan jasa antar saja, TIDAK ada unit yang keluar.
@@ -93,6 +94,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
   };
 
   const { activeRentals, rentedPS3, rentedPS4, rentedPS5, rentedPortabel, rentedTV, readyPS3, readyPS4, readyPS5, readyPortabel, readyTV } = useMemo(() => {
+    const sewaTable = buildSewaTable(hargaItems);
     let rPS3 = 0;
     let rPS4 = 0;
     let rPS5 = 0;
@@ -243,9 +245,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
               if (isCustom) {
                   nominalBelumBayar = parseInt(String((r as any)._customBase).replace(/\D/g, "")) || 0;
               } else if (hargaItems) {
-                  const targetStr = `${r.jenisPS} - ${r.lamaSewa}`;
-                  const found = hargaItems.find((h: any) => h.nama === targetStr);
-                  nominalBelumBayar = found ? found.harga : 0;
+                  nominalBelumBayar = getSewaPrice(sewaTable, r.jenisPS, r.lamaSewa);
               }
               if ((r as any).isOngkir === "YA") {
                   nominalBelumBayar += parseInt(String((r as any)._ongkir).replace(/\D/g, "")) || 0;
@@ -291,7 +291,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
       readyPortabel: Math.max(0, masterUnit.portabel - rPortabel),
       readyTV: Math.max(0, masterUnit.tv - rTV)
     };
-  }, [rowsSewa, history, activeDate, now, masterUnit]);
+  }, [rowsSewa, history, activeDate, now, masterUnit, hargaItems]);
 
   useEffect(() => {
     if (!("Notification" in window) || Notification.permission !== "granted" || !currentUserEmail) return;

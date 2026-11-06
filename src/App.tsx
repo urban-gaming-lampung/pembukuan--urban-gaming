@@ -136,6 +136,8 @@ export default function App() {
     setAbsenConfig,
     openEditRincian,
     setOpenEditRincian,
+    rincianVisibility,
+    handleUpdateRincianVisibility,
     getPrices,
     getHargaSewa,
     getTitle,
@@ -467,13 +469,13 @@ export default function App() {
                 currentUserEmail={user?.email}
                 adminName={user?.email ? user.email.split("@")[0] : "Admin"}
               />
-              <RincianHarian rows={rowsHarian} setRows={setRowsHarian} blank={{ ...blankHarian }} hargaItems={hargaHarian} isMobileTable={isMobileTable} />
-              <RincianJajanan rows={rowsJajanan} setRows={setRowsJajanan} blank={{ ...blankJajanan }} hargaItems={hargaJajanan} isMobileTable={isMobileTable} />
-              <RincianJasaAksesoris rows={rowsJasaAks} setRows={setRowsJasaAks} blank={{ ...blankJasaAks }} isMobileTable={isMobileTable} />
-              <RincianSewa rows={rowsSewa} setRows={setRowsSewa} blank={newBlankSewa()} hargaItems={hargaSewa} userEmail={user?.email} isMobileTable={isMobileTable}  />
+              {rincianVisibility.harian !== false && <RincianHarian rows={rowsHarian} setRows={setRowsHarian} blank={{ ...blankHarian }} hargaItems={hargaHarian} isMobileTable={isMobileTable} />}
+              {rincianVisibility.jajanan !== false && <RincianJajanan rows={rowsJajanan} setRows={setRowsJajanan} blank={{ ...blankJajanan }} hargaItems={hargaJajanan} isMobileTable={isMobileTable} />}
+              {rincianVisibility.jasaAks !== false && <RincianJasaAksesoris rows={rowsJasaAks} setRows={setRowsJasaAks} blank={{ ...blankJasaAks }} hargaItems={hargaJasaAks} isMobileTable={isMobileTable} />}
+              {rincianVisibility.sewa !== false && <RincianSewa rows={rowsSewa} setRows={setRowsSewa} blank={newBlankSewa()} hargaItems={hargaSewa} userEmail={user?.email} isMobileTable={isMobileTable}  />}
             </div>
             <div className="space-y-6">
-              <div id="section-pengeluaran">
+              {rincianVisibility.pengeluaran !== false && <div id="section-pengeluaran">
                  <RincianPengeluaran 
                     rows={rowsPengeluaran} setRows={setRowsPengeluaran} 
                     currentDate={tanggal} currentDay={hari}
@@ -481,14 +483,14 @@ export default function App() {
                     userEmail={user?.email}
                     isOwner={isSuperAdminOrOwner}
                  />
-              </div>
-              <div id="section-setoran">
+              </div>}
+              {rincianVisibility.setoran !== false && <div id="section-setoran">
                  <RincianSetoran 
                     rows={rowsSetoran} setRows={setRowsSetoran} 
                     currentDate={tanggal} currentDay={hari}
                     isMobileTable={isMobileTable}
                  />
-              </div>
+              </div>}
             </div>
             
             <div id="section-rekap" className="pt-2">
@@ -554,6 +556,8 @@ export default function App() {
             onOpenEditJajanan={() => setOpenEditRincian("jajanan")}
             onOpenEditJasaAks={() => setOpenEditRincian("jasaAks")}
             onOpenEditSewa={() => setOpenEditRincian("sewa")}
+            rincianVisibility={rincianVisibility}
+            onRincianVisibilityChange={handleUpdateRincianVisibility}
             userEmail={user?.email}
             userProfilePic={userProfilePic || undefined}
             onProfilePicChange={handleProfilePicChange}

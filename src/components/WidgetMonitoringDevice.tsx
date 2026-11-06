@@ -131,7 +131,13 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
   const [pdfLoadingText, setPdfLoadingText] = useState("");
   const [preloadedQrCodes, setPreloadedQrCodes] = useState<Record<string, string>>({});
 
-  const pages = useMemo(() => {
+  // Stiker terpilih di Riwayat (checkbox). pdfTargetIds = daftar yang sedang dicetak (null = semua).
+  const [selectedStickerIds, setSelectedStickerIds] = useState<string[]>([]);
+  const [pdfTargetIds, setPdfTargetIds] = useState<string[] | null>(null);
+  const toggleStickerSelect = (id: string) =>
+    setSelectedStickerIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const buildStickerPages = (devices: RegisteredDevice[]) => {
     // Group devices by category
     const squareDevices: RegisteredDevice[] = [];
     const stikPs4Devices: RegisteredDevice[] = [];
@@ -180,6 +186,20 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
     }
 
     return chunkedPages;
+  };
+
+  const pages = useMemo(
+    () => buildStickerPages(pdfTargetIds ? devices.filter((d) => pdfTargetIds.includes(d.id)) : devices),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [devices, pdfTargetIds]
+  );
+
+  // Buang pilihan yang unitnya sudah dihapus
+  useEffect(() => {
+    setSelectedStickerIds((prev) => {
+      const next = prev.filter((id) => devices.some((d) => d.id === id));
+      return next.length === prev.length ? prev : next;
+    });
   }, [devices]);
 
   // Listen to Master Capacities
@@ -639,11 +659,15 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
   };
 
   // Download All Stickers PDF
-  const handleDownloadAllStickersPDF = async () => {
-    if (devices.length === 0) {
-      alert("Tidak ada stiker yang tersimpan di database.");
+  const handleDownloadAllStickersPDF = async (onlyIds?: string[]) => {
+    const targetDevices = onlyIds && onlyIds.length ? devices.filter((d) => onlyIds.includes(d.id)) : devices;
+    if (targetDevices.length === 0) {
+      alert(onlyIds ? "Pilih minimal satu stiker untuk dicetak." : "Tidak ada stiker yang tersimpan di database.");
       return;
     }
+    // Halaman PDF dihitung dari daftar target (bukan `pages` lama di closure)
+    const targetPages = buildStickerPages(targetDevices);
+    setPdfTargetIds(onlyIds && onlyIds.length ? targetDevices.map((d) => d.id) : null);
 
     setIsGeneratingPdf(true);
     setPdfProgress(5);
@@ -653,7 +677,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       if (document.fonts) {
         await document.fonts.ready;
       }
-      const sortedDevices = [...devices].sort(
+      const sortedDevices = [...targetDevices].sort(
         (a, b) => a.type.localeCompare(b.type) || a.number - b.number
       );
       
@@ -689,8 +713,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
       const scale = 3.2; // Optimized 3.2x scale (600 DPI print quality, perfect balance between crispness and performance)
       
-      for (let pageIdx = 0; pageIdx < pages.length; pageIdx++) {
-        setPdfLoadingText(`Merender halaman ${pageIdx + 1} dari ${pages.length}...`);
+      for (let pageIdx = 0; pageIdx < targetPages.length; pageIdx++) {
+        setPdfLoadingText(`Merender halaman ${pageIdx + 1} dari ${targetPages.length}...`);
         
         const pageEl = document.getElementById(`pdf-page-${pageIdx}`);
         if (!pageEl) {
@@ -713,13 +737,13 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
         }
 
         pdf.addImage(imgData, "JPEG", 0, 0, 210, 297, undefined, "FAST");
-        setPdfProgress(Math.round(50 + ((pageIdx + 1) / pages.length) * 45));
+        setPdfProgress(Math.round(50 + ((pageIdx + 1) / targetPages.length) * 45));
       }
 
       setPdfLoadingText("Menyimpan PDF...");
       setPdfProgress(98);
       
-      pdf.save(`stiker_all_urban_gaming_${toLocalYmd()}.pdf`);
+      pdf.save(`stiker_${onlyIds && onlyIds.length ? `terpilih_${targetDevices.length}` : "all"}_urban_gaming_${toLocalYmd()}.pdf`);
       setPdfProgress(100);
       
       setTimeout(() => {
@@ -1360,7 +1384,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                   </button>
                   <button
                     type="button"
-                    onClick={handleDownloadAllStickersPDF}
+                    onClick={() => handleDownloadAllStickersPDF()}
                     className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-red-500/10 active:scale-95 animate-in fade-in duration-300"
                   >
                     <QrCode className="w-4 h-4" /> Download Semua Sticker (PDF)
@@ -1382,13 +1406,30 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                     <History className="w-4 h-4 text-emerald-500" /> Daftar Unit Terdaftar ({devices.length} Unit)
                   </h3>
                   {devices.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
                     <button
                       type="button"
-                      onClick={handleDownloadAllStickersPDF}
+                      onClick={() => setSelectedStickerIds(selectedStickerIds.length === devices.length ? [] : devices.map((d) => d.id))}
+                      className="flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-white/10 dark:hover:bg-white/15 text-zinc-700 dark:text-zinc-200 rounded-xl text-xs font-bold transition-all active:scale-95"
+                    >
+                      {selectedStickerIds.length === devices.length ? "Batal Pilih" : "Pilih Semua"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={selectedStickerIds.length === 0 || isGeneratingPdf}
+                      onClick={() => handleDownloadAllStickersPDF(selectedStickerIds)}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-zinc-300 dark:disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-xl text-xs font-bold transition-all active:scale-95"
+                    >
+                      <QrCode className="w-3.5 h-3.5" /> Cetak Terpilih ({selectedStickerIds.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadAllStickersPDF()}
                       className="self-start sm:self-auto flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-red-500/10 active:scale-95"
                     >
                       <QrCode className="w-3.5 h-3.5" /> Download Semua (PDF)
                     </button>
+                    </div>
                   )}
                 </div>
 
@@ -1399,6 +1440,15 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                       <table className="w-full border-collapse text-left text-xs">
                         <thead>
                           <tr className="bg-zinc-50 dark:bg-white/5 border-b border-zinc-200 dark:border-white/5 text-zinc-400 font-bold uppercase tracking-wider">
+                            <th className="pl-6 pr-2 py-4 w-10">
+                              <input
+                                type="checkbox"
+                                aria-label="Pilih semua stiker"
+                                className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                                checked={devices.length > 0 && selectedStickerIds.length === devices.length}
+                                onChange={(e) => setSelectedStickerIds(e.target.checked ? devices.map((d) => d.id) : [])}
+                              />
+                            </th>
                             <th className="px-6 py-4">ID Unit</th>
                             <th className="px-6 py-4">Tipe Alat</th>
                             <th className="px-6 py-4">No</th>
@@ -1410,10 +1460,19 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-200 dark:divide-white/5">
-                          {devices
+                          {[...devices]
                             .sort((a, b) => a.type.localeCompare(b.type) || a.number - b.number)
                             .map((dev) => (
                               <tr key={dev.id} className="hover:bg-zinc-50 dark:hover:bg-white/5 transition-colors">
+                                <td className="pl-6 pr-2 py-4">
+                                  <input
+                                    type="checkbox"
+                                    aria-label={`Pilih stiker ${dev.id}`}
+                                    className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                                    checked={selectedStickerIds.includes(dev.id)}
+                                    onChange={() => toggleStickerSelect(dev.id)}
+                                  />
+                                </td>
                                 <td className="px-6 py-4 font-mono font-bold text-zinc-800 dark:text-zinc-200">{dev.id}</td>
                                 <td className="px-6 py-4 font-bold text-zinc-650 dark:text-zinc-300">{DEVICE_LABELS[dev.type]}</td>
                                 <td className="px-6 py-4 font-mono text-zinc-800 dark:text-zinc-200">{String(dev.number).padStart(2, "0")}</td>
@@ -1476,12 +1535,19 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
                     {/* Mobile Card-Based History (visible on mobile/tablet below md) */}
                     <div className="grid grid-cols-1 gap-4 md:hidden">
-                      {devices
+                      {[...devices]
                         .sort((a, b) => a.type.localeCompare(b.type) || a.number - b.number)
                         .map((dev) => (
                           <div key={dev.id} className="bg-white dark:bg-[#161618] border border-zinc-200 dark:border-white/5 rounded-2xl p-4 flex flex-col gap-3 shadow-sm">
                             <div className="flex justify-between items-start">
                               <div className="flex items-center gap-2.5">
+                                <input
+                                  type="checkbox"
+                                  aria-label={`Pilih stiker ${dev.id}`}
+                                  className="w-5 h-5 accent-emerald-600 cursor-pointer shrink-0"
+                                  checked={selectedStickerIds.includes(dev.id)}
+                                  onChange={() => toggleStickerSelect(dev.id)}
+                                />
                                 <div className="w-7 h-7 rounded-lg border border-white/15 flex items-center justify-center text-xs font-mono font-black text-white shrink-0 shadow-sm" style={{ backgroundColor: dev.stickerColor }}>
                                   {dev.number}
                                 </div>

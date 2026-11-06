@@ -27,7 +27,12 @@ export const DEFAULT_HARGA_JAJANAN: Price[] = [
   { label: "Pop Mie (Free Nasi)", price: 8000 },
 ];
 
+// Harga 0 = nominal diisi manual di tabel (jasa yang harganya berbeda-beda)
 export const DEFAULT_HARGA_JASA_AKS: Price[] = [
+  { label: "Isi Game", price: 0 },
+  { label: "Stik & Aksesoris", price: 0 },
+  { label: "Upgrade HEN", price: 0 },
+  { label: "Aksesoris", price: 0 },
   { label: "Sewa Stick Tambahan", price: 5000 },
   { label: "Sewa Headset", price: 5000 },
   { label: "Ganti Kabel HDMI", price: 15000 },

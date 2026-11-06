@@ -5,7 +5,7 @@ import TableEditor from "./TableEditor";
 import { RowSewa } from "../lib/types";
 import { toInt } from "../lib/format";
 import { ChevronDown } from "lucide-react";
-import { DEFAULT_HARGA_SEWA } from "../constants/prices";
+import { buildSewaTable } from "../lib/priceLists";
 import { isUrbanUserDocId } from "../lib/urbanUsers";
 
 type PriceItem = { label: string; price: number };
@@ -20,150 +20,6 @@ function pickKey(row: any, candidates: string[]) {
   return null;
 }
 
-function normText(s: unknown) {
-  return String(s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
-}
-
-function normalizeJenisFromLabel(label: string): string | null {
-  const s = normText(label);
-  if (s.includes("hanya tv") || s === "tv" || (s.includes("tv") && !s.includes("ps")))
-    return "Hanya TV";
-
-  const psMatch = s.match(/ps\s*(\d+)/);
-  const psVer = psMatch ? `PS${psMatch[1]}` : null;
-
-  if (!psVer && !s.includes("hanya tv")) return null;
-
-  const isPortable = s.includes("portable");
-  const hasTv = s.includes("+ tv") || s.includes("tv") || s.includes("plus tv");
-
-  if (psVer) {
-    if (isPortable) return `${psVer} Portable`;
-    if (hasTv) return `${psVer} + TV`;
-    return psVer;
-  }
-  return null;
-}
-
-function normalizeLamaFromLabel(label: string): string | null {
-  const s = normText(label);
-  const jamMatch = s.match(/(\d+)\s*jam/);
-  if (jamMatch) {
-    const n = parseInt(jamMatch[1], 10);
-    if (Number.isFinite(n) && n > 0) return `${n} JAM`.toUpperCase();
-  }
-  const hariMatch = s.match(/(\d+)\s*hari/);
-  if (hariMatch) {
-    const n = parseInt(hariMatch[1], 10);
-    if (Number.isFinite(n) && n > 0) return `${n} HARI`.toUpperCase();
-  }
-  if (s.includes("semalam")) return "1 HARI";
-  if (s.includes("sehari")) return "1 HARI";
-  return null;
-}
-
-function normalizeHargaItems(items?: PriceItem[]) {
-  const src = Array.isArray(items) ? items : [];
-  return src
-    .map((x) => ({ label: String(x?.label ?? "").trim(), price: Math.max(0, Number(x?.price) || 0) }))
-    .filter((x) => x.label.length > 0);
-}
-
-function buildSewaTableFromHarga(items?: PriceItem[]) {
-  const cleaned = normalizeHargaItems(items);
-  const defaultCleaned = normalizeHargaItems(DEFAULT_HARGA_SEWA);
-
-  // Gabungkan items database dengan DEFAULT_HARGA_SEWA untuk label yang belum tersimpan
-  const combined = [...cleaned];
-  for (const def of defaultCleaned) {
-    if (!combined.some((x) => normText(x.label) === normText(def.label))) {
-      combined.push(def);
-    }
-  }
-
-  const table: Record<string, Record<string, number>> = {};
-  const jenisSet = new Set<string>();
-  const lamaSet = new Set<string>();
-
-  for (const it of combined) {
-    const jenis = normalizeJenisFromLabel(it.label);
-    const lama = normalizeLamaFromLabel(it.label);
-    if (!jenis || !lama) continue;
-
-    if (!table[lama]) table[lama] = {};
-    table[lama][jenis] = it.price;
-    jenisSet.add(jenis);
-    lamaSet.add(lama);
-  }
-
-  // Tambahkan pilihan standar ke daftar Jenis Sewa secara eksplisit
-  jenisSet.add("PS5");
-  jenisSet.add("PS5 + TV");
-  jenisSet.add("Hanya Ongkir");
-
-  // Pastikan durasi standar tersedia
-  lamaSet.add("12 JAM");
-  lamaSet.add("24 JAM");
-  lamaSet.add("1 HARI");
-
-  // Setup default / requested pricing
-  if (!table["12 JAM"]) table["12 JAM"] = {};
-  table["12 JAM"]["PS5"] = table["12 JAM"]["PS5"] || 140000;
-  table["12 JAM"]["PS5 + TV"] = table["12 JAM"]["PS5 + TV"] || 160000;
-
-  if (!table["24 JAM"]) table["24 JAM"] = {};
-  table["24 JAM"]["PS5"] = table["24 JAM"]["PS5"] || 250000;
-  table["24 JAM"]["PS5 + TV"] = table["24 JAM"]["PS5 + TV"] || 280000;
-
-  if (!table["1 HARI"]) table["1 HARI"] = {};
-  table["1 HARI"]["PS5"] = table["1 HARI"]["PS5"] || 250000;
-  table["1 HARI"]["PS5 + TV"] = table["1 HARI"]["PS5 + TV"] || 280000;
-
-  if (!table["2 HARI"]) table["2 HARI"] = {};
-  table["2 HARI"]["PS5"] = table["2 HARI"]["PS5"] || 400000;
-  table["2 HARI"]["PS5 + TV"] = table["2 HARI"]["PS5 + TV"] || 480000;
-
-  if (!table["3 HARI"]) table["3 HARI"] = {};
-  table["3 HARI"]["PS5"] = table["3 HARI"]["PS5"] || 600000;
-  table["3 HARI"]["PS5 + TV"] = table["3 HARI"]["PS5 + TV"] || 720000;
-
-  // Sinkronkan 1 HARI ke 24 JAM
-  Object.entries(table["1 HARI"]).forEach(([k, v]) => {
-    if (!table["24 JAM"][k]) table["24 JAM"][k] = v;
-  });
-  if (table["24 JAM"]) {
-    Object.entries(table["24 JAM"]).forEach(([k, v]) => {
-      if (!table["1 HARI"][k]) table["1 HARI"][k] = v;
-    });
-  }
-
-  const preferredJenisOrder = [
-    "PS3", "PS3 + TV", "PS3 Portable",
-    "PS4", "PS4 + TV", "PS4 Portable",
-    "PS5", "PS5 + TV", "PS5 Portable",
-    "Hanya TV", "Hanya Ongkir"
-  ];
-  const jenisOptions = Array.from(jenisSet).sort((a, b) => {
-    const ia = preferredJenisOrder.indexOf(a);
-    const ib = preferredJenisOrder.indexOf(b);
-    if (ia !== -1 && ib !== -1) return ia - ib;
-    if (ia !== -1) return -1;
-    if (ib !== -1) return 1;
-    return a.localeCompare(b);
-  });
-
-  const preferredLamaOrder = ["12 JAM", "24 JAM", "1 HARI", "2 HARI", "3 HARI"];
-  const lamaOptions = Array.from(lamaSet).sort((a, b) => {
-    const ia = preferredLamaOrder.indexOf(a);
-    const ib = preferredLamaOrder.indexOf(b);
-    if (ia !== -1 && ib !== -1) return ia - ib;
-    if (ia !== -1) return -1;
-    if (ib !== -1) return 1;
-    return a.localeCompare(b);
-  });
-
-  return { table, jenisOptions, lamaOptions };
-}
 
 function getHargaAuto(row: any, table: Record<string, Record<string, number>>) {
   const jenisKey = pickKey(row, ["jenis sewa", "jenissewa", "jenis ps", "jenisps", "jenis", "ps"]);
@@ -183,16 +39,7 @@ function getHargaAuto(row: any, table: Record<string, Record<string, number>>) {
   if (lama === "24 JAM" && table?.["1 HARI"]?.[jenis]) return table["1 HARI"][jenis];
   if (lama === "1 HARI" && table?.["24 JAM"]?.[jenis]) return table["24 JAM"][jenis];
 
-  // Fallbacks harga PS5 sesuai request
-  if (jenis === "PS5" && lama === "12 JAM") return 140000;
-  if (jenis === "PS5 + TV" && lama === "12 JAM") return 160000;
-  if (jenis === "PS5" && (lama === "24 JAM" || lama === "1 HARI")) return 250000;
-  if (jenis === "PS5 + TV" && (lama === "24 JAM" || lama === "1 HARI")) return 280000;
-  if (jenis === "PS5" && lama === "2 HARI") return 400000;
-  if (jenis === "PS5 + TV" && lama === "2 HARI") return 480000;
-  if (jenis === "PS5" && lama === "3 HARI") return 600000;
-  if (jenis === "PS5 + TV" && lama === "3 HARI") return 720000;
-
+  // Tidak ada harga cadangan di sini: semua harga berasal dari Edit Rincian (lib/priceLists).
   return 0;
 }
 
@@ -212,7 +59,7 @@ const RincianSewa: React.FC<{
   isMobileTable?: boolean;
 }> = ({ rows, setRows, blank, hargaItems, userEmail, isMobileTable }) => {
   const { table, jenisOptions, lamaOptions } = React.useMemo(
-    () => buildSewaTableFromHarga(hargaItems),
+    () => buildSewaTable(hargaItems),
     [hargaItems]
   );
 

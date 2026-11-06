@@ -85,6 +85,11 @@ const DEFAULT_PRODUCTS: Omit<Product, "id">[] = [
 
 import { calculatePOSDiscount, PromosConfig, DEFAULT_PROMOS_CONFIG } from "../utils/promoDiscount";
 
+const toPrinterAscii = (t: string) =>
+  String(t ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7E\n]/g, "");
+
+const STORE_ADDRESS_LINES = ["Jl. Purnawirawan Raya No.114, Gn. Terang", "Langkapura, Bandar Lampung"];
+
 function buildEscPosBytes(
   cart: CartItem[],
   buyerName: string,
@@ -95,7 +100,9 @@ function buildEscPosBytes(
   adminName: string,
   paymentMethod: string
 ): Uint8Array {
-  const encoder = new TextEncoder();
+  // Printer thermal hanya paham ASCII: nama game ber-aksen/emoji dulu tercetak sebagai karakter acak.
+  const utf8 = new TextEncoder();
+  const encoder = { encode: (t: string) => utf8.encode(toPrinterAscii(t)) };
   const init = [0x1b, 0x40]; // ESC @
   const center = [0x1b, 0x61, 0x01]; // ESC a 1
   const left = [0x1b, 0x61, 0x00]; // ESC a 0
@@ -114,8 +121,9 @@ function buildEscPosBytes(
   commands.push(...center, ...doubleOn, ...boldOn);
   commands = commands.concat(Array.from(encoder.encode("URBAN GAMING\n")));
   commands.push(...doubleOff, ...boldOff);
-  commands = commands.concat(Array.from(encoder.encode("Jl. Imam Bonjol No.58, Segala Mider\n")));
-  commands = commands.concat(Array.from(encoder.encode("Tj. Karang Barat, Bandar Lampung\n")));
+  STORE_ADDRESS_LINES.forEach((line) => {
+    commands = commands.concat(Array.from(encoder.encode(`${line}\n`)));
+  });
   commands = commands.concat(Array.from(encoder.encode("================================================\n"))); // 48 chars for 80mm
   
   const dateStr = new Date().toLocaleString("id-ID", {
@@ -378,6 +386,22 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     return calculatePOSDiscount(cart, promosConfig);
   }, [cart, promosConfig]);
 
+  // Sinkronkan harga/nama item keranjang dengan katalog terbaru (realtime)
+  useEffect(() => {
+    setCart((prev) => {
+      let changed = false;
+      const next = prev.map((item) => {
+        const src = (item.category === "ISI GAME" ? games : products).find((p) => p.id === item.id);
+        if (src && (src.price !== item.price || src.name !== item.name)) {
+          changed = true;
+          return { ...item, price: src.price, name: src.name };
+        }
+        return item;
+      });
+      return changed ? next : prev;
+    });
+  }, [products, games]);
+
   // Cart operations
   const addToCart = (product: Product) => {
     setCart((prev) => {
@@ -563,7 +587,13 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   const handleInitializeDefaults = async () => {
     if (!window.confirm("Apakah Anda ingin memuat produk bawaan awal ke database?")) return;
     try {
-      for (const p of DEFAULT_PRODUCTS) {
+      const existing = new Set(products.map((x) => String(x.name || "").trim().toLowerCase()));
+      const toAdd = DEFAULT_PRODUCTS.filter((p) => !existing.has(String(p.name || "").trim().toLowerCase()));
+      if (toAdd.length === 0) {
+        alert("Semua produk bawaan sudah ada di database.");
+        return;
+      }
+      for (const p of toAdd) {
         await addDoc(collection(db, "products"), {
           ...p,
           createdAt: serverTimestamp()
@@ -589,9 +619,16 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       return;
     }
 
-    // Generate PDF
-    const itemHeight = 8;
-    const pageHeight = 75 + cart.length * itemHeight + (discountAmount > 0 ? 30 : 20);
+    // Generate PDF — hitung tinggi kertas dari jumlah baris nama item (nama panjang dibungkus)
+    const measure = new jsPDF({ unit: "mm", format: [80, 200] });
+    measure.setFont("courier", "bold");
+    measure.setFontSize(8);
+    const itemNameLines = cart.map((item) => {
+      const displayName = item.category === "ISI GAME" && item.platform ? `${item.name} (${item.platform})` : item.name;
+      return measure.splitTextToSize(displayName, 70) as string[];
+    });
+    const itemsHeight = itemNameLines.reduce((sum, lines) => sum + lines.length * 4 + 6, 0);
+    const pageHeight = 75 + itemsHeight + (discountAmount > 0 ? 30 : 20);
     const docPdf = new jsPDF({ unit: "mm", format: [80, pageHeight] });
 
     docPdf.setFont("courier", "bold");
@@ -600,8 +637,8 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
     docPdf.setFont("courier", "normal");
     docPdf.setFontSize(8);
-    docPdf.text("Jl. Imam Bonjol No.58, Segala Mider", 40, 14, { align: "center" });
-    docPdf.text("Tj. Karang Barat, Bandar Lampung", 40, 18, { align: "center" });
+    docPdf.text(STORE_ADDRESS_LINES[0], 40, 14, { align: "center" });
+    docPdf.text(STORE_ADDRESS_LINES[1], 40, 18, { align: "center" });
     docPdf.text("-".repeat(38), 40, 22, { align: "center" });
 
     const dateStr = new Date().toLocaleString("id-ID", {
@@ -616,11 +653,12 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     docPdf.text("-".repeat(38), 40, 42, { align: "center" });
 
     let y = 46;
-    cart.forEach((item) => {
+    cart.forEach((item, idx) => {
       docPdf.setFont("courier", "bold");
-      const displayName = item.category === "ISI GAME" && item.platform ? `${item.name} (${item.platform})` : item.name;
-      docPdf.text(displayName, 5, y);
-      y += 4;
+      itemNameLines[idx].forEach((line) => {
+        docPdf.text(line, 5, y);
+        y += 4;
+      });
       docPdf.setFont("courier", "normal");
       docPdf.text(`  ${item.quantity} x Rp ${item.price.toLocaleString("id-ID")}`, 5, y);
       const itemSub = item.price * item.quantity;
@@ -655,7 +693,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
     docPdf.text("Terima Kasih Atas Kunjungan Anda!", 40, y, { align: "center" });
 
-    docPdf.save(`Struk_URBAN_${buyerName.trim().replace(/\s+/g, "_")}_${Date.now()}.pdf`);
+    docPdf.save(`Struk_URBAN_${buyerName.trim().replace(/[^a-zA-Z0-9]+/g, "_")}_${Date.now()}.pdf`);
     
     // Close overlay
     setBuyerName("");
@@ -666,7 +704,9 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   const handlePrintDirect = async () => {
     if (cart.length === 0) return;
     
-    const finalBuyerName = window.prompt("Nama Pembeli / Pelanggan:", "Pelanggan") || "Pelanggan";
+    const promptName = window.prompt("Nama Pembeli / Pelanggan:", "Pelanggan");
+    if (promptName === null) return; // user menekan Batal
+    const finalBuyerName = promptName.trim() || "Pelanggan";
     const bytes = buildEscPosBytes(cart, finalBuyerName, subtotal, discountPercent, discountAmount, total, adminName, paymentMethod);
     
     // 1. Web Bluetooth API Attempt
@@ -703,8 +743,14 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
           throw new Error("Karakteristik write printer tidak ditemukan.");
         }
       } catch (err: any) {
+        if (err?.name === "NotFoundError" || err?.name === "AbortError") return; // user menutup pemilih printer
         console.warn("Web Bluetooth print failed, attempting RawBT fallback:", err);
       }
+    }
+
+    if (!/android/i.test(navigator.userAgent || "")) {
+      alert("Cetak langsung butuh printer Bluetooth (Chrome) atau aplikasi RawBT di Android. Gunakan Simpan PDF untuk perangkat ini.");
+      return;
     }
 
     // 2. RawBT App Intent Fallback

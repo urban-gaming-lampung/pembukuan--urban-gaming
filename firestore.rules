@@ -106,9 +106,12 @@ service cloud.firestore {
     match /data/settings {
       allow read: if isUrbanStaff();
       allow create: if isUrbanStaff()
+        && (!request.resource.data.keys().hasAny(['rincianVisibility']) || isSalaryAdmin())
         && (!request.resource.data.keys().hasAny(['priceLists', 'priceListsRevision', 'settings'])
           || (isSalaryAdmin() && request.resource.data.priceListsRevision == 1));
       allow update: if isUrbanStaff()
+        // Tampil/sembunyi tabel rincian Usaha Rental hanya oleh owner / super admin
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['rincianVisibility']) || isSalaryAdmin())
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['priceLists', 'priceListsRevision', 'settings'])
           || (isSalaryAdmin()
             && request.resource.data.priceListsRevision == resource.data.get('priceListsRevision', 0) + 1));

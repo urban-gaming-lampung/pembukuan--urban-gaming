@@ -18,6 +18,7 @@ import useStokData from "./useStokData";
 import { PdfExporterHandle } from "../components/PdfExporter";
 import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr, isLogForDate } from "../lib/absenPeriod";
 import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
+import { buildSewaTable, getSewaPrice, effectiveSewaPrices, effectiveJasaPrices, cleanPriceList, isValidSewaLabel } from "../lib/priceLists";
 
 type ImageQuality = "Tinggi" | "Hemat";
 type Price = { label: string; price: number };
@@ -876,38 +877,36 @@ export default function useAppController() {
 
   const [openEditRincian, setOpenEditRincian] = useState<PriceListKey | null>(null);
 
+  // Edit Rincian menampilkan daftar yang SAMA PERSIS dengan yang dipakai tabel.
   const getPrices = (key: PriceListKey): Price[] => {
     if (key === "harian") return hargaHarian;
     if (key === "jajanan") return hargaJajanan;
-    if (key === "jasaAks") return hargaJasaAks;
-    return hargaSewa;
+    if (key === "jasaAks") return effectiveJasaPrices(hargaJasaAks);
+    return effectiveSewaPrices(hargaSewa);
   };
 
+  // ===== Tampil / sembunyikan tabel rincian di Usaha Rental (diatur super admin) =====
+  const DEFAULT_RINCIAN_VISIBILITY = { harian: true, jajanan: true, jasaAks: true, sewa: true, pengeluaran: true, setoran: true };
+  type RincianKey = keyof typeof DEFAULT_RINCIAN_VISIBILITY;
+  const [rincianVisibility, setRincianVisibility] = useState<Record<RincianKey, boolean>>(DEFAULT_RINCIAN_VISIBILITY);
+  const handleUpdateRincianVisibility = async (key: RincianKey, visible: boolean) => {
+    if (!isSuperAdminOrOwner) { alert("Hanya super admin yang dapat mengatur tabel rincian."); return; }
+    const next = { ...rincianVisibility, [key]: visible };
+    setRincianVisibility(next);
+    try {
+      await setDoc(doc(db, "data", "settings"), { rincianVisibility: next }, { merge: true });
+    } catch (e: any) {
+      setRincianVisibility(rincianVisibility);
+      alert("Gagal menyimpan pengaturan tabel: " + (e?.message || e));
+    }
+  };
+
+  // Harga sewa dari SUMBER TUNGGAL yang sama dengan tabel (lib/priceLists).
+  const sewaPriceTable = useMemo(() => buildSewaTable(hargaSewa), [hargaSewa]);
   const getHargaSewa = (r: RowSewa): number => {
     if (!r.jenisPS) return 0;
     if (r.jenisPS === "Hanya Ongkir") return toNum(r._ongkir);
-    if (!r.lamaSewa) return 0;
-    const s1 = r.jenisPS.toLowerCase().replace(/\s+/g, "");
-    const s2 = r.lamaSewa.toLowerCase().replace(/\s+/g, "");
-    const item = hargaSewa.find(x => {
-        const lbl = x.label.toLowerCase().replace(/\s+/g, "");
-        const matchJenis = lbl.includes(s1);
-        const matchLama = lbl.includes(s2) || (s2.includes("24jam") && lbl.includes("1hari")) || (s2.includes("1hari") && lbl.includes("24jam"));
-        return matchJenis && matchLama;
-    });
-    if (item) return item.price;
-
-    // Fallbacks untuk PS5 sesuai request
-    if (s1 === "ps5" && s2.includes("12jam")) return 140000;
-    if (s1.includes("ps5") && s1.includes("tv") && s2.includes("12jam")) return 160000;
-    if (s1 === "ps5" && (s2.includes("24jam") || s2.includes("1hari"))) return 250000;
-    if (s1.includes("ps5") && s1.includes("tv") && (s2.includes("24jam") || s2.includes("1hari"))) return 280000;
-    if (s1 === "ps5" && s2.includes("2hari")) return 400000;
-    if (s1.includes("ps5") && s1.includes("tv") && s2.includes("2hari")) return 480000;
-    if (s1 === "ps5" && s2.includes("3hari")) return 600000;
-    if (s1.includes("ps5") && s1.includes("tv") && s2.includes("3hari")) return 720000;
-
-    return 0;
+    return getSewaPrice(sewaPriceTable, r.jenisPS, r.lamaSewa);
   };
 
   const getTitle = (key: PriceListKey | null) => {
@@ -944,7 +943,22 @@ export default function useAppController() {
 
   const handleSavePrices = async (key: PriceListKey, next: Price[], baseline: Price[]) => {
     const field = priceFields[key];
-    await persistPrices({ [field]: next }, { hargaHarian, hargaJajanan, hargaJasaAks, hargaSewa, [field]: baseline });
+    const cleaned = cleanPriceList(next);
+    // Label kembar membuat salah satu harga tidak pernah terpakai di tabel
+    const seen = new Set<string>();
+    const dupes = cleaned.filter((x) => { const k = x.label.toLowerCase(); if (seen.has(k)) return true; seen.add(k); return false; });
+    if (dupes.length) throw new Error(`Ada nama item kembar: ${dupes.map((d) => d.label).join(", ")}. Hapus salah satunya.`);
+    if (key === "sewa") {
+      const invalid = cleaned.filter((x) => !isValidSewaLabel(x.label));
+      if (invalid.length) {
+        throw new Error(`Nama item sewa harus memuat jenis unit & lama sewa (contoh: "PS4 12 Jam", "PS4+TV 2 Hari", "Hanya TV 1 Hari"). Tidak terbaca: ${invalid.map((d) => d.label).join(", ")}`);
+      }
+    }
+    // Editor dibuka dengan daftar "efektif" (sama dengan tabel); bandingkan dengan data mentah tersimpan.
+    const raw = { hargaHarian, hargaJajanan, hargaJasaAks, hargaSewa }[field];
+    const effective = key === "sewa" ? effectiveSewaPrices(raw) : key === "jasaAks" ? effectiveJasaPrices(raw) : raw;
+    const expectedRaw = JSON.stringify(baseline) === JSON.stringify(effective) ? raw : baseline;
+    await persistPrices({ [field]: cleaned }, { hargaHarian, hargaJajanan, hargaJasaAks, hargaSewa, [field]: expectedRaw });
     setOpenEditRincian(null);
   };
 
@@ -1973,6 +1987,7 @@ export default function useAppController() {
         if (data.absenConfig) {
            setAbsenConfig(data.absenConfig);
         }
+        setRincianVisibility({ ...DEFAULT_RINCIAN_VISIBILITY, ...(data.rincianVisibility || {}) });
       }
     }, (err) => console.error(err));
 
@@ -2556,6 +2571,8 @@ export default function useAppController() {
     openEditRincian,
     setOpenEditRincian,
     getPrices,
+    rincianVisibility,
+    handleUpdateRincianVisibility,
     getHargaSewa,
     getTitle,
     handleSavePrices,

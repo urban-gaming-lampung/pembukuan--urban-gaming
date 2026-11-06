@@ -3,15 +3,18 @@ import TableEditor from "./TableEditor";
 import { RowJasaAks } from "../lib/types";
 import { toInt } from "../lib/format";
 import { ChevronDown } from "lucide-react";
-
-const TIPE_OPTIONS = ["Isi Game", "Stik & Aksesoris", "Upgrade HEN", "Aksesoris"];
+import { effectiveJasaPrices } from "../lib/priceLists";
+import type { Price } from "../constants/prices";
 
 const RincianJasaAksesoris: React.FC<{
   rows: RowJasaAks[];
   setRows: React.Dispatch<React.SetStateAction<RowJasaAks[]>>;
   blank: RowJasaAks;
   isMobileTable?: boolean;
-}> = ({ rows, setRows, blank, isMobileTable }) => {
+  hargaItems?: Price[];
+}> = ({ rows, setRows, blank, isMobileTable, hargaItems }) => {
+  // Pilihan "Tipe" = daftar di Pengaturan > Edit Rincian > Jasa & Aksesoris (sumber tunggal)
+  const items = React.useMemo(() => effectiveJasaPrices(hargaItems), [hargaItems]);
   return (
     <TableEditor<RowJasaAks>
       title="3. Rincian Pemasukan Jasa & Aksesoris"
@@ -33,14 +36,24 @@ const RincianJasaAksesoris: React.FC<{
                 className={`${inputBase} appearance-none pr-8 cursor-pointer`}
                 value={String(value || "")}
                 onKeyDown={onKeyNav}
-                onChange={(e) => updateRow(rowIndex, { tipe: e.target.value } as any)}
+                onChange={(e) => {
+                  const tipe = e.target.value;
+                  const item = items.find((it) => it.label === tipe);
+                  // Harga otomatis dari Edit Rincian bila harga di baris masih kosong (tetap bisa diubah)
+                  const patch: any = { tipe };
+                  if (item && item.price > 0 && !harga) patch.harga = item.price;
+                  updateRow(rowIndex, patch);
+                }}
               >
                 <option value="">Pilih tipe...</option>
-                {TIPE_OPTIONS.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
+                {items.map((it) => (
+                  <option key={it.label} value={it.label}>
+                    {it.price > 0 ? `${it.label} — Rp ${it.price.toLocaleString("id-ID")}` : it.label}
                   </option>
                 ))}
+                {value && !items.some((it) => it.label === value) && (
+                  <option value={String(value)}>{String(value)}</option>
+                )}
               </select>
               <ChevronDown className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400 pointer-events-none opacity-60" />
             </div>
