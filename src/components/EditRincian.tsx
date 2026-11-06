@@ -44,6 +44,8 @@ interface EditRincianProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (items: PriceItem[], baseline: PriceItem[]) => void | Promise<void>;
+  /** Keterangan kecil di bawah nama item (mis. cara item dibaca tabel). */
+  getItemHint?: (label: string) => string | null;
   title: string;
   initialData: PriceItem[];
   onResetDefault?: () => void;
@@ -53,6 +55,7 @@ const EditRincian: React.FC<EditRincianProps> = ({
   isOpen,
   onClose,
   onSave,
+  getItemHint,
   title,
   initialData,
   onResetDefault,
@@ -231,15 +234,20 @@ const EditRincian: React.FC<EditRincianProps> = ({
                         </div>
 
                         {/* Input Label */}
-                        <input
-                          type="text"
-                          value={item.label}
-                          onChange={(e) =>
-                            handleChange(realIndex, "label", e.target.value)
-                          }
-                          placeholder="Nama Item"
-                          className="flex-1 bg-transparent text-[17px] text-black dark:text-white placeholder:text-gray-400 focus:outline-none"
-                        />
+                        <div className="flex-1 min-w-0 flex flex-col">
+                          <input
+                            type="text"
+                            value={item.label}
+                            onChange={(e) =>
+                              handleChange(realIndex, "label", e.target.value)
+                            }
+                            placeholder="Nama Item"
+                            className="w-full bg-transparent text-[17px] text-black dark:text-white placeholder:text-gray-400 focus:outline-none"
+                          />
+                          {getItemHint && item.label.trim() && getItemHint(item.label) && (
+                            <span className="text-[11px] text-blue-500 dark:text-blue-400 truncate">{getItemHint(item.label)}</span>
+                          )}
+                        </div>
 
                         {/* Input Price */}
                         <div className="flex items-center">

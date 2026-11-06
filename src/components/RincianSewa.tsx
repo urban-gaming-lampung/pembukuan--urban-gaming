@@ -99,6 +99,9 @@ const RincianSewa: React.FC<{
         const jenisKey = pickKey(row, ["jenis sewa", "jenissewa", "jenis ps", "jenisps", "jenis", "ps"]);
         const lamaKey = pickKey(row, ["lama sewa", "lamasewa", "lama", "durasi", "waktu"]);
         const isHanyaOngkir = String(jenisKey ? (row as any)[jenisKey] : "") === "Hanya Ongkir";
+        // Item tambahan (harga tetap, tanpa durasi) dari Edit Rincian, mis. "Tambah Sewa Stik PS4"
+        const isAddon = !!table["-"]?.[String(jenisKey ? (row as any)[jenisKey] : "")];
+        const isNoDuration = isHanyaOngkir || isAddon;
 
         if (jenisKey && keyName === jenisKey) {
           return (
@@ -111,7 +114,16 @@ const RincianSewa: React.FC<{
                 onChange={(e) => {
                   const nextJenis = e.target.value;
                   const patch: any = { [jenisKey]: nextJenis };
-                  if (nextJenis === "Hanya Ongkir") {
+                  const nextAddonPrice = table["-"]?.[nextJenis];
+                  if (typeof nextAddonPrice === "number") {
+                    patch.lamaSewa = "-";
+                    patch.jamMasukSewa = "-";
+                    patch.isOngkir = "TIDAK";
+                    patch._ongkir = "";
+                    patch._bayarOngkir = "";
+                    if ((row as any).jenisPS === "Hanya Ongkir") { patch.ket = ""; patch.isPaid = ""; }
+                    patch.harga = (row as any).isPaid === "TIDAK" ? 0 : nextAddonPrice;
+                  } else if (nextJenis === "Hanya Ongkir") {
                     patch.lamaSewa = "-";
                     patch.jamMasukSewa = "-";
                     patch.ket = "Hanya Ongkir";
@@ -128,6 +140,11 @@ const RincianSewa: React.FC<{
                     patch._bayarOngkir = "";
                     patch.harga = 0;
                   } else {
+                    if (isAddon) {
+                      // keluar dari item tambahan: kosongkan lama & jam supaya wajib diisi lagi
+                      patch.lamaSewa = "";
+                      patch.jamMasukSewa = "";
+                    }
                     const nextRow = { ...(row as any), ...patch };
                     const base = getHargaAuto(nextRow, table);
                     const isCustom = nextRow.lamaSewa === "Isi Sendiri";
@@ -164,7 +181,7 @@ const RincianSewa: React.FC<{
         }
 
         if (lamaKey && keyName === lamaKey) {
-          if (isHanyaOngkir) {
+          if (isNoDuration) {
             return (
               <div className="min-w-[100px]">
                 <input
@@ -253,7 +270,7 @@ const RincianSewa: React.FC<{
         }
 
         if (keyName === "jamMasukSewa") {
-          if (isHanyaOngkir) {
+          if (isNoDuration) {
             return (
               <div className="min-w-[110px]">
                 <input
@@ -365,6 +382,18 @@ const RincianSewa: React.FC<{
         }
 
         if (keyName === "isOngkir") {
+          if (isAddon) {
+            return (
+              <div className="min-w-[120px]">
+                <input
+                  disabled
+                  className={`${inputBase} bg-zinc-100 dark:bg-black/40 text-zinc-400 cursor-not-allowed border-dashed text-center font-bold`}
+                  value="-"
+                  readOnly
+                />
+              </div>
+            );
+          }
           return (
             <div className="flex flex-wrap items-center gap-2 min-w-[120px]">
               <div className="flex items-center gap-1 bg-zinc-100/50 dark:bg-zinc-800/50 p-1 rounded-lg shrink-0">

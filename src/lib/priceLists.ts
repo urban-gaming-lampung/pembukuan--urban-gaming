@@ -36,8 +36,22 @@ export function sewaLamaFromLabel(label: string): string | null {
   return null;
 }
 
-/** Label sewa valid = tabel bisa membaca jenis & lama sewanya. */
+/** Label sewa unit = tabel bisa membaca jenis & lama sewanya (mis. "PS4 12 Jam"). */
 export const isValidSewaLabel = (label: string) => !!(sewaJenisFromLabel(label) && sewaLamaFromLabel(label));
+
+/**
+ * Item sewa TANPA durasi (mis. "Tambah Sewa Stik PS4") = ITEM TAMBAHAN berharga tetap.
+ * Di tabel dipilih lewat "Jenis Sewa", lama & jam sewa otomatis "-", dan tidak dihitung
+ * sebagai unit yang jalan di monitoring.
+ */
+export const ADDON_LAMA = "-";
+export const isSewaAddonLabel = (label: string) => !isValidSewaLabel(label);
+
+/** Keterangan di Edit Rincian: bagaimana tabel Sewa membaca item ini. */
+export const sewaItemHint = (label: string): string | null => {
+  if (isValidSewaLabel(label)) return `Unit ${sewaJenisFromLabel(label)} · ${sewaLamaFromLabel(label)}`;
+  return "Item tambahan (harga tetap, tanpa durasi)";
+};
 
 /**
  * Daftar harga Sewa yang dipakai tabel = data tersimpan, ditambah default HANYA untuk jenis
@@ -47,7 +61,9 @@ export const isValidSewaLabel = (label: string) => !!(sewaJenisFromLabel(label) 
 export function effectiveSewaPrices(items?: Price[] | null): Price[] {
   const cleaned = cleanPriceList(items);
   if (cleaned.length === 0) return cleanPriceList(DEFAULT_HARGA_SEWA);
-  const jenisAda = new Set(cleaned.map((i) => sewaJenisFromLabel(i.label)).filter(Boolean) as string[]);
+  // Hanya item unit (jenis + lama) yang dihitung; item tambahan seperti "Tambah Stik PS5" tidak
+  // boleh membuat default PS5 dianggap sudah ada.
+  const jenisAda = new Set(cleaned.filter((i) => isValidSewaLabel(i.label)).map((i) => sewaJenisFromLabel(i.label)) as string[]);
   const extra = cleanPriceList(DEFAULT_HARGA_SEWA).filter((d) => {
     const j = sewaJenisFromLabel(d.label);
     return !!j && !jenisAda.has(j);
@@ -84,7 +100,12 @@ export function buildSewaTable(items?: Price[] | null): SewaTable {
   for (const it of effectiveSewaPrices(items)) {
     const jenis = sewaJenisFromLabel(it.label);
     const lama = sewaLamaFromLabel(it.label);
-    if (!jenis || !lama) continue;
+    if (!jenis || !lama) {
+      // Item tambahan: harga tetap, pilihannya = nama item itu sendiri
+      (table[ADDON_LAMA] ||= {})[it.label] = it.price;
+      jenisSet.add(it.label);
+      continue;
+    }
     (table[lama] ||= {})[jenis] = it.price;
     jenisSet.add(jenis);
     lamaSet.add(lama);

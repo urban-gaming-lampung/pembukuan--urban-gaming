@@ -7,10 +7,10 @@ import Section from "./common/Section";
 import { buildSewaTable, getSewaPrice } from "../lib/priceLists";
 import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
 
-// Baris "Hanya Ongkir" = pemasukan jasa antar saja, TIDAK ada unit yang keluar.
-// Jadi tidak boleh muncul sebagai BILING / unit jalan di monitoring.
+// Baris "Hanya Ongkir" atau ITEM TAMBAHAN (lama sewa "-", mis. "Tambah Sewa Stik PS4") =
+// pemasukan tanpa unit yang keluar. Tidak boleh muncul sebagai BILING / unit jalan.
 const isHanyaOngkirRow = (r: any): boolean =>
-  String(r?.jenisPS ?? "").trim().toLowerCase() === "hanya ongkir";
+  String(r?.jenisPS ?? "").trim().toLowerCase() === "hanya ongkir" || String(r?.lamaSewa ?? "").trim() === "-";
 
 type WidgetMonitoringStatusProps = {
   history: HistoryItem[];

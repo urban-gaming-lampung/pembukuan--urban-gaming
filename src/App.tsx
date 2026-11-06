@@ -17,6 +17,7 @@ import Reminder from "./components/Reminder";
 import PdfExporter from "./components/PdfExporter";
 import Pengaturan from "./components/Pengaturan";
 import EditRincian from "./components/EditRincian"; 
+import { sewaItemHint } from "./lib/priceLists";
 import UpdateStok from "./components/UpdateStok"; 
 import PageOwner from "./components/PageOwner";
 import POSModal from "./components/POSModal";
@@ -535,6 +536,7 @@ export default function App() {
             onClose={() => setOpenEditRincian(null)}
             onSave={async (items, baseline) => { if (openEditRincian) await handleSavePrices(openEditRincian, items, baseline); }}
             onResetDefault={() => openEditRincian && handleResetSpecificDefault(openEditRincian)}
+            getItemHint={openEditRincian === "sewa" ? sewaItemHint : undefined}
           />
 
           <input ref={restoreInputRef} type="file" accept="application/json" className="hidden" onChange={(e) => onPickRestoreFile(e.target.files?.[0] ?? null)} />

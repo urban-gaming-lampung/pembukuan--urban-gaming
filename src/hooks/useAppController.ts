@@ -18,7 +18,7 @@ import useStokData from "./useStokData";
 import { PdfExporterHandle } from "../components/PdfExporter";
 import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr, isLogForDate } from "../lib/absenPeriod";
 import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
-import { buildSewaTable, getSewaPrice, effectiveSewaPrices, effectiveJasaPrices, cleanPriceList, isValidSewaLabel } from "../lib/priceLists";
+import { buildSewaTable, getSewaPrice, effectiveSewaPrices, effectiveJasaPrices, cleanPriceList } from "../lib/priceLists";
 
 type ImageQuality = "Tinggi" | "Hemat";
 type Price = { label: string; price: number };
@@ -953,12 +953,6 @@ export default function useAppController() {
     const seen = new Set<string>();
     const dupes = cleaned.filter((x) => { const k = x.label.toLowerCase(); if (seen.has(k)) return true; seen.add(k); return false; });
     if (dupes.length) throw new Error(`Ada nama item kembar: ${dupes.map((d) => d.label).join(", ")}. Hapus salah satunya.`);
-    if (key === "sewa") {
-      const invalid = cleaned.filter((x) => !isValidSewaLabel(x.label));
-      if (invalid.length) {
-        throw new Error(`Nama item sewa harus memuat jenis unit & lama sewa (contoh: "PS4 12 Jam", "PS4+TV 2 Hari", "Hanya TV 1 Hari"). Tidak terbaca: ${invalid.map((d) => d.label).join(", ")}`);
-      }
-    }
     // Editor dibuka dengan daftar "efektif" (sama dengan tabel); bandingkan dengan data mentah tersimpan.
     const raw = { hargaHarian, hargaJajanan, hargaJasaAks, hargaSewa }[field];
     const effective = key === "sewa" ? effectiveSewaPrices(raw) : key === "jasaAks" ? effectiveJasaPrices(raw) : raw;
