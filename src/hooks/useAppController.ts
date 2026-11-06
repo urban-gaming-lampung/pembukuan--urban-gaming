@@ -922,6 +922,8 @@ export default function useAppController() {
   // Write only explicit edits; snapshots and initial defaults never trigger writes.
   const priceDefaults = { hargaHarian: DEFAULT_HARGA_HARIAN, hargaJajanan: DEFAULT_HARGA_JAJANAN, hargaJasaAks: DEFAULT_HARGA_JASA_AKS, hargaSewa: DEFAULT_HARGA_SEWA };
   const priceFields = { harian: "hargaHarian", jajanan: "hargaJajanan", jasaAks: "hargaJasaAks", sewa: "hargaSewa" } as const;
+  const samePriceList = (a: unknown, b: unknown) =>
+    JSON.stringify(cleanPriceList(a as Price[])) === JSON.stringify(cleanPriceList(b as Price[]));
   const persistPrices = async (patch: Partial<Record<keyof typeof priceDefaults, Price[]>>, expected = { hargaHarian, hargaJajanan, hargaJasaAks, hargaSewa }) => {
     if (!user || !isSuperAdminOrOwner) {
       throw new Error("Hanya super admin yang dapat mengubah rincian harga.");
@@ -933,7 +935,10 @@ export default function useAppController() {
       const current = { ...data.settings?.priceLists, ...data.priceLists };
       for (const field of Object.keys(patch) as (keyof typeof priceDefaults)[]) {
         if (!Array.isArray(patch[field])) throw new Error("Format rincian harga tidak valid.");
-        if (JSON.stringify(current[field] ?? priceDefaults[field]) !== JSON.stringify(expected[field])) {
+        // Bandingkan ISI (nama + harga), bukan teks JSON mentah: urutan key / tipe angka dari
+        // Firestore bisa berbeda walau datanya sama, dulu membuat simpan selalu gagal.
+        if (!samePriceList(current[field] ?? priceDefaults[field], expected[field])) {
+          console.warn("[Edit Rincian] konflik", field, { server: current[field], lokal: expected[field] });
           throw new Error("Rincian berubah di perangkat lain. Salin perubahan Anda dan buka ulang Edit Rincian sebelum menyimpan.");
         }
       }
@@ -957,7 +962,7 @@ export default function useAppController() {
     // Editor dibuka dengan daftar "efektif" (sama dengan tabel); bandingkan dengan data mentah tersimpan.
     const raw = { hargaHarian, hargaJajanan, hargaJasaAks, hargaSewa }[field];
     const effective = key === "sewa" ? effectiveSewaPrices(raw) : key === "jasaAks" ? effectiveJasaPrices(raw) : raw;
-    const expectedRaw = JSON.stringify(baseline) === JSON.stringify(effective) ? raw : baseline;
+    const expectedRaw = samePriceList(baseline, effective) ? raw : baseline;
     await persistPrices({ [field]: cleaned }, { hargaHarian, hargaJajanan, hargaJasaAks, hargaSewa, [field]: expectedRaw });
     setOpenEditRincian(null);
   };
