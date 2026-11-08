@@ -14,6 +14,7 @@ import FilterComp from "./Filter";
 import TabPegawai from "./TabPegawai";
 import WidgetMonitoringStatus from "./WidgetMonitoringStatus";
 import RupiahIcon from "./common/RupiahIcon";
+import StokJualanOwner from "./StokJualanOwner";
 import WidgetMonitoringDevice from "./WidgetMonitoringDevice";
 import {
   ResponsiveContainer,
@@ -643,60 +644,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     return combinedIncomeBulanIni.filter(x => x.kategori === selectedIncomeCategory);
   }, [selectedIncomeCategory, combinedIncomeBulanIni]);
 
-  // 2. Data Stok Alert (Menipis <= 5)
-  const lowStockItems = useMemo(() => {
-    const alerts: { kategori: string; item: string; jumlah: number; type: string }[] = [];
-
-    // Cek Rental
-    if (stokState.rental) {
-      Object.entries(stokState.rental).forEach(([kat, items]) => {
-        Object.entries(items as Record<string, StokItemValue>).forEach(([item, val]) => {
-          if (val.jumlah <= 5) {
-            alerts.push({ kategori: kat, item, jumlah: val.jumlah, type: "Rental" });
-          }
-        });
-      });
-    }
-
-    // Cek Jualan
-    if (stokState.jualan) {
-      Object.entries(stokState.jualan).forEach(([kat, items]) => {
-        Object.entries(items as Record<string, StokItemValue>).forEach(([item, val]) => {
-          if (val.jumlah <= 5) {
-            alerts.push({ kategori: kat, item, jumlah: val.jumlah, type: "Surplus" }); // Jualan
-          }
-        });
-      });
-    }
-
-    // Urutkan dari yg paling sedikit
-    return alerts.sort((a, b) => a.jumlah - b.jumlah);
-  }, [stokState]);
-
-  // 3. Persiapan Data Chart Stok Rental & Jualan
-  const rentalChartData = useMemo(() => {
-    const data: { name: string; jumlah: number }[] = [];
-    if (stokState.rental) {
-      Object.entries(stokState.rental).forEach(([kat, items]) => {
-        Object.entries(items as Record<string, StokItemValue>).forEach(([item, val]) => {
-          data.push({ name: item, jumlah: val.jumlah });
-        });
-      });
-    }
-    return data.sort((a, b) => a.jumlah - b.jumlah).slice(0, 15); // Ambil 15 terendah agar chart tidak penuh
-  }, [stokState]);
-
-  const jualanChartData = useMemo(() => {
-    const data: { name: string; jumlah: number }[] = [];
-    if (stokState.jualan) {
-      Object.entries(stokState.jualan).forEach(([kat, items]) => {
-        Object.entries(items as Record<string, StokItemValue>).forEach(([item, val]) => {
-          data.push({ name: item, jumlah: val.jumlah });
-        });
-      });
-    }
-    return data.sort((a, b) => a.jumlah - b.jumlah).slice(0, 15);
-  }, [stokState]);
+  // Stok: lihat komponen StokJualanOwner (khusus stok jualan)
 
   const [masterUnit, setMasterUnit] = useState({ ps3: 0, ps4: 0, ps5: 0, tv: 0, portabel: 0 });
   useEffect(() => {
@@ -2041,76 +1989,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
         </div>
       )}
 
-      {activeTabOwner === "STOK" && (
-        <>
-          {/* ALERT STOK MENIPIS */}
-          {lowStockItems.length > 0 && (
-            <Section title="⚠️ Stok Menipis (Butuh Restock)">
-              <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 rounded-2xl p-4 sm:p-6 overflow-x-auto">
-                <div className="flex flex-col gap-3">
-                  {lowStockItems.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-white dark:bg-[#1c1c1e] border border-red-100 dark:border-red-900/30 rounded-xl shadow-sm">
-                      <div className="flex items-center gap-3">
-                        <AlertCircle className="w-5 h-5 text-red-500" />
-                        <div>
-                          <p className="font-bold text-sm text-zinc-900 dark:text-zinc-100">{item.item}</p>
-                          <p className="text-xs text-zinc-500 dark:text-zinc-400">{item.type} - {item.kategori}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-center bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 font-bold px-3 py-1 rounded-lg">
-                        Sisa {item.jumlah}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </Section>
-          )}
-
-          {/* GRAFIK STOK */}
-          <Section title="Pantauan Stok (Bottom 15)">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] p-5 border border-zinc-200 dark:border-white/10 shadow-sm">
-                <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200 mb-4 tracking-wide uppercase">Stok Rental</h3>
-                <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={rentalChartData} layout="vertical" margin={{ top: 0, right: 0, left: 20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke={isDark ? "#333" : "#f0f0f0"} />
-                      <XAxis type="number" hide />
-                      <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: "#666", fontSize: 10 }} width={90} />
-                      <Tooltip cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }} contentStyle={{ borderRadius: '12px', background: isDark ? '#1C1C1E' : '#fff', border: isDark ? '1px solid #333' : '1px solid #eaeaea', color: isDark ? '#fff' : '#000' }} itemStyle={{ color: isDark ? '#a1a1aa' : '#52525b' }} />
-                      <Bar dataKey="jumlah" radius={[0, 4, 4, 0]} barSize={12}>
-                        {rentalChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={getStokColor(entry.jumlah, isDark)} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              <div className="bg-white dark:bg-[#1c1c1e] rounded-[24px] p-5 border border-zinc-200 dark:border-white/10 shadow-sm">
-                <h3 className="text-sm font-bold text-zinc-800 dark:text-zinc-200 mb-4 tracking-wide uppercase">Stok Usaha</h3>
-                <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={jualanChartData} layout="vertical" margin={{ top: 0, right: 0, left: 20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke={isDark ? "#333" : "#f0f0f0"} />
-                      <XAxis type="number" hide />
-                      <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: "#666", fontSize: 10 }} width={90} />
-                      <Tooltip cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }} contentStyle={{ borderRadius: '12px', background: isDark ? '#1C1C1E' : '#fff', border: isDark ? '1px solid #333' : '1px solid #eaeaea', color: isDark ? '#fff' : '#000' }} itemStyle={{ color: isDark ? '#a1a1aa' : '#52525b' }} />
-                      <Bar dataKey="jumlah" radius={[0, 4, 4, 0]} barSize={12}>
-                        {jualanChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={getStokColor(entry.jumlah, isDark)} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
-          </Section>
-        </>
-      )}
+      {activeTabOwner === "STOK" && <StokJualanOwner />}
 
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* MODAL: RINCIAN PENGELUARAN (Apple HIG Design) */}
