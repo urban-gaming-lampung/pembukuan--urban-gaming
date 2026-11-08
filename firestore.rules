@@ -210,6 +210,15 @@ service cloud.firestore {
     }
 
     // ==========================================
+    // Riwayat Stok Jualan (masuk / terjual / rusak / koreksi)
+    // ==========================================
+    match /stok_log/{logId} {
+      allow read, create: if isUrbanStaff();
+      // Riwayat tidak boleh diubah pegawai; koreksi hanya owner / super admin
+      allow update, delete: if isSalaryAdmin();
+    }
+
+    // ==========================================
     // Aturan Share Screenshots (ProsperoEden) — tidak diubah
     // ==========================================
     match /posts/{postId} {

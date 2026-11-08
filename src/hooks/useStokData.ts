@@ -121,6 +121,10 @@ export type StokItemValue = {
   lastEditDate?: string;
   lastEditDelta?: number;
   lastEditBy?: string;
+  /** waktu update (ms) — lebih andal daripada lastEditDate (teks) */
+  lastEditTs?: number;
+  /** catatan barang, mis. "servis", "di pakai rental 4" */
+  catatan?: string;
 };
 
 export type StokData = {

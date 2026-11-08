@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { INITIAL_STOK_RENTAL, INITIAL_STOK_JUALAN, StokKategori, StokItemValue, StokData, MasterStokCategories } from "../hooks/useStokData";
 import { Package, Activity } from "lucide-react";
+import StokJualanEditor from "./StokJualanEditor";
 
 const INTEGRATED_CATEGORIES = [
   "UPDATE STIK - STIK PS3",
@@ -177,6 +178,8 @@ const MasterInventarisForm = ({
    const [itemName, setItemName] = useState("");
    const [loading, setLoading] = useState(false);
    const [isAdding, setIsAdding] = useState(false);
+   // Daftar chip panjang disembunyikan secara default (memenuhi layar HP)
+   const [showList, setShowList] = useState(false);
 
    // Sync default category if list changes
    React.useEffect(() => {
@@ -216,12 +219,19 @@ const MasterInventarisForm = ({
                    MASTER INVENTARIS {isOwner ? "(OWNER)" : ""}
                 </h3>
                 {isOwner && (
+                   <div className="flex items-center gap-2">
+                   {!isAdding && (
+                      <button type="button" onClick={() => setShowList((v) => !v)} className="text-xs px-3 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-semibold">
+                         {showList ? "Sembunyikan" : `Lihat Daftar (${catList.reduce((n, c) => n + c.items.length, 0)})`}
+                      </button>
+                   )}
                    <button
                       onClick={() => setIsAdding(!isAdding)}
                       className="text-xs px-3 py-1.5 rounded-lg bg-white dark:bg-black text-blue-600 dark:text-blue-400 font-bold border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-all shadow-sm"
                    >
                       {isAdding ? "Batal" : "Tambah Item"}
                    </button>
+                   </div>
                 )}
              </div>
 
@@ -256,7 +266,7 @@ const MasterInventarisForm = ({
                       </button>
                    </div>
                 </div>
-             ) : (
+             ) : showList ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-1 z-10 animate-in fade-in duration-300">
                    {catList.map(c => (
                       <div key={c.kategori} className="bg-zinc-50/50 dark:bg-black/20 p-4 rounded-2xl border border-zinc-200/50 dark:border-white/5 flex flex-col gap-2">
@@ -273,7 +283,7 @@ const MasterInventarisForm = ({
                       </div>
                    ))}
                 </div>
-             )}
+             ) : null}
          </div>
     );
 };
@@ -335,15 +345,7 @@ export default function UpdateStok({ adminName, isOwner, stokState, updateStok, 
             />
          </div>
       ) : (
-         <StokTable
-           title="TABEL UPDATE STOK JUALAN"
-           categories={masterCategories.jualan}
-           type="jualan"
-           colorTheme="lime"
-           data={stokState.jualan}
-           onUpdate={updateStok}
-           adminName={adminName}
-         />
+         <StokJualanEditor categories={masterCategories.jualan} data={stokState.jualan} isOwner={isOwner} />
       )}
     </div>
   );
