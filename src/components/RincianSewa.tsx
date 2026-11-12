@@ -4,9 +4,11 @@ import { db } from "../lib/firebase";
 import TableEditor from "./TableEditor";
 import { RowSewa } from "../lib/types";
 import { toInt } from "../lib/format";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Receipt } from "lucide-react";
 import { buildSewaTable } from "../lib/priceLists";
 import { isUrbanUserDocId } from "../lib/urbanUsers";
+import NotaSewaSheet from "./NotaSewaSheet";
+import { barisSiapNota, BarisSewaNota } from "../lib/notaSewa";
 
 type PriceItem = { label: string; price: number };
 
@@ -57,7 +59,9 @@ const RincianSewa: React.FC<{
   hargaItems?: PriceItem[];
   userEmail?: string | null;
   isMobileTable?: boolean;
-}> = ({ rows, setRows, blank, hargaItems, userEmail, isMobileTable }) => {
+  /** Tanggal pembukuan (YYYY-MM-DD) — untuk jam kembali di nota sewa */
+  tanggal?: string;
+}> = ({ rows, setRows, blank, hargaItems, userEmail, isMobileTable, tanggal = "" }) => {
   const { table, jenisOptions, lamaOptions } = React.useMemo(
     () => buildSewaTable(hargaItems),
     [hargaItems]
@@ -85,7 +89,40 @@ const RincianSewa: React.FC<{
     return () => unsub();
   }, []);
 
+  // ===== Nota sewa per baris (ikon di kolom No.) =====
+  const [notaIdx, setNotaIdx] = useState<number | null>(null);
+  const notaRow = notaIdx !== null ? ((rows[notaIdx] as BarisSewaNota) || null) : null;
+  const hargaDasarOf = (r: any) => getHargaAuto(r, table);
+  const patchNota = (patch: Partial<BarisSewaNota>) => {
+    if (notaIdx === null) return;
+    const target = rows[notaIdx] as any;
+    setRows((prev) =>
+      prev.map((r: any, i) => ((target?._rowId ? r._rowId === target._rowId : i === notaIdx) ? { ...r, ...patch } : r))
+    );
+  };
+  const tombolNota = (row: RowSewa, i: number) => {
+    if (!barisSiapNota(row as BarisSewaNota, hargaDasarOf(row))) return null;
+    const ada = !!(row as any)._noNota;
+    return (
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setNotaIdx(i); }}
+        aria-label={`Nota sewa baris ${i + 1}`}
+        title={ada ? `Nota ${(row as any)._noNota}` : "Buat nota sewa"}
+        className={
+          isMobileTable === false
+            ? "inline-flex items-center justify-center w-8 h-8 rounded-lg bg-sky-50 text-sky-600 hover:bg-sky-100 dark:bg-sky-500/10 dark:text-sky-400 active:scale-90 transition"
+            : "inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-white/25 hover:bg-white/35 text-white text-[11px] font-bold tracking-wide shadow-inner shadow-black/10 active:scale-95 transition"
+        }
+      >
+        <Receipt size={13} strokeWidth={2.4} />
+        {isMobileTable !== false && <span>Nota</span>}
+      </button>
+    );
+  };
+
   return (
+    <>
     <TableEditor<RowSewa>
       title="4. Rincian Pemasukan SEWA PS"
       columns={["No.", "Jenis Sewa", "Lama Sewa", "Jam Sewa", "Nama Penyewa", "Apakah sudah dibayar?", "Harga (Rp)", "Apakah di antar?", "Siapa Yang antar?", "Cash", "Transfer"]}
@@ -635,7 +672,17 @@ const RincianSewa: React.FC<{
         return undefined;
       }}
       isMobileTable={isMobileTable}
+      renderNo={tombolNota}
     />
+    <NotaSewaSheet
+      row={notaRow}
+      hargaDasar={notaRow ? hargaDasarOf(notaRow) : 0}
+      tanggal={tanggal}
+      kasirEmail={userEmail}
+      onPatch={patchNota}
+      onClose={() => setNotaIdx(null)}
+    />
+    </>
   );
 };
 

@@ -16,6 +16,7 @@ import { LS_KEY } from "../constants/storage";
 import { checkCatalogBaselineAndLogUpdates, isVersionLower, SavedCatalogState, startOfDay, endOfDay } from "../lib/catalog";
 import useStokData from "./useStokData";
 import { bukaHalamanStok } from "../lib/stokRental";
+import { isBarisNota, sinkronNotaKePembukuan, totalBaris, useNotaHariKerja } from "../lib/posPembukuan";
 import { PdfExporterHandle } from "../components/PdfExporter";
 import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr, isLogForDate } from "../lib/absenPeriod";
 import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
@@ -923,7 +924,7 @@ export default function useAppController() {
     switch (key) {
       case "harian": return "Pemasukan Harian";
       case "jajanan": return "Jajanan";
-      case "jasaAks": return "Jasa & Aksesoris";
+      case "jasaAks": return "Pemasukan Usaha";
       case "sewa": return "Sewa PS";
       default: return "";
     }
@@ -1013,22 +1014,37 @@ export default function useAppController() {
 
   const totalHarian = useMemo(() => rowsHarian.reduce((s, r) => s + toNum(r.harga), 0), [rowsHarian]);
   const totalJajanan = useMemo(() => rowsJajanan.reduce((s, r) => s + toNum(r.harga), 0), [rowsJajanan]);
-  const totalJasaAks = useMemo(() => rowsJasaAks.reduce((s, r) => s + toNum(r.harga), 0), [rowsJasaAks]);
+  // Rincian Pemasukan Usaha = baris manual (form) + baris jasa dari nota POS hari kerja ini (terkunci)
+  const notaHariKerja = useNotaHariKerja(tanggal);
+  const barisNotaJasa = notaHariKerja.baris;
+  const notaBarangHari = notaHariKerja.barang;
+  const totalNotaJasa = useMemo(() => totalBaris(barisNotaJasa), [barisNotaJasa]);
+  const totalJasaAksManual = useMemo(() => rowsJasaAks.reduce((s, r) => s + toNum(r.harga), 0), [rowsJasaAks]);
+  const totalJasaAks = totalJasaAksManual + totalNotaJasa.total;
+  /** Baris rincian usaha yang disimpan: manual + nota POS (SSOT untuk history, PDF & laporan). */
+  const rowsJasaAksLengkap = useMemo(
+    () => [...rowsJasaAks.filter((r: any) => !isBarisNota(r)), ...barisNotaJasa] as RowJasaAks[],
+    [rowsJasaAks, barisNotaJasa]
+  );
   const totalSewa = useMemo(() => rowsSewa.reduce((s, r) => s + toNum(r.harga), 0), [rowsSewa]);
 
   const normalizeBayar = (v: unknown) => String(v ?? "").trim().toLowerCase();
   const isCash = (v: unknown) => { const s = normalizeBayar(v); return s.includes("cash") || s.includes("tunai"); };
   const isTransfer = (v: unknown) => { const s = normalizeBayar(v); return s.includes("transfer") || s.includes("tf") || s.includes("trx"); };
 
-  const totalCash = useMemo(() => {
+  const totalCashManual = useMemo(() => {
     const allRows = [...rowsHarian, ...rowsJajanan, ...rowsJasaAks, ...rowsSewa] as Array<{ harga?: unknown; bayar?: unknown }>;
     return allRows.reduce((sum, r) => (isCash(r.bayar) ? sum + toNum(r.harga) : sum), 0);
   }, [rowsHarian, rowsJajanan, rowsJasaAks, rowsSewa]);
 
-  const totalTransfer = useMemo(() => {
+  const totalTransferManual = useMemo(() => {
     const allRows = [...rowsHarian, ...rowsJajanan, ...rowsJasaAks, ...rowsSewa] as Array<{ harga?: unknown; bayar?: unknown }>;
     return allRows.reduce((sum, r) => (isTransfer(r.bayar) ? sum + toNum(r.harga) : sum), 0);
   }, [rowsHarian, rowsJajanan, rowsJasaAks, rowsSewa]);
+
+  // Kas harian ikut jasa dari nota POS (barang jualan tidak — langsung disetor ke owner)
+  const totalCash = totalCashManual + totalNotaJasa.cash;
+  const totalTransfer = totalTransferManual + totalNotaJasa.transfer;
 
   const totalPengeluaran = useMemo(() => rowsPengeluaran.reduce((s, r) => s + toNum(r.harga), 0), [rowsPengeluaran]);
   const totalPengeluaranCash = useMemo(() => rowsPengeluaran.reduce((sum, r) => (r.bayar === "Cash" ? sum + toNum(r.harga) : sum), 0), [rowsPengeluaran]);
@@ -1189,13 +1205,13 @@ export default function useAppController() {
 
   const exportData = useMemo(() => ({
     tanggal, hari, absenPagi, absenSiang, catatan,
-    rowsHarian, rowsJajanan, rowsJasaAks, rowsSewa,
+    rowsHarian, rowsJajanan, rowsJasaAks: rowsJasaAksLengkap, rowsSewa,
     totalHarian, totalJajanan, totalJasaAks, totalSewa,
     totalCash, totalTransfer, history,
     rowsSetoran, rowsPengeluaran
   }), [
     tanggal, hari, absenPagi, absenSiang, catatan,
-    rowsHarian, rowsJajanan, rowsJasaAks, rowsSewa,
+    rowsHarian, rowsJajanan, rowsJasaAksLengkap, rowsSewa,
     totalHarian, totalJajanan, totalJasaAks, totalSewa,
     totalCash, totalTransfer, history,
     rowsSetoran, rowsPengeluaran
@@ -1207,11 +1223,12 @@ export default function useAppController() {
       tanggal, hari, catatan,
       rukoBuka, rukoTutup,
       rowsHarian, rowsJajanan, rowsJasaAks, rowsSewa,
-      totalHarian, totalJajanan, totalJasaAks, totalSewa,
-      totalCash, totalTransfer,
+      // Total manual saja: nota POS dibaca realtime oleh tiap HP, jangan sampai memicu tulis draft bersama
+      totalHarian, totalJajanan, totalJasaAks: totalJasaAksManual, totalSewa,
+      totalCash: totalCashManual, totalTransfer: totalTransferManual,
       rowsSetoran, rowsPengeluaran
     });
-  }, [tanggal, hari, rukoBuka, rukoTutup, catatan, rowsHarian, rowsJajanan, rowsJasaAks, rowsSewa, totalHarian, totalJajanan, totalJasaAks, totalSewa, totalCash, totalTransfer, rowsSetoran, rowsPengeluaran]);
+  }, [tanggal, hari, rukoBuka, rukoTutup, catatan, rowsHarian, rowsJajanan, rowsJasaAks, rowsSewa, totalHarian, totalJajanan, totalJasaAksManual, totalSewa, totalCashManual, totalTransferManual, rowsSetoran, rowsPengeluaran]);
 
   useEffect(() => {
     if (isJustSavedOrLoaded.current) {
@@ -1252,7 +1269,7 @@ export default function useAppController() {
 
     if (data.rowsHarian) setRowsHarian(cleanRows(data.rowsHarian, 5));
     if (data.rowsJajanan) setRowsJajanan(cleanRows(data.rowsJajanan, 5));
-    if (data.rowsJasaAks) setRowsJasaAks(cleanRows(data.rowsJasaAks, 5));
+    if (data.rowsJasaAks) setRowsJasaAks(cleanRows(data.rowsJasaAks.filter((r: any) => !isBarisNota(r)), 5));
     if (data.rowsSewa) setRowsSewa(cleanRows(data.rowsSewa, 5));
     if (data.rowsSetoran) setRowsSetoran(cleanRows(data.rowsSetoran, 1));
     if (data.rowsPengeluaran) setRowsPengeluaran(cleanRows(data.rowsPengeluaran, 1));
@@ -1689,7 +1706,7 @@ export default function useAppController() {
       totalHarian, totalJajanan, totalJasaAks, totalSewa, totalCash, totalTransfer,
       rowsHarian: JSON.parse(JSON.stringify(rowsHarian)),
       rowsJajanan: JSON.parse(JSON.stringify(rowsJajanan)),
-      rowsJasaAks: JSON.parse(JSON.stringify(rowsJasaAks)),
+      rowsJasaAks: JSON.parse(JSON.stringify(rowsJasaAksLengkap)),
       rowsSewa: JSON.parse(JSON.stringify(rowsSewa.map(row => {
           if (row.isOngkir === "YA" && toNum((row as any)._ongkir) > 0) {
               const ongkirAmount = toNum((row as any)._ongkir);
@@ -1710,7 +1727,10 @@ export default function useAppController() {
       rowsPengeluaran: JSON.parse(JSON.stringify(rowsPengeluaran)),
     };
 
-    setDoc(doc(db, "history_pembukuan", newItem.id), newItem).catch(console.error);
+    // Sesudah tersimpan, cocokkan lagi baris nota POS (nota yang dibuat tepat saat menyimpan)
+    setDoc(doc(db, "history_pembukuan", newItem.id), newItem)
+      .then(() => sinkronNotaKePembukuan(newItem.tanggal))
+      .catch(console.error);
     logActivity("CREATE", tanggal, hari, newItem);
 
     if (!editingId && shiftPegawai !== "Libur" && user?.email) {
@@ -1846,7 +1866,7 @@ export default function useAppController() {
         totalHarian, totalJajanan, totalJasaAks, totalSewa, totalCash, totalTransfer,
         rowsHarian: JSON.parse(JSON.stringify(rowsHarian)),
         rowsJajanan: JSON.parse(JSON.stringify(rowsJajanan)),
-        rowsJasaAks: JSON.parse(JSON.stringify(rowsJasaAks)),
+        rowsJasaAks: JSON.parse(JSON.stringify(rowsJasaAksLengkap)),
         rowsSewa: JSON.parse(JSON.stringify(rowsSewa.map(row => {
           if (row.isOngkir === "YA" && toNum((row as any)._ongkir) > 0) {
               const ongkirAmount = toNum((row as any)._ongkir);
@@ -1901,7 +1921,9 @@ export default function useAppController() {
       return;
     }
 
-    setDoc(doc(db, "history_pembukuan", editingId), updatedData, { merge: true }).catch(console.error);
+    setDoc(doc(db, "history_pembukuan", editingId), updatedData, { merge: true })
+      .then(() => sinkronNotaKePembukuan(updatedData.tanggal))
+      .catch(console.error);
     logActivity("UPDATE", tanggal, hari, updatedData);
 
     setSavedSignature(currentFormSignature);
@@ -1924,7 +1946,9 @@ export default function useAppController() {
     setCatatan(item.catatan || "");
     setRowsHarian(item.rowsHarian || Array.from({ length: 5 }, () => ({ ...blankHarian })));
     setRowsJajanan(item.rowsJajanan || Array.from({ length: 5 }, () => ({ ...blankJajanan })));
-    setRowsJasaAks(item.rowsJasaAks || Array.from({ length: 5 }, () => ({ ...blankJasaAks })));
+    // Baris nota POS tidak diedit di form: dibaca ulang realtime dari pos_transaksi
+    const jasaManual = (item.rowsJasaAks || []).filter((r: any) => !isBarisNota(r));
+    setRowsJasaAks(jasaManual.length ? jasaManual : Array.from({ length: 5 }, () => ({ ...blankJasaAks })));
     setRowsSewa(item.rowsSewa || Array.from({ length: 5 }, () => newBlankSewa()));
 
     const setoranData = (item.rowsSetoran || [{ ket: "", harga: "", bayar: "" }]).map((r: any) => ({
@@ -2600,6 +2624,8 @@ export default function useAppController() {
     setRowsJajanan,
     rowsJasaAks,
     setRowsJasaAks,
+    barisNotaJasa,
+    notaBarangHari,
     rowsSewa,
     setRowsSewa,
     rowsSetoran,

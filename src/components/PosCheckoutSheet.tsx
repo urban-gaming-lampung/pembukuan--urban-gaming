@@ -5,7 +5,7 @@ import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { commitPosSale, infoNego, isBonus, Kondisi, negoSatuan, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, StokRef } from "../lib/posSales";
 import { UploadTransferProof } from "./TableEditor";
-import { buildNotaPdf, fmtTanggalNota, GARANSI_JUDUL, GARANSI_TEKS, notaFileName, preloadNotaAssets, printNotaThermal, STORE } from "../lib/posReceipt";
+import { belumDibayar, buildNotaPdf, fmtTanggalNota, isNotaSewa, judulNota, kotakSyarat, labelPembeli, notaFileName, preloadNotaAssets, printNotaThermal, STORE, teksPembayaran, teksPenutup, teksStatusBayar } from "../lib/posReceipt";
 
 export type CheckoutLine = {
   id: string;
@@ -46,15 +46,16 @@ export const NotaPreview: React.FC<{ sale: PosSale }> = ({ sale: s }) => {
       <p className="mt-0.5 text-[10px] font-bold text-center">WA {STORE.wa} &nbsp;|&nbsp; IG {STORE.ig}</p>
       <div className="h-[2px] bg-black my-3" />
       <div className="text-center leading-tight">
-        <div className="text-[13px] font-black tracking-[0.12em]">NOTA PENJUALAN</div>
+        <div className="text-[13px] font-black tracking-[0.12em]">{judulNota(s)}</div>
         <div className="text-[11px] font-bold font-mono mt-0.5">{s.noNota}</div>
       </div>
       <div className="mt-2.5 space-y-0.5 text-[11px]">
         <Row l="Tanggal" r={fmtTanggalNota(s.ts)} />
-        <Row l="Kasir" r={s.kasirNama || s.kasir.split("@")[0]} />
-        <Row l="Pembeli" r={s.pembeli || "Pelanggan"} />
-        {s.pembeliWa && <Row l="WA Pembeli" r={s.pembeliWa} />}
-        <Row l="Pembayaran" r={s.metode === "TRANSFER" ? "Transfer / QRIS" : "Tunai"} />
+        <Row l={isNotaSewa(s) ? "Admin" : "Kasir"} r={s.kasirNama || s.kasir.split("@")[0]} />
+        <Row l={labelPembeli(s)} r={s.pembeli || "Pelanggan"} />
+        {s.pembeliWa && <Row l={`WA ${labelPembeli(s)}`} r={s.pembeliWa} />}
+        {(s.infoNota || []).map((x) => <Row key={x.l} l={x.l} r={x.r} />)}
+        <Row l="Pembayaran" r={teksPembayaran(s)} />
       </div>
       <div className="border-t border-dashed border-zinc-400 my-2.5" />
       <div className="space-y-2">
@@ -94,8 +95,8 @@ export const NotaPreview: React.FC<{ sale: PosSale }> = ({ sale: s }) => {
         <span className="text-[12px] font-black tracking-wider">TOTAL</span>
         <span className="text-[15px] font-black font-mono">{rp(s.total)}</span>
       </div>
-      <div className="text-center text-[10.5px] font-bold mt-2 tracking-wide">
-        LUNAS · {s.metode === "TRANSFER" ? "TRANSFER / QRIS" : "TUNAI"}
+      <div className={`text-center text-[10.5px] font-bold mt-2 tracking-wide ${belumDibayar(s) ? "text-red-600" : ""}`}>
+        {teksStatusBayar(s).replace(" - ", " · ")}
       </div>
       {ng.ada && (
         <div className="mt-2.5 rounded-md border border-dashed border-zinc-500 px-2.5 py-1.5 text-center text-[10px] leading-snug text-zinc-700">
@@ -103,11 +104,13 @@ export const NotaPreview: React.FC<{ sale: PosSale }> = ({ sale: s }) => {
         </div>
       )}
       <div className="mt-3 rounded-md border-[1.5px] border-black px-3 py-2 text-center">
-        <div className="text-[11px] font-black tracking-wide">{GARANSI_JUDUL}</div>
-        <div className="text-[10px] leading-snug text-zinc-700 mt-0.5">{GARANSI_TEKS}</div>
+        <div className="text-[11px] font-black tracking-wide">{kotakSyarat(s).judul}</div>
+        {kotakSyarat(s).isi.map((t, i) => (
+          <div key={i} className="text-[10px] leading-snug text-zinc-700 mt-0.5">{t}</div>
+        ))}
       </div>
       <div className="text-center mt-3.5">
-        <div className="text-[12px] font-black">Terima kasih telah berbelanja!</div>
+        <div className="text-[12px] font-black">{teksPenutup(s)}</div>
         <div className="text-[10px] text-zinc-600 mt-0.5">Instagram {STORE.ig}</div>
         <div className="text-[10px] text-zinc-600">WhatsApp {STORE.wa}</div>
         <div className="flex justify-center gap-[5px] mt-2" aria-hidden>
@@ -189,16 +192,20 @@ export function useNotaActions(sale: PosSale | null) {
   };
   const kirimWa = async () => {
     if (!sale?.pembeliWa) return;
+    const sewa = isNotaSewa(sale);
     const pesan = (link: string) => [
-      `Halo ${sale.pembeli || "Kak"}, terima kasih sudah berbelanja di *${STORE.nama}* 🙏`,
+      `Halo ${sale.pembeli || "Kak"}, terima kasih sudah ${sewa ? "menyewa" : "berbelanja"} di *${STORE.nama}* 🙏`,
       ``,
       `No. Nota: *${sale.noNota}*`,
       ...sale.items.map((it) => `• ${it.nama} (${it.qty}x) ${isBonus(it) ? "BONUS" : rp(it.subtotal)}`),
+      ...(sale.infoNota || []).map((x) => `${x.l}: ${x.r}`),
       ...(infoNego(sale).ada ? [`_Catatan: ${infoNego(sale).catatan}._`] : []),
-      `Total: *${rp(sale.total)}* — LUNAS (${sale.metode === "TRANSFER" ? "Transfer/QRIS" : "Tunai"})`,
+      belumDibayar(sale)
+        ? `Total: *${rp(sale.total)}* — BELUM DIBAYAR`
+        : `Total: *${rp(sale.total)}* — LUNAS (${sale.metode === "TRANSFER" ? "Transfer/QRIS" : "Tunai"})`,
       ``,
       ...(link ? [`📄 Nota PDF: ${link}`, ``] : []),
-      `_Simpan nota / invoice ini untuk keperluan klaim garansi._`,
+      sewa ? `_Tunjukkan nota ini saat pengembalian unit._` : `_Simpan nota / invoice ini untuk keperluan klaim garansi._`,
       `IG ${STORE.ig} · WA ${STORE.wa}`,
     ].join("\n");
     const waLink = (link: string) => `https://wa.me/${waIntl(sale.pembeliWa!)}?text=${encodeURIComponent(pesan(link))}`;

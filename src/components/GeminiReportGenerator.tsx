@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { HistoryItem } from "../lib/types";
+import { kategoriBarisUsaha } from "../lib/pemasukanUsaha";
+import { sebutHen } from "../lib/posPembukuan";
 
 // Helper format "1.919k"
 const formatK = (num: number) => {
@@ -7,6 +9,7 @@ const formatK = (num: number) => {
   const k = num / 1000;
   return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 3 }).format(k) + "k";
 };
+const formatK0 = (num: number) => formatK(num) || "0";
 
 // Helper format uang Rupiah penuh
 const formatRp = (num: number) => {
@@ -28,6 +31,35 @@ const formatDateShort = (dateString: string) => {
   } catch { return dateString; }
 };
 
+const toNum = (v: unknown) => Number(String(v ?? "").replace(/\D/g, "")) || 0;
+
+/** Target pemasukan rental + jasa per hari. Target mingguan = target harian × jumlah hari. */
+export const TARGET_HARIAN = 350000;
+
+/**
+ * Pemasukan satu hari untuk laporan karyawan: RENTAL (sewa + harian + jajanan) dan
+ * JASA (isi game, HEN, servis). Penjualan barang (unit, stik, aksesoris) tidak ikut —
+ * uangnya langsung ke owner, dan modal / laba tidak dibagikan ke karyawan.
+ */
+const rincianHari = (h: any) => {
+  const sewa = toNum(h?.totalSewa);
+  const harian = toNum(h?.totalHarian);
+  const jajanan = toNum(h?.totalJajanan);
+  let isiGame = 0, hen = 0, servis = 0;
+  (Array.isArray(h?.rowsJasaAks) ? h.rowsJasaAks : []).forEach((r: any) => {
+    const v = toNum(r?.harga);
+    if (v <= 0) return;
+    const { kategori, barang } = kategoriBarisUsaha(r.tipe, r.ket);
+    if (barang) return;
+    if (kategori === "Isi Game") isiGame += v;
+    else if (/hen/i.test(String(r.tipe || "")) || sebutHen(r.ket)) hen += v;
+    else servis += v;
+  });
+  const rental = sewa + harian + jajanan;
+  const jasa = isiGame + hen + servis;
+  return { sewa, harian, jajanan, isiGame, hen, servis, rental, jasa, total: rental + jasa };
+};
+
 export default function GeminiReportGenerator({
   history,
   currentDate,
@@ -46,70 +78,53 @@ export default function GeminiReportGenerator({
     setCopied(false);
 
     setTimeout(() => {
-      // Gunakan currentDate (tanggal yang dipilih) sebagai acuan waktu, bukan new Date() real-time
-      const anchorDate = new Date(currentDate);
+      // Tanggal yang dipilih di form = acuan laporan (bukan jam sekarang)
+      const [ay, am, ad] = String(currentDate || "").split("-").map(Number);
+      const anchorDate = ay && am && ad ? new Date(ay, am - 1, ad) : new Date();
       const currentMonth = anchorDate.getMonth();
       const currentYear = anchorDate.getFullYear();
+      const anchorDay = anchorDate.getDate();
+      const prefixBulan = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-`;
 
-      // 1. FILTER HISTORY BULAN INI SAMPAI TANGGAL TERPILIH
-      // Logic: Bulan & Tahun sama, TAPI tanggal tidak boleh melebihi currentDate
-      const monthHistory = history.filter((h) => {
-        const d = new Date(h.tanggal);
-        const sameMonthYear = d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-        // String comparison "YYYY-MM-DD" works for date limitation
-        const isBeforeOrSame = h.tanggal <= currentDate;
+      // 1. Pembukuan bulan ini s/d tanggal terpilih. Hari terpilih yang belum disimpan memakai data form.
+      const monthHistory: any[] = history
+        .filter((h) => String(h.tanggal).startsWith(prefixBulan) && h.tanggal <= currentDate)
+        .sort((a, b) => a.tanggal.localeCompare(b.tanggal));
+      const savedToday = history.find((h) => h.tanggal === currentDate);
+      if (!savedToday && currentData && String(currentDate).startsWith(prefixBulan)) {
+        monthHistory.push({ ...currentData, tanggal: currentDate });
+      }
+      const todayItem: any = savedToday || currentData;
 
-        return sameMonthYear && isBeforeOrSame;
-      }).sort((a, b) => new Date(a.tanggal).getTime() - new Date(b.tanggal).getTime());
-
-      // 2. AMBIL DATA HARI INI (Sesuai Tanggal Terpilih)
-      // Cari history yang tanggalnya persis sama dengan tanggal yang dipilih user, atau fallback ke live data jika tanggal dipilih adalah tanggal hari ini
-      const todayItem = history.find((h) => h.tanggal === currentDate) || currentData;
-
-      // --- CALCULATE WEEKLY DATA & LIST STRING ---
+      // 2. Hitung per hari, rekap bulan, setor & pengeluaran
       const dataMap: Record<number, number> = {};
-
-      // String builder untuk Setor & Pengeluaran (Akumulasi Bulan Ini s/d Tanggal Terpilih)
+      const rekap = { sewa: 0, harian: 0, jajanan: 0, isiGame: 0, hen: 0, servis: 0, rental: 0, jasa: 0, total: 0 };
+      let hariTerisi = 0;
       let strSetor = "";
       let strPengeluaranList = "";
-
-      // Variabel untuk menghitung Total Saldo Bulan Ini (Tanggal 1 - Tanggal Terpilih)
       let monthTotalCash = 0;
       let monthTotalTransfer = 0;
       let monthTotalPengeluaran = 0;
 
       monthHistory.forEach((h) => {
-        const d = new Date(h.tanggal);
-        const dateNum = d.getDate();
+        const dateNum = Number(String(h.tanggal).slice(8, 10));
+        const r = rincianHari(h);
+        dataMap[dateNum] = (dataMap[dateNum] || 0) + r.total;
+        (Object.keys(rekap) as (keyof typeof rekap)[]).forEach((k) => { rekap[k] += r[k]; });
+        if (r.total > 0) hariTerisi++;
 
-        // Pemasukan Harian (Omzet per hari)
-        const totalHariIni =
-          (h.totalHarian || 0) +
-          (h.totalJajanan || 0) +
-          (h.totalJasaAks || 0) +
-          (h.totalSewa || 0);
+        monthTotalCash += Number(h.totalCash) || 0;
+        monthTotalTransfer += Number(h.totalTransfer) || 0;
 
-        dataMap[dateNum] = (dataMap[dateNum] || 0) + totalHariIni;
-
-        // Akumulasi Saldo Bulan Ini
-        monthTotalCash += (Number(h.totalCash) || 0);
-        monthTotalTransfer += (Number(h.totalTransfer) || 0);
-
-        // Build List Setoran (Bulanan)
-        const item = h as any;
-        if (Array.isArray(item.rowsSetoran)) {
-          item.rowsSetoran.forEach((s: any) => {
-            const nom = Number(String(s.harga).replace(/\D/g,"")) || 0;
-            if (nom > 0) {
-              strSetor += `${formatDateShort(s.tanggal || h.tanggal)} - ${s.ket || "Setoran"} - ${formatRp(nom)}\n`;
-            }
+        if (Array.isArray(h.rowsSetoran)) {
+          h.rowsSetoran.forEach((s: any) => {
+            const nom = toNum(s.harga);
+            if (nom > 0) strSetor += `${formatDateShort(s.tanggal || h.tanggal)} - ${s.ket || "Setoran"} - ${formatRp(nom)}\n`;
           });
         }
-
-        // Build List Pengeluaran (Bulanan) & Hitung Total Pengeluaran Bulan Ini
-        if (Array.isArray(item.rowsPengeluaran)) {
-          item.rowsPengeluaran.forEach((p: any) => {
-            const nom = Number(String(p.harga).replace(/\D/g,"")) || 0;
+        if (Array.isArray(h.rowsPengeluaran)) {
+          h.rowsPengeluaran.forEach((p: any) => {
+            const nom = toNum(p.harga);
             if (nom > 0) {
               monthTotalPengeluaran += nom;
               strPengeluaranList += `${formatDateShort(p.tanggal || h.tanggal)} - ${p.ket || "Pengeluaran"} - ${formatRp(nom)}\n`;
@@ -118,125 +133,81 @@ export default function GeminiReportGenerator({
         }
       });
 
-      // Hitung Total Saldo Bulan Ini (Sampai tanggal terpilih)
+      // Total saldo bulan ini (kas cash + transfer − pengeluaran), sama seperti sebelumnya
       const totalSaldoBulanIni = (monthTotalCash + monthTotalTransfer) - monthTotalPengeluaran;
 
-      // --- HITUNG LOGIKA SALDO HARI INI (BAGIAN BAWAH) ---
-      // Ini mengambil data spesifik dari tanggal yang dipilih (jika ada di history)
-
-      let hariIniPemasukanKotor = 0;
+      // 3. Hari ini
+      const hariIni = todayItem ? rincianHari(todayItem) : null;
       let hariIniPengeluaran = 0;
-      let hariIniPengeluaranCash = 0;
-      let hariIniPengeluaranManualCash = 0;
-      let hariIniCash = 0;
-      let hariIniSetorYa = 0; // Nominal yang sudah di setor (Transfer 'Ya')
-
-      if (todayItem) {
-        // 1. Pemasukan Kotor Hari Ini
-        hariIniPemasukanKotor =
-          (todayItem.totalHarian || 0) +
-          (todayItem.totalJajanan || 0) +
-          (todayItem.totalJasaAks || 0) +
-          (todayItem.totalSewa || 0);
-
-        hariIniCash = Number(todayItem.totalCash) || 0;
-
-        // 2. Pengeluaran Hari Ini
-        if (Array.isArray((todayItem as any).rowsPengeluaran)) {
-          (todayItem as any).rowsPengeluaran.forEach((p: any) => {
-            const nom = Number(String(p.harga).replace(/\D/g, "")) || 0;
-            hariIniPengeluaran += nom;
-            if (!p.bayar || String(p.bayar).toLowerCase() === "cash") {
-              hariIniPengeluaranCash += nom;
-              if (!p._autoOngkirKey) {
-                 hariIniPengeluaranManualCash += nom;
-              }
-            }
-          });
-        }
-
-        // 3. Cek Setoran Hari Ini (Untuk Saldo Belum Setor)
-        if (Array.isArray((todayItem as any).rowsSetoran)) {
-          (todayItem as any).rowsSetoran.forEach((s: any) => {
-            const isTf = String(s.bayar || "").toLowerCase();
-            // Jika user bilang "Ya", "Sudah", dsb.
-            if (isTf.includes("ya") || isTf.includes("sudah")) {
-              hariIniSetorYa += (Number(String(s.harga).replace(/\D/g,"")) || 0);
-            }
-          });
-        }
+      if (todayItem && Array.isArray(todayItem.rowsPengeluaran)) {
+        todayItem.rowsPengeluaran.forEach((p: any) => { hariIniPengeluaran += toNum(p.harga); });
       }
+      const hariIniKotor = hariIni?.total || 0;
+      const hariIniBersih = hariIniKotor - hariIniPengeluaran;
+      // Saldo yang harus disetor = kas cash hari itu (rental + jasa), sama seperti sebelumnya
+      const hariIniHarusSetor = Math.max(0, Number(todayItem?.totalCash) || 0);
 
-      // Hitung Pemasukan Bersih Hari Ini
-      const hariIniPemasukanBersih = hariIniPemasukanKotor - hariIniPengeluaran;
+      // 4. Susun teks
+      const headerDateStr = new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(anchorDate);
+      const GARIS = "==============================\n";
+      const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
+      const minggu: [number, number][] = [[1, 7], [8, 14], [15, 21], [22, Math.min(28, lastDay)]];
+      if (lastDay >= 29) minggu.push([29, lastDay]);
 
-      // Hitung Saldo Yang Harus Disetor (Hanya Hari Ini)
-      // Logika: saldo hari itu yang harus disetor (total cash) tanpa memperdulikan apakah sudah disetor atau belum
-      const hariIniHarusSetor = Math.max(0, hariIniCash);
-
-      // --- GENERATE STRING HEADER ---
-      // Format tanggal header: dd MMMM yyyy (ex: 17 Februari 2026) -> Menggunakan Anchor Date
-      const headerDateStr = new Intl.DateTimeFormat("id-ID", { day: 'numeric', month: 'long', year: 'numeric' }).format(anchorDate);
-
-      let text = `📌 UPDATE PEMASUKAN & KONDISI RENTAL PS URBAN\n`;
+      let text = `📌 LAPORAN RENTAL & JASA URBAN\n`;
       text += `🗓 ${headerDateStr}\n`;
-      text += `🎯 Target Harian: Rp250.000\n`;
-      text += `🎯 Target Mingguan: Rp1.750.000\n`;
-      text += `==============================\n`;
-      text += `PEMASUKAN\n`;
+      text += `🎯 Target: ${formatRp(TARGET_HARIAN)}/hari · ${formatRp(TARGET_HARIAN * 7)}/minggu\n`;
+      text += GARIS;
+      text += `PEMASUKAN HARIAN (Rental + Jasa)\n\n`;
 
-      const renderWeek = (start: number, end: number, weekLabel: string) => {
-        let weekTotal = 0;
-        let weekText = `${weekLabel}\n`;
-
+      minggu.forEach(([start, end], idx) => {
+        const target = TARGET_HARIAN * (end - start + 1);
+        let total = 0;
+        text += `Minggu ${idx + 1} (${start}–${end})\n`;
         for (let i = start; i <= end; i++) {
           const val = dataMap[i] || 0;
-          weekTotal += val;
-          // Hanya render angka jika ada value (agar rapi), tapi layout minggu tetap full
-          weekText += `${i}. ${val > 0 ? formatK(val) : ""}\n`;
+          total += val;
+          text += `${i}. ${val > 0 ? formatK(val) : ""}\n`;
         }
-        weekText += `Total : ${formatK(weekTotal)}\n\n`;
-        return { text: weekText, total: weekTotal };
-      };
+        const status = end <= anchorDay ? (total >= target ? " ✅" : " ❌") : start <= anchorDay ? " ⏳" : "";
+        const angka = start > anchorDay ? "-" : formatK0(total);
+        text += `Total : ${angka}${status} (target ${formatK(target)})\n\n`;
+      });
 
-      const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
+      // Dibulatkan ke ribuan supaya mudah dibaca (mis. 397k)
+      const rataRata = hariTerisi ? Math.round(rekap.total / hariTerisi / 1000) * 1000 : 0;
+      text += GARIS;
+      text += `REKAP BULAN INI (1–${anchorDay})\n`;
+      text += `Rental : ${formatK0(rekap.rental)}\n`;
+      text += `• Sewa PS : ${formatK0(rekap.sewa)}\n`;
+      if (rekap.harian > 0) text += `• Harian : ${formatK(rekap.harian)}\n`;
+      if (rekap.jajanan > 0) text += `• Jajanan : ${formatK(rekap.jajanan)}\n`;
+      text += `Jasa : ${formatK0(rekap.jasa)}\n`;
+      text += `• Isi game : ${formatK0(rekap.isiGame)}\n`;
+      text += `• Upgrade HEN : ${formatK0(rekap.hen)}\n`;
+      if (rekap.servis > 0) text += `• Servis : ${formatK(rekap.servis)}\n`;
+      text += `Total : ${formatK0(rekap.total)}\n`;
+      text += `Rata-rata/hari : ${formatK0(rataRata)}${hariTerisi ? (rataRata >= TARGET_HARIAN ? " ✅" : " ❌") : ""}\n`;
 
-      const w1 = renderWeek(1, 7, "Minggu 1");
-      const w2 = renderWeek(8, 14, "Minggu 2");
-      const w3 = renderWeek(15, 21, "Minggu 3");
-      const w4 = renderWeek(22, lastDay, "Minggu 4");
-
-      text += w1.text;
-      text += w2.text;
-      text += w3.text;
-      text += w4.text;
-
-      text += `==============================\n`;
-      text += `TOTAL PEMASUKAN MINGGUAN\n`;
-      text += `Minggu 1 : ${formatK(w1.total)}\n`;
-      text += `Minggu 2 : ${formatK(w2.total)}\n`;
-      text += `Minggu 3 : ${formatK(w3.total)}\n`;
-      text += `Minggu 4 : ${formatK(w4.total)}\n`;
-
-      text += `==============================\n`;
+      text += GARIS;
       text += `*SETOR*\n`;
-      text += strSetor || "";
+      text += strSetor || "-\n";
 
-      text += `==============================\n`;
+      text += GARIS;
       text += `*PENGELUARAN*\n`;
-      text += strPengeluaranList || "";
+      text += strPengeluaranList || "-\n";
 
-      text += `==============================\n`;
-      // FOOTER SESUAI REQUEST
-      text += `PENGELUARAN HARI INI : -${formatRp(hariIniPengeluaran).replace("Rp", "Rp")}\n`;
-      text += `PEMASUKAN KOTOR HARI INI : ${formatRp(hariIniPemasukanKotor)}\n`;
-      text += `PEMASUKAN BERSIH HARI INI : ${formatRp(hariIniPemasukanBersih)}\n`;
-      text += `SALDO YANG HARUS DI SETOR : ${formatRp(hariIniHarusSetor)}\n`;
-      text += `TOTAL SALDO BULAN INI = ${formatRp(totalSaldoBulanIni)}\n`;
+      text += GARIS;
+      text += `HARI INI\n`;
+      text += `Pemasukan kotor : ${formatRp(hariIniKotor)}\n`;
+      text += `Pengeluaran : -${formatRp(hariIniPengeluaran)}\n`;
+      text += `Pemasukan bersih : ${formatRp(hariIniBersih)}\n`;
+      text += `Saldo harus disetor : ${formatRp(hariIniHarusSetor)}\n`;
+      text += `Total saldo bulan ini : ${formatRp(totalSaldoBulanIni)}\n`;
 
       setReport(text);
       setLoading(false);
-    }, 1000);
+    }, 600);
   };
 
   const copyToClipboard = () => {
@@ -280,7 +251,7 @@ export default function GeminiReportGenerator({
                     : "bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-lg hover:shadow-blue-500/30"
                   }`}
               >
-                {loading ? "Sedang Memproses..." : "笨ｨ Generate Laporan"}
+                {loading ? "Sedang Memproses..." : "✨ Generate Laporan"}
               </button>
             ) : (
               <div className="flex w-full gap-3">

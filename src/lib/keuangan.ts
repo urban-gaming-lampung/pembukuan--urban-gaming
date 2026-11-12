@@ -135,8 +135,12 @@ const toNum = (v: unknown) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-/** Pemasukan rental satu hari pembukuan (harian + jajanan + jasa & aksesoris + sewa). */
-export const pemasukanRental = (h: HistoryItem) => toNum(h.totalHarian) + toNum(h.totalJajanan) + toNum(h.totalJasaAks) + toNum(h.totalSewa);
+/**
+ * Pemasukan RENTAL satu hari pembukuan: harian + jajanan + sewa.
+ * Rincian Pemasukan Usaha (isi game, HEN, servis, aksesoris) adalah pemasukan USAHA —
+ * dihitung di Analitik › Usaha (lib/pemasukanUsaha), walau uangnya ikut kas harian.
+ */
+export const pemasukanRental = (h: HistoryItem) => toNum(h.totalHarian) + toNum(h.totalJajanan) + toNum(h.totalSewa);
 
 /** Pengeluaran yang dicatat admin di pembukuan rental harian (termasuk ongkir). */
 export function pengeluaranAdminRental(h: HistoryItem): { nama: string; harga: number; tanggal: string }[] {

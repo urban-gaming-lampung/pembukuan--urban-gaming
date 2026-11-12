@@ -151,6 +151,8 @@ export default function App() {
     setRowsJajanan,
     rowsJasaAks,
     setRowsJasaAks,
+    barisNotaJasa,
+    notaBarangHari,
     rowsSewa,
     setRowsSewa,
     rowsSetoran,
@@ -451,8 +453,8 @@ export default function App() {
               />
               {rincianVisibility.harian !== false && <RincianHarian rows={rowsHarian} setRows={setRowsHarian} blank={{ ...blankHarian }} hargaItems={hargaHarian} isMobileTable={isMobileTable} />}
               {rincianVisibility.jajanan !== false && <RincianJajanan rows={rowsJajanan} setRows={setRowsJajanan} blank={{ ...blankJajanan }} hargaItems={hargaJajanan} isMobileTable={isMobileTable} />}
-              {rincianVisibility.jasaAks !== false && <RincianJasaAksesoris rows={rowsJasaAks} setRows={setRowsJasaAks} blank={{ ...blankJasaAks }} hargaItems={hargaJasaAks} isMobileTable={isMobileTable} />}
-              {rincianVisibility.sewa !== false && <RincianSewa rows={rowsSewa} setRows={setRowsSewa} blank={newBlankSewa()} hargaItems={hargaSewa} userEmail={user?.email} isMobileTable={isMobileTable}  />}
+              {rincianVisibility.jasaAks !== false && <RincianJasaAksesoris rows={rowsJasaAks} setRows={setRowsJasaAks} blank={{ ...blankJasaAks }} hargaItems={hargaJasaAks} isMobileTable={isMobileTable} barisNota={barisNotaJasa} notaBarang={notaBarangHari} tampilNominalBarang={isSuperAdminOrOwner} />}
+              {rincianVisibility.sewa !== false && <RincianSewa rows={rowsSewa} setRows={setRowsSewa} blank={newBlankSewa()} hargaItems={hargaSewa} userEmail={user?.email} isMobileTable={isMobileTable} tanggal={tanggal} />}
             </div>
             <div className="space-y-6">
               {rincianVisibility.pengeluaran !== false && <div id="section-pengeluaran">

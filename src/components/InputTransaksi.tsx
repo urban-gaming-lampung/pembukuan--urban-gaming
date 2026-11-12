@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Package } from "lucide-react";
 import { addDoc, collection, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
@@ -41,7 +41,7 @@ const bulanKey = (tanggal: string) => {
  * Form + histori transaksi owner (PENGELUARAN / PEMASUKAN) — satu komponen untuk keduanya (SSOT).
  * Histori dipisah per model usaha: RENTAL dan USAHA.
  */
-const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[] }> = ({ jenis, items }) => {
+const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[]; onJenisChange?: (j: JenisTransaksi) => void }> = ({ jenis, items, onJenisChange }) => {
   const t = TEMA[jenis];
   const label = jenis === "PENGELUARAN" ? "Pengeluaran" : "Pemasukan";
   const [tab, setTab] = useState<Bisnis>("RENTAL");
@@ -51,6 +51,18 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[] 
   const [kategoriAuto, setKategoriAuto] = useState(false);
   const [bukaBulan, setBukaBulan] = useState<string[]>([]);
   const [bukaKat, setBukaKat] = useState<string[]>([]);
+
+  // Ganti Pengeluaran <-> Pemasukan: kosongkan isian, pertahankan usaha & tanggal yang dipilih
+  const jenisAwal = useRef(jenis);
+  useEffect(() => {
+    if (jenisAwal.current === jenis) return;
+    jenisAwal.current = jenis;
+    setEditingId(null);
+    setKategoriAuto(false);
+    setBukaBulan([]);
+    setBukaKat([]);
+    setForm((f) => ({ ...kosong(f.bisnis), tanggal: f.tanggal }));
+  }, [jenis]);
 
   // Saran nama & kategori dari riwayat manual (bukan yang dibuat otomatis oleh stok masuk)
   const manual = useMemo(() => items.filter((o) => o.sumber !== "input_stok"), [items]);
@@ -156,6 +168,17 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[] 
           <RupiahIcon /> {editingId ? `Edit ${label}` : t.judul}
         </h2>
         <div className="grid grid-cols-1 gap-4 mb-5">
+          {onJenisChange && !editingId && (
+            <div className="flex flex-col gap-2">
+              <label className={lbl}>Jenis transaksi</label>
+              <SubTabs<JenisTransaksi>
+                ariaLabel="Jenis transaksi"
+                value={jenis}
+                onChange={onJenisChange}
+                options={[{ key: "PENGELUARAN", label: "Pengeluaran" }, { key: "PEMASUKAN", label: "Pemasukan" }]}
+              />
+            </div>
+          )}
           <div className="flex flex-col gap-2">
             <label className={lbl}>Untuk usaha</label>
             <SubTabs<Bisnis>

@@ -163,7 +163,7 @@ const RekapPemasukan: React.FC<RekapPemasukanProps> = ({
         <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
           <StatTile label="Harian"        value={totalHarian}  icon={Calendar} accentBg="bg-zinc-500/15 dark:bg-zinc-400/15" accentText="text-zinc-600 dark:text-zinc-300" />
           <StatTile label="Jajanan"       value={totalJajanan} icon={Coffee}   accentBg="bg-pink-500/15 dark:bg-pink-400/15" accentText="text-pink-600 dark:text-pink-400" />
-          <StatTile label="Jasa & Aks"    value={totalJasaAks} icon={Wrench}   accentBg="bg-purple-500/15 dark:bg-purple-400/15" accentText="text-purple-600 dark:text-purple-400" />
+          <StatTile label="Usaha"         value={totalJasaAks} icon={Wrench}   accentBg="bg-purple-500/15 dark:bg-purple-400/15" accentText="text-purple-600 dark:text-purple-400" />
           <StatTile label="Sewa Console"  value={totalSewa}    icon={Gamepad2} accentBg="bg-indigo-500/15 dark:bg-indigo-400/15" accentText="text-indigo-600 dark:text-indigo-400" />
         </div>
 

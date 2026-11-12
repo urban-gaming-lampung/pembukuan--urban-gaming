@@ -22,6 +22,8 @@ import InputTransaksi from "./InputTransaksi";
 import AnalitikKeseluruhan from "./AnalitikKeseluruhan";
 import SubTabs from "./common/SubTabs";
 import { bisnisOf, JenisTransaksi, pemasukanRental, saringPeriode, useTransaksiOwner } from "../lib/keuangan";
+import { kasUsahaHarian } from "../lib/pemasukanUsaha";
+import { sinkronNotaKePembukuan } from "../lib/posPembukuan";
 import WidgetMonitoringDevice from "./WidgetMonitoringDevice";
 import {
   ResponsiveContainer,
@@ -205,6 +207,8 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     try {
       // 1. Update history_pembukuan
       await setDoc(doc(db, "history_pembukuan", req.historyId), req.proposedData, { merge: true });
+      // Baris nota POS mengikuti data terbaru (bisa berubah sejak request dibuat)
+      sinkronNotaKePembukuan(req.proposedData?.tanggal || req.tanggal).catch((e) => console.warn("Sinkron nota:", e));
       
       // 2. Update edit_request status
       await updateDoc(doc(db, "edit_requests", req.id), { status: "approved" });
@@ -308,7 +312,6 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   const INCOME_COLORS: Record<string, string> = {
     "Pemasukan Harian": "#3b82f6",
     "Jajanan & Minuman": "#f59e0b",
-    "Jasa & Aksesoris": "#8b5cf6",
     "Sewa PS": "#10b981",
     "Ongkir (Bagi Hasil)": "#06b6d4",
   };
@@ -353,13 +356,15 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   const labaKotor = totalPemasukanBulanIni;
   const labaBersih = totalPemasukanBulanIni - totalPengeluaranBulanIni;
 
-  // Hitung Total Cash & Transfer dari filteredHistory untuk section Ringkasan
+  // Hitung Total Cash & Transfer RENTAL dari filteredHistory untuk section Ringkasan
+  // (kas harian dikurangi Rincian Pemasukan Usaha, yang dihitung di Analitik › Usaha)
   const { totalCashFiltered, totalTransferFiltered } = useMemo(() => {
     let cash = 0;
     let transfer = 0;
     filteredHistory.forEach((h) => {
-      cash += (h as any).totalCash || 0;
-      transfer += (h as any).totalTransfer || 0;
+      const usaha = kasUsahaHarian(h);
+      cash += Math.max(0, (Number((h as any).totalCash) || 0) - usaha.cash);
+      transfer += Math.max(0, (Number((h as any).totalTransfer) || 0) - usaha.transfer);
     });
     return { totalCashFiltered: cash, totalTransferFiltered: transfer };
   }, [filteredHistory]);
@@ -513,15 +518,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
           }
         });
       }
-      // Jasa & Aksesoris
-      if (Array.isArray(h.rowsJasaAks)) {
-        h.rowsJasaAks.forEach((r: any) => {
-          const price = parseInt(String(r.harga).replace(/\D/g, "")) || 0;
-          if (price > 0) {
-            list.push({ nama: r.tipe || r.ket || "Jasa/Aks", harga: price, tanggal: h.tanggal, hari: h.hari, kategori: "Jasa & Aksesoris", bayar: r.bayar || "" });
-          }
-        });
-      }
+      // Rincian Pemasukan Usaha (isi game, HEN, servis, aksesoris) = pemasukan USAHA -> Analitik › Usaha
       // Sewa PS
       if (Array.isArray(h.rowsSewa)) {
         h.rowsSewa.forEach((r: any) => {
@@ -902,15 +899,11 @@ const PageOwner: React.FC<PageOwnerProps> = ({
             options={[{ key: "TRANSAKSI", label: "Transaksi" }, { key: "STOK", label: "Stok Jualan" }]}
           />
           {inputSubTab === "TRANSAKSI" ? (
-            <>
-              <SubTabs<JenisTransaksi>
-                ariaLabel="Jenis transaksi"
-                value={transaksiSubTab}
-                onChange={setTransaksiSubTab}
-                options={[{ key: "PENGELUARAN", label: "Pengeluaran" }, { key: "PEMASUKAN", label: "Pemasukan" }]}
-              />
-              <InputTransaksi key={transaksiSubTab} jenis={transaksiSubTab} items={transaksiSubTab === "PENGELUARAN" ? ownerExpenses : ownerIncomes} />
-            </>
+            <InputTransaksi
+              jenis={transaksiSubTab}
+              onJenisChange={setTransaksiSubTab}
+              items={transaksiSubTab === "PENGELUARAN" ? ownerExpenses : ownerIncomes}
+            />
           ) : (
             <InputStokJualan />
           )}
@@ -2119,7 +2112,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                       proposedRows = req.proposedData?.rowsJajanan || [];
                       renderRow = (row) => `${row.jenisJajanan} · ${row.qtyJam} qty · ${rupiah(row.harga)} · ${row.bayar || "Cash"}`;
                     } else if (cat === "jasaAks") {
-                      title = "Jasa & Aksesoris";
+                      title = "Pemasukan Usaha";
                       originalRows = req.originalData?.rowsJasaAks || [];
                       proposedRows = req.proposedData?.rowsJasaAks || [];
                       renderRow = (row) => `${row.tipe} (${row.ket}) · ${rupiah(row.harga)} · ${row.bayar || "Cash"}`;

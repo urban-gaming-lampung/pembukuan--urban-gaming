@@ -17,6 +17,18 @@ export const STORE = {
 export const GARANSI_JUDUL = "SIMPAN NOTA / INVOICE INI";
 export const GARANSI_TEKS = "Nota ini wajib disimpan & ditunjukkan untuk keperluan klaim garansi.";
 
+// ---- Teks nota yang berbeda antara nota penjualan & nota sewa (SSOT layar / PDF / thermal / WA) ----
+export const isNotaSewa = (s: Pick<PosSale, "jenisNota">) => s.jenisNota === "SEWA";
+export const judulNota = (s: Pick<PosSale, "jenisNota">) => (isNotaSewa(s) ? "NOTA SEWA" : "NOTA PENJUALAN");
+export const labelPembeli = (s: Pick<PosSale, "jenisNota">) => (isNotaSewa(s) ? "Penyewa" : "Pembeli");
+export const belumDibayar = (s: Pick<PosSale, "statusBayar">) => s.statusBayar === "BELUM DIBAYAR";
+export const teksPembayaran = (s: Pick<PosSale, "metode" | "statusBayar">) =>
+  belumDibayar(s) ? "Belum dibayar" : s.metode === "TRANSFER" ? "Transfer / QRIS" : "Tunai";
+export const teksStatusBayar = (s: Pick<PosSale, "metode" | "statusBayar">) =>
+  belumDibayar(s) ? "BELUM DIBAYAR" : `LUNAS - ${s.metode === "TRANSFER" ? "TRANSFER / QRIS" : "TUNAI"}`;
+export const kotakSyarat = (s: Pick<PosSale, "syaratNota">) => s.syaratNota || { judul: GARANSI_JUDUL, isi: [GARANSI_TEKS] };
+export const teksPenutup = (s: Pick<PosSale, "jenisNota">) => (isNotaSewa(s) ? "Terima kasih telah menyewa!" : "Terima kasih telah berbelanja!");
+
 const rp = (n: number) => `Rp ${Math.round(n || 0).toLocaleString("id-ID")}`;
 /** Font standar PDF & printer thermal hanya aman untuk ASCII dasar. */
 export const toAscii = (t: string) =>
@@ -114,15 +126,16 @@ function drawNota(pdf: jsPDF, s: PosSale, logo: { url: string; ratio: number } |
   y += 5;
 
   // Judul nota
-  center("NOTA PENJUALAN", 10, "bold", 4.4);
+  center(judulNota(s), 10, "bold", 4.4);
   center(s.noNota, 8.5, "bold", 4.8);
 
   // Info transaksi
   row("Tanggal", fmtTanggalNota(s.ts));
-  row("Kasir", s.kasirNama || s.kasir.split("@")[0]);
-  row("Pembeli", s.pembeli || "Pelanggan");
-  if (s.pembeliWa) row("WA Pembeli", s.pembeliWa);
-  row("Pembayaran", s.metode === "TRANSFER" ? "Transfer / QRIS" : "Tunai");
+  row(isNotaSewa(s) ? "Admin" : "Kasir", s.kasirNama || s.kasir.split("@")[0]);
+  row(labelPembeli(s), s.pembeli || "Pelanggan");
+  if (s.pembeliWa) row(`WA ${labelPembeli(s)}`, s.pembeliWa);
+  (s.infoNota || []).forEach((x) => row(x.l, x.r));
+  row("Pembayaran", teksPembayaran(s));
   y += 0.5;
   dashed(4);
 
@@ -165,7 +178,7 @@ function drawNota(pdf: jsPDF, s: PosSale, logo: { url: string; ratio: number } |
   pdf.text(rp(s.total), W - M - 2.5, y + 4.8, { align: "right" });
   pdf.setTextColor(0, 0, 0);
   y += 12;
-  center(`LUNAS  -  ${s.metode === "TRANSFER" ? "TRANSFER / QRIS" : "TUNAI"}`, 7.5, "bold", 3.4);
+  center(teksStatusBayar(s).replace(" - ", "  -  "), 7.5, "bold", 3.4);
   y += 2.5;
 
   // Catatan nego kasir
@@ -183,17 +196,18 @@ function drawNota(pdf: jsPDF, s: PosSale, logo: { url: string; ratio: number } |
     y += nh + 3;
   }
 
-  // Ketentuan garansi
+  // Ketentuan garansi (nota penjualan) / ketentuan sewa (nota sewa)
+  const syarat = kotakSyarat(s);
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(7);
-  const gLines = pdf.splitTextToSize(toAscii(GARANSI_TEKS), CW - 8) as string[];
+  const gLines = syarat.isi.flatMap((t) => pdf.splitTextToSize(toAscii(t), CW - 8) as string[]);
   const boxH = 6.5 + gLines.length * 3.1;
   pdf.setLineWidth(0.4);
   pdf.roundedRect(M, y, CW, boxH, 1.5, 1.5, "S");
   let gy = y + 4.2;
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(7.8);
-  pdf.text(GARANSI_JUDUL, W / 2, gy, { align: "center" });
+  pdf.text(toAscii(syarat.judul), W / 2, gy, { align: "center" });
   gy += 3.4;
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(7);
@@ -201,7 +215,7 @@ function drawNota(pdf: jsPDF, s: PosSale, logo: { url: string; ratio: number } |
   y += boxH + 5;
 
   // Penutup + sosmed
-  center("Terima kasih telah berbelanja!", 8.5, "bold", 4);
+  center(teksPenutup(s), 8.5, "bold", 4);
   center(`Instagram ${STORE.ig}`, 7, "normal", 3.1);
   center(`WhatsApp ${STORE.wa}`, 7, "normal", 3.1);
   y += 1.5;
@@ -301,13 +315,14 @@ export async function buildNotaEscPos(s: PosSale): Promise<Uint8Array> {
   wrap(STORE.alamat).forEach(line);
   bold(true); line(`WA ${STORE.wa} | IG ${STORE.ig}`); bold(false);
   rule("=");
-  bold(true); size(0x01); line("NOTA PENJUALAN"); size(0x00); line(s.noNota); bold(false);
+  bold(true); size(0x01); line(judulNota(s)); size(0x00); line(s.noNota); bold(false);
   align(0);
   line(lr("Tanggal", fmtTanggalNota(s.ts)));
-  line(lr("Kasir", s.kasirNama || s.kasir.split("@")[0]));
-  line(lr("Pembeli", s.pembeli || "Pelanggan"));
-  if (s.pembeliWa) line(lr("WA Pembeli", s.pembeliWa));
-  line(lr("Pembayaran", s.metode === "TRANSFER" ? "Transfer / QRIS" : "Tunai"));
+  line(lr(isNotaSewa(s) ? "Admin" : "Kasir", s.kasirNama || s.kasir.split("@")[0]));
+  line(lr(labelPembeli(s), s.pembeli || "Pelanggan"));
+  if (s.pembeliWa) line(lr(`WA ${labelPembeli(s)}`, s.pembeliWa));
+  (s.infoNota || []).forEach((x) => line(lr(x.l, x.r)));
+  line(lr("Pembayaran", teksPembayaran(s)));
   rule();
   s.items.forEach((it) => {
     const nama = it.kategori === "ISI GAME" && it.platform ? `${it.nama} (${it.platform})` : it.nama;
@@ -328,14 +343,15 @@ export async function buildNotaEscPos(s: PosSale): Promise<Uint8Array> {
   }
   bold(true); size(0x01); line(lr("TOTAL", rp(s.total))); size(0x00); bold(false);
   align(1);
-  line(`LUNAS - ${s.metode === "TRANSFER" ? "TRANSFER / QRIS" : "TUNAI"}`);
+  line(teksStatusBayar(s));
   if (ng.ada) wrap(`Catatan: ${ng.catatan}.`).forEach(line);
   rule("*");
-  bold(true); line(GARANSI_JUDUL); bold(false);
-  wrap(GARANSI_TEKS).forEach(line);
+  const syarat = kotakSyarat(s);
+  bold(true); line(syarat.judul); bold(false);
+  syarat.isi.forEach((t) => wrap(t).forEach(line));
   rule("*");
   line();
-  bold(true); line("Terima kasih telah berbelanja!"); bold(false);
+  bold(true); line(teksPenutup(s)); bold(false);
   line(`Instagram ${STORE.ig}`);
   line(`WhatsApp ${STORE.wa}`);
   line(); line(); line();

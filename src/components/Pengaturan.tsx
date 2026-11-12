@@ -1433,7 +1433,7 @@ const Pengaturan: React.FC<Props> = ({
           <IOSGroup title="Kategori Item">
             <IOSRow label="Pemasukan Harian" value={`${sHarian.count} Item`} icon={<Gamepad2 size={16} />} iconColor="bg-blue-500" onClick={() => openEditModal(onOpenEditHarian)} />
             <IOSRow label="Jajanan" value={`${sJajanan.count} Item`} icon={<Coffee size={16} />} iconColor="bg-orange-500" onClick={() => openEditModal(onOpenEditJajanan)} />
-            <IOSRow label="Jasa & Aksesoris" value={`${sJasa.count} Item`} icon={<Wrench size={16} />} iconColor="bg-slate-500" onClick={() => openEditModal(onOpenEditJasaAks)} />
+            <IOSRow label="Pemasukan Usaha" value={`${sJasa.count} Item`} icon={<Wrench size={16} />} iconColor="bg-slate-500" onClick={() => openEditModal(onOpenEditJasaAks)} />
             <IOSRow label="Sewa PS" value={`${sSewa.count} Item`} icon={<Truck size={16} />} iconColor="bg-green-500" isLast onClick={() => openEditModal(onOpenEditSewa)} />
           </IOSGroup>
 
@@ -1441,7 +1441,7 @@ const Pengaturan: React.FC<Props> = ({
             {([
               { key: "harian", label: "1. Pemasukan Harian" },
               { key: "jajanan", label: "2. Pemasukan Jajanan" },
-              { key: "jasaAks", label: "3. Jasa & Aksesoris" },
+              { key: "jasaAks", label: "3. Pemasukan Usaha" },
               { key: "sewa", label: "4. Sewa PS" },
               { key: "pengeluaran", label: "Rincian Pengeluaran" },
               { key: "setoran", label: "Rincian Setoran" },

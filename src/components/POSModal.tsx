@@ -78,12 +78,8 @@ const DEFAULT_PRODUCTS: Omit<Product, "id">[] = [
   { name: "Kaset PS4 - Days Gone", price: 150000, category: "JUALAN", imageUrl: "" },
   { name: "Downgrade PS4 HEN", price: 500000, category: "JUALAN", imageUrl: "" },
   
-  // RENTAL
-  { name: "Sewa PS3 + TV / Jam", price: 5000, category: "RENTAL", imageUrl: "" },
-  { name: "Sewa PS4 + TV / Jam", price: 8000, category: "RENTAL", imageUrl: "" },
-  { name: "Sewa PS5 + TV / Jam", price: 15000, category: "RENTAL", imageUrl: "" },
-  { name: "Paket Main 3 Jam PS4", price: 20000, category: "RENTAL", imageUrl: "" },
-  
+  // RENTAL tidak dijual lewat POS: sewa dicatat di Rincian Pemasukan SEWA PS (nota sewa di sana)
+
   // SERVIS
   { name: "Jasa Servis Stik PS3 (Tombol/Analog)", price: 30000, category: "SERVIS", imageUrl: "" },
   { name: "Jasa Servis Stik PS4 (Drift/R2/L2)", price: 45000, category: "SERVIS", imageUrl: "" },
@@ -155,7 +151,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   const [openAddProduct, setOpenAddProduct] = useState(false);
   const [newProdName, setNewProdName] = useState("");
   const [newProdPrice, setNewProdPrice] = useState<number | "">("");
-  const [newProdCategory, setNewProdCategory] = useState<"JUALAN" | "RENTAL" | "SERVIS">("RENTAL");
+  const [newProdCategory, setNewProdCategory] = useState<"JUALAN" | "RENTAL" | "SERVIS">("SERVIS");
   const [newProdSubCategory, setNewProdSubCategory] = useState<"Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD">("Aksesoris");
   const [newProdImage, setNewProdImage] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -165,7 +161,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   const [selectedProductForEdit, setSelectedProductForEdit] = useState<Product | null>(null);
   const [editProdName, setEditProdName] = useState("");
   const [editProdPrice, setEditProdPrice] = useState<number | "">("");
-  const [editProdCategory, setEditProdCategory] = useState<"JUALAN" | "RENTAL" | "SERVIS">("RENTAL");
+  const [editProdCategory, setEditProdCategory] = useState<"JUALAN" | "RENTAL" | "SERVIS">("SERVIS");
   const [editProdSubCategory, setEditProdSubCategory] = useState<"Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD">("Aksesoris");
   const [editProdImage, setEditProdImage] = useState<File | null>(null);
   const [editProdImageUrl, setEditProdImageUrl] = useState("");
@@ -659,7 +655,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
           {/* Mobile sub-menu bar (Horizontal at the top) */}
           <div className="md:hidden p-4 bg-white/50 dark:bg-black/10 border-b border-zinc-200/60 dark:border-white/5 shrink-0">
             <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-[14px] gap-1 overflow-x-auto no-scrollbar">
-              {(["JUALAN", "RENTAL", "ISI GAME", "SERVIS"] as const).map((sub) => {
+              {(["JUALAN", "ISI GAME", "SERVIS"] as const).map((sub) => {
                 const hasCategoryUpdate = sub === "ISI GAME"
                   ? games.some(g => catalogChanges[g.id] !== undefined)
                   : products.some(p => p.category === sub && catalogChanges[p.id] !== undefined);
@@ -692,10 +688,10 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               </p>
             )}
             {/* Add product button for Super Admin on Mobile */}
-            {isSuperAdminOrOwner && (activeSub === "RENTAL" || activeSub === "SERVIS") && (
+            {isSuperAdminOrOwner && activeSub === "SERVIS" && (
               <div className="mt-3 flex gap-2">
                 <button 
-                  onClick={() => { setNewProdCategory(activeSub === "SERVIS" ? "SERVIS" : "RENTAL"); setOpenAddProduct(true); }}
+                  onClick={() => { setNewProdCategory("SERVIS"); setOpenAddProduct(true); }}
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black shadow-md shadow-black/25 dark:shadow-white/10 active:scale-95 transition-all"
                 >
                   <PlusCircle size={14} />
@@ -720,7 +716,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               <span className="text-[10px] font-black tracking-widest text-zinc-400 dark:text-zinc-500 uppercase px-3">
                 KATEGORI POS
               </span>
-              {(["JUALAN", "RENTAL", "ISI GAME", "SERVIS"] as const).map((sub) => {
+              {(["JUALAN", "ISI GAME", "SERVIS"] as const).map((sub) => {
                 const count = sub === "ISI GAME" 
                   ? games.length 
                   : products.filter(p => p.category === sub).length;
@@ -766,9 +762,9 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   Inisialisasi Produk
                 </button>
               )}
-              {isSuperAdminOrOwner && (activeSub === "RENTAL" || activeSub === "SERVIS") && (
+              {isSuperAdminOrOwner && activeSub === "SERVIS" && (
                 <button
-                  onClick={() => { setNewProdCategory(activeSub === "SERVIS" ? "SERVIS" : "RENTAL"); setOpenAddProduct(true); }}
+                  onClick={() => { setNewProdCategory("SERVIS"); setOpenAddProduct(true); }}
                   className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black shadow-md shadow-black/25 dark:shadow-white/10 active:scale-95 transition-all"
                 >
                   <PlusCircle size={14} />
@@ -788,9 +784,9 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
                   Katalog {activeSub} &mdash; Klik item untuk menambahkan ke keranjang
                 </span>
-                {(activeSub === "RENTAL" || activeSub === "SERVIS") && products.length > 0 && (
+                {activeSub === "SERVIS" && products.length > 0 && (
                   <button
-                    onClick={() => { setNewProdCategory(activeSub === "SERVIS" ? "SERVIS" : "RENTAL"); setOpenAddProduct(true); }}
+                    onClick={() => { setNewProdCategory("SERVIS"); setOpenAddProduct(true); }}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700 font-bold text-xs transition-all active:scale-95"
                   >
                     <PlusCircle size={13} />
@@ -922,9 +918,9 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     {activeSub === "JUALAN" ? `Belum ada barang ${activeKondisi === "SEKEN" ? "seken" : "baru"} di kategori ini.` : `Belum ada produk di kategori ${activeSub}.`}
                     {isSuperAdminOrOwner && (activeSub === "JUALAN" ? " Tambahkan lewat Owner › Input › Stok Jualan." : " Klik tombol di bawah untuk menambahkan produk.")}
                   </p>
-                  {isSuperAdminOrOwner && (activeSub === "RENTAL" || activeSub === "SERVIS") && (
+                  {isSuperAdminOrOwner && activeSub === "SERVIS" && (
                     <button
-                      onClick={() => { setNewProdCategory(activeSub === "SERVIS" ? "SERVIS" : "RENTAL"); setOpenAddProduct(true); }}
+                      onClick={() => { setNewProdCategory("SERVIS"); setOpenAddProduct(true); }}
                       className="mt-4 px-4 py-2 text-xs font-bold bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black rounded-lg active:scale-95 shadow-md shadow-black/20 dark:shadow-white/5"
                     >
                       Tambah Produk Pertama
@@ -1509,7 +1505,6 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   onChange={(e) => setNewProdCategory(e.target.value as any)}
                   className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
                 >
-                  <option value="RENTAL">RENTAL (Sewa PS / Paket Jam)</option>
                   <option value="SERVIS">SERVIS (Jasa Service Stik / Konsol)</option>
                 </select>
               </div>
@@ -1630,7 +1625,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   onChange={(e) => setEditProdCategory(e.target.value as any)}
                   className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
                 >
-                  <option value="RENTAL">RENTAL (Sewa PS / Paket Jam)</option>
+                  {editProdCategory === "RENTAL" && <option value="RENTAL">RENTAL (lama — tidak tampil di POS)</option>}
                   <option value="SERVIS">SERVIS (Jasa Service Stik / Konsol)</option>
                 </select>
               </div>

@@ -6,6 +6,7 @@ import { useIsDark } from "../hooks/useIsDark";
 import { usePosSales } from "../lib/posSales";
 import { Bisnis, bisnisOf, isBelanjaStok, pemasukanRental, pengeluaranAdminRental, periodRange, TransaksiOwner } from "../lib/keuangan";
 import type { HistoryItem } from "../lib/types";
+import { barisUsahaManual } from "../lib/pemasukanUsaha";
 import { rpShort } from "../lib/format";
 import {
   ArusTile, BarisUang, BatangUang, KartuAnalitik, LegendaArus, persen, rp, rpTanda, StatusArus, Titik, WARNA_KELUAR, WARNA_MASUK,
@@ -120,7 +121,7 @@ export default function AnalitikKeseluruhan(props: Props) {
       harian.set(key, x);
     };
     const r = { buku: 0, lain: 0, admin: 0, owner: 0 };
-    const u = { pos: 0, nota: 0, lain: 0, stok: 0, ops: 0 };
+    const u = { pos: 0, nota: 0, buku: 0, bukuN: 0, lain: 0, stok: 0, ops: 0 };
     const sumber = new Map<string, { label: string; sub: string; v: number }>();
     const kategori = new Map<string, { label: string; sub: string; v: number }>();
     const masukKe = (key: string, label: string, sub: string, v: number) => {
@@ -139,6 +140,12 @@ export default function AnalitikKeseluruhan(props: Props) {
       const v = pemasukanRental(h);
       r.buku += v;
       tambah(h.tanggal, "rm", v);
+      // Rincian Pemasukan Usaha (input admin) = pemasukan USAHA; baris dari nota POS dihitung lewat POS
+      barisUsahaManual(h).forEach((x) => {
+        u.buku += x.harga;
+        u.bukuN++;
+        tambah(h.tanggal, "um", x.harga);
+      });
       pengeluaranAdminRental(h).forEach((x) => {
         r.admin += x.harga;
         tambah(h.tanggal, "rk", x.harga);
@@ -155,6 +162,7 @@ export default function AnalitikKeseluruhan(props: Props) {
       tambah(s.tanggal || ymd(new Date(s.ts)), "um", s.total);
     });
     if (u.pos) masukKe("USAHA|pos", "Penjualan POS", `Usaha · ${u.nota} nota`, u.pos);
+    if (u.buku) masukKe("USAHA|buku", "Rincian pemasukan usaha", `Usaha · ${u.bukuN} input pembukuan`, u.buku);
 
     // Transaksi owner (Input › Transaksi)
     pemasukan.forEach((o) => {
@@ -177,7 +185,7 @@ export default function AnalitikKeseluruhan(props: Props) {
     });
 
     const rental = { masuk: r.buku + r.lain, keluar: r.admin + r.owner };
-    const usaha = { masuk: u.pos + u.lain, keluar: u.stok + u.ops };
+    const usaha = { masuk: u.pos + u.buku + u.lain, keluar: u.stok + u.ops };
     const masuk = rental.masuk + usaha.masuk;
     const keluar = rental.keluar + usaha.keluar;
     return {
@@ -306,13 +314,14 @@ export default function AnalitikKeseluruhan(props: Props) {
         />
         <KartuBisnis
           judul="Usaha"
-          sub="Penjualan POS & stok jualan"
+          sub="POS, jasa & stok jualan"
           icon={<Store className="w-[18px] h-[18px]" />}
           loading={loading}
           masuk={d.usaha.masuk}
           keluar={d.usaha.keluar}
           rows={[
             { jenis: "masuk", label: "Penjualan POS", note: `${d.u.nota} nota`, v: d.u.pos },
+            { jenis: "masuk", label: "Rincian pembukuan", note: `${d.u.bukuN} input`, v: d.u.buku },
             { jenis: "masuk", label: "Pemasukan lain", v: d.u.lain },
             { jenis: "keluar", label: "Belanja stok", v: d.u.stok },
             { jenis: "keluar", label: "Biaya operasional", v: d.u.ops },

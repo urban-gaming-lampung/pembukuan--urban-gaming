@@ -304,7 +304,7 @@ const AppleReportTemplate = forwardRef<HTMLDivElement, { data: Props['data'] }>(
             <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsJajanan.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.jenisJajanan} (x{r.qtyJam})</td><td className="py-2 text-right font-bold">{fmt(r.harga)}</td></tr>) : null)}</tbody></table>
           </div>
           <div>
-            <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Jasa & Aksesoris</span> <span className="text-zinc-500">{fmt(data.totalJasaAks)}</span></h3>
+            <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Pemasukan Usaha</span> <span className="text-zinc-500">{fmt(data.totalJasaAks)}</span></h3>
             <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsJasaAks.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.tipe}</td><td className="py-2 text-right font-bold">{fmt(r.harga)}</td></tr>) : null)}</tbody></table>
           </div>
         </div>

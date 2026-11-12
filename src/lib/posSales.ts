@@ -12,6 +12,7 @@ import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage
 import { auth, db, storage } from "./firebase";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { applyMasterChanges, prepareStokWrites, removeJualanItem, writeStokInTx, StokChange } from "./stokJualan";
+import { sinkronNotaDiam } from "./posPembukuan";
 
 export type StokRef = { kategori: string; item: string }; // item "*" = pilih saat checkout
 export const PILIH_SAAT_CHECKOUT = "*";
@@ -63,6 +64,17 @@ export type PosSale = {
   batalAlasan?: string | null;
   /** Hanya di hasil commitPosSale (tidak disimpan): sisa stok sesudah transaksi per "kategori||item". */
   stokSesudah?: Record<string, number>;
+  /**
+   * Nota SEWA dari Rincian Pemasukan SEWA PS (bukan penjualan POS, tidak disimpan di pos_transaksi):
+   * judul "NOTA SEWA", info unit / durasi / jam, dan ketentuan sewa menggantikan kotak garansi.
+   */
+  jenisNota?: "SEWA";
+  /** Baris info tambahan di bawah data pembeli (mis. Unit, Durasi, Jam ambil, Jam kembali). */
+  infoNota?: { l: string; r: string }[];
+  /** Kotak ketentuan pengganti kotak garansi. */
+  syaratNota?: { judul: string; isi: string[] };
+  /** Status pembayaran (bawaan: LUNAS). */
+  statusBayar?: "LUNAS" | "BELUM DIBAYAR";
 };
 
 // ============================================================
@@ -317,7 +329,7 @@ export async function commitPosSale(
   }
   if (input.metode === "TRANSFER" && !input.buktiTransfer) throw new Error("Bukti transfer wajib diupload.");
 
-  return runTransaction(db, async (tx) => {
+  const hasil = await runTransaction(db, async (tx) => {
     const [cSnap, sSnap] = await Promise.all([tx.get(counterRef), tx.get(stokRef)]);
     const c = cSnap.data() || {};
     const seq = c.day === dayKey ? (Number(c.seq) || 0) + 1 : 1;
@@ -350,6 +362,9 @@ export async function commitPosSale(
     tx.set(saleRef, { ...JSON.parse(JSON.stringify(sale)), waktu: serverTimestamp() });
     return { ...sale, id: saleRef.id, stokSesudah };
   });
+  // Jasa (isi game / HEN / servis) ikut rincian pembukuan hari itu bila sudah disimpan
+  sinkronNotaDiam(now);
+  return hasil;
 }
 
 /** Stok yang benar-benar terpotong oleh nota (stok tidak pernah di bawah 0) -> perubahan untuk mengembalikannya. */
@@ -395,6 +410,7 @@ export async function deletePosSale(sale: PosSale): Promise<void> {
     logs.docs.forEach((d) => tx.delete(d.ref));
     tx.delete(saleRef);
   });
+  sinkronNotaDiam(sale.ts);
 }
 
 /**
@@ -418,6 +434,7 @@ export async function cancelPosSale(sale: PosSale, alasan = ""): Promise<void> {
     writeStokInTx(tx, w, { noNota: cur.noNota });
     tx.update(saleRef, { batal: true, batalOleh: oleh, batalTs: now, batalAlasan: alasan.trim() || null });
   });
+  sinkronNotaDiam(sale.ts);
 }
 
 /** Unggah PDF nota ke Storage (link untuk WhatsApp pembeli) & simpan link-nya di transaksi. */

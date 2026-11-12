@@ -14,6 +14,7 @@ import {
 import { HistoryItem } from "../lib/types";
 import { rupiah } from "../lib/format";
 import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
+import { pemasukanRental } from "../lib/keuangan";
 
 // ─── UTILS ──────────────────────────────────────────
 const HARI = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
@@ -26,11 +27,8 @@ const formatCurrencyCompact = (value: number) =>
     maximumFractionDigits: 1,
   }).format(value);
 
-const getTotal = (h: HistoryItem) =>
-  Number(h.totalHarian ?? 0) +
-  Number(h.totalJajanan ?? 0) +
-  Number(h.totalJasaAks ?? 0) +
-  Number(h.totalSewa ?? 0);
+// Grafik Analitik Rental: harian + jajanan + sewa (Rincian Pemasukan Usaha ada di Analitik › Usaha)
+const getTotal = (h: HistoryItem) => pemasukanRental(h);
 
 const getBarColor = (total: number, isDark: boolean) => {
   if (total === 0) return "transparent";

@@ -220,7 +220,7 @@ export default function HistoryPembukuan({ items, onClear, onEdit, onDelete, isO
                   <th className={thStyle}>Hari</th>
                   <th className={thStyle}>Harian</th>
                   <th className={thStyle}>Jajanan</th>
-                  <th className={thStyle}>Jasa/Aks</th>
+                  <th className={thStyle}>Usaha</th>
                   <th className={thStyle}>Sewa PS</th>
                   {isOwner && (
                     <>
@@ -374,7 +374,7 @@ export default function HistoryPembukuan({ items, onClear, onEdit, onDelete, isO
                                   <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-xs mb-4">
                                     <DetailRow label="Harian" value={rupiah(h.totalHarian)} />
                                     <DetailRow label="Jajanan" value={rupiah(h.totalJajanan)} />
-                                    <DetailRow label="Jasa & Aks" value={rupiah(h.totalJasaAks)} />
+                                    <DetailRow label="Usaha" value={rupiah(h.totalJasaAks)} />
                                     <DetailRow label="Sewa PS" value={rupiah(h.totalSewa)} />
                                   </div>
 

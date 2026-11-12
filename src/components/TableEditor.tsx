@@ -74,7 +74,7 @@ function getThemeColors(title: string) {
   if (t.includes("sewa")) {
     return { color: "#0EA5E8", borderFocus: "focus:ring-[#0EA5E8]/30 focus:border-[#0EA5E8]" };
   }
-  if (t.includes("jasa") || t.includes("aksesoris")) {
+  if (t.includes("jasa") || t.includes("aksesoris") || t.includes("usaha")) {
     return { color: "#ED4343", borderFocus: "focus:ring-[#ED4343]/30 focus:border-[#ED4343]" };
   }
   if (t.includes("pengeluaran")) {
@@ -358,6 +358,12 @@ export default function TableEditor<T extends AnyRow>(props: {
   keyboardNav?: boolean;
   minRows?: number;
   isMobileTable?: boolean;
+  /** Tambahan ke total header (mis. baris nota POS yang ditampilkan di luar tabel). */
+  extraTotal?: number;
+  /** Konten di antara judul dan tabel (mis. baris terkunci dari POS). */
+  slotAtas?: React.ReactNode;
+  /** Tombol kecil di kolom No. / kepala kartu (klik tidak membuka-tutup kartu). */
+  renderNo?: (row: T, rowIndex: number) => React.ReactNode;
 }) {
   const {
     title,
@@ -371,6 +377,9 @@ export default function TableEditor<T extends AnyRow>(props: {
     keyboardNav = true,
     minRows = 1,
     isMobileTable = true,
+    extraTotal = 0,
+    slotAtas,
+    renderNo,
   } = props;
 
   const [isMobileScreen, setIsMobileScreen] = React.useState(
@@ -389,8 +398,8 @@ export default function TableEditor<T extends AnyRow>(props: {
   // Mendapatkan tema warna berdasarkan Judul Tabel
   const theme = React.useMemo(() => getThemeColors(title), [title]);
   const total = React.useMemo(
-    () => rows.reduce((s, r) => s + getHarga(r), 0),
-    [rows, getHarga]
+    () => rows.reduce((s, r) => s + getHarga(r), 0) + (Number(extraTotal) || 0),
+    [rows, getHarga, extraTotal]
   );
 
   const wrapRef = React.useRef<HTMLDivElement>(null);
@@ -555,26 +564,28 @@ export default function TableEditor<T extends AnyRow>(props: {
     <Section>
       <div className="flex flex-col gap-4">
         {/* Header Section */}
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-1.5 rounded-full" style={{ backgroundColor: theme.color }} />
+        <div className="flex items-center justify-between gap-3 px-1">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-8 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: theme.color }} />
             <h2
               className={`text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100`}
             >
               {title}
             </h2>
           </div>
-          <div className="text-right">
+          <div className="text-right shrink-0">
              {props.title.toLowerCase().includes("pengeluaran") ? (
                <div className="text-[10px] font-medium uppercase tracking-widest text-zinc-400">Total Keluar</div>
              ) : (
                 <div className="text-[10px] font-medium uppercase tracking-widest text-zinc-400">Total</div>
              )}
-            <div className="text-lg font-bold tracking-tight" style={{ color: theme.color }}>
+            <div className="text-lg font-bold tracking-tight tabular-nums whitespace-nowrap" style={{ color: theme.color }}>
               {currency(total)}
             </div>
           </div>
         </div>
+
+        {slotAtas}
 
         {/* Table Wrapper controlled entirely by isMobile state */}
         <div className={`relative overflow-hidden ${isMobile ? "bg-transparent shadow-none" : "border border-zinc-200/60 bg-white shadow-sm dark:border-zinc-800 dark:bg-[#1C1C1E]/40 rounded-[20px]"}`}>
@@ -634,6 +645,11 @@ export default function TableEditor<T extends AnyRow>(props: {
                                 <span className={`font-extrabold text-[12px] tracking-widest uppercase ${isCollapsedEmpty ? 'text-zinc-500 dark:text-zinc-400' : 'text-white/95'}`}>
                                   <span className={isCollapsedEmpty ? "bg-zinc-200/50 dark:bg-zinc-700/50 px-2.5 py-1 rounded-full text-[10px]" : "bg-white/20 px-2.5 py-1 rounded-full shadow-inner shadow-black/10 text-[10px]"}>BARIS {i + 1}</span>
                                 </span>
+                                {renderNo && (
+                                  <span className="contents" onClick={(e) => e.stopPropagation()}>
+                                    {renderNo(r, i)}
+                                  </span>
+                                )}
                                 {!expanded && hasData && (
                                    <div className="flex items-center justify-center bg-white/20 backdrop-blur-md rounded-full p-0.5 shadow-sm animate-in zoom-in-95">
                                       <Check size={12} strokeWidth={3} className="text-white drop-shadow-sm" />
@@ -648,8 +664,9 @@ export default function TableEditor<T extends AnyRow>(props: {
                               )}
                             </div>
                          ) : (
-                            <div className="flex justify-center items-center h-full">
+                            <div className="flex flex-col justify-center items-center gap-1 h-full">
                                <span className="font-mono text-sm tracking-widest font-bold text-zinc-500 dark:text-zinc-400">{i + 1}</span>
+                               {renderNo?.(r, i)}
                             </div>
                          )}
 
