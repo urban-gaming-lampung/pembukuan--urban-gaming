@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import {
-  Receipt, TrendingUp, TrendingDown, ShoppingBag, Package, Search, X, AlertTriangle, Users, Clock, Wallet, Ban, Loader2, BadgePercent, Store,
+  Receipt, TrendingUp, TrendingDown, ShoppingBag, Package, Search, X, AlertTriangle, Users, Clock, Wallet, Ban, Loader2, BadgePercent, Store, Trash2,
 } from "lucide-react";
 import FilterComp from "./Filter";
 import { useIsDark } from "../hooks/useIsDark";
@@ -9,7 +9,7 @@ import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue } from "../hooks/useStokData";
 import { getMinStok, statusOf, useMinStok } from "../lib/stokJualan";
-import { cancelPosSale, PosItem, PosSale, StokRef, usePosSales } from "../lib/posSales";
+import { cancelPosSale, deletePosSale, PosItem, PosSale, StokRef, usePosSales } from "../lib/posSales";
 import { resolveMonthYear } from "../lib/dateLocal";
 import { fmtTanggalNota } from "../lib/posReceipt";
 import { NotaActionButtons, NotaPreview, useNotaActions } from "./PosCheckoutSheet";
@@ -478,20 +478,39 @@ export default function AnalitikUsaha(props: FilterProps) {
 const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; onClose: () => void }> = ({ sale, live, onClose }) => {
   useBodyScrollLock(!!sale);
   const actions = useNotaActions(sale);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"" | "batal" | "hapus">("");
   if (!sale || !live) return null;
+
+  const hapus = async () => {
+    const ok = window.confirm(
+      `Hapus permanen nota ${live.noNota}?\n\n` +
+        (live.batal ? "" : "• Stok barang yang terpotong akan dikembalikan.\n") +
+        "• Riwayat stok nota ini ikut dihapus.\n• Tidak bisa dibatalkan."
+    );
+    if (!ok) return;
+    setBusy("hapus");
+    try {
+      await deletePosSale(live);
+      onClose();
+      window.alert(`Nota ${live.noNota} dihapus ✅`);
+    } catch (e: any) {
+      actions.setMsg("Gagal menghapus: " + (e?.message || e));
+    } finally {
+      setBusy("");
+    }
+  };
 
   const batalkan = async () => {
     const alasan = window.prompt(`Batalkan nota ${live.noNota}?\nStok barang yang terpotong akan dikembalikan.\n\nAlasan pembatalan (opsional):`, "");
     if (alasan === null) return;
-    setBusy(true);
+    setBusy("batal");
     try {
       await cancelPosSale(live, alasan);
       actions.setMsg("Nota dibatalkan & stok dikembalikan ✅");
     } catch (e: any) {
       actions.setMsg("Gagal membatalkan: " + (e?.message || e));
     } finally {
-      setBusy(false);
+      setBusy("");
     }
   };
 
@@ -526,11 +545,16 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
         </div>
         <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] bg-white dark:bg-[#1c1c1e] border-t border-zinc-200/70 dark:border-white/5 space-y-2">
           {!live.batal && <NotaActionButtons sale={live} actions={actions} />}
-          {!live.batal && (
-            <button type="button" disabled={busy} onClick={batalkan} className="w-full h-10 rounded-xl text-[13px] font-bold text-red-600 bg-red-50 dark:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-1.5">
-              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}Batalkan nota & kembalikan stok
+          <div className={`grid gap-2 ${live.batal ? "grid-cols-1" : "grid-cols-[1fr_auto]"}`}>
+            {!live.batal && (
+              <button type="button" disabled={!!busy} onClick={batalkan} className="h-11 rounded-xl text-[13px] font-bold text-red-600 bg-red-50 dark:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                {busy === "batal" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}Batalkan & kembalikan stok
+              </button>
+            )}
+            <button type="button" disabled={!!busy} onClick={hapus} className="h-11 px-4 rounded-xl text-[13px] font-bold text-white bg-red-600 disabled:opacity-50 flex items-center justify-center gap-1.5">
+              {busy === "hapus" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}Hapus nota
             </button>
-          )}
+          </div>
         </div>
       </div>
     </div>

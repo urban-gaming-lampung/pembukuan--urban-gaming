@@ -7,7 +7,7 @@
  *   pos_transaksi, pengurangan stok jualan, dan riwayat stok "Terjual".
  */
 import { useEffect, useState } from "react";
-import { collection, doc, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, where } from "firebase/firestore";
+import { collection, doc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, where } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { prepareStokWrites, writeStokInTx, StokChange } from "./stokJualan";
@@ -185,6 +185,51 @@ export async function commitPosSale(
   });
 }
 
+/** Stok yang benar-benar terpotong oleh nota (stok tidak pernah di bawah 0) -> perubahan untuk mengembalikannya. */
+function restoreChanges(sale: PosSale): StokChange[] {
+  const need = new Map<string, { kategori: string; item: string; qty: number }>();
+  (sale.items || []).forEach((it) => {
+    if (!it.stokRef || it.stokRef.item === PILIH_SAAT_CHECKOUT) return;
+    const k = `${it.stokRef.kategori}||${it.stokRef.item}`;
+    const n = need.get(k) || { ...it.stokRef, qty: 0 };
+    n.qty += it.qty;
+    need.set(k, n);
+  });
+  const changes: StokChange[] = [];
+  need.forEach((n) => {
+    const kurang = (sale.stokKurang || []).find((k) => k.kategori === n.kategori && k.item === n.item);
+    const terpotong = kurang ? Math.max(0, Math.min(n.qty, kurang.tersedia)) : n.qty;
+    if (terpotong > 0) changes.push({ kategori: n.kategori, item: n.item, delta: terpotong });
+  });
+  return changes;
+}
+
+/**
+ * Hapus nota permanen (owner / super admin, untuk data uji / salah input).
+ * Bila nota belum dibatalkan, stok yang terpotong dikembalikan. Riwayat stok milik
+ * nota ini ikut dihapus, sehingga tidak meninggalkan jejak di Stok & Analitik.
+ */
+export async function deletePosSale(sale: PosSale): Promise<void> {
+  if (!sale.id) throw new Error("ID nota tidak ditemukan.");
+  const oleh = auth.currentUser?.email || "admin";
+  const now = Date.now();
+  const saleRef = doc(db, "pos_transaksi", sale.id);
+  const stokDoc = doc(db, "data", "stok");
+  const logs = await getDocs(query(collection(db, "stok_log"), where("noNota", "==", sale.noNota)));
+  await runTransaction(db, async (tx) => {
+    const [sSnap, stSnap] = await Promise.all([tx.get(saleRef), tx.get(stokDoc)]);
+    if (!sSnap.exists()) throw new Error("Nota sudah tidak ada.");
+    const cur = sSnap.data() as PosSale;
+    if (!cur.batal) {
+      const jualan = (stSnap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
+      const w = prepareStokWrites(jualan, restoreChanges(cur), "koreksi", "", oleh, now);
+      if (Object.keys(w.patch).length) tx.set(stokDoc, { jualan: w.patch }, { merge: true }); // tanpa log: riwayatnya ikut dihapus
+    }
+    logs.docs.forEach((d) => tx.delete(d.ref));
+    tx.delete(saleRef);
+  });
+}
+
 /**
  * Batalkan nota (owner / super admin): stok yang benar-benar terpotong dikembalikan
  * dan nota ditandai batal (tetap tersimpan untuk jejak audit).
@@ -201,21 +246,7 @@ export async function cancelPosSale(sale: PosSale, alasan = ""): Promise<void> {
     const cur = sSnap.data() as PosSale;
     if (cur.batal) throw new Error("Nota ini sudah dibatalkan.");
     const jualan = (stSnap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
-    // Jumlah yang benar-benar terpotong (stok tidak pernah di bawah 0)
-    const need = new Map<string, { kategori: string; item: string; qty: number }>();
-    (cur.items || []).forEach((it) => {
-      if (!it.stokRef || it.stokRef.item === PILIH_SAAT_CHECKOUT) return;
-      const k = `${it.stokRef.kategori}||${it.stokRef.item}`;
-      const n = need.get(k) || { ...it.stokRef, qty: 0 };
-      n.qty += it.qty;
-      need.set(k, n);
-    });
-    const changes: StokChange[] = [];
-    need.forEach((n) => {
-      const kurang = (cur.stokKurang || []).find((k) => k.kategori === n.kategori && k.item === n.item);
-      const terpotong = kurang ? Math.max(0, kurang.tersedia) : n.qty;
-      if (terpotong > 0) changes.push({ kategori: n.kategori, item: n.item, delta: terpotong });
-    });
+    const changes = restoreChanges(cur);
     const w = prepareStokWrites(jualan, changes, "koreksi", `Batal nota ${cur.noNota}${alasan.trim() ? ` · ${alasan.trim()}` : ""}`, oleh, now);
     writeStokInTx(tx, w, { noNota: cur.noNota });
     tx.update(saleRef, { batal: true, batalOleh: oleh, batalTs: now, batalAlasan: alasan.trim() || null });
