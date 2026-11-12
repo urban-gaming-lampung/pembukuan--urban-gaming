@@ -1,15 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Plus, Minus, X, ChevronRight, Camera, Package, Sparkles, Trash2, Loader2, AlertTriangle, Link2Off } from "lucide-react";
+import { Search, Plus, Minus, X, ChevronRight, Camera, Package, Sparkles, Trash2, Loader2, AlertTriangle, Link2Off, RotateCcw } from "lucide-react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { toLocalYmd } from "../lib/dateLocal";
-import { getMinStok, removeJualanItem, statusOf, useMinStok } from "../lib/stokJualan";
+import { getMinStok, removeJualanItem, statusOf, StokLog, useMinStok, useStokLog } from "../lib/stokJualan";
 import { PILIH_SAAT_CHECKOUT, produkSubKategori, StokRef, SubKategoriJualan, syncProdukKeStok } from "../lib/posSales";
 import {
-  hapusBarangJualan, KATEGORI_PENGELUARAN_STOK, ModalMap, pratinjauOtomatis, ProdukJualan, simpanBarangJualan, uploadFotoProduk, useModalProduk,
+  catatanStokMasuk, hapusBarangJualan, KATEGORI_PENGELUARAN_STOK, koreksiJumlahStok, ModalMap, pratinjauOtomatis, ProdukJualan, simpanBarangJualan,
+  uploadFotoProduk, urungkanStokMasuk, useModalProduk,
 } from "../lib/barangJualan";
 import { refAda, StokRefSelect } from "./StokRefSelect";
 
@@ -356,6 +357,10 @@ const BarangJualanSheet: React.FC<{
   const [varian, setVarian] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [info, setInfo] = useState("");
+  const [ubahJumlah, setUbahJumlah] = useState<string | null>(null);
+  const [busyStok, setBusyStok] = useState<string>("");
+  const { logs } = useStokLog(300);
 
   useEffect(() => { if (!subManual) setSub(produkSubKategori(nama)); }, [nama, subManual]);
   useEffect(() => () => { if (foto && fotoPreview.startsWith("blob:")) URL.revokeObjectURL(fotoPreview); }, [foto, fotoPreview]);
@@ -369,6 +374,34 @@ const BarangJualanSheet: React.FC<{
   const sv = stokView(efektif, cats, data, minMap);
   const varianList = efektif?.item === PILIH_SAAT_CHECKOUT ? cats.find((c) => c.kategori === efektif.kategori)?.items || [] : [];
   const dipakaiLain = efektif && efektif.item !== PILIH_SAAT_CHECKOUT ? products.filter((x) => x.id !== p?.id && x.stokRef && x.stokRef.kategori === efektif.kategori && x.stokRef.item === efektif.item) : [];
+
+  // Stok masuk dari Input Stok untuk barang ini (7 hari terakhir) -> bisa diurungkan
+  const masukTerakhir: StokLog[] = p
+    ? logs.filter((l) => l.alasan === "masuk" && !l.diurungkan && l.delta > 0 && Date.now() - l.ts < 7 * 86400000 && ((l.catatan || "") === catatanStokMasuk(p.name) || (l.catatan || "").startsWith(catatanStokMasuk(p.name) + " ·"))).slice(0, 5)
+    : [];
+  const jumlahSekarang = efektif && efektif.item !== PILIH_SAAT_CHECKOUT ? Math.max(0, Math.round(Number(data?.[efektif.kategori]?.[efektif.item]?.jumlah) || 0)) : null;
+  const bisaUbahJumlah = !!p && !!efektif && efektif.item !== PILIH_SAAT_CHECKOUT && ref !== undefined;
+
+  const urungkan = async (l: StokLog) => {
+    if (!p) return;
+    if (!confirm(`Urungkan stok masuk +${l.delta} (${l.item})?\nStok dikurangi lagi & pengeluaran "${KATEGORI_PENGELUARAN_STOK}"-nya ikut dihapus.`)) return;
+    setBusyStok(l.id); setErr(""); setInfo("");
+    try {
+      const r = await urungkanStokMasuk(l, p.id);
+      setInfo(`Stok masuk diurungkan (−${l.delta})${r.pengeluaranDihapus ? " & pengeluarannya dihapus" : ""} ✓`);
+    } catch (e: any) { setErr(e?.message || String(e)); }
+    finally { setBusyStok(""); }
+  };
+  const simpanJumlah = async () => {
+    if (!p || !efektif || ubahJumlah === null) return;
+    setBusyStok("jumlah"); setErr(""); setInfo("");
+    try {
+      await koreksiJumlahStok(efektif, Number(ubahJumlah || 0), p.name);
+      setInfo(`Jumlah stok disamakan jadi ${Number(ubahJumlah || 0)} ✓`);
+      setUbahJumlah(null);
+    } catch (e: any) { setErr(e?.message || String(e)); }
+    finally { setBusyStok(""); }
+  };
 
   const pilihFoto = (f: File | null) => {
     if (!f) return;
@@ -506,6 +539,45 @@ const BarangJualanSheet: React.FC<{
               <p className="text-[12.5px] text-zinc-500 px-1 leading-snug">Stok ini dipakai bersama: {dipakaiLain.map((x) => x.name).join(", ")}</p>
             )}
             {ref === null && <p className="text-[12.5px] text-amber-600 dark:text-amber-400 px-1">Stok tidak akan berkurang saat barang ini terjual.</p>}
+
+            {bisaUbahJumlah && (
+              <div className="pt-1">
+                {ubahJumlah === null ? (
+                  <div className="flex items-center justify-between gap-3 px-1">
+                    <span className="text-[14px] text-zinc-700 dark:text-zinc-200">Jumlah sekarang <b className="tabular-nums">{jumlahSekarang}</b></span>
+                    <button type="button" onClick={() => setUbahJumlah(String(jumlahSekarang ?? 0))} className="text-[14px] font-medium text-blue-600 dark:text-blue-400">Ubah jumlah</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <input autoFocus inputMode="numeric" value={ubahJumlah} onChange={(e) => setUbahJumlah(digits(e.target.value))}
+                      className="flex-1 min-w-0 h-11 px-3.5 rounded-[12px] bg-zinc-100 dark:bg-white/10 text-[16px] tabular-nums text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
+                    <button type="button" onClick={() => setUbahJumlah(null)} className="h-11 px-3 text-[14px] text-zinc-500">Batal</button>
+                    <button type="button" disabled={busyStok === "jumlah"} onClick={simpanJumlah} className="h-11 px-4 rounded-[12px] bg-blue-600 text-white text-[14px] font-semibold disabled:opacity-50">
+                      {busyStok === "jumlah" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
+                    </button>
+                  </div>
+                )}
+                {ubahJumlah !== null && <p className="mt-1.5 px-1 text-[12px] text-zinc-500">Samakan dengan hitungan fisik. Tercatat sebagai koreksi, tidak masuk pengeluaran.</p>}
+              </div>
+            )}
+
+            {masukTerakhir.length > 0 && (
+              <div className="pt-2 mt-1 border-t border-zinc-100 dark:border-white/5">
+                <div className="px-1 pb-1 text-[12px] font-medium text-zinc-500">Stok masuk terakhir</div>
+                {masukTerakhir.map((l) => (
+                  <div key={l.id} className="flex items-center gap-3 px-1 py-1.5">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[14px] text-zinc-900 dark:text-white"><b className="text-emerald-600 dark:text-emerald-400 tabular-nums">+{l.delta}</b> {l.item}</div>
+                      <div className="text-[12px] text-zinc-500">{new Date(l.ts).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
+                    </div>
+                    <button type="button" disabled={!!busyStok} onClick={() => urungkan(l)}
+                      className="h-8 px-3 rounded-full bg-zinc-100 dark:bg-white/10 text-[13px] font-medium text-zinc-700 dark:text-zinc-200 flex items-center gap-1.5 disabled:opacity-50">
+                      {busyStok === l.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}Urungkan
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Stok masuk */}
@@ -555,6 +627,9 @@ const BarangJualanSheet: React.FC<{
             </div>
           )}
 
+          {info && (
+            <div className="rounded-[14px] bg-emerald-50 dark:bg-emerald-500/10 px-3.5 py-3 text-[13.5px] text-emerald-700 dark:text-emerald-400">{info}</div>
+          )}
           {err && (
             <div className="flex items-start gap-2 rounded-[14px] bg-red-50 dark:bg-red-500/10 px-3.5 py-3 text-[13.5px] text-red-600 dark:text-red-400">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />{err}

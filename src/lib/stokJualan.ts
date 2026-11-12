@@ -43,6 +43,8 @@ export type StokLog = {
   catatan?: string;
   oleh: string;
   ts: number;
+  /** Stok masuk yang sudah dibatalkan lewat "Urungkan" */
+  diurungkan?: boolean;
 };
 
 export type StokRow = {
