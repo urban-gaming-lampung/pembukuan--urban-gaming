@@ -160,7 +160,7 @@ export default function AnalitikUsaha(props: FilterProps) {
         const cl = catLabel(it);
         const c = byCat.get(cl) || { omzet: 0, qty: 0 };
         c.omzet += it.subtotal; c.qty += it.qty; byCat.set(cl, c);
-        const pn = it.kategori === "ISI GAME" && it.platform ? `${it.nama} (${it.platform})` : it.nama;
+        const pn = it.kategori === "ISI GAME" && it.platform ? `${it.nama} (${it.platform})` : it.kategori === "JUALAN" ? String(it.nama || "").toUpperCase() : it.nama;
         const p = byProduct.get(pn) || { nama: pn, kategori: cl, qty: 0, omzet: 0 };
         p.qty += it.qty; p.omzet += it.subtotal; byProduct.set(pn, p);
         if (it.stokRef) {
@@ -189,7 +189,8 @@ export default function AnalitikUsaha(props: FilterProps) {
         if (m.perkiraan) perkiraan += it.qty;
         denganModal += it.subtotal;
         hpp += m.modal * it.qty;
-        perProduk.set(it.nama, (perProduk.get(it.nama) || 0) + it.subtotal - m.modal * it.qty);
+        const key = String(it.nama || "").toUpperCase();
+        perProduk.set(key, (perProduk.get(key) || 0) + it.subtotal - m.modal * it.qty);
       })
     );
     const kotor = denganModal - hpp;

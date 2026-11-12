@@ -154,9 +154,12 @@ export function produkSubKategori(name: string): SubKategoriJualan {
 
 export const KATEGORI_KASET_BD = "KASET BD";
 
+/** Nama barang jualan & barang stok jualan selalu HURUF BESAR (mudah dibaca, konsisten). */
+export const namaJualan = (s: string) => String(s || "").replace(/\s+/g, " ").trim().toUpperCase();
+
 /** Kategori & nama barang stok baru untuk produk yang belum punya padanan di stok. */
 export function stokBaruUntukProduk(p: Pick<ProdukSync, "name" | "subcategory">): StokRef {
-  const name = String(p.name || "").replace(/\s+/g, " ").trim();
+  const name = namaJualan(p.name);
   const sub = (p.subcategory as SubKategoriJualan) || produkSubKategori(name);
   const tok = tokenize(name);
   const clean =

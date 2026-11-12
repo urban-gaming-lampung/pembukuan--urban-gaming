@@ -476,7 +476,7 @@ const BarangJualanSheet: React.FC<{
             </label>
             <div className="flex-1 min-w-0">
               <span className={label}>Nama barang</span>
-              <textarea value={nama} onChange={(e) => setNama(e.target.value)} rows={2} placeholder="Contoh: Stik PS4 Baru - Hitam"
+              <textarea value={nama} onChange={(e) => setNama(e.target.value.toUpperCase())} rows={2} placeholder="CONTOH: STIK PS4 BARU - HITAM" autoCapitalize="characters"
                 className="w-full px-3 py-2 rounded-[12px] bg-zinc-100 dark:bg-white/10 text-[16px] leading-snug text-zinc-900 dark:text-white placeholder:text-zinc-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
             </div>
           </div>

@@ -14,7 +14,7 @@ import type { StokKategori } from "../hooks/useStokData";
 import { applyMasterChanges, commitStokChanges, prepareStokWrites, renameJualanItem, writeStokInTx } from "./stokJualan";
 import type { StokItemValue } from "../hooks/useStokData";
 import {
-  hapusStokOtomatisBilaYatim, PILIH_SAAT_CHECKOUT, planStokSync, ProdukSync, StokRef, stokBaruUntukProduk, SubKategoriJualan,
+  hapusStokOtomatisBilaYatim, namaJualan, PILIH_SAAT_CHECKOUT, planStokSync, ProdukSync, StokRef, stokBaruUntukProduk, SubKategoriJualan,
 } from "./posSales";
 
 export const KATEGORI_PENGELUARAN_STOK = "Stok Jualan";
@@ -94,7 +94,7 @@ export async function uploadFotoProduk(file: File): Promise<string> {
 /** Pratinjau: barang stok mana yang akan dipakai bila "Otomatis". */
 export function pratinjauOtomatis(nama: string, sub: SubKategoriJualan, master: StokKategori[]): { ref: StokRef; baru: boolean } | null {
   if (!nama.trim()) return null;
-  const plan = planStokSync([{ id: "_", name: nama.trim(), category: "JUALAN", subcategory: sub, stokRef: undefined }], master);
+  const plan = planStokSync([{ id: "_", name: namaJualan(nama), category: "JUALAN", subcategory: sub, stokRef: undefined }], master);
   return plan.links[0] ? { ref: plan.links[0].ref, baru: plan.links[0].baru } : null;
 }
 
@@ -122,7 +122,7 @@ export async function simpanBarangJualan(
   jumlahStok: (r: StokRef) => number | undefined,
   masuk?: StokMasukInput
 ): Promise<{ id: string; stokRef: StokRef | null; dibuat: boolean }> {
-  const nama = input.nama.replace(/\s+/g, " ").trim();
+  const nama = namaJualan(input.nama);
   if (!nama) throw new Error("Nama barang wajib diisi.");
   if (!(input.hargaJual > 0)) throw new Error("Harga jual wajib diisi.");
   const lain = semuaProduk.filter((p) => p.id !== input.id);
