@@ -235,6 +235,11 @@ service cloud.firestore {
       allow read, write: if isSalaryAdmin();
     }
 
+    // Catatan stok masuk barang jualan (berisi harga modal) — owner / super admin
+    match /stok_masuk/{masukId} {
+      allow read, write: if isSalaryAdmin();
+    }
+
     // ==========================================
     // Aturan Share Screenshots (ProsperoEden) — tidak diubah
     // ==========================================
