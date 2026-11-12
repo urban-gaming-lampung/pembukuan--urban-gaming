@@ -8,7 +8,7 @@ import { commitStokChanges, StokChange } from "../lib/stokJualan";
 /**
  * Tempel laporan stok format WhatsApp → pratinjau → simpan.
  * Barang yang cocok diperbarui jumlah & catatannya. Barang yang belum terdaftar bisa disamakan
- * dengan barang lain atau dilewati — barang jualan baru hanya dibuat lewat Owner › Input › Stok Jualan.
+ * dengan barang lain atau dilewati — barang jualan baru hanya dibuat lewat Owner › Input › Atur Stok.
  */
 type Decision = "lewati" | `map:${string}`;
 type StaleAction = "biarkan" | "nol";
@@ -82,7 +82,7 @@ const StokReportPaste: React.FC<{
       });
       if (staleAction === "nol") stale.forEach((s) => byKey.set(`${s.kategori}||${normKey(s.item)}`, { kategori: s.kategori, item: s.item, setTo: 0 }));
       const n = await commitStokChanges(Array.from(byKey.values()), "koreksi", "Tempel laporan stok");
-      alert(`Laporan stok tersimpan ✅\n${stats.berubah} berubah\n${n} barang tercatat sudah dicek hari ini.${stats.baru ? `\n${stats.baru} barang belum terdaftar dilewati — tambahkan lewat Owner › Input › Stok Jualan.` : ""}`);
+      alert(`Laporan stok tersimpan ✅\n${stats.berubah} berubah\n${n} barang tercatat sudah dicek hari ini.${stats.baru ? `\n${stats.baru} barang belum terdaftar dilewati — tambahkan lewat Owner › Input › Atur Stok.` : ""}`);
       reset();
       onClose();
     } catch (e: any) {
@@ -217,7 +217,7 @@ const StokReportPaste: React.FC<{
                           {!m.item && (
                             <div className="mt-2 flex flex-wrap items-center gap-1.5">
                               {d === "lewati" && (
-                                <span className="basis-full text-[11px] text-zinc-500">Barang baru ditambahkan lewat Owner › Input › Stok Jualan, lalu tempel ulang.</span>
+                                <span className="basis-full text-[11px] text-zinc-500">Barang baru ditambahkan lewat Owner › Input › Atur Stok, lalu tempel ulang.</span>
                               )}
                               {m.saran && d !== `map:${m.saran}` && (
                                 <button

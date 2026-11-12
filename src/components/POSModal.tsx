@@ -721,10 +721,10 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               })}
             </div>
             
-            {/* Barang jualan hanya lewat Owner › Input › Stok Jualan */}
+            {/* Barang jualan hanya lewat Owner › Input › Atur Stok */}
             {isSuperAdminOrOwner && activeSub === "JUALAN" && (
               <p className="mt-3 text-[12px] leading-snug text-zinc-500 dark:text-zinc-400">
-                Tambah & ubah barang jualan (harga, modal, stok) di <b className="text-zinc-700 dark:text-zinc-200">Owner › Input › Stok Jualan</b>.
+                Tambah & ubah barang jualan (harga, modal, stok) di <b className="text-zinc-700 dark:text-zinc-200">Owner › Input › Atur Stok</b>.
               </p>
             )}
             {/* Add product button for Super Admin on Mobile */}
@@ -956,7 +956,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   </h3>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-[240px]">
                     {activeSub === "JUALAN" ? `Belum ada barang ${activeKondisi === "SEKEN" ? "seken" : "baru"} di kategori ini.` : `Belum ada produk di kategori ${activeSub}.`}
-                    {isSuperAdminOrOwner && (activeSub === "JUALAN" ? " Tambahkan lewat Owner › Input › Stok Jualan." : " Klik tombol di bawah untuk menambahkan produk.")}
+                    {isSuperAdminOrOwner && (activeSub === "JUALAN" ? " Tambahkan lewat Owner › Input › Atur Stok." : " Klik tombol di bawah untuk menambahkan produk.")}
                   </p>
                   {isSuperAdminOrOwner && activeSub === "SERVIS" && (
                     <button

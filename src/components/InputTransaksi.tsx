@@ -298,7 +298,7 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
                                   <div className="flex items-center justify-between sm:justify-end gap-3">
                                     <div className={`text-[14px] font-black whitespace-nowrap ${t.angka}`}>{rupiah(o.harga)}</div>
                                     {o.sumber === "input_stok" ? (
-                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-zinc-500 bg-zinc-100 dark:bg-white/10 px-2 py-1.5 rounded-lg" title="Ubah lewat Input › Stok Jualan › Riwayat stok masuk">
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-zinc-500 bg-zinc-100 dark:bg-white/10 px-2 py-1.5 rounded-lg" title="Ubah lewat Input › Atur Stok › Riwayat stok masuk">
                                         <Package className="w-3 h-3" />Dari stok masuk
                                       </span>
                                     ) : (
@@ -322,7 +322,7 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
           })}
         </div>
         {tab === "USAHA" && jenis === "PENGELUARAN" && (
-          <p className="mt-3 text-[12px] text-zinc-400 leading-snug">Pengeluaran “Dari stok masuk” diubah / dihapus lewat Input › Stok Jualan › Edit Barang › Riwayat stok masuk, supaya stok ikut sinkron.</p>
+          <p className="mt-3 text-[12px] text-zinc-400 leading-snug">Pengeluaran “Dari stok masuk” diubah / dihapus lewat Input › Atur Stok › Edit Barang › Riwayat stok masuk, supaya stok ikut sinkron.</p>
         )}
       </div>
     </div>

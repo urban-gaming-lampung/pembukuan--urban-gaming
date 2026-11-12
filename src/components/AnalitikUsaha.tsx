@@ -484,7 +484,7 @@ export default function AnalitikUsaha(props: FilterProps) {
           {laba.qtyTanpa > 0 && (
             <p className="mt-2.5 flex items-start gap-1.5 text-[12px] text-amber-700 dark:text-amber-400">
               <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              {laba.qtyTanpa} barang terjual ({rupiah(laba.penjualanTanpaModal)}) belum punya harga modal / tidak dikenali, tidak ikut dihitung laba. Isi di Owner › Input › Stok Jualan.
+              {laba.qtyTanpa} barang terjual ({rupiah(laba.penjualanTanpaModal)}) belum punya harga modal / tidak dikenali, tidak ikut dihitung laba. Isi di Owner › Input › Atur Stok.
             </p>
           )}
           {laba.perkiraan > 0 && <p className="mt-1.5 text-[12px] text-zinc-500">{laba.perkiraan} barang memakai perkiraan harga modal (modal diisi sesudah transaksi, atau barang dari pembukuan harian memakai harga modal sekarang).</p>}

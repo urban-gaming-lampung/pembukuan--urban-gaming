@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { AlertCircle, CheckCircle, Check, Clock, ClipboardPaste, Copy, History, Minus, Plus, Search, ShoppingCart, TrendingUp, X } from "lucide-react";
 import useStokData from "../hooks/useStokData";
-import { Kondisi, kondisiStok } from "../lib/posSales";
+import { Kondisi, kondisiStok, stokBeririsan } from "../lib/posSales";
 import { useProdukJualan } from "../lib/barangJualan";
 import KondisiSwitch from "./KondisiSwitch";
 import StokReportPaste from "./StokReportPaste";
@@ -93,7 +93,8 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
   // Halaman Baru / Seken (draft di halaman lain tetap ikut tersimpan)
   const kondisiOf = (r: { kategori: string; item: string }) => kondisiStok(r.kategori, r.item, products);
   const rows = useMemo(() => rowsAll.filter((r) => kondisiOf(r) === kondisi), [rowsAll, products, kondisi]); // eslint-disable-line react-hooks/exhaustive-deps
-  const kondisiCount = { BARU: rowsAll.filter((r) => kondisiOf(r) === "BARU").length, SEKEN: rowsAll.filter((r) => kondisiOf(r) === "SEKEN").length };
+  // Barang stok yang belum dijual di POS (sama dengan "Stok tanpa produk" di Input › Atur Stok)
+  const tanpaProduk = (r: { kategori: string; item: string }) => !products.some((p) => stokBeririsan(p.stokRef, r));
   const sold30 = useMemo(() => soldMap(logs, 30), [logs]);
   const catatanOf = (r: { kategori: string; item: string }) => String(dataJualan?.[r.kategori]?.[r.item]?.catatan || "");
 
@@ -154,11 +155,29 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
   };
 
   // ---------- Ringkasan & daftar ----------
+  const cocokFilter = (r: StokRow, f: Filter = filter) => (f === "semua" ? true : f === "cek" ? isStale(r.lastTs) : r.status === f);
+  // Ringkasan = SELURUH barang jualan (baru + seken), sama seperti Input › Atur Stok
   const count = {
-    habis: rows.filter((r) => r.status === "habis").length,
-    menipis: rows.filter((r) => r.status === "menipis").length,
-    aman: rows.filter((r) => r.status === "aman").length,
-    cek: rows.filter((r) => isStale(r.lastTs)).length,
+    habis: rowsAll.filter((r) => cocokFilter(r, "habis")).length,
+    menipis: rowsAll.filter((r) => cocokFilter(r, "menipis")).length,
+    aman: rowsAll.filter((r) => cocokFilter(r, "aman")).length,
+    cek: rowsAll.filter((r) => cocokFilter(r, "cek")).length,
+  };
+  // Angka di saklar Baru / Seken mengikuti filter ringkasan yang aktif
+  const kondisiCount = {
+    BARU: rowsAll.filter((r) => kondisiOf(r) === "BARU" && cocokFilter(r)).length,
+    SEKEN: rowsAll.filter((r) => kondisiOf(r) === "SEKEN" && cocokFilter(r)).length,
+  };
+  const pilihFilter = (f: Filter) => {
+    const next = filter === f ? "semua" : f;
+    setFilter(next);
+    setTab("barang");
+    // Halaman ini tidak punya barang dengan status itu tapi halaman lain punya -> pindah ke sana
+    if (next !== "semua") {
+      const lain: Kondisi = kondisi === "BARU" ? "SEKEN" : "BARU";
+      const di = (k: Kondisi) => rowsAll.filter((r) => kondisiOf(r) === k && cocokFilter(r, next)).length;
+      if (!di(kondisi) && di(lain)) setKondisi(lain);
+    }
   };
   const perluBeli = rows.filter((r) => r.status !== "aman");
 
@@ -174,7 +193,7 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
 
   const q = cari.trim().toLowerCase();
   const visible = rows
-    .filter((r) => (filter === "semua" ? true : filter === "cek" ? isStale(r.lastTs) : r.status === filter) || !!drafts[kunciStok(r)])
+    .filter((r) => cocokFilter(r) || !!drafts[kunciStok(r)])
     .filter((r) => !q || r.item.toLowerCase().includes(q) || r.kategori.toLowerCase().includes(q));
   const grouped = kategoriJualan
     .map((c) => ({
@@ -203,10 +222,7 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
 
   return (
     <div className={`space-y-4 ${changed.length ? "pb-24" : ""}`}>
-      {/* Halaman Baru / Seken */}
-      <KondisiSwitch value={kondisi} onChange={(k) => { setKondisi(k); setFilter("semua"); }} counts={kondisiCount} />
-
-      {/* Ringkasan */}
+      {/* Ringkasan seluruh barang jualan (baru + seken) */}
       <div className="grid grid-cols-2 gap-2.5">
         {tiles.map((t) => (
           <TileStok
@@ -217,10 +233,13 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
             cls={t.cls}
             icon={t.icon}
             active={filter === t.key}
-            onClick={() => { setFilter(filter === t.key ? "semua" : t.key); setTab("barang"); }}
+            onClick={() => pilihFilter(t.key)}
           />
         ))}
       </div>
+
+      {/* Halaman Baru / Seken: daftar belanja & daftar barang di bawah ini mengikuti halaman terpilih */}
+      <KondisiSwitch value={kondisi} onChange={setKondisi} counts={kondisiCount} />
 
       {/* Aksi */}
       <div className="space-y-2">
@@ -288,7 +307,7 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
 
           {grouped.length === 0 ? (
             <div className="text-center text-sm text-zinc-500 py-10 rounded-2xl border border-dashed border-zinc-300 dark:border-white/10">
-              {filter === "habis" || filter === "menipis" ? "Tidak ada barang dengan status ini 👍" : "Tidak ada barang yang cocok."}
+              {filter === "habis" || filter === "menipis" ? `Tidak ada barang ${kondisi === "BARU" ? "baru" : "seken"} dengan status ini 👍` : "Tidak ada barang yang cocok."}
             </div>
           ) : (
             grouped.map((g) => (
@@ -310,6 +329,7 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
                           {r.status !== "aman" && <StatusChip status={r.status} kurang={r.kurang} />}
                           <span className="text-[11px] text-zinc-400 truncate">
                             min {r.min}{sold ? ` · ${sold} laku/30h` : ""} · <span className={isStale(r.lastTs) ? "text-amber-600" : ""}>{fmtWaktu(r.lastTs)}</span>
+                            {isOwner && tanpaProduk(r) ? " · tanpa produk" : ""}
                           </span>
                         </div>
                       </button>
@@ -525,7 +545,7 @@ const ItemSheet: React.FC<{ row: StokRow; catatan: string; logs: StokLog[]; isOw
             )}
           </div>
 
-          {isOwner && <p className="text-center text-[12px] text-zinc-400 leading-snug px-2">Ubah nama, harga, atau hapus barang lewat Owner › Input › Stok Jualan.</p>}
+          {isOwner && <p className="text-center text-[12px] text-zinc-400 leading-snug px-2">Ubah nama, harga, atau hapus barang lewat Owner › Input › Atur Stok.</p>}
         </div>
       </div>
     </div>

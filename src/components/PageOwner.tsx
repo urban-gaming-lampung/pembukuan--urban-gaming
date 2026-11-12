@@ -771,7 +771,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
             ariaLabel="Halaman input"
             value={inputSubTab}
             onChange={setInputSubTab}
-            options={[{ key: "TRANSAKSI", label: "Transaksi" }, { key: "STOK", label: "Stok Jualan" }]}
+            options={[{ key: "TRANSAKSI", label: "Transaksi" }, { key: "STOK", label: "Atur Stok" }]}
           />
           {inputSubTab === "TRANSAKSI" ? (
             <InputTransaksi

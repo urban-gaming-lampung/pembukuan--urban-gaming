@@ -1,5 +1,5 @@
 /**
- * BARANG JUALAN — satu pintu (Owner › Input › Stok Jualan).
+ * BARANG JUALAN — satu pintu (Owner › Input › Atur Stok).
  *
  * Produk jualan (nama, foto, sub-kategori, harga jual) ada di `products`, jumlahnya dihitung
  * di stok jualan (`data/stok` + master), dan harga modal disimpan TERPISAH di

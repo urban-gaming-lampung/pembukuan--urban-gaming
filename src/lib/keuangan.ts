@@ -24,13 +24,13 @@ export type TransaksiOwner = {
   tanggal: string; // YYYY-MM-DD
   timestamp?: number;
   bisnis?: Bisnis;
-  /** "input_stok" = dibuat otomatis dari stok masuk (diubah lewat Input › Stok Jualan) */
+  /** "input_stok" = dibuat otomatis dari stok masuk (diubah lewat Input › Atur Stok) */
   sumber?: string;
   produkId?: string;
   stokMasukId?: string;
 };
 
-/** Pengeluaran belanja stok barang jualan (dibuat otomatis dari Input › Stok Jualan, atau kategori "Stok Jualan"). */
+/** Pengeluaran belanja stok barang jualan (dibuat otomatis dari Input › Atur Stok, atau kategori "Stok Jualan"). */
 export const isBelanjaStok = (o: Pick<TransaksiOwner, "sumber" | "kategori">) => o.sumber === "input_stok" || o.kategori === "Stok Jualan";
 
 /** Model usaha sebuah transaksi. Data lama tanpa field `bisnis`: stok jualan = USAHA, sisanya RENTAL. */

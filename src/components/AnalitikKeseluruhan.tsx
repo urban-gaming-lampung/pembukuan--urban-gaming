@@ -409,7 +409,7 @@ export default function AnalitikKeseluruhan(props: Props) {
           </div>
 
           <p className="text-[11.5px] text-zinc-400 leading-snug px-1">
-            Rental = pembukuan harian + transaksi owner bertanda Rental. Usaha = nota POS (tanpa nota batal) + transaksi owner bertanda Usaha, termasuk belanja stok dari Input › Stok Jualan.
+            Rental = pembukuan harian + transaksi owner bertanda Rental. Usaha = nota POS (tanpa nota batal) + transaksi owner bertanda Usaha, termasuk belanja stok dari Input › Atur Stok.
           </p>
         </>
       )}
