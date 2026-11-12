@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { X, ShoppingCart, Plus, Minus, Trash2, PlusCircle, Sparkles, Pencil, Search, Receipt, Link2 } from "lucide-react";
-import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, setDoc, deleteDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, setDoc, deleteDoc, deleteField } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage, listGameDb } from "../lib/firebase";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue } from "../hooks/useStokData";
 import PosCheckoutSheet from "./PosCheckoutSheet";
-import PosStokLinkSheet, { StokRefSelect } from "./PosStokLinkSheet";
-import { PILIH_SAAT_CHECKOUT, StokRef, stokRefLabel, suggestStokRef } from "../lib/posSales";
-import { getMinStok, statusOf, useMinStok } from "../lib/stokJualan";
+import PosStokLinkSheet, { refAda, StokRefSelect } from "./PosStokLinkSheet";
+import { hapusStokOtomatisBilaYatim, PILIH_SAAT_CHECKOUT, StokRef, stokBaruUntukProduk, stokRefLabel, suggestStokRef, syncProdukKeStok } from "../lib/posSales";
+import { getMinStok, renameJualanItem, statusOf, useMinStok } from "../lib/stokJualan";
 
 const qrisImg = new URL("/images/QRIS.jpeg", import.meta.url).href;
 
@@ -24,7 +24,8 @@ interface Product {
   size?: string;
   available?: boolean;
   subcategory?: "Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD";
-  stokRef?: StokRef | null; // barang stok jualan yang dipotong saat nota dibuat
+  stokRef?: StokRef | null; // barang stok jualan yang dipotong saat nota dibuat (undefined = belum disinkron)
+  stokAuto?: boolean; // barang stok dibuat otomatis khusus untuk produk ini
 }
 
 interface CartItem extends Product {
@@ -185,8 +186,12 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   // Checkout (nota + potong stok) & hubungkan produk ke stok
   const [openCheckout, setOpenCheckout] = useState(false);
   const [openStokLink, setOpenStokLink] = useState(false);
-  const [newProdStokRef, setNewProdStokRef] = useState<StokRef | null>(null);
-  const [editProdStokRef, setEditProdStokRef] = useState<StokRef | null>(null);
+  // undefined = Otomatis (sistem hubungkan / buat barang stok)
+  const [newProdStokRef, setNewProdStokRef] = useState<StokRef | null | undefined>(undefined);
+  const [editProdStokRef, setEditProdStokRef] = useState<StokRef | null | undefined>(undefined);
+  const [syncInfo, setSyncInfo] = useState<{ linked: number; created: number } | null>(null);
+  const syncTried = useRef<Set<string>>(new Set());
+  const syncBusy = useRef(false);
   const { stokState, masterCategories } = useStokData();
   const minStokMap = useMinStok();
   const stokCats = Array.isArray(masterCategories?.jualan) ? masterCategories.jualan : [];
@@ -377,8 +382,10 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       if (newProdCategory === "JUALAN") {
         productPayload.subcategory = newProdSubCategory;
       }
-      if (newProdCategory === "JUALAN" || newProdCategory === "SERVIS") {
-        productPayload.stokRef = newProdStokRef || null;
+      // Otomatis (undefined): field dibiarkan kosong -> langsung disinkron ke stok oleh sistem
+      if ((newProdCategory === "JUALAN" || newProdCategory === "SERVIS") && newProdStokRef !== undefined) {
+        productPayload.stokRef = newProdStokRef;
+        productPayload.stokAuto = false;
       }
 
       await addDoc(collection(db, "products"), productPayload);
@@ -387,7 +394,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       setNewProdName("");
       setNewProdPrice("");
       setNewProdSubCategory("Aksesoris");
-      setNewProdStokRef(null);
+      setNewProdStokRef(undefined);
       setNewProdImage(null);
       setOpenAddProduct(false);
       alert("Produk berhasil ditambahkan!");
@@ -406,7 +413,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     setEditProdCategory(p.category as any);
     setEditProdSubCategory(p.subcategory || getProductSubCategory(p.name));
     setEditProdImageUrl(p.imageUrl || "");
-    setEditProdStokRef(p.stokRef || null);
+    setEditProdStokRef(p.stokRef === undefined ? undefined : p.stokRef);
     setEditProdImage(null);
     setOpenEditProduct(true);
   };
@@ -450,8 +457,42 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       } else {
         updateData.subcategory = null;
       }
-      updateData.stokRef = editProdCategory === "JUALAN" || editProdCategory === "SERVIS" ? editProdStokRef || null : null;
+      // --- Sinkron produk <-> stok ---
+      const prod = selectedProductForEdit;
+      const namaBaru = editProdName.trim();
+      let bersihkan: StokRef | null = null;
+      if (editProdCategory !== "JUALAN" && editProdCategory !== "SERVIS") {
+        updateData.stokRef = null;
+        updateData.stokAuto = false;
+        if (prod.stokAuto && prod.stokRef) bersihkan = prod.stokRef;
+      } else if (editProdStokRef === undefined) {
+        // Otomatis: kosongkan supaya sistem menghubungkan / membuat ulang barang stok
+        updateData.stokRef = deleteField();
+        updateData.stokAuto = deleteField();
+      } else {
+        let ref = editProdStokRef;
+        const tetap = JSON.stringify(ref ?? null) === JSON.stringify(prod.stokRef ?? null);
+        // Barang stok yang dibuat otomatis untuk produk ini ikut ganti nama
+        if (tetap && ref && prod.stokAuto && namaBaru !== prod.name) {
+          const dipakaiLain = products.some((x) => x.id !== prod.id && x.stokRef?.kategori === ref!.kategori && x.stokRef?.item === ref!.item);
+          if (!dipakaiLain) {
+            const target = stokBaruUntukProduk({ name: namaBaru, subcategory: editProdCategory === "JUALAN" ? editProdSubCategory : null });
+            try {
+              const renamed = await renameJualanItem(ref.kategori, ref.item, target.item);
+              if (renamed) ref = { kategori: ref.kategori, item: renamed };
+            } catch (err: any) {
+              console.warn("Ganti nama barang stok gagal:", err);
+            }
+          }
+        }
+        updateData.stokRef = ref;
+        updateData.stokAuto = tetap ? !!prod.stokAuto : false;
+        if (!tetap && prod.stokAuto && prod.stokRef) bersihkan = prod.stokRef;
+      }
       await setDoc(docRef, updateData, { merge: true });
+      if (bersihkan) {
+        await hapusStokOtomatisBilaYatim(bersihkan, products.filter((x) => x.id !== prod.id), stokData?.[bersihkan.kategori]?.[bersihkan.item]?.jumlah).catch(() => false);
+      }
 
       // Sync updated product info in cart
       setCart((prev) =>
@@ -478,7 +519,12 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     if (!window.confirm("Apakah Anda yakin ingin menghapus produk ini secara permanen dari database?")) return;
     try {
       const docRef = doc(db, "products", productId);
+      const prod = products.find((x) => x.id === productId);
       await deleteDoc(docRef);
+      // Barang stok yang dibuat otomatis untuk produk ini ikut dihapus bila stoknya 0 & tidak dipakai produk lain
+      if (prod?.stokAuto && prod.stokRef) {
+        await hapusStokOtomatisBilaYatim(prod.stokRef, products.filter((x) => x.id !== productId), stokData?.[prod.stokRef.kategori]?.[prod.stokRef.item]?.jumlah).catch(() => false);
+      }
       setOpenEditProduct(false);
       setSelectedProductForEdit(null);
       // Remove from cart if present
@@ -514,21 +560,41 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   };
 
   // Produk JUALAN yang belum terhubung ke stok (owner)
-  const unlinkedCount = useMemo(() => products.filter((p) => p.category === "JUALAN" && !p.stokRef).length, [products]);
+  const unlinkedCount = useMemo(
+    () => products.filter((p) => p.category === "JUALAN" && (p.stokRef === undefined || (p.stokRef && stokCats.length > 0 && !refAda(p.stokRef, stokCats)))).length,
+    [products, stokCats]
+  );
+
+  // SINKRON OTOMATIS: produk jualan yang belum punya barang stok -> dihubungkan / dibuatkan (owner & super admin)
+  useEffect(() => {
+    if (!open || !isSuperAdminOrOwner || syncBusy.current || products.length === 0) return;
+    const pending = products.filter((p) => p.category === "JUALAN" && p.stokRef === undefined && !syncTried.current.has(p.id));
+    if (!pending.length) return;
+    syncBusy.current = true;
+    pending.forEach((p) => syncTried.current.add(p.id));
+    syncProdukKeStok(products)
+      .then((r) => {
+        if (r.linked || r.created) setSyncInfo((prev) => ({ linked: (prev?.linked || 0) + r.linked, created: (prev?.created || 0) + r.created }));
+      })
+      .catch((e) => console.warn("Sinkron produk ke stok gagal:", e))
+      .finally(() => { syncBusy.current = false; });
+  }, [open, isSuperAdminOrOwner, products]);
 
   // Badge stok di kartu produk
-  const stokBadge = (p: Product): { label: string; tone: "habis" | "menipis" | "aman" } | null => {
+  const stokBadge = (p: Product): { label: string; tone: "habis" | "menipis" | "aman" | "belum" } | null => {
     const r = p.stokRef;
     if (!r) return null;
     if (r.item === PILIH_SAAT_CHECKOUT) {
       const items = stokCats.find((c) => c.kategori === r.kategori)?.items || [];
       if (!items.length) return null;
+      if (!items.some((it) => stokData?.[r.kategori]?.[it])) return { label: "Stok ?", tone: "belum" };
       const n = items.reduce((s, it) => s + Math.max(0, Math.round(Number(stokData?.[r.kategori]?.[it]?.jumlah) || 0)), 0);
       return { label: n > 0 ? `Stok ${n}` : "Habis", tone: n > 0 ? "aman" : "habis" };
     }
     const v = stokData?.[r.kategori]?.[r.item];
     const diMaster = stokCats.some((c) => c.kategori === r.kategori && c.items.includes(r.item));
     if (!v && !diMaster) return null;
+    if (!v) return { label: "Stok ?", tone: "belum" };
     const n = Math.max(0, Math.round(Number(v?.jumlah) || 0));
     return { label: n > 0 ? `Stok ${n}` : "Habis", tone: statusOf(n, getMinStok(minStokMap, r.kategori, r.item)) };
   };
@@ -875,6 +941,19 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   )}
                 </div>
               ) : (
+                <>
+                {syncInfo && isSuperAdminOrOwner && (
+                  <div className="mb-3 rounded-2xl border border-blue-200 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 px-3.5 py-3 flex items-start gap-3">
+                    <Sparkles size={18} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0 text-[12.5px] leading-snug text-blue-900 dark:text-blue-100">
+                      <b>Sinkron stok otomatis:</b> {syncInfo.linked > 0 && <>{syncInfo.linked} produk dihubungkan ke barang stok yang sudah ada</>}
+                      {syncInfo.linked > 0 && syncInfo.created > 0 && ", "}
+                      {syncInfo.created > 0 && <>{syncInfo.created} barang baru ditambahkan ke stok jualan (jumlahnya belum dihitung — isi di menu Stok)</>}.
+                      <button type="button" onClick={() => setOpenStokLink(true)} className="block mt-1 font-bold text-blue-700 dark:text-blue-300 underline underline-offset-2">Lihat & koreksi</button>
+                    </div>
+                    <button type="button" onClick={() => setSyncInfo(null)} aria-label="Tutup info" className="w-7 h-7 rounded-full flex items-center justify-center text-blue-700/70 dark:text-blue-300/70 shrink-0"><X size={14} /></button>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-3 pb-24 md:pb-6">
                   {filteredProducts.map((p) => {
                     const cartItem = cart.find(item => item.id === p.id);
@@ -940,7 +1019,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                           {(() => {
                             const b = stokBadge(p);
                             return b ? (
-                              <div className={`absolute bottom-1.5 left-1.5 z-10 px-1.5 py-0.5 rounded-md text-[9.5px] font-black shadow-sm select-none ${b.tone === "habis" ? "bg-red-600 text-white" : b.tone === "menipis" ? "bg-amber-400 text-amber-950" : "bg-black/70 text-white"}`}>
+                              <div className={`absolute bottom-1.5 left-1.5 z-10 px-1.5 py-0.5 rounded-md text-[9.5px] font-black shadow-sm select-none ${b.tone === "habis" ? "bg-red-600 text-white" : b.tone === "menipis" ? "bg-amber-400 text-amber-950" : b.tone === "belum" ? "bg-zinc-500/80 text-white" : "bg-black/70 text-white"}`}>
                                 {b.label}
                               </div>
                             ) : null;
@@ -996,6 +1075,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     );
                   })}
                 </div>
+                </>
               )}
             </div>
           </div>
@@ -1470,6 +1550,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     Barang Stok (dipotong saat nota dicetak)
                   </label>
                   <StokRefSelect
+                    allowAuto={newProdCategory === "JUALAN"}
                     value={newProdStokRef}
                     onChange={setNewProdStokRef}
                     categories={stokCats}
@@ -1620,6 +1701,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     Barang Stok (dipotong saat nota dicetak)
                   </label>
                   <StokRefSelect
+                    allowAuto={editProdCategory === "JUALAN"}
                     value={editProdStokRef}
                     onChange={setEditProdStokRef}
                     categories={stokCats}

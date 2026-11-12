@@ -391,7 +391,12 @@ const PosCheckoutSheet: React.FC<Props> = ({
                             })}
                           </select>
                         )}
-                        {ref && sisa !== null && (
+                        {ref && sisa !== null && !data?.[ref.kategori]?.[ref.item] && (
+                          <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11.5px] font-bold bg-zinc-100 text-zinc-600 dark:bg-white/5 dark:text-zinc-300">
+                            <Package className="w-3.5 h-3.5" />Stok {ref.item} belum dihitung — isi di menu Stok
+                          </div>
+                        )}
+                        {ref && sisa !== null && !!data?.[ref.kategori]?.[ref.item] && (
                           <div className={`mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11.5px] font-bold ${sesudah! < 0 ? "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400" : sesudah === 0 ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"}`}>
                             {sesudah! < 0 ? <AlertTriangle className="w-3.5 h-3.5" /> : <Package className="w-3.5 h-3.5" />}
                             {sesudah! < 0 ? `Stok tercatat ${sisa}, butuh ${need} — cek stok fisik` : `Stok ${ref.item}: ${sisa} → ${sesudah}${sesudah === 0 ? " (habis)" : ""}`}

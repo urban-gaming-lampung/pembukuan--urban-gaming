@@ -7,10 +7,10 @@
  *   pos_transaksi, pengurangan stok jualan, dan riwayat stok "Terjual".
  */
 import { useEffect, useState } from "react";
-import { collection, doc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, where, writeBatch } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
-import { prepareStokWrites, writeStokInTx, StokChange } from "./stokJualan";
+import { applyMasterChanges, prepareStokWrites, removeJualanItem, writeStokInTx, StokChange } from "./stokJualan";
 
 export type StokRef = { kategori: string; item: string }; // item "*" = pilih saat checkout
 export const PILIH_SAAT_CHECKOUT = "*";
@@ -89,7 +89,8 @@ export function suggestStokRef(productName: string, categories: StokKategori[]):
   const pTok = tokenize(productName);
   const pSet = new Set(pTok);
   const pHint = hintOf(pTok);
-  type Cand = { ref: StokRef; recall: number; matched: number };
+  // Unit tanpa keterangan Baru/Seken dianggap baru (seken selalu ditulis "Seken" di katalog)
+  type Cand = { ref: StokRef; recall: number; matched: number; full: boolean };
   const cands: Cand[] = [];
   categories.forEach((c) => {
     const katTok = tokenize(c.kategori);
@@ -99,9 +100,11 @@ export function suggestStokRef(productName: string, categories: StokKategori[]):
       const sTok = Array.from(new Set([...katCore, ...tokenize(item)])).filter((t) => !HINTS.includes(t as any));
       if (!sTok.length) return;
       const matched = sTok.filter((t) => pSet.has(t)).length;
+      const full = matched === sTok.length; // semua kata barang stok ada di nama produk
       let recall = matched / sTok.length;
       if (cHint && pHint) recall += cHint === pHint ? 0.15 : -0.35;
-      cands.push({ ref: { kategori: c.kategori, item }, recall, matched });
+      else if (cHint && !pHint && cHint === "BARU") recall += 0.05;
+      cands.push({ ref: { kategori: c.kategori, item }, recall, matched, full });
     });
   });
   cands.sort((a, b) => b.recall - a.recall || b.matched - a.matched);
@@ -117,11 +120,107 @@ export function suggestStokRef(productName: string, categories: StokKategori[]):
   if (!top || top.recall < 0.75 || top.matched < 1) return kategoriSaja();
   const ties = cands.filter((c) => Math.abs(c.recall - top.recall) < 1e-9 && c.matched === top.matched);
   // "yakin" hanya bila semua kata barang stok ada di nama produk DAN minimal 2 kata cocok
-  if (ties.length === 1) return { ref: top.ref, yakin: top.recall >= 0.99 && top.matched >= 2 };
+  if (ties.length === 1) return { ref: top.ref, yakin: top.full && top.matched >= 2 && top.recall >= 0.99 };
   if (ties.every((t) => t.ref.kategori === top.ref.kategori)) {
     return { ref: { kategori: top.ref.kategori, item: PILIH_SAAT_CHECKOUT }, yakin: false };
   }
   return null;
+}
+
+// ============================================================
+// Sinkron otomatis Produk POS <-> Stok Jualan
+// ============================================================
+
+export type ProdukSync = { id: string; name: string; category: string; subcategory?: string | null; stokRef?: StokRef | null; stokAuto?: boolean };
+export type SubKategoriJualan = "Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD";
+
+/** Sub-kategori produk jualan dari namanya (sama dengan katalog POS). */
+export function produkSubKategori(name: string): SubKategoriJualan {
+  const lower = String(name || "").toLowerCase();
+  if (lower.startsWith("bd ") || lower.includes(" bd ") || lower.includes("kaset") || lower.includes("blu-ray")) return "BD";
+  if (lower.includes("hdd") || lower.includes("hardisk") || lower.includes("hard disk") || lower.includes("external")) return "Hardisk";
+  if (
+    (lower.startsWith("ps3") || lower.startsWith("ps4") || lower.startsWith("ps5") || lower.startsWith("playstation") || lower.startsWith("konsol") || lower.startsWith("nintendo")) &&
+    !lower.includes("kabel") && !lower.includes("charger") && !lower.includes("kaset") && !lower.includes("servis")
+  ) return "Unit PS";
+  if (lower.includes("stik") || lower.includes("controller")) return "Stik";
+  return "Aksesoris";
+}
+
+export const KATEGORI_KASET_BD = "KASET BD";
+
+/** Kategori & nama barang stok baru untuk produk yang belum punya padanan di stok. */
+export function stokBaruUntukProduk(p: Pick<ProdukSync, "name" | "subcategory">): StokRef {
+  const name = String(p.name || "").replace(/\s+/g, " ").trim();
+  const sub = (p.subcategory as SubKategoriJualan) || produkSubKategori(name);
+  const tok = tokenize(name);
+  const clean =
+    name
+      .replace(/\s*\((?:baru|seken|second|bekas)[^)]*\)\s*$/i, "")
+      .replace(/\s+(?:baru|seken)\s*$/i, "")
+      .trim() || name;
+  if (sub === "BD") return { kategori: KATEGORI_KASET_BD, item: clean.replace(/^(?:kaset\s+)?bd\s+/i, "").trim() || clean };
+  if (sub === "Unit PS") return { kategori: tok.includes("SEKEN") ? "UNIT KONSOL SEKEN" : "UNIT KONSOL BARU", item: clean };
+  if (sub === "Stik") return { kategori: tok.includes("PS4") ? "STIK PS4" : tok.includes("PS3") ? "STIK PS3" : "STIK LAINNYA", item: clean };
+  return { kategori: "AKSESORIS", item: clean };
+}
+
+/**
+ * Rencana sinkron untuk produk JUALAN yang belum pernah diatur (stokRef belum ada):
+ * - cocok jelas dengan barang stok -> dihubungkan,
+ * - tidak ada padanannya -> barang stok baru dibuat (stokAuto) lalu dihubungkan.
+ * Produk yang sengaja di-set "Tidak dihubungkan" (null) tidak disentuh.
+ */
+export function planStokSync(products: ProdukSync[], master: StokKategori[]) {
+  const nk = (s: string) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const cats = master.map((c) => ({ kategori: c.kategori, items: [...(c.items || [])] }));
+  const links: { id: string; ref: StokRef; baru: boolean }[] = [];
+  const add: Record<string, string[]> = {};
+  products
+    .filter((p) => p.category === "JUALAN" && p.stokRef === undefined)
+    .sort((a, b) => a.name.localeCompare(b.name, "id"))
+    .forEach((p) => {
+      const s = suggestStokRef(p.name, cats);
+      if (s && (s.yakin || s.ref.item === PILIH_SAAT_CHECKOUT)) {
+        links.push({ id: p.id, ref: s.ref, baru: false });
+        return;
+      }
+      const want = stokBaruUntukProduk(p);
+      let cat = cats.find((c) => nk(c.kategori) === nk(want.kategori));
+      if (!cat) { cat = { kategori: want.kategori, items: [] }; cats.push(cat); }
+      const exist = cat.items.find((i) => nk(i) === nk(want.item));
+      const item = exist || want.item;
+      if (!exist) { cat.items.push(item); (add[cat.kategori] ||= []).push(item); }
+      links.push({ id: p.id, ref: { kategori: cat.kategori, item }, baru: !exist });
+    });
+  return { links, add };
+}
+
+/** Jalankan sinkron (owner / super admin). Master dibaca langsung dari server. */
+export async function syncProdukKeStok(products: ProdukSync[]): Promise<{ linked: number; created: number; items: StokRef[] }> {
+  if (!products.some((p) => p.category === "JUALAN" && p.stokRef === undefined)) return { linked: 0, created: 0, items: [] };
+  const snap = await getDoc(doc(db, "data", "master_stok_categories"));
+  const raw = snap.data()?.jualan;
+  if (!Array.isArray(raw)) throw new Error("Master stok belum terbaca.");
+  const plan = planStokSync(products, raw as StokKategori[]);
+  if (!plan.links.length) return { linked: 0, created: 0, items: [] };
+  await applyMasterChanges(plan.add);
+  for (let i = 0; i < plan.links.length; i += 400) {
+    const b = writeBatch(db);
+    plan.links.slice(i, i + 400).forEach((l) => b.set(doc(db, "products", l.id), { stokRef: l.ref, stokAuto: l.baru }, { merge: true }));
+    await b.commit();
+  }
+  const baru = plan.links.filter((l) => l.baru);
+  return { linked: plan.links.length - baru.length, created: baru.length, items: baru.map((l) => l.ref) };
+}
+
+/** Barang stok yang dibuat otomatis untuk sebuah produk ikut dihapus bila tak dipakai produk lain & jumlahnya 0. */
+export async function hapusStokOtomatisBilaYatim(ref: StokRef, produkLain: ProdukSync[], jumlah: number | undefined): Promise<boolean> {
+  if (!ref || ref.item === PILIH_SAAT_CHECKOUT) return false;
+  const dipakai = produkLain.some((p) => p.stokRef && p.stokRef.kategori === ref.kategori && p.stokRef.item === ref.item);
+  if (dipakai || (Number(jumlah) || 0) > 0) return false;
+  await removeJualanItem(ref.kategori, ref.item);
+  return true;
 }
 
 export const stokRefLabel = (r?: StokRef | null) =>

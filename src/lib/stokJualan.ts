@@ -10,9 +10,7 @@
  * mengubah stok bersamaan tidak saling menimpa.
  */
 import { useEffect, useState } from "react";
-import {
-  collection, doc, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc, type Transaction,
-} from "firebase/firestore";
+import { collection, deleteField, doc, FieldPath, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc, type Transaction, writeBatch } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 
@@ -62,7 +60,7 @@ export type StokRow = {
 export type MinStokMap = Record<string, Record<string, number>>;
 
 /** Stok minimum bawaan bila owner belum mengatur: unit konsol 1, barang lain 3. */
-export const defaultMinStok = (kategori: string) => (/unit|konsol/i.test(kategori) ? 1 : 3);
+export const defaultMinStok = (kategori: string) => (/unit|konsol|kaset bd/i.test(kategori) ? 1 : 3);
 
 export const getMinStok = (map: MinStokMap | undefined, kategori: string, item: string) => {
   const v = map?.[kategori]?.[item];
@@ -265,6 +263,48 @@ export async function removeJualanItem(kategori: string, item: string) {
     const jualan = readMasterJualan(snap.data()?.jualan)
       .map((c) => (c.kategori === kategori ? { ...c, items: c.items.filter((i) => i !== item) } : c));
     tx.set(ref, { jualan }, { merge: true });
+  });
+  // Sinkron ke POS: produk yang memakai barang ini jadi "tidak dihubungkan" (tidak dibuat ulang otomatis)
+  try {
+    const snap = await getDocs(collection(db, "products"));
+    const hit = snap.docs.filter((d) => {
+      const r = d.data()?.stokRef;
+      return r && r.kategori === kategori && r.item === item;
+    });
+    if (hit.length) {
+      const b = writeBatch(db);
+      hit.forEach((d) => b.set(d.ref, { stokRef: null, stokAuto: false }, { merge: true }));
+      await b.commit();
+    }
+  } catch (e) {
+    console.warn("Lepas hubungan produk POS gagal:", e);
+  }
+}
+
+/**
+ * Ganti nama barang stok jualan (master, jumlah, & stok minimum ikut pindah).
+ * Riwayat lama tetap memakai nama lama. Mengembalikan nama baru, atau null bila tidak ada perubahan.
+ */
+export async function renameJualanItem(kategori: string, lama: string, baru: string): Promise<string | null> {
+  const nama = String(baru || "").replace(/\s+/g, " ").trim();
+  if (!nama || nama === lama) return null;
+  const nk = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const mRef = doc(db, "data", "master_stok_categories");
+  const sRef = doc(db, "data", "stok");
+  const cRef = doc(db, "data", "stok_config");
+  return runTransaction(db, async (tx) => {
+    const [m, s, c] = await Promise.all([tx.get(mRef), tx.get(sRef), tx.get(cRef)]);
+    const jualan = readMasterJualan(m.data()?.jualan);
+    const cat = jualan.find((x) => x.kategori === kategori);
+    if (!cat || !cat.items.includes(lama)) return null;
+    if (cat.items.some((i) => i !== lama && nk(i) === nk(nama))) throw new Error(`"${nama}" sudah ada di ${kategori}.`);
+    cat.items = cat.items.map((i) => (i === lama ? nama : i));
+    tx.set(mRef, { jualan }, { merge: true });
+    const val = s.data()?.jualan?.[kategori]?.[lama];
+    if (val !== undefined) tx.update(sRef, new FieldPath("jualan", kategori, nama), val, new FieldPath("jualan", kategori, lama), deleteField());
+    const min = c.data()?.minStok?.[kategori]?.[lama];
+    if (min !== undefined) tx.update(cRef, new FieldPath("minStok", kategori, nama), min, new FieldPath("minStok", kategori, lama), deleteField());
+    return nama;
   });
 }
 
