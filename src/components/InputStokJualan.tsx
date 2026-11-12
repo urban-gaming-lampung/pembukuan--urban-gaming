@@ -8,9 +8,10 @@ import { getMinStok, removeJualanItem, statusOf, StokLog, useMinStok, useStokLog
 import { Kondisi, kondisiProduk, kondisiStok, PILIH_SAAT_CHECKOUT, produkSubKategori, stokBeririsan, StokRef, SubKategoriJualan, syncProdukKeStok } from "../lib/posSales";
 import KondisiSwitch from "./KondisiSwitch";
 import {
-  hapusBarangJualan, hapusStokMasuk, KATEGORI_PENGELUARAN_STOK, koreksiJumlahStok, ModalMap, pratinjauOtomatis, ProdukJualan, simpanBarangJualan,
-  StokMasuk, ubahStokMasuk, uploadFotoProduk, useModalProduk, useProdukJualan, useStokMasuk,
+  hapusBarangJualan, KATEGORI_PENGELUARAN_STOK, koreksiJumlahStok, kurangiStokMasukSalahInput, ModalMap, pratinjauOtomatis, ProdukJualan, rencanaKurangiStokMasuk,
+  simpanBarangJualan, StokMasuk, uploadFotoProduk, useModalProduk, useProdukJualan, useStokMasuk,
 } from "../lib/barangJualan";
+import StokMasukSheet, { digits, fmtDigits, Toggle } from "./StokMasukSheet";
 import { refAda, StokRefSelect } from "./StokRefSelect";
 import { rupiah } from "../lib/format";
 
@@ -28,8 +29,6 @@ const rpShort = (n: number) => {
   if (a >= 1e3) return `Rp ${Math.round(n / 1e3)} rb`;
   return rupiah(n);
 };
-const digits = (s: string) => s.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
-const fmtDigits = (s: string) => (s ? Number(s).toLocaleString("id-ID") : "");
 const subOf = (p: ProdukJualan): SubKategoriJualan => (p.subcategory as SubKategoriJualan) || produkSubKategori(p.name);
 const subDariKategori = (kat: string, item: string): SubKategoriJualan =>
   /konsol|unit/i.test(kat) ? "Unit PS" : /stik/i.test(kat) ? "Stik" : /bd/i.test(kat) ? "BD" : produkSubKategori(item);
@@ -62,13 +61,6 @@ const Thumb: React.FC<{ url?: string; size?: number }> = ({ url, size = 44 }) =>
   <div className="shrink-0 rounded-[12px] bg-zinc-100 dark:bg-white/10 overflow-hidden flex items-center justify-center" style={{ width: size, height: size }}>
     {url ? <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => (e.currentTarget.style.display = "none")} /> : <Package className="w-5 h-5 text-zinc-400" />}
   </div>
-);
-
-const Toggle: React.FC<{ on: boolean; onChange: (v: boolean) => void; label: string }> = ({ on, onChange, label }) => (
-  <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)}
-    className={`relative w-[51px] h-[31px] rounded-full transition-colors shrink-0 ${on ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"}`}>
-    <span className={`absolute top-[2px] w-[27px] h-[27px] rounded-full bg-white shadow transition-all ${on ? "left-[22px]" : "left-[2px]"}`} />
-  </button>
 );
 
 type Filter = "semua" | SubKategoriJualan | "tanpaModal" | "yatim";
@@ -393,7 +385,8 @@ const BarangJualanSheet: React.FC<{
   const dipakaiLain = efektif ? products.filter((x) => x.id !== p?.id && stokBeririsan(x.stokRef, efektif)) : [];
 
   // Riwayat stok masuk (catatan yang bisa diedit) + stok masuk lama dari menu Stok (hanya dilihat)
-  const { list: riwayatMasuk } = useStokMasuk(p?.id);
+  // Catatan stok masuk menempel pada barang stoknya (termasuk dari produk lain / yang sudah dihapus)
+  const { list: riwayatMasuk } = useStokMasuk(p?.id, p?.stokRef ?? null);
   const [editMasuk, setEditMasuk] = useState<StokMasuk | null>(null);
   const [semuaRiwayat, setSemuaRiwayat] = useState(false);
   const masukLain: StokLog[] =
@@ -412,13 +405,28 @@ const BarangJualanSheet: React.FC<{
   const bisaUbahJumlah = !!p && !!efektif && ref !== undefined && refAda(efektif, cats) && barisJumlah.length > 0;
   useEffect(() => { setUbah(null); }, [efektif?.kategori, efektif?.item]);
 
-  const simpanJumlah = async () => {
+  // Stok dikurangi padahal ada catatan stok masuk -> tanya: salah input (pengeluaran ikut) atau hilang/rusak?
+  const [tanyaAlasan, setTanyaAlasan] = useState(false);
+  useEffect(() => { setTanyaAlasan(false); }, [ubah?.item, ubah?.nilai]);
+  const catatanItem = (item: string) => riwayatMasuk.filter((r) => r.kategori === efektif?.kategori && r.item === item);
+  const kurangUbah = ubah ? jumlahDi(ubah.item) - Number(ubah.nilai || 0) : 0;
+  const rencanaSalah = ubah && kurangUbah > 0 ? rencanaKurangiStokMasuk(catatanItem(ubah.item), kurangUbah) : null;
+
+  const simpanJumlah = async (alasan?: "salah" | "hilang") => {
     if (!p || !efektif || !ubah) return;
+    const target = { kategori: efektif.kategori, item: ubah.item };
     const n = Number(ubah.nilai || 0);
+    if (!alasan && rencanaSalah && rencanaSalah.langkah.length) { setTanyaAlasan(true); return; }
     setBusyStok("jumlah"); setErr(""); setInfo("");
+    const awal = perVarian ? `${ubah.item}: j` : "J";
     try {
-      await koreksiJumlahStok({ kategori: efektif.kategori, item: ubah.item }, n, p.name);
-      setInfo(`${perVarian ? `${ubah.item}: j` : "J"}umlah stok disamakan jadi ${n} ✓`);
+      if (alasan === "salah") {
+        const r = await kurangiStokMasukSalahInput(target, kurangUbah, p.name);
+        setInfo(`${awal}umlah stok jadi ${n} · catatan stok masuk${r.rupiah ? ` & pengeluaran (−${rupiah(r.rupiah)})` : ""} ikut dikurangi ✓`);
+      } else {
+        await koreksiJumlahStok(target, n, p.name);
+        setInfo(`${awal}umlah stok disamakan jadi ${n} ✓`);
+      }
       setUbah(null);
     } catch (e: any) { setErr(e?.message || String(e)); }
     finally { setBusyStok(""); }
@@ -613,7 +621,7 @@ const BarangJualanSheet: React.FC<{
                           <input autoFocus inputMode="numeric" aria-label={`Jumlah ${it}`} value={ubah.nilai} onChange={(e) => setUbah({ item: it, nilai: digits(e.target.value) })}
                             className={`flex-1 min-w-0 h-11 px-3.5 rounded-[12px] ${perVarian ? "bg-white" : "bg-zinc-100"} dark:bg-white/10 text-[16px] tabular-nums text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40`} />
                           <button type="button" onClick={() => setUbah(null)} className="h-11 px-2 text-[14px] text-zinc-500 shrink-0">Batal</button>
-                          <button type="button" disabled={busyStok === "jumlah"} onClick={simpanJumlah} className="h-11 px-4 rounded-[12px] bg-blue-600 text-white text-[14px] font-semibold disabled:opacity-50 shrink-0">
+                          <button type="button" disabled={busyStok === "jumlah" || tanyaAlasan} onClick={() => simpanJumlah()} className="h-11 px-4 rounded-[12px] bg-blue-600 text-white text-[14px] font-semibold disabled:opacity-50 shrink-0">
                             {busyStok === "jumlah" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
                           </button>
                         </div>
@@ -633,7 +641,25 @@ const BarangJualanSheet: React.FC<{
                     );
                   })}
                 </div>
-                {ubah !== null && <p className="mt-1.5 px-1 text-[12px] text-zinc-500">Samakan dengan hitungan fisik. Tercatat sebagai koreksi, tidak masuk pengeluaran.</p>}
+                {ubah !== null && tanyaAlasan && rencanaSalah && (
+                  <div className="mt-2 rounded-[14px] bg-zinc-50 dark:bg-white/5 p-3 space-y-2">
+                    <div className="px-0.5 text-[13.5px] font-semibold text-zinc-900 dark:text-white">Stok {ubah.item} berkurang {kurangUbah}. Kenapa?</div>
+                    <button type="button" disabled={busyStok === "jumlah"} onClick={() => simpanJumlah("salah")}
+                      className="w-full text-left rounded-[12px] bg-white dark:bg-white/10 px-3.5 py-3 active:opacity-70 disabled:opacity-50">
+                      <div className="text-[14.5px] font-semibold text-zinc-900 dark:text-white">Salah input stok masuk</div>
+                      <div className="text-[12.5px] text-zinc-500 leading-snug">
+                        Mis. barang yang sama tercatat dua kali. Catatan stok masuk terbaru{rencanaSalah.rupiah ? <> & pengeluaran <b className="text-red-600 dark:text-red-400">−{rupiah(rencanaSalah.rupiah)}</b></> : ""} ikut dikurangi.
+                      </div>
+                    </button>
+                    <button type="button" disabled={busyStok === "jumlah"} onClick={() => simpanJumlah("hilang")}
+                      className="w-full text-left rounded-[12px] bg-white dark:bg-white/10 px-3.5 py-3 active:opacity-70 disabled:opacity-50">
+                      <div className="text-[14.5px] font-semibold text-zinc-900 dark:text-white">Hilang, rusak, atau terpakai</div>
+                      <div className="text-[12.5px] text-zinc-500 leading-snug">Barangnya memang dibeli. Pengeluaran tetap, hanya jumlah stok yang dikoreksi.</div>
+                    </button>
+                    {busyStok === "jumlah" && <div className="flex justify-center py-1"><Loader2 className="w-4 h-4 animate-spin text-zinc-400" /></div>}
+                  </div>
+                )}
+                {ubah !== null && !tanyaAlasan && <p className="mt-1.5 px-1 text-[12px] text-zinc-500">Samakan dengan hitungan fisik. Barang baru dibeli? Pakai “Stok masuk” supaya pengeluarannya tercatat.</p>}
               </div>
             )}
 
@@ -710,6 +736,11 @@ const BarangJualanSheet: React.FC<{
                           {r.modalSatuan > 0 ? `${rupiah(r.modalSatuan)}/pcs · total ${rupiah(r.modalSatuan * r.qty)}` : "Tanpa harga modal"}
                           {r.catatPengeluaran ? " · masuk pengeluaran" : ""}
                         </div>
+                        {r.produkId !== p.id && (
+                          <div className="text-[11.5px] text-amber-600 dark:text-amber-400 truncate">
+                            dari {r.produkNama || "produk lain"}{products.some((x) => x.id === r.produkId) ? "" : " · produk sudah dihapus"}
+                          </div>
+                        )}
                       </div>
                       <ChevronRight className="w-4 h-4 text-zinc-300 dark:text-zinc-600 shrink-0" />
                     </button>
@@ -753,7 +784,8 @@ const BarangJualanSheet: React.FC<{
           {editMasuk && p && (
             <StokMasukSheet
               rec={editMasuk}
-              produkNama={nama.trim() || p.name}
+              produkNama={editMasuk.produkId === p.id ? nama.trim() || p.name : editMasuk.produkNama}
+              produkDihapus={!products.some((x) => x.id === editMasuk.produkId)}
               onClose={() => setEditMasuk(null)}
               onDone={(m) => { setEditMasuk(null); setErr(""); setInfo(m); }}
             />
@@ -763,101 +795,6 @@ const BarangJualanSheet: React.FC<{
               Hapus barang
             </button>
           )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ============================================================
-// Lembar edit satu catatan stok masuk
-// ============================================================
-const StokMasukSheet: React.FC<{ rec: StokMasuk; produkNama: string; onClose: () => void; onDone: (msg: string) => void }> = ({ rec, produkNama, onClose, onDone }) => {
-  const [qty, setQty] = useState(rec.qty);
-  const [modal, setModal] = useState(String(rec.modalSatuan || ""));
-  const [tanggal, setTanggal] = useState(rec.tanggal);
-  const [catat, setCatat] = useState(rec.catatPengeluaran);
-  const [busy, setBusy] = useState<"" | "simpan" | "hapus">("");
-  const [err, setErr] = useState("");
-  const modalN = Number(modal || 0);
-  const selisih = qty - rec.qty;
-  const berubah = qty !== rec.qty || modalN !== rec.modalSatuan || tanggal !== rec.tanggal || catat !== rec.catatPengeluaran;
-  const field = "w-full h-12 px-4 rounded-[14px] bg-zinc-100 dark:bg-white/10 text-[16px] text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40";
-
-  const simpan = async () => {
-    setErr("");
-    if (!(qty > 0)) return setErr("Jumlah minimal 1. Untuk membatalkan, pakai Hapus.");
-    setBusy("simpan");
-    try {
-      const r = await ubahStokMasuk(rec, { qty, modalSatuan: modalN, tanggal, catatPengeluaran: catat }, produkNama);
-      onDone(`Stok masuk diperbarui${r.selisih ? ` · stok ${r.selisih > 0 ? "+" : "−"}${Math.abs(r.selisih)}` : ""} ✓`);
-    } catch (e: any) { setErr(e?.message || String(e)); setBusy(""); }
-  };
-  const hapus = async () => {
-    if (!confirm(`Hapus stok masuk +${rec.qty} (${rec.item})?\nStok dikurangi ${rec.qty}${rec.catatPengeluaran ? " & pengeluarannya ikut dihapus" : ""}.`)) return;
-    setBusy("hapus"); setErr("");
-    try { await hapusStokMasuk(rec); onDone(`Stok masuk dihapus · stok −${rec.qty} ✓`); }
-    catch (e: any) { setErr(e?.message || String(e)); setBusy(""); }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[320] flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={() => !busy && onClose()} />
-      <div className="relative w-full sm:max-w-md bg-[#f2f2f7] dark:bg-black rounded-t-[22px] sm:rounded-[22px] max-h-[90vh] flex flex-col overflow-hidden pb-[env(safe-area-inset-bottom)]">
-        <div className="flex justify-center pt-2"><div className="w-9 h-[5px] rounded-full bg-zinc-300 dark:bg-zinc-700" /></div>
-        <div className="px-4 pt-1 pb-2 flex items-center justify-between">
-          <button type="button" onClick={onClose} disabled={!!busy} className="text-[16px] text-blue-600 dark:text-blue-400 disabled:opacity-40 min-w-[56px] text-left">Batal</button>
-          <h3 className="text-[16px] font-semibold text-zinc-900 dark:text-white">Stok Masuk</h3>
-          <button type="button" onClick={simpan} disabled={!!busy || !berubah} className="text-[16px] font-semibold text-blue-600 dark:text-blue-400 disabled:opacity-40 min-w-[56px] text-right">
-            {busy === "simpan" ? <Loader2 className="w-5 h-5 animate-spin ml-auto" /> : "Simpan"}
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 space-y-4">
-          <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] p-4 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-[15px] font-semibold text-zinc-900 dark:text-white truncate">{rec.item}</div>
-                <div className="text-[12.5px] text-zinc-500 truncate">{rec.kategori}</div>
-              </div>
-              <div className="flex items-center gap-1 bg-zinc-100 dark:bg-white/10 rounded-full p-1 shrink-0">
-                <button type="button" aria-label="Kurangi" onClick={() => setQty((n) => Math.max(1, n - 1))} className="w-9 h-9 rounded-full flex items-center justify-center text-zinc-700 dark:text-zinc-200"><Minus className="w-4 h-4" /></button>
-                <input inputMode="numeric" value={qty || ""} onChange={(e) => setQty(Math.min(9999, Number(digits(e.target.value) || 0)))} className="w-10 bg-transparent text-center text-[17px] font-semibold tabular-nums text-zinc-900 dark:text-white focus:outline-none" />
-                <button type="button" aria-label="Tambah" onClick={() => setQty((n) => Math.min(9999, n + 1))} className="w-9 h-9 rounded-full flex items-center justify-center text-zinc-700 dark:text-zinc-200"><Plus className="w-4 h-4" /></button>
-              </div>
-            </div>
-            {selisih !== 0 && (
-              <p className="text-[12.5px] text-zinc-500">Stok sekarang akan {selisih > 0 ? "bertambah" : "berkurang"} <b className="text-zinc-800 dark:text-zinc-200">{Math.abs(selisih)}</b>.</p>
-            )}
-            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
-              <div>
-                <span className="block text-[13px] font-medium text-zinc-500 mb-1.5 px-1">Modal / barang</span>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[15px] text-zinc-400">Rp</span>
-                  <input inputMode="numeric" value={fmtDigits(modal)} onChange={(e) => setModal(digits(e.target.value))} placeholder="0" className={`${field} pl-10 tabular-nums`} />
-                </div>
-              </div>
-              <div>
-                <span className="block text-[13px] font-medium text-zinc-500 mb-1.5 px-1">Tanggal beli</span>
-                <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value || rec.tanggal)} className={`${field} text-[15px]`} />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 pt-1">
-              <div className="min-w-0">
-                <div className="text-[15px] text-zinc-900 dark:text-white">Catat ke Pengeluaran</div>
-                <div className="text-[12.5px] text-zinc-500">Kategori “{KATEGORI_PENGELUARAN_STOK}” · {rupiah(modalN * qty)}</div>
-              </div>
-              <Toggle on={catat} onChange={setCatat} label="Catat ke pengeluaran" />
-            </div>
-          </div>
-          <p className="px-1 text-[12px] text-zinc-400">Dicatat {new Date(rec.ts).toLocaleString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })} oleh {rec.oleh.split("@")[0]}{rec.updatedAt ? ` · diubah ${new Date(rec.updatedAt).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}</p>
-          {err && <div className="flex items-start gap-2 rounded-[14px] bg-red-50 dark:bg-red-500/10 px-3.5 py-3 text-[13.5px] text-red-600 dark:text-red-400"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />{err}</div>}
-          <button type="button" onClick={simpan} disabled={!!busy || !berubah}
-            className="w-full h-[52px] rounded-[16px] bg-blue-600 text-white text-[17px] font-semibold disabled:opacity-40 flex items-center justify-center gap-2">
-            {busy === "simpan" && <Loader2 className="w-5 h-5 animate-spin" />}Simpan perubahan
-          </button>
-          <button type="button" onClick={hapus} disabled={!!busy} className="w-full h-11 text-[15px] text-red-600 dark:text-red-400 disabled:opacity-40 flex items-center justify-center gap-2">
-            {busy === "hapus" && <Loader2 className="w-4 h-4 animate-spin" />}Hapus stok masuk
-          </button>
         </div>
       </div>
     </div>

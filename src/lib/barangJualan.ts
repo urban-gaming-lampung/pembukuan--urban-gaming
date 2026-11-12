@@ -7,7 +7,7 @@
  * Riwayat harga modal disimpan supaya laba bulan lalu tetap akurat walau modal berubah.
  */
 import { useEffect, useState } from "react";
-import { addDoc, arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot, query, runTransaction, serverTimestamp, setDoc, where } from "firebase/firestore";
+import { addDoc, arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, runTransaction, serverTimestamp, setDoc, where } from "firebase/firestore";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { auth, db, storage } from "./firebase";
 import type { StokKategori } from "../hooks/useStokData";
@@ -262,25 +262,61 @@ const tglLabel = (ymd: string) => {
 };
 const namaPengeluaran = (nama: string, item: string, qty: number) => `Stok jualan: ${nama}${item !== nama ? ` (${item})` : ""} × ${qty}`;
 
-/** Riwayat stok masuk satu barang (owner / super admin). */
-export function useStokMasuk(produkId: string | undefined): { list: StokMasuk[]; loading: boolean } {
+/** Urutan riwayat stok masuk: tanggal beli terbaru dulu. */
+const urutTerbaru = (l: StokMasuk[]) => [...l].sort((a, b) => b.tanggal.localeCompare(a.tanggal) || b.ts - a.ts);
+
+/**
+ * Riwayat stok masuk sebuah BARANG STOK (owner / super admin). Catatan menempel pada barang
+ * stoknya, jadi catatan dari produk lain yang memakai stok yang sama — termasuk produk yang
+ * sudah dihapus — tetap terlihat & bisa diubah. `stok.item` "*" = semua varian kategori itu.
+ * Tanpa barang stok: catatan milik produk ini saja.
+ */
+export function useStokMasuk(produkId: string | undefined, stok: StokRef | null | undefined): { list: StokMasuk[]; loading: boolean } {
   const [list, setList] = useState<StokMasuk[]>([]);
-  const [loading, setLoading] = useState(!!produkId);
+  const [loading, setLoading] = useState(!!(produkId || stok));
+  const kat = stok?.kategori || "";
+  const item = stok?.item || "";
   useEffect(() => {
-    if (!produkId) { setList([]); setLoading(false); return; }
+    if (!kat && !produkId) { setList([]); setLoading(false); return; }
     setLoading(true);
+    const q = kat ? query(collection(db, "stok_masuk"), where("kategori", "==", kat)) : query(collection(db, "stok_masuk"), where("produkId", "==", produkId));
     return onSnapshot(
-      query(collection(db, "stok_masuk"), where("produkId", "==", produkId)),
+      q,
       (s) => {
         const l = s.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StokMasuk, "id">) }));
-        l.sort((a, b) => b.tanggal.localeCompare(a.tanggal) || b.ts - a.ts);
-        setList(l);
+        setList(urutTerbaru(kat && item !== PILIH_SAAT_CHECKOUT ? l.filter((r) => r.item === item) : l));
         setLoading(false);
       },
       (e) => { console.warn("stok_masuk:", e); setLoading(false); }
     );
-  }, [produkId]);
+  }, [produkId, kat, item]);
   return { list, loading };
+}
+
+/** Satu catatan stok masuk (mis. dibuka dari histori pengeluaran). null bila sudah tidak ada. */
+export async function ambilStokMasuk(id: string): Promise<StokMasuk | null> {
+  const d = await getDoc(doc(db, "stok_masuk", id));
+  return d.exists() ? ({ id: d.id, ...(d.data() as Omit<StokMasuk, "id">) }) : null;
+}
+
+/**
+ * Rencana "stok berkurang karena salah input stok masuk" (MURNI): kurangi catatan stok masuk
+ * TERBARU lebih dulu sebanyak `kurang`. `sisa` 0 = catatan dihapus. `rupiah` = pengeluaran yang
+ * ikut berkurang. Bila catatan tidak cukup, sisanya (`tanpaCatatan`) hanya mengurangi stok.
+ */
+export function rencanaKurangiStokMasuk(list: StokMasuk[], kurang: number) {
+  let butuh = Math.max(0, Math.round(kurang));
+  const langkah: { rec: StokMasuk; ambil: number; sisa: number }[] = [];
+  let rupiahTurun = 0;
+  for (const rec of urutTerbaru(list)) {
+    if (butuh <= 0) break;
+    const ambil = Math.min(rec.qty, butuh);
+    if (ambil <= 0) continue;
+    langkah.push({ rec, ambil, sisa: rec.qty - ambil });
+    if (rec.catatPengeluaran && rec.expenseId) rupiahTurun += ambil * (rec.modalSatuan || 0);
+    butuh -= ambil;
+  }
+  return { langkah, rupiah: Math.round(rupiahTurun), tanpaCatatan: butuh };
 }
 
 /** Catat barang masuk: stok bertambah, riwayat stok, catatan stok masuk & (opsional) pengeluaran — satu transaksi. */
@@ -322,8 +358,11 @@ export async function tambahStokMasuk(p: { id: string; nama: string }, target: S
   return masukRef.id;
 }
 
-/** Ubah catatan stok masuk: selisih jumlah disesuaikan ke stok, pengeluaran ikut diperbarui. */
-export async function ubahStokMasuk(rec: StokMasuk, d: StokMasukData, produkNama: string): Promise<{ selisih: number }> {
+/**
+ * Ubah catatan stok masuk: pengeluaran ikut diperbarui. Selisih jumlah disesuaikan ke stok,
+ * kecuali `ikutStok` false (jumlah stok sudah dikoreksi sendiri).
+ */
+export async function ubahStokMasuk(rec: StokMasuk, d: StokMasukData, produkNama: string, ikutStok = true): Promise<{ selisih: number }> {
   if (!(d.qty > 0)) throw new Error("Jumlah harus lebih dari 0. Untuk membatalkan, pakai Hapus.");
   const oleh = auth.currentUser?.email || "owner";
   const now = Date.now();
@@ -337,7 +376,7 @@ export async function ubahStokMasuk(rec: StokMasuk, d: StokMasukData, produkNama
       rec.expenseId ? tx.get(doc(db, "owner_expenses", rec.expenseId)) : Promise.resolve(null),
     ]);
     if (!r.exists()) throw new Error("Catatan stok masuk sudah tidak ada.");
-    if (selisih !== 0) {
+    if (selisih !== 0 && ikutStok) {
       const jualan = (s.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
       const w = prepareStokWrites(jualan, [{ kategori: rec.kategori, item: rec.item, delta: selisih }], "koreksi", `Edit stok masuk ${tglLabel(rec.tanggal)}: ${rec.qty} → ${d.qty}`, oleh, now);
       writeStokInTx(tx, w, { produkId: rec.produkId, stokMasukId: rec.id });
@@ -362,11 +401,14 @@ export async function ubahStokMasuk(rec: StokMasuk, d: StokMasukData, produkNama
     }
     tx.update(recRef, { qty: d.qty, modalSatuan: d.modalSatuan, tanggal: d.tanggal, catatPengeluaran: mau, expenseId, produkNama, updatedAt: now });
   });
-  return { selisih };
+  return { selisih: ikutStok ? selisih : 0 };
 }
 
-/** Hapus catatan stok masuk (salah input): stok dikurangi lagi & pengeluarannya dihapus. */
-export async function hapusStokMasuk(rec: StokMasuk): Promise<void> {
+/**
+ * Hapus catatan stok masuk (salah input): pengeluarannya dihapus, stok dikurangi lagi —
+ * kecuali `ikutStok` false (jumlah stok sudah dikoreksi sendiri).
+ */
+export async function hapusStokMasuk(rec: StokMasuk, ikutStok = true): Promise<void> {
   const oleh = auth.currentUser?.email || "owner";
   const now = Date.now();
   const stokDoc = doc(db, "data", "stok");
@@ -378,12 +420,57 @@ export async function hapusStokMasuk(rec: StokMasuk): Promise<void> {
       rec.expenseId ? tx.get(doc(db, "owner_expenses", rec.expenseId)) : Promise.resolve(null),
     ]);
     if (!r.exists()) throw new Error("Catatan stok masuk sudah tidak ada.");
-    const jualan = (s.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
-    const w = prepareStokWrites(jualan, [{ kategori: rec.kategori, item: rec.item, delta: -rec.qty }], "koreksi", `Hapus stok masuk ${tglLabel(rec.tanggal)} (+${rec.qty})`, oleh, now);
-    writeStokInTx(tx, w, { produkId: rec.produkId, stokMasukId: rec.id });
+    if (ikutStok) {
+      const jualan = (s.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
+      const w = prepareStokWrites(jualan, [{ kategori: rec.kategori, item: rec.item, delta: -rec.qty }], "koreksi", `Hapus stok masuk ${tglLabel(rec.tanggal)} (+${rec.qty})`, oleh, now);
+      writeStokInTx(tx, w, { produkId: rec.produkId, stokMasukId: rec.id });
+    }
     if (e && e.exists()) tx.delete(e.ref);
     tx.delete(recRef);
   });
+}
+
+/**
+ * Stok berkurang karena SALAH INPUT stok masuk (mis. barang yang sama tercatat dua kali):
+ * stok dikurangi `kurang`, catatan stok masuk terbaru barang itu & pengeluarannya ikut
+ * dikurangi / dihapus — satu transaksi, jadi stok & pengeluaran tetap sinkron.
+ */
+export async function kurangiStokMasukSalahInput(ref: StokRef, kurang: number, nama: string): Promise<{ rupiah: number }> {
+  if (ref.item === PILIH_SAAT_CHECKOUT) throw new Error("Pilih varian stok dulu.");
+  const n = Math.round(kurang);
+  if (!(n > 0)) throw new Error("Jumlah yang dikurangi harus lebih dari 0.");
+  const snap = await getDocs(query(collection(db, "stok_masuk"), where("kategori", "==", ref.kategori)));
+  const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StokMasuk, "id">) })).filter((r) => r.item === ref.item);
+  const rencana = rencanaKurangiStokMasuk(list, n);
+  const oleh = auth.currentUser?.email || "owner";
+  const now = Date.now();
+  const stokDoc = doc(db, "data", "stok");
+  await runTransaction(db, async (tx) => {
+    const s = await tx.get(stokDoc);
+    const cek = await Promise.all(
+      rencana.langkah.map(async (l) => ({
+        l,
+        r: await tx.get(doc(db, "stok_masuk", l.rec.id)),
+        e: l.rec.expenseId ? await tx.get(doc(db, "owner_expenses", l.rec.expenseId)) : null,
+      }))
+    );
+    cek.forEach(({ l, r }) => {
+      if (!r.exists() || Number(r.data()?.qty) !== l.rec.qty) throw new Error("Catatan stok masuk baru saja berubah. Coba lagi.");
+    });
+    const jualan = (s.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
+    const w = prepareStokWrites(jualan, [{ kategori: ref.kategori, item: ref.item, delta: -n }], "koreksi", `Salah input stok masuk · ${nama}`, oleh, now);
+    writeStokInTx(tx, w);
+    cek.forEach(({ l, r, e }) => {
+      if (l.sisa <= 0) {
+        if (e && e.exists()) tx.delete(e.ref);
+        tx.delete(r.ref);
+        return;
+      }
+      tx.update(r.ref, { qty: l.sisa, updatedAt: now });
+      if (e && e.exists()) tx.update(e.ref, { qty: l.sisa, harga: Math.round(l.sisa * (l.rec.modalSatuan || 0)), nama: namaPengeluaran(l.rec.produkNama, l.rec.item, l.sisa) });
+    });
+  });
+  return { rupiah: rencana.rupiah };
 }
 
 /** Samakan jumlah stok dengan hitungan fisik (koreksi). */

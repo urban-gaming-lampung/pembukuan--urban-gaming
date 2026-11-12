@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Package } from "lucide-react";
+import { ChevronDown, ChevronRight, Package } from "lucide-react";
 import { addDoc, collection, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { rupiah } from "../lib/format";
@@ -7,6 +7,8 @@ import { toLocalYmd } from "../lib/dateLocal";
 import { Bisnis, bisnisOf, JenisTransaksi, KOLEKSI, TransaksiOwner } from "../lib/keuangan";
 import SubTabs from "./common/SubTabs";
 import RupiahIcon from "./common/RupiahIcon";
+import StokMasukSheet from "./StokMasukSheet";
+import { ambilStokMasuk, StokMasuk, useProdukJualan } from "../lib/barangJualan";
 
 const TEMA = {
   PENGELUARAN: {
@@ -51,6 +53,23 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
   const [kategoriAuto, setKategoriAuto] = useState(false);
   const [bukaBulan, setBukaBulan] = useState<string[]>([]);
   const [bukaKat, setBukaKat] = useState<string[]>([]);
+  // Histori ikut usaha yang dipilih di form (Untuk usaha: Rental / Usaha)
+  useEffect(() => { setTab(form.bisnis); }, [form.bisnis]);
+
+  // Pengeluaran "Dari stok masuk": dibuka di lembar stok masuk supaya stok & pengeluaran tetap sinkron
+  const { products } = useProdukJualan();
+  const [stokMasuk, setStokMasuk] = useState<StokMasuk | null>(null);
+  const [toast, setToast] = useState("");
+  const tampilToast = (m: string) => { setToast(m); window.setTimeout(() => setToast(""), 2800); };
+  const bukaStokMasuk = async (o: TransaksiOwner) => {
+    try {
+      const rec = o.stokMasukId ? await ambilStokMasuk(o.stokMasukId) : null;
+      if (rec) { setStokMasuk(rec); return; }
+      if (!confirm(`Catatan stok masuk untuk "${o.nama}" sudah tidak ada.\nHapus pengeluaran ini?`)) return;
+      await deleteDoc(doc(db, KOLEKSI[jenis], o.id));
+      tampilToast("Pengeluaran dihapus");
+    } catch (e: any) { alert("Gagal membuka stok masuk: " + (e?.message || e)); }
+  };
 
   // Ganti Pengeluaran <-> Pemasukan: kosongkan isian, pertahankan usaha & tanggal yang dipilih
   const jenisAwal = useRef(jenis);
@@ -124,7 +143,6 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
       const data = { nama: form.nama.trim(), harga: nominal, kategori: form.kategori.trim() || "Lainnya", tanggal: form.tanggal, bisnis: form.bisnis };
       if (editingId) await updateDoc(doc(db, KOLEKSI[jenis], editingId), data);
       else await addDoc(collection(db, KOLEKSI[jenis]), { ...data, timestamp: Date.now() });
-      setTab(form.bisnis);
       setEditingId(null);
       setKategoriAuto(false);
       setForm(kosong(form.bisnis));
@@ -175,7 +193,10 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
                 ariaLabel="Jenis transaksi"
                 value={jenis}
                 onChange={onJenisChange}
-                options={[{ key: "PENGELUARAN", label: "Pengeluaran" }, { key: "PEMASUKAN", label: "Pemasukan" }]}
+                options={[
+                  { key: "PENGELUARAN", label: "Pengeluaran", tone: "text-red-600 dark:text-red-400" },
+                  { key: "PEMASUKAN", label: "Pemasukan", tone: "text-emerald-600 dark:text-emerald-400" },
+                ]}
               />
             </div>
           )}
@@ -298,9 +319,10 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
                                   <div className="flex items-center justify-between sm:justify-end gap-3">
                                     <div className={`text-[14px] font-black whitespace-nowrap ${t.angka}`}>{rupiah(o.harga)}</div>
                                     {o.sumber === "input_stok" ? (
-                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-zinc-500 bg-zinc-100 dark:bg-white/10 px-2 py-1.5 rounded-lg" title="Ubah lewat Input › Atur Stok › Riwayat stok masuk">
-                                        <Package className="w-3 h-3" />Dari stok masuk
-                                      </span>
+                                      <button type="button" onClick={() => bukaStokMasuk(o)} title="Ubah / hapus stok masuk"
+                                        className="inline-flex items-center gap-1 text-[10px] font-bold text-zinc-600 dark:text-zinc-300 bg-zinc-100 hover:bg-zinc-200 dark:bg-white/10 dark:hover:bg-white/15 px-2 py-1.5 rounded-lg active:scale-95">
+                                        <Package className="w-3 h-3" />Dari stok masuk<ChevronRight className="w-3 h-3 -mr-0.5" />
+                                      </button>
                                     ) : (
                                       <div className="flex items-center gap-2">
                                         <button onClick={() => edit(o)} className="text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-500/10 px-2 py-1.5 rounded-lg border border-blue-100 dark:border-blue-500/20 active:scale-95">Edit</button>
@@ -322,9 +344,23 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
           })}
         </div>
         {tab === "USAHA" && jenis === "PENGELUARAN" && (
-          <p className="mt-3 text-[12px] text-zinc-400 leading-snug">Pengeluaran “Dari stok masuk” diubah / dihapus lewat Input › Atur Stok › Edit Barang › Riwayat stok masuk, supaya stok ikut sinkron.</p>
+          <p className="mt-3 text-[12px] text-zinc-400 leading-snug">Ketuk “Dari stok masuk” untuk mengubah jumlah, modal, atau menghapus belanja stok — jumlah stok ikut sinkron.</p>
         )}
       </div>
+
+      {stokMasuk && (
+        <StokMasukSheet
+          rec={stokMasuk}
+          produkDihapus={!products.some((p) => p.id === stokMasuk.produkId)}
+          onClose={() => setStokMasuk(null)}
+          onDone={(m) => { setStokMasuk(null); tampilToast(m); }}
+        />
+      )}
+      {toast && (
+        <div className="fixed left-1/2 -translate-x-1/2 bottom-[calc(24px+env(safe-area-inset-bottom))] z-[400] px-4 py-2.5 rounded-full bg-zinc-900/90 dark:bg-white/90 text-white dark:text-zinc-900 text-[14px] font-medium shadow-lg backdrop-blur max-w-[90vw] text-center">
+          {toast}
+        </div>
+      )}
     </div>
   );
 };

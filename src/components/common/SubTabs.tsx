@@ -1,5 +1,11 @@
 
-export type SubTabOption<T extends string> = { key: T; label: string; count?: number };
+export type SubTabOption<T extends string> = {
+  key: T;
+  label: string;
+  count?: number;
+  /** Warna teks khusus (mis. merah untuk Pengeluaran, hijau untuk Pemasukan) */
+  tone?: string;
+};
 
 /**
  * SATU-SATUNYA gaya tab sub-halaman (SSOT): segmented control ala iOS, label HURUF BESAR.
@@ -35,7 +41,9 @@ function SubTabs<T extends string>({
             aria-selected={aktif}
             onClick={() => onChange(o.key)}
             className={`min-h-[40px] px-1.5 py-1.5 rounded-[10px] text-[12px] sm:text-[13px] font-bold uppercase tracking-wide leading-tight transition-all flex items-center justify-center gap-1.5 text-center ${
-              aktif ? "bg-white dark:bg-[#3a3a3c] text-zinc-900 dark:text-white shadow-sm" : "text-zinc-500 dark:text-zinc-400 active:bg-white/50 dark:active:bg-white/5"
+              aktif
+                ? `bg-white dark:bg-[#3a3a3c] shadow-sm ${o.tone || "text-zinc-900 dark:text-white"}`
+                : `${o.tone ? `${o.tone} opacity-60` : "text-zinc-500 dark:text-zinc-400"} active:bg-white/50 dark:active:bg-white/5`
             }`}
           >
             <span>{o.label}</span>
