@@ -12,7 +12,6 @@ import {
   Trash2,
   ClipboardList,
   Info,
-  User,
   LogOut,
   CreditCard,
   Sparkles,
@@ -32,18 +31,17 @@ import {
   ChevronLeft,
   X,
   ChevronDown,
-  ChevronUp,
   Download,
-  Check,
   Pencil,
-  Plus,
   ChevronRight
 } from "lucide-react";
 // import SopPdf from "../SOP/SOP_SewaPS_URBAN.pdf";
 import versionData from "../version.json";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
-import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, BULAN_NAMES, normalizeBulanTahun, normalizeDateStr } from "../lib/absenPeriod";
-import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
+import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr } from "../lib/absenPeriod";
+import { toLocalYmd } from "../lib/dateLocal";
+import { ongkirPengantarTersimpan } from "../lib/sewa";
+import { toInt, rupiah } from "../lib/format";
 
 interface Price {
   label: string;
@@ -503,12 +501,10 @@ const Pengaturan: React.FC<Props> = ({
             h.rowsSewa.forEach((r: any) => {
               if (r.isOngkir === "YA" && r._ongkir && r.diantarOleh && r.diantarOleh.toLowerCase() === emailTrimmed) {
                 const key = bulanTahun;
-                const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
+                const nominalAsli = toInt(r._ongkir);
                 if (nominalAsli > 0) {
                     if (r._isNewOngkirSystem) {
-                        const fallbackPersen = r._ongkirPegawaiPersen ?? 70;
-                        const fallbackNominal = Math.round((nominalAsli * fallbackPersen) / 100);
-                        const pegawaiNominal = r._ongkirPegawaiNominal ?? fallbackNominal;
+                        const pegawaiNominal = ongkirPengantarTersimpan(r) ?? 0;
                         ongkirMap.set(key, (ongkirMap.get(key) || 0) + pegawaiNominal);
                     } else {
                         ongkirMap.set(key, (ongkirMap.get(key) || 0) + nominalAsli);
@@ -522,12 +518,10 @@ const Pengaturan: React.FC<Props> = ({
             h.rowsHarian.forEach((r: any) => {
               if (r._ongkir && r.diantarOleh && r.diantarOleh.toLowerCase() === emailTrimmed) {
                 const key = bulanTahun;
-                const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
+                const nominalAsli = toInt(r._ongkir);
                 if (nominalAsli > 0) {
                     if (r._isNewOngkirSystem) {
-                        const fallbackPersen = r._ongkirPegawaiPersen ?? 70;
-                        const fallbackNominal = Math.round((nominalAsli * fallbackPersen) / 100);
-                        const pegawaiNominal = r._ongkirPegawaiNominal ?? fallbackNominal;
+                        const pegawaiNominal = ongkirPengantarTersimpan(r) ?? 0;
                         ongkirMap.set(key, (ongkirMap.get(key) || 0) + pegawaiNominal);
                     } else {
                         ongkirMap.set(key, (ongkirMap.get(key) || 0) + nominalAsli);
@@ -988,12 +982,12 @@ const Pengaturan: React.FC<Props> = ({
                               { name: "Pengurangan", value: totalPotongan, color: "#ef4444" }
                             ].filter(d => d.value > 0).map((e, i) => <Cell key={i} fill={e.color} />)}
                           </Pie>
-                          <Tooltip formatter={(val: number) => `Rp ${val.toLocaleString("id-ID")}`} />
+                          <Tooltip formatter={(val: number) => `${rupiah(val)}`} />
                         </PieChart>
                       </ResponsiveContainer>
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none flex-col mt-1">
                         <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest text-center">Total<br />Sepanjang Waktu</span>
-                        <span className="text-lg font-black text-emerald-500">Rp {totalDiterima.toLocaleString("id-ID")}</span>
+                        <span className="text-lg font-black text-emerald-500">{rupiah(totalDiterima)}</span>
                       </div>
                     </div>
 
@@ -1022,7 +1016,7 @@ const Pengaturan: React.FC<Props> = ({
                                 Gaji {r.bulanTahun}
                               </span>
                               <div className="flex items-center gap-3">
-                                <span className="text-[13px] font-black text-emerald-600 dark:text-emerald-400">Rp {tDiterimaSemua.toLocaleString("id-ID")}</span>
+                                <span className="text-[13px] font-black text-emerald-600 dark:text-emerald-400">{rupiah(tDiterimaSemua)}</span>
                                 <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
                               </div>
                             </div>
@@ -1032,12 +1026,12 @@ const Pengaturan: React.FC<Props> = ({
                               <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 space-y-3 bg-white/50 dark:bg-zinc-900/50 animate-in slide-in-from-top-2 duration-200">
                                 <div className="flex justify-between items-center">
                                   <span className="text-xs font-bold text-zinc-500">Gaji Pokok</span>
-                                  <span className="text-sm font-black text-zinc-900 dark:text-white">Rp {tPokok.toLocaleString("id-ID")}</span>
+                                  <span className="text-sm font-black text-zinc-900 dark:text-white">{rupiah(tPokok)}</span>
                                 </div>
                                 {tbArr.map((tb: any, i: number) => Number(tb.nominal) > 0 && (
                                   <div key={`tb-${i}`} className="flex justify-between items-center">
                                     <div className="flex flex-col gap-0.5">
-                                      <span className="text-[12px] font-bold text-blue-500">Tambahan: +Rp {Number(tb.nominal).toLocaleString("id-ID")}</span>
+                                      <span className="text-[12px] font-bold text-blue-500">Tambahan: +{rupiah(Number(tb.nominal))}</span>
                                       {tb.status === 'sudah' ? (
                                           <span className="text-[9px] font-extrabold w-fit uppercase bg-emerald-100/80 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded">SUDAH DIBAYAR</span>
                                       ) : (
@@ -1050,7 +1044,7 @@ const Pengaturan: React.FC<Props> = ({
                                 {(tOngkir > 0) && (
                                   <div className="flex justify-between items-center flex-wrap gap-1">
                                     <div className="flex flex-col gap-0.5">
-                                      <span className="text-[12px] font-bold text-purple-500">Total Ongkir: +Rp {tOngkir.toLocaleString("id-ID")}</span>
+                                      <span className="text-[12px] font-bold text-purple-500">Total Ongkir: +{rupiah(tOngkir)}</span>
                                       <span className="text-[9px] font-extrabold w-fit uppercase bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 px-1.5 py-0.5 rounded">Tidak masuk transfer</span>
                                     </div>
                                     <span className="text-right text-[11px] font-medium text-purple-400 max-w-[140px] italic">"Otomatis dari Sistem"</span>
@@ -1064,7 +1058,7 @@ const Pengaturan: React.FC<Props> = ({
                                        <div className="flex flex-col gap-0.5">
                                          <div className="flex items-center gap-1.5 flex-wrap">
                                            <span className={`text-[12px] font-bold ${isCanceled ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-red-500'}`}>
-                                             Pengurangan: -Rp {Number(pg.nominal).toLocaleString("id-ID")}
+                                             Pengurangan: -{rupiah(Number(pg.nominal))}
                                            </span>
                                            {pg._isAutoSistem && (
                                              <span className="text-[8px] font-extrabold uppercase tracking-wider text-orange-500 bg-orange-50 dark:bg-orange-500/10 px-1.5 py-0.5 rounded">⚡ Auto</span>
@@ -1090,7 +1084,7 @@ const Pengaturan: React.FC<Props> = ({
 
                                 <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl flex justify-between items-center">
                                   <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600/80 dark:text-amber-400/80">Yang Harus Ditransfer</span>
-                                  <span className="text-lg font-black text-amber-600 dark:text-amber-400">Rp {tDitransfer.toLocaleString("id-ID")}</span>
+                                  <span className="text-lg font-black text-amber-600 dark:text-amber-400">{rupiah(tDitransfer)}</span>
                                 </div>
 
                                 {r.buktiTransfer && (
@@ -1282,7 +1276,7 @@ const Pengaturan: React.FC<Props> = ({
                     <div className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">Nominal Denda (Rp)</div>
                     <div className="text-xs text-zinc-500">Jumlah denda per blok waktu</div>
                   </div>
-                  <div className="text-[15px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-3 py-1 rounded-lg">Rp {localNominalDenda.toLocaleString("id-ID")}</div>
+                  <div className="text-[15px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-3 py-1 rounded-lg">{rupiah(localNominalDenda)}</div>
                 </div>
                 <div className="relative pt-2 pb-1 touch-pan-y">
                   <input 
@@ -1387,7 +1381,7 @@ const Pengaturan: React.FC<Props> = ({
                     <span className="text-[14px] font-semibold text-zinc-900 dark:text-white">Denda Tidak Full Absen (Bolos/Lupa)</span>
                     <span className="text-[12px] text-zinc-500 dark:text-zinc-400">Potongan gaji jika tidak absen masuk/pulang sampai tutup buku</span>
                   </div>
-                  <div className="text-[15px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-500/10 px-3 py-1 rounded-lg">Rp {localDendaTidakAbsenPulang.toLocaleString("id-ID")}</div>
+                  <div className="text-[15px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-500/10 px-3 py-1 rounded-lg">{rupiah(localDendaTidakAbsenPulang)}</div>
                 </div>
                 <div className="relative pt-2 pb-6 touch-pan-y">
                   <input 
@@ -1499,7 +1493,7 @@ const Pengaturan: React.FC<Props> = ({
                 <div key={a.id} className={`flex items-center justify-between p-4 ${i !== assistants.length - 1 ? 'border-b border-zinc-100 dark:border-zinc-700/50' : ''} ${editingAsistenId === a.id ? 'bg-cyan-50 dark:bg-cyan-500/10' : ''}`}>
                   <div>
                     <div className="font-bold text-[14px] text-zinc-800 dark:text-white">{a.nama_pengeluaran}</div>
-                    <div className="text-[11px] font-medium text-zinc-500 uppercase">Tgl {a.tanggal} | {a.kategori}{a.nominal ? ` | Rp ${Number(a.nominal).toLocaleString("id-ID")}` : ''}</div>
+                    <div className="text-[11px] font-medium text-zinc-500 uppercase">Tgl {a.tanggal} | {a.kategori}{a.nominal ? ` | ${rupiah(Number(a.nominal))}` : ''}</div>
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => handleEditAsisten(a)} className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-500 active:scale-90"><Pencil size={14} /></button>

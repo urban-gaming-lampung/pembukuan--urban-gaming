@@ -1,9 +1,10 @@
 import React from "react";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { PILIH_SAAT_CHECKOUT, StokRef } from "../lib/posSales";
+import { kunciStok } from "../lib/stokJualan";
 
 const AUTO = "__auto__";
-const encode = (r?: StokRef | null) => (r ? `${r.kategori}||${r.item}` : "");
+const encode = (r?: StokRef | null) => (r ? kunciStok(r) : "");
 const decode = (v: string): StokRef | null => {
   if (!v) return null;
   const [kategori, item] = v.split("||");

@@ -5,6 +5,10 @@ import {
   RowHarian, RowJajanan, RowJasaAks, RowSewa, HistoryItem 
 } from "../lib/types";
 import type { StokData, MasterStokCategories, StokKategori } from "../hooks/useStokData";
+import { rpShort, rupiah } from "../lib/format";
+import { totalPemasukanHarian } from "../lib/keuangan";
+import { buatLaporanHarian, laporanUntukPdf } from "../lib/laporan";
+import { toAscii } from "../lib/posReceipt";
 
 type ImageQuality = "Tinggi" | "Hemat";
 
@@ -23,148 +27,6 @@ type Props = {
   masterCategories?: MasterStokCategories;
   onStartExport?: () => void;
   onEndExport?: () => void;
-};
-
-// --- HELPER UNTUK GENERATE TEXT LAPORAN ---
-const formatK = (num: number) => {
-    if (num === 0) return "";
-    const k = num / 1000;
-    return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 3 }).format(k) + "k";
-};
-
-const formatRp = (num: number) => {
-    return new Intl.NumberFormat("id-ID", {
-        style: "currency",
-        currency: "IDR",
-        maximumFractionDigits: 0,
-    }).format(num);
-};
-
-const formatDateShort = (dateString: string) => {
-    try {
-        const d = new Date(dateString);
-        const day = String(d.getDate()).padStart(2, '0');
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const year = String(d.getFullYear()).slice(-2);
-        return `${day}/${month}/${year}`;
-    } catch { return dateString; }
-};
-
-const generateLaporanText = (history: HistoryItem[], currentData: Props['data']) => {
-    const dObj = new Date(currentData.tanggal); 
-    const currentMonth = dObj.getMonth();
-    const currentYear = dObj.getFullYear();
-    const todayStringKey = currentData.tanggal;
-
-    const monthHistory = history.filter((h) => {
-        const d = new Date(h.tanggal);
-        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    }).sort((a, b) => new Date(a.tanggal).getTime() - new Date(b.tanggal).getTime());
-
-    const todayItem = history.find((h) => h.tanggal === todayStringKey) || currentData;
-
-    const dataMap: Record<number, number> = {};
-    let strSetor = "";
-    let strPengeluaranList = "";
-    let monthTotalCash = 0;
-    let monthTotalTransfer = 0;
-    let monthTotalPengeluaran = 0;
-
-    monthHistory.forEach((h) => {
-        const d = new Date(h.tanggal);
-        const dateNum = d.getDate();
-        const totalHariIni = (h.totalHarian || 0) + (h.totalJajanan || 0) + (h.totalJasaAks || 0) + (h.totalSewa || 0);
-        
-        dataMap[dateNum] = (dataMap[dateNum] || 0) + totalHariIni;
-        monthTotalCash += (Number((h as any).totalCash) || 0);
-        monthTotalTransfer += (Number((h as any).totalTransfer) || 0);
-
-        if (Array.isArray((h as any).rowsSetoran)) {
-            (h as any).rowsSetoran.forEach((s: any) => {
-                const nom = Number(String(s.harga).replace(/\D/g,"")) || 0;
-                if (nom > 0) strSetor += `${formatDateShort(s.tanggal || h.tanggal)} - ${s.ket || "Setoran"} - ${formatRp(nom)}\n`;
-            });
-        }
-        if (Array.isArray((h as any).rowsPengeluaran)) {
-            (h as any).rowsPengeluaran.forEach((p: any) => {
-                const nom = Number(String(p.harga).replace(/\D/g,"")) || 0;
-                if (nom > 0) {
-                    monthTotalPengeluaran += nom;
-                    strPengeluaranList += `${formatDateShort(p.tanggal || h.tanggal)} - ${p.ket || "Pengeluaran"} - ${formatRp(nom)}\n`;
-                }
-            });
-        }
-    });
-
-    const hariIniPemasukanKotor = (todayItem.totalHarian || 0) + (todayItem.totalJajanan || 0) + (todayItem.totalJasaAks || 0) + (todayItem.totalSewa || 0);
-    
-    let hariIniPengeluaran = 0;
-    if (Array.isArray((todayItem as any).rowsPengeluaran)) {
-        (todayItem as any).rowsPengeluaran.forEach((p: any) => hariIniPengeluaran += (Number(String(p.harga).replace(/\D/g,"")) || 0));
-    }
-
-    let hariIniSetorYa = 0;
-    if (Array.isArray((todayItem as any).rowsSetoran)) {
-        (todayItem as any).rowsSetoran.forEach((s: any) => {
-            const isTf = String(s.bayar || "").toLowerCase();
-            if (isTf.includes("ya") || isTf.includes("sudah")) hariIniSetorYa += (Number(String(s.harga).replace(/\D/g,"")) || 0);
-        });
-    }
-
-    const saldoHarusSetor = Math.max(0, Number(todayItem.totalCash) || 0);
-    const totalSaldoBulanIni = (monthTotalCash + monthTotalTransfer) - monthTotalPengeluaran;
-
-    const monthsIndo = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-    
-    const dayStr = String(dObj.getDate()).padStart(2, '0');
-    const monthStr = monthsIndo[dObj.getMonth()];
-    const yearStr = dObj.getFullYear();
-    const formattedDateHeader = `${dayStr} ${monthStr} ${yearStr}`;
-
-    let text = `[PIN] UPDATE PEMASUKAN & KONDISI RENTAL PS URBAN\n`;
-    text += `TANGGAL : ${formattedDateHeader}\n`;
-    text += `TARGET HARIAN: Rp250.000\n`;
-    text += `TARGET MINGGUAN: Rp1.750.000\n`;
-    text += `==============================\nPEMASUKAN\n`;
-
-    const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
-    const weeks = [
-        { s: 1, e: 7, label: "Minggu 1" },
-        { s: 8, e: 14, label: "Minggu 2" },
-        { s: 15, e: 21, label: "Minggu 3" },
-        { s: 22, e: lastDay, label: "Minggu 4" }
-    ];
-
-    const weeklySums: number[] = [];
-
-    weeks.forEach((w) => {
-        let sum = 0;
-        text += `${w.label}\n`;
-        for (let i = w.s; i <= w.e; i++) {
-            const v = dataMap[i] || 0; 
-            sum += v;
-            text += `${i}. ${v > 0 ? formatK(v) : ""}\n`;
-        }
-        text += `Total : ${formatK(sum)}\n\n`;
-        weeklySums.push(sum);
-    });
-
-    text += `==============================\nTOTAL PEMASUKAN MINGGUAN\n`;
-    weeks.forEach((w, idx) => {
-        text += `${w.label} : ${formatK(weeklySums[idx])}\n`;
-    });
-
-    text += `==============================\n*SETOR*\n${strSetor}`;
-    text += `==============================\n*PENGELUARAN*\n${strPengeluaranList}`;
-    text += `==============================\n`;
-    
-    text += `PENGELUARAN HARI INI : -${formatRp(hariIniPengeluaran)}\n`;
-    text += `PEMASUKAN KOTOR HARI INI : ${formatRp(hariIniPemasukanKotor)}\n`;
-    text += `PEMASUKAN BERSIH HARI INI : ${formatRp(hariIniPemasukanKotor - hariIniPengeluaran)}\n`;
-    text += `SALDO YANG HARUS DI SETOR : ${formatRp(saldoHarusSetor)}\n`;
-    text += `TOTAL SALDO BULAN INI = ${formatRp(totalSaldoBulanIni)}`;
-    
-    return text;
 };
 
 const generateLaporanStokText = (stokData?: StokData, masterCats?: MasterStokCategories) => {
@@ -209,22 +71,12 @@ const generateLaporanStokText = (stokData?: StokData, masterCats?: MasterStokCat
 
 export type PdfExporterHandle = { share: () => Promise<void>; };
 
-const fmt = (n: number | string) => 
-  new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(Number(n) || 0);
-
-const fmtCompact = (n: number) => {
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + "jt";
-  if (n >= 1000) return (n / 1000).toFixed(0) + "rb";
-  return String(n);
-};
-
 const AppleChart = ({ history }: { history: HistoryItem[] }) => {
   const chartData = useMemo(() => {
     if (!history) return [];
     const raw = [...history].slice(0, 7).reverse(); 
     return raw.map(h => {
-        const total = Number(h.totalHarian) + Number(h.totalJajanan) + Number(h.totalJasaAks) + Number(h.totalSewa);
-        return { label: h.hari.substring(0, 3), value: total };
+        return { label: String(h.hari || "").substring(0, 3), value: totalPemasukanHarian(h) };
     });
   }, [history]);
 
@@ -245,7 +97,7 @@ const AppleChart = ({ history }: { history: HistoryItem[] }) => {
                 return (
                     <g key={i}>
                         <rect x={x} y={y} width={barWidth} height={barHeight} rx="6" fill={isToday ? "#2563eb" : "#e4e4e7"} />
-                        <text x={x + barWidth / 2} y={y - 8} textAnchor="middle" fontSize="14" fontWeight="bold" fill={isToday ? "#2563eb" : "#71717a"}>{fmtCompact(d.value)}</text>
+                        <text x={x + barWidth / 2} y={y - 8} textAnchor="middle" fontSize="14" fontWeight="bold" fill={isToday ? "#2563eb" : "#71717a"}>{rpShort(d.value)}</text>
                         <text x={x + barWidth / 2} y={height} textAnchor="middle" fontSize="12" fontWeight="500" fill="#a1a1aa">{d.label}</text>
                     </g>
                 );
@@ -256,7 +108,7 @@ const AppleChart = ({ history }: { history: HistoryItem[] }) => {
 };
 
 const AppleReportTemplate = forwardRef<HTMLDivElement, { data: Props['data'] }>(({ data }, ref) => {
-  const GrandTotal = data.totalHarian + data.totalJajanan + data.totalJasaAks + data.totalSewa;
+  const GrandTotal = totalPemasukanHarian(data);
   return (
     <div ref={ref} className="w-[1200px] min-h-[1600px] bg-white text-zinc-900 p-12 font-sans antialiased">
       <div className="flex justify-between items-end border-b-2 border-zinc-900 pb-6 mb-8">
@@ -272,15 +124,15 @@ const AppleReportTemplate = forwardRef<HTMLDivElement, { data: Props['data'] }>(
       <div className="grid grid-cols-3 gap-6 mb-8">
         <div className="p-6 bg-zinc-50 rounded-2xl border border-zinc-100">
           <p className="text-zinc-500 text-sm font-semibold uppercase tracking-wider mb-1">Total Pemasukan</p>
-          <p className="text-4xl font-extrabold text-black">{fmt(GrandTotal)}</p>
+          <p className="text-4xl font-extrabold text-black">{rupiah(GrandTotal)}</p>
         </div>
         <div className="p-6 bg-zinc-50 rounded-2xl border border-zinc-100">
           <p className="text-zinc-500 text-sm font-semibold uppercase tracking-wider mb-1">Cash</p>
-          <p className="text-3xl font-bold text-emerald-600">{fmt(data.totalCash)}</p>
+          <p className="text-3xl font-bold text-emerald-600">{rupiah(data.totalCash)}</p>
         </div>
         <div className="p-6 bg-zinc-50 rounded-2xl border border-zinc-100">
           <p className="text-zinc-500 text-sm font-semibold uppercase tracking-wider mb-1">Transfer / QRIS</p>
-          <p className="text-3xl font-bold text-blue-600">{fmt(data.totalTransfer)}</p>
+          <p className="text-3xl font-bold text-blue-600">{rupiah(data.totalTransfer)}</p>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-8 mb-8 text-sm text-zinc-600 border-b border-zinc-100 pb-6">
@@ -290,22 +142,22 @@ const AppleReportTemplate = forwardRef<HTMLDivElement, { data: Props['data'] }>(
       <div className="space-y-8 mb-10">
         <div className="grid grid-cols-2 gap-8">
           <div>
-            <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Pemasukan Harian</span> <span className="text-zinc-500">{fmt(data.totalHarian)}</span></h3>
-            <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsHarian.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.jenisPS} ({r.jumlahJam} jam)</td><td className="py-2 text-right font-bold">{fmt(r.harga)}</td></tr>) : null)}</tbody></table>
+            <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Pemasukan Harian</span> <span className="text-zinc-500">{rupiah(data.totalHarian)}</span></h3>
+            <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsHarian.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.jenisPS} ({r.jumlahJam} jam)</td><td className="py-2 text-right font-bold">{rupiah(r.harga)}</td></tr>) : null)}</tbody></table>
           </div>
           <div>
-            <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Sewa PS</span> <span className="text-zinc-500">{fmt(data.totalSewa)}</span></h3>
-            <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsSewa.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.jenisPS} ({r.lamaSewa})</td><td className="py-2 text-right font-bold">{fmt(r.harga)}</td></tr>) : null)}</tbody></table>
+            <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Sewa PS</span> <span className="text-zinc-500">{rupiah(data.totalSewa)}</span></h3>
+            <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsSewa.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.jenisPS} ({r.lamaSewa})</td><td className="py-2 text-right font-bold">{rupiah(r.harga)}</td></tr>) : null)}</tbody></table>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-8">
           <div>
-            <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Jajanan</span> <span className="text-zinc-500">{fmt(data.totalJajanan)}</span></h3>
-            <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsJajanan.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.jenisJajanan} (x{r.qtyJam})</td><td className="py-2 text-right font-bold">{fmt(r.harga)}</td></tr>) : null)}</tbody></table>
+            <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Jajanan</span> <span className="text-zinc-500">{rupiah(data.totalJajanan)}</span></h3>
+            <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsJajanan.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.jenisJajanan} (x{r.qtyJam})</td><td className="py-2 text-right font-bold">{rupiah(r.harga)}</td></tr>) : null)}</tbody></table>
           </div>
           <div>
-            <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Pemasukan Usaha</span> <span className="text-zinc-500">{fmt(data.totalJasaAks)}</span></h3>
-            <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsJasaAks.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.tipe}</td><td className="py-2 text-right font-bold">{fmt(r.harga)}</td></tr>) : null)}</tbody></table>
+            <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Pemasukan Usaha</span> <span className="text-zinc-500">{rupiah(data.totalJasaAks)}</span></h3>
+            <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsJasaAks.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.tipe}</td><td className="py-2 text-right font-bold">{rupiah(r.harga)}</td></tr>) : null)}</tbody></table>
           </div>
         </div>
       </div>
@@ -320,10 +172,10 @@ const AppleReportTemplate = forwardRef<HTMLDivElement, { data: Props['data'] }>(
                 </thead>
                 <tbody className="divide-y divide-zinc-50">
                   {data.history.slice(0, 7).map((h, i) => {
-                     const total = Number(h.totalHarian) + Number(h.totalJajanan) + Number(h.totalJasaAks) + Number(h.totalSewa);
+                     const total = totalPemasukanHarian(h);
                      return (
                       <tr key={i} className="text-zinc-700">
-                        <td className="py-3 font-medium">{h.tanggal}</td><td className="py-3">{h.hari}</td><td className="py-3 text-right font-bold">{fmt(total)}</td><td className="py-3 text-right">{fmt((h as any).totalCash)}</td><td className="py-3 text-right">{fmt((h as any).totalTransfer)}</td>
+                        <td className="py-3 font-medium">{h.tanggal}</td><td className="py-3">{h.hari}</td><td className="py-3 text-right font-bold">{rupiah(total)}</td><td className="py-3 text-right">{rupiah((h as any).totalCash)}</td><td className="py-3 text-right">{rupiah((h as any).totalTransfer)}</td>
                       </tr>
                      )
                   })}
@@ -349,12 +201,6 @@ const PdfExporter = forwardRef<PdfExporterHandle, Props>(function PdfExporter({ 
      if (!el) return null;
 
      try {
-         // --- PRE-CALCULATION FOR INVALID STATE ERROR FIX ---
-         // Kita ambil ukuran asli elemen sebelum cloning untuk disuntikkan nanti
-         const rect = el.getBoundingClientRect();
-         const safeWidth = rect.width || 1200; // Fallback width
-         const safeHeight = rect.height || 200; // Fallback height
-
          const canvas = await html2canvas(el, {
             scale,
             useCORS: true,
@@ -524,7 +370,7 @@ const PdfExporter = forwardRef<PdfExporterHandle, Props>(function PdfExporter({ 
       }
 
       // --- PAGE 3: TEXT REPORT ---
-      const aiText = generateLaporanText(data.history, data);
+      const aiText = toAscii(laporanUntukPdf(buatLaporanHarian(data.history, data.tanggal, data)));
       pdf.setFont("courier", "normal"); pdf.setFontSize(9);
       const splitText = pdf.splitTextToSize(aiText, contentWidth);
       const textHeight = splitText.length * pdf.getLineHeight();

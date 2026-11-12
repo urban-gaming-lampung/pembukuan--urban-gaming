@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useSyncExternalStore, useCallback } from "react";
+import { useEffect, useSyncExternalStore, useCallback } from "react";
 
 export type StokKategori = {
   kategori: string;
@@ -135,7 +135,7 @@ export type MasterStokCategories = {
 
 const STOK_LS_KEY = "URBAN_STOK_DATA"; // Keep for migration if needed
 
-import { doc, onSnapshot, setDoc, getDoc, updateDoc, collection } from "firebase/firestore";
+import { doc, onSnapshot, setDoc, getDoc, collection } from "firebase/firestore";
 import { db } from "../lib/firebase";
 
 // ============================================================

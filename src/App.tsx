@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, Suspense, lazy } from "react";
+import { useMemo, Suspense, lazy } from "react";
 import Header from "./components/Header";
 import Input from "./components/Input";
 import RincianHarian from "./components/RincianHarian";
@@ -10,7 +10,6 @@ import RincianSetoran from "./components/RincianSetoran";
 import RincianPengeluaran from "./components/RincianPengeluaran";
 import FilterComp from "./components/Filter";
 import HistoryPembukuan from "./components/HistoryPembukuan";
-import Grafik from "./components/Grafik";
 import Footer from "./components/Footer";
 import GeminiReportGenerator from "./components/GeminiReportGenerator";
 import Reminder from "./components/Reminder";
@@ -34,6 +33,10 @@ import { GAME_NAMES_ID } from "./games/constants";
 import useAppController from "./hooks/useAppController";
 import SubTabs from "./components/common/SubTabs";
 import { petaWaPenyewa } from "./lib/pengingatSewa";
+import PeringatanSewaHabis from "./components/PeringatanSewaHabis";
+import { totalPemasukanHarian } from "./lib/keuangan";
+import { JAM_GANTI_HARI, toLocalYmd } from "./lib/dateLocal";
+import { rupiah } from "./lib/format";
 
 const ChallengeModal = lazy(() => import("./games/components/ChallengeModal"));
 
@@ -42,24 +45,17 @@ export default function App() {
     rootRef,
     appStokData,
     pdfRef,
-    hydrated,
     dark,
-    setDark,
     themeMode,
-    setThemeMode,
     showChallenge,
     setShowChallenge,
     gameConfig,
     kualitasGambar,
-    setKualitasGambar,
     tableMode,
-    setTableMode,
-    isExportingPDF,
     setIsExportingPDF,
     isMobileTable,
     user,
     authLoading,
-    userRole,
     isSuperAdminOrOwner,
     userProfilePic,
     userProfileColor,
@@ -79,7 +75,6 @@ export default function App() {
     setAdminMonitoringTab,
     handleOpenScan,
     activeUsers,
-    setFocusedField,
     absenPagi,
     setAbsenPagi,
     absenSiang,
@@ -92,15 +87,9 @@ export default function App() {
     setOpenPOS,
     openGallery,
     setOpenGallery,
-    hasVersionUpdate,
-    posUpdates,
-    posBaseline,
-    posBaselineLoaded,
-    dbCatalogState,
     userProfileLoaded,
     isDeactivated,
     editingId,
-    setEditingId,
     rukoBuka,
     setRukoBuka,
     rukoBukaDate,
@@ -109,12 +98,8 @@ export default function App() {
     rukoTutupDate,
     catatan,
     setCatatan,
-    showDownloadAlert,
-    setShowDownloadAlert,
     showDuplicateDateAlert,
     setShowDuplicateDateAlert,
-    showNewMonthAlert,
-    setShowNewMonthAlert,
     showUnsavedAlert,
     setShowUnsavedAlert,
     validationAlert,
@@ -122,7 +107,6 @@ export default function App() {
     showSuccessAlert,
     setShowSuccessAlert,
     successMessage,
-    setSuccessMessage,
     showStokConfirmation,
     setShowStokConfirmation,
     showRecheckAlert,
@@ -134,15 +118,12 @@ export default function App() {
     hargaJasaAks,
     hargaSewa,
     ongkirConfig,
-    setOngkirConfig,
     absenConfig,
-    setAbsenConfig,
     openEditRincian,
     setOpenEditRincian,
     rincianVisibility,
     handleUpdateRincianVisibility,
     getPrices,
-    getHargaSewa,
     getTitle,
     handleSavePrices,
     handleResetSpecificDefault,
@@ -167,12 +148,9 @@ export default function App() {
     totalCash,
     totalTransfer,
     totalPengeluaran,
-    totalPengeluaranCash,
-    manualPengeluaranCash,
     hasData,
     mandatoryFilled,
     history,
-    setHistory,
     filter,
     setFilter,
     filterMonth,
@@ -185,9 +163,7 @@ export default function App() {
     exportData,
     currentFormSignature,
     unverifiedRentals,
-    setUnverifiedRentals,
     paymentVerifyPrompt,
-    setPaymentVerifyPrompt,
     handleVerifyReturn,
     handleCatatPengingat,
     validateTransactions,
@@ -209,14 +185,11 @@ export default function App() {
     newBlankSewa,
     catalogChanges,
     hasPOSUpdate,
-    setUserProfileColor,
-    handleClearProductChange,
     handleResetRukoBuka,
     handleResetRukoTutup,
     handleResetAbsenPagi,
     handleResetAbsenSiang,
     handleResetForm,
-    handleToggleTheme,
     handleUpdateOngkirConfig,
     handleUpdateAbsenConfig,
     handleUpdateThemeMode,
@@ -269,8 +242,7 @@ export default function App() {
         
         <div className="relative z-10 text-zinc-900 dark:text-zinc-100">
           <Header
-              rootRef={rootRef} tanggal={tanggal} dark={dark}
-              onToggleTheme={handleToggleTheme}
+              rootRef={rootRef} tanggal={tanggal}
               onSharePDF={handleShareCheck}
               onOpenSettings={() => setOpenSettings(true)}
               onOpenScan={handleOpenScan}
@@ -351,7 +323,7 @@ export default function App() {
                 totalCash={totalCash} 
                 totalTransfer={totalTransfer}
                 totalPengeluaran={totalPengeluaran}
-                pendapatanBersih={(totalHarian + totalJajanan + totalJasaAks + totalSewa) - totalPengeluaran}
+                pendapatanBersih={totalPemasukanHarian({ totalHarian, totalJajanan, totalJasaAks, totalSewa }) - totalPengeluaran}
                 history={history}
                 rowsSewa={rowsSewa}
                 activeDate={tanggal}
@@ -368,7 +340,6 @@ export default function App() {
                 setRangeEnd={setRangeEnd}
                 filteredHistory={filteredHistory}
                 isVerifyingPayment={!!paymentVerifyPrompt}
-                stokState={appStokData.stokState}
                 tampilJajanan={rincianVisibility.jajanan !== false}
               />
             ) : activeTab === "MONITORING" && !isSuperAdminOrOwner ? (
@@ -433,14 +404,14 @@ export default function App() {
                   const h = wib.getHours();
                   const m = wib.getMinutes();
                   const totalMin = h * 60 + m;
-                  // Sebelum jam 03:00 dini hari (toleransi checkout shift sore): tidak diblok
-                  if (totalMin <= 180) return false;
+                  // Dini hari (masih hari kerja kemarin, toleransi checkout shift malam): tidak diblok
+                  if (totalMin < JAM_GANTI_HARI * 60) return false;
                   // Mulai jam 09:45 pagi ke atas (toko buka hari baru): tidak diblok
                   if (totalMin >= 585) return false;
-                  // Antara jam 03:00 s.d 09:45 pagi: blok jika data kemarin sudah disimpan
+                  // Antara pergantian hari kerja s.d 09:45 pagi: blok jika data kemarin sudah disimpan
                   const yesterday = new Date(wib);
                   yesterday.setDate(yesterday.getDate() - 1);
-                  const yStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
+                  const yStr = toLocalYmd(yesterday);
                   return history.some(h2 => h2.tanggal === yStr);
                 })()}
               />
@@ -488,7 +459,7 @@ export default function App() {
                 totalCash={totalCash} 
                 totalTransfer={totalTransfer}
                 totalPengeluaran={totalPengeluaran}
-                pendapatanBersih={(totalHarian + totalJajanan + totalJasaAks + totalSewa) - totalPengeluaran}
+                pendapatanBersih={totalPemasukanHarian({ totalHarian, totalJajanan, totalJasaAks, totalSewa }) - totalPengeluaran}
               />
             </div>
             
@@ -502,7 +473,6 @@ export default function App() {
             <div id="section-history" className="pt-2">
               <HistoryPembukuan
                 items={filteredHistory}
-                onClear={() => { if (history.length > 0 && confirm("Bersihkan SEMUA history pembukuan?")) setHistory([]); }}
                 onEdit={editHistoryItem} onDelete={deleteHistoryItem}
                 isOwner={isSuperAdminOrOwner}
               />
@@ -563,7 +533,6 @@ export default function App() {
             isSuperAdminOrOwner={isSuperAdminOrOwner}
             adminName={user?.email ? user.email.split('@')[0] : "Admin"}
             catalogChanges={catalogChanges}
-            onClearProductChange={handleClearProductChange}
           />
 
           <GalleryModal
@@ -595,7 +564,7 @@ export default function App() {
                     </div>
                     {triggeredAssistants[0].nominal ? (
                       <div className="text-[16px] font-black text-cyan-600 dark:text-cyan-400 pt-1">
-                        Rp {Number(triggeredAssistants[0].nominal).toLocaleString("id-ID")}
+                        {rupiah(Number(triggeredAssistants[0].nominal))}
                       </div>
                     ) : null}
                   </div>
@@ -636,40 +605,13 @@ export default function App() {
             </div>
           )}
 
-          {unverifiedRentals.length > 0 && !paymentVerifyPrompt && (
-            <div className="fixed inset-0 z-[500] flex items-center justify-center p-6 font-sans">
-              <div className="absolute inset-0 bg-black/70 backdrop-blur-[6px] pointer-events-auto" />
-              <div className="relative w-full max-w-[320px] overflow-hidden rounded-[24px] bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-xl shadow-2xl ring-1 ring-black/10 dark:ring-white/10 animate-in zoom-in-90 duration-300">
-                <div className="p-6 text-center flex flex-col items-center">
-                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400 ring-4 ring-red-500/10">
-                     <AlertCircle className="w-8 h-8 animate-pulse" />
-                  </div>
-                  <h3 className="text-[19px] font-black text-zinc-900 dark:text-white mb-2 leading-tight tracking-tight">Waktu Sewa Habis!</h3>
-                  {(() => {
-                    const profileName = (user?.email || "").split("@")[0];
-                    const capitalizedName = profileName ? profileName.charAt(0).toUpperCase() + profileName.slice(1) : "Admin";
-                    const item = unverifiedRentals[0];
-                    return (
-                      <>
-                        <p className="text-[14px] leading-relaxed text-zinc-600 dark:text-zinc-400 mb-4">
-                          Unit <strong className="text-zinc-900 dark:text-white bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">{item?.jenis}</strong> atas nama <strong className="text-blue-600 dark:text-blue-400">{item?.namaPenyewa}</strong> telah selesai durasi sewanya.
-                        </p>
-                        <p className="text-[16px] font-bold text-zinc-900 dark:text-white mb-4 leading-tight tracking-tight">Apakah sewa sudah habis atau belum, {capitalizedName}?</p>
-                      </>
-                    );
-                  })()}
-                </div>
-                <div className="flex flex-col border-t border-gray-200/50 dark:border-white/10">
-                  <button 
-                    onClick={() => handleVerifyReturn(unverifiedRentals[0])} 
-                    className="w-full py-4 text-[15px] shadow-inner font-black text-blue-600 dark:text-blue-500 bg-white/50 dark:bg-black/20 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors active:bg-blue-100 dark:active:bg-blue-500/20"
-                  >
-                    YA, SUDAH HABIS & KEMBALI
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          <PeringatanSewaHabis
+            items={unverifiedRentals}
+            userEmail={user?.email}
+            jeda={!!paymentVerifyPrompt}
+            onVerify={handleVerifyReturn}
+            onPengingat={handleCatatPengingat}
+          />
 
           {paymentVerifyPrompt && (
             <div className="fixed inset-0 z-[501] flex items-center justify-center p-6 font-sans">

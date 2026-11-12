@@ -7,6 +7,7 @@ import jsPDF from "jspdf";
 import logoBlackUrl from "../assets/urban-logo-black.png";
 import { infoNego, isBonus, negoSatuan, pernahDp, sisaBayar, totalDibayar } from "./posSales";
 import type { PosSale } from "./posSales";
+import { rupiah } from "./format";
 
 export const STORE = {
   nama: "URBAN Gaming Lampung",
@@ -53,14 +54,14 @@ export function barisPembayaran(s: PosSale): { l: string; r: string; bold?: bool
   if (!pernahDp(s)) return [];
   const out: { l: string; r: string; bold?: boolean }[] = (s.pembayaran || []).map((p) => ({
     l: `${p.jenis === "DP" ? "DP" : "Pelunasan"} ${tglPendek(p.ts)} (${p.metode === "TRANSFER" ? "Transfer" : "Tunai"})`,
-    r: rp(p.jumlah),
+    r: rupiah(p.jumlah),
   }));
   if (s.status === "DP") {
-    out.push({ l: "Sisa pembayaran", r: rp(sisaBayar(s)), bold: true });
+    out.push({ l: "Sisa pembayaran", r: rupiah(sisaBayar(s)), bold: true });
     out.push({ l: "Jatuh tempo", r: fmtJatuhTempo(s.jatuhTempo) });
   }
-  if (s.status === "BATAL_PEMBELI") out.push({ l: "DP hangus", r: rp(totalDibayar(s)), bold: true });
-  if (s.status === "BATAL_URBAN") out.push({ l: "DP dikembalikan", r: rp(totalDibayar(s)), bold: true });
+  if (s.status === "BATAL_PEMBELI") out.push({ l: "DP hangus", r: rupiah(totalDibayar(s)), bold: true });
+  if (s.status === "BATAL_URBAN") out.push({ l: "DP dikembalikan", r: rupiah(totalDibayar(s)), bold: true });
   return out;
 }
 export const KETENTUAN_DP = {
@@ -75,7 +76,6 @@ export const kotakSyarat = (s: Pick<PosSale, "syaratNota" | "status">) =>
   s.syaratNota || (s.status === "DP" || s.status === "BATAL_PEMBELI" || s.status === "BATAL_URBAN" ? KETENTUAN_DP : { judul: GARANSI_JUDUL, isi: [GARANSI_TEKS] });
 export const teksPenutup = (s: Pick<PosSale, "jenisNota">) => (isNotaSewa(s) ? "Terima kasih telah menyewa!" : "Terima kasih telah berbelanja!");
 
-const rp = (n: number) => `Rp ${Math.round(n || 0).toLocaleString("id-ID")}`;
 /** Font standar PDF & printer thermal hanya aman untuk ASCII dasar. */
 export const toAscii = (t: string) =>
   String(t ?? "")
@@ -191,12 +191,12 @@ function drawNota(pdf: jsPDF, s: PosSale, logo: { url: string; ratio: number } |
     pdf.setFontSize(8);
     const nama = it.kategori === "ISI GAME" && it.platform ? `${it.nama} (${it.platform})` : it.nama;
     (pdf.splitTextToSize(toAscii(nama), CW) as string[]).forEach((line) => { pdf.text(line, M, y); y += 3.4; });
-    row(`${it.qty} x ${rp(it.harga)}${isBonus(it) ? "  (BONUS)" : ""}`, rp(it.subtotal), 7.5);
+    row(`${it.qty} x ${rupiah(it.harga)}${isBonus(it) ? "  (BONUS)" : ""}`, rupiah(it.subtotal), 7.5);
     const n = negoSatuan(it);
     if (n) {
       pdf.setFont("helvetica", "italic");
       pdf.setFontSize(6.6);
-      pdf.text(toAscii(`Harga normal ${rp(it.hargaNormal!)} - nego kasir ${n > 0 ? "-" : "+"}${rp(Math.abs(n))}/pcs`), M, y);
+      pdf.text(toAscii(`Harga normal ${rupiah(it.hargaNormal!)} - nego kasir ${n > 0 ? "-" : "+"}${rupiah(Math.abs(n))}/pcs`), M, y);
       y += 3;
     }
     y += 1.4;
@@ -206,12 +206,12 @@ function drawNota(pdf: jsPDF, s: PosSale, logo: { url: string; ratio: number } |
   // Total
   const ng = infoNego(s);
   if (ng.ada) {
-    row("Harga normal", rp(ng.hargaNormal));
-    row(ng.labelBaris, `${ng.total >= 0 ? "-" : "+"}${rp(Math.abs(ng.total))}`);
+    row("Harga normal", rupiah(ng.hargaNormal));
+    row(ng.labelBaris, `${ng.total >= 0 ? "-" : "+"}${rupiah(Math.abs(ng.total))}`);
   }
   if (s.diskon > 0) {
-    row("Subtotal", rp(s.subtotal));
-    row(`Diskon promo (${s.diskonPersen}%)`, `-${rp(s.diskon)}`);
+    row("Subtotal", rupiah(s.subtotal));
+    row(`Diskon promo (${s.diskonPersen}%)`, `-${rupiah(s.diskon)}`);
   }
   if (ng.ada || s.diskon > 0) y += 1;
   pdf.setFillColor(0, 0, 0);
@@ -221,7 +221,7 @@ function drawNota(pdf: jsPDF, s: PosSale, logo: { url: string; ratio: number } |
   pdf.setFontSize(9);
   pdf.text("TOTAL", M + 2.5, y + 4.6);
   pdf.setFontSize(11.5);
-  pdf.text(rp(s.total), W - M - 2.5, y + 4.8, { align: "right" });
+  pdf.text(rupiah(s.total), W - M - 2.5, y + 4.8, { align: "right" });
   pdf.setTextColor(0, 0, 0);
   y += 12;
   const bayarRows = barisPembayaran(s);
@@ -392,21 +392,21 @@ export async function buildNotaEscPos(s: PosSale): Promise<Uint8Array> {
   s.items.forEach((it) => {
     const nama = it.kategori === "ISI GAME" && it.platform ? `${it.nama} (${it.platform})` : it.nama;
     bold(true); wrap(nama).forEach(line); bold(false);
-    line(lr(`  ${it.qty} x ${rp(it.harga)}${isBonus(it) ? " (BONUS)" : ""}`, rp(it.subtotal)));
+    line(lr(`  ${it.qty} x ${rupiah(it.harga)}${isBonus(it) ? " (BONUS)" : ""}`, rupiah(it.subtotal)));
     const n = negoSatuan(it);
-    if (n) wrap(`  Normal ${rp(it.hargaNormal!)}, nego ${n > 0 ? "-" : "+"}${rp(Math.abs(n))}/pcs`).forEach(line);
+    if (n) wrap(`  Normal ${rupiah(it.hargaNormal!)}, nego ${n > 0 ? "-" : "+"}${rupiah(Math.abs(n))}/pcs`).forEach(line);
   });
   rule();
   const ng = infoNego(s);
   if (ng.ada) {
-    line(lr("Harga normal", rp(ng.hargaNormal)));
-    line(lr(ng.labelBaris, `${ng.total >= 0 ? "-" : "+"}${rp(Math.abs(ng.total))}`));
+    line(lr("Harga normal", rupiah(ng.hargaNormal)));
+    line(lr(ng.labelBaris, `${ng.total >= 0 ? "-" : "+"}${rupiah(Math.abs(ng.total))}`));
   }
   if (s.diskon > 0) {
-    line(lr("Subtotal", rp(s.subtotal)));
-    line(lr(`Diskon promo (${s.diskonPersen}%)`, `-${rp(s.diskon)}`));
+    line(lr("Subtotal", rupiah(s.subtotal)));
+    line(lr(`Diskon promo (${s.diskonPersen}%)`, `-${rupiah(s.diskon)}`));
   }
-  bold(true); size(0x01); line(lr("TOTAL", rp(s.total))); size(0x00); bold(false);
+  bold(true); size(0x01); line(lr("TOTAL", rupiah(s.total))); size(0x00); bold(false);
   barisPembayaran(s).forEach((b) => { if (b.bold) bold(true); line(lr(b.l, b.r)); if (b.bold) bold(false); });
   align(1);
   if (statusTegas(s)) {

@@ -6,8 +6,8 @@ import { batalkanNotaDp, hariKeJatuhTempo, lunasiNotaDp, PosSale, sisaBayar, tot
 import { fmtJatuhTempo } from "../lib/posReceipt";
 import { NotaActionButtons, NotaPreview, useNotaActions } from "./PosCheckoutSheet";
 import { UploadTransferProof } from "./TableEditor";
+import { rupiah } from "../lib/format";
 
-const rp = (n: number) => `Rp ${Math.round(n || 0).toLocaleString("id-ID")}`;
 
 /** Label jatuh tempo: lewat / hari ini / H-n. */
 export function labelJatuhTempo(s: PosSale): { teks: string; tone: "lewat" | "dekat" | "aman" } {
@@ -35,8 +35,8 @@ export const BatalDp: React.FC<{ sale: PosSale; onSelesai: (s: PosSale) => void;
   const [galat, setGalat] = useState("");
   const dp = totalDibayar(sale);
   const pilihan = [
-    { k: "PEMBELI" as const, judul: "Dibatalkan pembeli", isi: `DP ${rp(dp)} hangus — dicatat sebagai pemasukan usaha.`, icon: <Ban className="w-5 h-5" /> },
-    { k: "URBAN" as const, judul: "Dibatalkan URBAN", isi: `DP ${rp(dp)} dikembalikan penuh ke pembeli — bukan pemasukan.`, icon: <Undo2 className="w-5 h-5" /> },
+    { k: "PEMBELI" as const, judul: "Dibatalkan pembeli", isi: `DP ${rupiah(dp)} hangus — dicatat sebagai pemasukan usaha.`, icon: <Ban className="w-5 h-5" /> },
+    { k: "URBAN" as const, judul: "Dibatalkan URBAN", isi: `DP ${rupiah(dp)} dikembalikan penuh ke pembeli — bukan pemasukan.`, icon: <Undo2 className="w-5 h-5" /> },
   ];
   const simpan = async () => {
     if (!pihak) return;
@@ -131,7 +131,7 @@ const NotaDpSheet: React.FC<{
     mode.k === "lunasi" ? "Pelunasan" : mode.k === "nota" ? "Nota DP" : mode.k === "batal" ? "Batalkan nota DP" : mode.k === "selesai" ? mode.judul : "Belum Lunas";
   const sub =
     mode.k === "list"
-      ? list.length ? `${list.length} nota DP · sisa tagihan ${rp(totalSisa)}` : "Tidak ada nota DP"
+      ? list.length ? `${list.length} nota DP · sisa tagihan ${rupiah(totalSisa)}` : "Tidak ada nota DP"
       : aktif ? `${aktif.noNota} · ${aktif.pembeli || "Pelanggan"}` : mode.k === "selesai" ? mode.sale.noNota : "";
 
   return (
@@ -176,9 +176,9 @@ const NotaDpSheet: React.FC<{
                     </div>
                     <p className="mt-1.5 text-[12.5px] leading-snug text-zinc-600 dark:text-zinc-300 line-clamp-2">{barang.join(", ")}</p>
                     <div className="mt-2.5 grid grid-cols-3 gap-2 text-[11.5px]">
-                      <div><div className="text-zinc-400">Total</div><div className="font-bold tabular-nums text-zinc-900 dark:text-white">{rp(s.total)}</div></div>
-                      <div><div className="text-zinc-400">DP</div><div className="font-bold tabular-nums text-zinc-900 dark:text-white">{rp(totalDibayar(s))}</div></div>
-                      <div className="text-right"><div className="text-zinc-400">Sisa</div><div className="font-black tabular-nums text-red-600">{rp(sisaBayar(s))}</div></div>
+                      <div><div className="text-zinc-400">Total</div><div className="font-bold tabular-nums text-zinc-900 dark:text-white">{rupiah(s.total)}</div></div>
+                      <div><div className="text-zinc-400">DP</div><div className="font-bold tabular-nums text-zinc-900 dark:text-white">{rupiah(totalDibayar(s))}</div></div>
+                      <div className="text-right"><div className="text-zinc-400">Sisa</div><div className="font-black tabular-nums text-red-600">{rupiah(sisaBayar(s))}</div></div>
                     </div>
                     <div className={`mt-3 grid gap-2 ${isOwner ? "grid-cols-[1fr_auto_auto]" : "grid-cols-[1fr_auto]"}`}>
                       <button type="button" onClick={() => mulaiLunasi(s)} className="h-11 rounded-xl bg-blue-600 text-white text-[13.5px] font-black flex items-center justify-center gap-1.5 active:scale-[0.98]">
@@ -204,8 +204,8 @@ const NotaDpSheet: React.FC<{
             <>
               <div className="rounded-[20px] bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-4 py-3.5">
                 <div className="text-[11px] font-bold uppercase tracking-widest opacity-60">Sisa yang dibayar</div>
-                <div className="text-[30px] font-black font-mono tracking-tight leading-none mt-1">{rp(sisaBayar(aktif))}</div>
-                <div className="text-[12px] mt-1.5 opacity-80">Total {rp(aktif.total)} · DP {rp(totalDibayar(aktif))}</div>
+                <div className="text-[30px] font-black font-mono tracking-tight leading-none mt-1">{rupiah(sisaBayar(aktif))}</div>
+                <div className="text-[12px] mt-1.5 opacity-80">Total {rupiah(aktif.total)} · DP {rupiah(totalDibayar(aktif))}</div>
               </div>
               <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] p-3.5 space-y-2.5">
                 <div className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Metode pelunasan</div>
@@ -291,7 +291,7 @@ const NotaDpSheet: React.FC<{
           <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] bg-white dark:bg-[#1c1c1e] border-t border-zinc-200/70 dark:border-white/5">
             <button type="button" onClick={lunasi} disabled={busy || (metode === "TRANSFER" && !bukti)}
               className="w-full h-[52px] rounded-2xl bg-blue-600 text-white text-[15px] font-black flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]">
-              {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}Lunasi {rp(sisaBayar(aktif))}
+              {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}Lunasi {rupiah(sisaBayar(aktif))}
             </button>
           </div>
         )}

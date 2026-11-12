@@ -1,14 +1,11 @@
 import React, { useEffect, useState, useRef } from "react";
 import { PresenceData } from "../hooks/usePresence";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
-const logoImg = new URL('/images/logo.png', import.meta.url).href;
 
 type HeaderProps = {
   rootRef: React.RefObject<HTMLDivElement>;
   tanggal: string;
 
-  dark: boolean;
-  onToggleTheme: () => void;
   onSharePDF: () => void;
   onOpenSettings: () => void;
   onOpenScan: () => void;
@@ -86,8 +83,6 @@ function getColorForEmail(email: string) {
 export default function Header({
   rootRef,
   tanggal,
-  dark,
-  onToggleTheme,
   onSharePDF,
   onOpenSettings,
   onOpenScan,

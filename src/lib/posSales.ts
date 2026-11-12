@@ -11,8 +11,10 @@ import { collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, ru
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { auth, db, storage } from "./firebase";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
-import { applyMasterChanges, prepareStokWrites, removeJualanItem, writeStokInTx, StokChange } from "./stokJualan";
+import { applyMasterChanges, kunciStok, prepareStokWrites, removeJualanItem, writeStokInTx, StokChange } from "./stokJualan";
 import { sinkronNotaDiam } from "./posPembukuan";
+import { tanggalHariKerja } from "./dateLocal";
+import { pad, rupiah } from "./format";
 
 export type StokRef = { kategori: string; item: string }; // item "*" = pilih saat checkout
 export const PILIH_SAAT_CHECKOUT = "*";
@@ -138,13 +140,68 @@ export function dipesanDari(notaDp: PosSale[]): Map<string, number> {
   const m = new Map<string, number>();
   notaDp.forEach((s) => {
     if (!isDpTerbuka(s)) return;
-    (s.items || []).forEach((it) => {
-      if (!it.stokRef || it.stokRef.item === PILIH_SAAT_CHECKOUT) return;
-      const k = `${it.stokRef.kategori}||${it.stokRef.item}`;
-      m.set(k, (m.get(k) || 0) + (Number(it.qty) || 0));
-    });
+    kebutuhanStok(s.items).forEach((n, k) => m.set(k, (m.get(k) || 0) + n.qty));
   });
   return m;
+}
+
+/** Jumlah barang stok yang dipakai sebuah nota: "kategori||item" -> {kategori, item, qty}. */
+export function kebutuhanStok(items: PosItem[] | undefined): Map<string, { kategori: string; item: string; qty: number }> {
+  const need = new Map<string, { kategori: string; item: string; qty: number }>();
+  (items || []).forEach((it) => {
+    if (!it.stokRef || it.stokRef.item === PILIH_SAAT_CHECKOUT) return;
+    const k = kunciStok(it.stokRef);
+    const n = need.get(k) || { kategori: it.stokRef.kategori, item: it.stokRef.item, qty: 0 };
+    n.qty += Number(it.qty) || 0;
+    need.set(k, n);
+  });
+  return need;
+}
+
+/** Potong stok untuk sebuah nota: perubahan stok + daftar barang yang stoknya kurang. */
+function potongStok(items: PosItem[] | undefined, jualan: Record<string, Record<string, StokItemValue>>) {
+  const stokKurang: NonNullable<PosSale["stokKurang"]> = [];
+  const changes: StokChange[] = [];
+  kebutuhanStok(items).forEach((n) => {
+    const tersedia = Math.max(0, Math.round(Number(jualan?.[n.kategori]?.[n.item]?.jumlah) || 0));
+    if (tersedia < n.qty) stokKurang.push({ kategori: n.kategori, item: n.item, diminta: n.qty, tersedia });
+    changes.push({ kategori: n.kategori, item: n.item, delta: -n.qty });
+  });
+  return { stokKurang, changes };
+}
+
+/** Sisa stok sesudah transaksi per "kategori||item" (dari log perubahan). */
+const sisaSesudah = (logs: { kategori: string; item: string; sesudah: number }[]) => Object.fromEntries(logs.map((l) => [kunciStok(l), l.sesudah]));
+
+// ============================================================
+// Penjualan untuk analitik — SSOT Analitik Usaha & Keseluruhan
+// ============================================================
+
+/** Gabungkan daftar nota tanpa duplikat (nota dibuat di periode + nota DP yang dilunasi di periode). */
+export function gabungNota(...daftar: PosSale[][]): PosSale[] {
+  const m = new Map<string, PosSale>();
+  daftar.forEach((l) => l.forEach((s) => m.set(s.id || s.noNota, s)));
+  return Array.from(m.values());
+}
+/** Nota terhitung sebagai penjualan pada rentang waktu (nota DP dihitung saat lunas). */
+export const terjualDalam = (s: PosSale, from: number, to: number) => {
+  const t = waktuPenjualan(s);
+  return dihitungPenjualan(s) && t >= from && t <= to;
+};
+/** Tanggal hari kerja penjualan (nota dini hari ikut hari kerja sebelumnya). */
+export const tanggalPenjualan = (s: Pick<PosSale, "lunasTs" | "ts">) => tanggalHariKerja(waktuPenjualan(s));
+/**
+ * Uang DP dari nota yang DIBUAT di periode: DP berjalan (belum lunas) dan DP hangus (pembeli batal).
+ * Nota DP yang sudah lunas tidak dihitung di sini — penjualannya dihitung saat lunas.
+ */
+export function ringkasanDp(notaDibuat: PosSale[]) {
+  let berjalan = 0, berjalanN = 0, sisa = 0, hangus = 0, hangusN = 0;
+  notaDibuat.forEach((s) => {
+    if (isDpTerbuka(s)) { berjalan += totalDibayar(s); sisa += sisaBayar(s); berjalanN++; }
+    const h = dpHangus(s);
+    if (h > 0) { hangus += h; hangusN++; }
+  });
+  return { berjalan, berjalanN, sisa, hangus, hangusN, total: berjalan + hangus, nota: berjalanN + hangusN };
 }
 
 // ============================================================
@@ -172,7 +229,7 @@ export function infoNego(s: Pick<PosSale, "items" | "subtotal" | "negoOleh" | "k
     /** jumlah harga normal sebelum nego */
     hargaNormal: (s.subtotal || 0) + total,
     labelBaris: total >= 0 ? "Potongan nego kasir" : "Penyesuaian harga kasir",
-    catatan: `Harga ${barang.length} jenis barang diubah oleh kasir ${oleh} (nego) · ${total >= 0 ? "potongan" : "tambahan"} Rp ${Math.abs(Math.round(total)).toLocaleString("id-ID")}`,
+    catatan: `Harga ${barang.length} jenis barang diubah oleh kasir ${oleh} (nego) · ${total >= 0 ? "potongan" : "tambahan"} ${rupiah(Math.abs(total))}`,
   };
 }
 
@@ -379,9 +436,6 @@ export const stokRefLabel = (r?: StokRef | null) =>
 // Simpan penjualan
 // ============================================================
 
-const pad = (n: number, w = 2) => String(n).padStart(w, "0");
-const ymdLocal = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
 export async function commitPosSale(
   input: Omit<PosSale, "noNota" | "ts" | "tanggal" | "kasir" | "stokKurang">,
   /** Bayar DP: stok belum berkurang sampai pelunasan. */
@@ -390,7 +444,8 @@ export async function commitPosSale(
   const kasir = auth.currentUser?.email || "admin";
   const now = Date.now();
   const d = new Date(now);
-  const tanggal = ymdLocal(d);
+  // Tanggal hari kerja (nota dini hari milik pembukuan hari sebelumnya); nomor nota tetap per tanggal kalender
+  const tanggal = tanggalHariKerja(now);
   const dayKey = `${String(d.getFullYear()).slice(2)}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
   const counterRef = doc(db, "data", "pos_counter");
   const stokRef = doc(db, "data", "stok");
@@ -413,21 +468,7 @@ export async function commitPosSale(
     const noNota = `URB-${dayKey}-${pad(seq, 3)}`;
 
     const jualan = (sSnap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
-    const need = new Map<string, { kategori: string; item: string; qty: number }>();
-    input.items.forEach((it) => {
-      if (!it.stokRef) return;
-      const k = `${it.stokRef.kategori}||${it.stokRef.item}`;
-      const cur = need.get(k) || { ...it.stokRef, qty: 0 };
-      cur.qty += it.qty;
-      need.set(k, cur);
-    });
-    const stokKurang: NonNullable<PosSale["stokKurang"]> = [];
-    const changes: StokChange[] = [];
-    need.forEach((n) => {
-      const tersedia = Math.max(0, Math.round(Number(jualan?.[n.kategori]?.[n.item]?.jumlah) || 0));
-      if (tersedia < n.qty) stokKurang.push({ kategori: n.kategori, item: n.item, diminta: n.qty, tersedia });
-      changes.push({ kategori: n.kategori, item: n.item, delta: -n.qty });
-    });
+    const { stokKurang, changes } = potongStok(input.items, jualan);
 
     // Nota DP: stok baru dipotong saat pelunasan (barang berstatus "dipesan")
     const w = dp ? { patch: {}, logs: [] as any[] } : prepareStokWrites(jualan, changes, "terjual", `Nota ${noNota}${input.pembeli ? ` · ${input.pembeli}` : ""}`, kasir, now);
@@ -440,7 +481,7 @@ export async function commitPosSale(
           pembayaran: [{ jenis: "DP", jumlah: dp, metode: input.metode, ...(input.buktiTransfer ? { buktiTransfer: input.buktiTransfer } : {}), ts: now, oleh: kasir, olehNama: input.kasirNama }],
         }
       : { ...input, noNota, ts: now, tanggal, kasir, stokKurang };
-    const stokSesudah = Object.fromEntries((w.logs as any[]).map((l) => [`${l.kategori}||${l.item}`, l.sesudah]));
+    const stokSesudah = sisaSesudah(w.logs as any[]);
     tx.set(counterRef, { day: dayKey, seq }, { merge: true });
     // Firestore menolak nilai undefined -> bersihkan dulu (data polos, aman di-JSON)
     tx.set(saleRef, { ...JSON.parse(JSON.stringify(sale)), waktu: serverTimestamp() });
@@ -453,16 +494,8 @@ export async function commitPosSale(
 
 /** Stok yang benar-benar terpotong oleh nota (stok tidak pernah di bawah 0) -> perubahan untuk mengembalikannya. */
 function restoreChanges(sale: PosSale): StokChange[] {
-  const need = new Map<string, { kategori: string; item: string; qty: number }>();
-  (sale.items || []).forEach((it) => {
-    if (!it.stokRef || it.stokRef.item === PILIH_SAAT_CHECKOUT) return;
-    const k = `${it.stokRef.kategori}||${it.stokRef.item}`;
-    const n = need.get(k) || { ...it.stokRef, qty: 0 };
-    n.qty += it.qty;
-    need.set(k, n);
-  });
   const changes: StokChange[] = [];
-  need.forEach((n) => {
+  kebutuhanStok(sale.items).forEach((n) => {
     const kurang = (sale.stokKurang || []).find((k) => k.kategori === n.kategori && k.item === n.item);
     const terpotong = kurang ? Math.max(0, Math.min(n.qty, kurang.tersedia)) : n.qty;
     if (terpotong > 0) changes.push({ kategori: n.kategori, item: n.item, delta: terpotong });
@@ -544,21 +577,7 @@ export async function lunasiNotaDp(
     if (cur.batal || cur.status !== "DP") throw new Error("Nota ini sudah tidak menunggu pelunasan.");
     const sisa = sisaBayar(cur);
     const jualan = (stSnap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
-    const need = new Map<string, { kategori: string; item: string; qty: number }>();
-    (cur.items || []).forEach((it) => {
-      if (!it.stokRef || it.stokRef.item === PILIH_SAAT_CHECKOUT) return;
-      const k = `${it.stokRef.kategori}||${it.stokRef.item}`;
-      const n = need.get(k) || { ...it.stokRef, qty: 0 };
-      n.qty += it.qty;
-      need.set(k, n);
-    });
-    const stokKurang: NonNullable<PosSale["stokKurang"]> = [];
-    const changes: StokChange[] = [];
-    need.forEach((n) => {
-      const tersedia = Math.max(0, Math.round(Number(jualan?.[n.kategori]?.[n.item]?.jumlah) || 0));
-      if (tersedia < n.qty) stokKurang.push({ kategori: n.kategori, item: n.item, diminta: n.qty, tersedia });
-      changes.push({ kategori: n.kategori, item: n.item, delta: -n.qty });
-    });
+    const { stokKurang, changes } = potongStok(cur.items, jualan);
     const w = prepareStokWrites(jualan, changes, "terjual", `Pelunasan nota ${cur.noNota}${cur.pembeli ? ` · ${cur.pembeli}` : ""}`, oleh, now);
     writeStokInTx(tx, w, { noNota: cur.noNota });
     const pembayaran: PembayaranNota[] = [
@@ -567,8 +586,7 @@ export async function lunasiNotaDp(
     ];
     const patch = { status: "LUNAS" as StatusNota, lunasTs: now, lunasOleh: oleh, pembayaran, stokKurang };
     tx.update(saleRef, JSON.parse(JSON.stringify(patch)));
-    const stokSesudah = Object.fromEntries(w.logs.map((l) => [`${l.kategori}||${l.item}`, l.sesudah]));
-    return { ...cur, ...patch, stokSesudah };
+    return { ...cur, ...patch, stokSesudah: sisaSesudah(w.logs) };
   });
 }
 

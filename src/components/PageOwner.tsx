@@ -1,19 +1,17 @@
 import React, { useMemo, useState, useEffect } from "react";
 import HistoryPembukuan from "./HistoryPembukuan";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
-import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Activity, Clock, Monitor, Gamepad2, CheckCircle, Settings2, ShieldCheck, Smartphone, Sparkles, Zap, Brain, Target, BarChart3 } from "lucide-react";
-import { doc, setDoc, onSnapshot, query, collection, addDoc, deleteDoc, updateDoc, where, orderBy } from "firebase/firestore";
-import { db, auth } from "../lib/firebase";
+import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Activity, Clock, Gamepad2, Settings2, Sparkles, Brain, Target, BarChart3 } from "lucide-react";
+import { doc, setDoc, onSnapshot, query, collection, updateDoc, orderBy } from "firebase/firestore";
+import { db } from "../lib/firebase";
 import { HistoryItem, RowSewa } from "../lib/types";
-import { rupiah, formatDateShort } from "../lib/format";
+import { rupiah, formatDateShort, toInt } from "../lib/format";
 import RekapPemasukan from "./RekapPemasukan";
 import Grafik from "./Grafik";
 import Section from "./common/Section";
-import { StokData, StokItemValue } from "../hooks/useStokData";
 import FilterComp from "./Filter";
 import TabPegawai from "./TabPegawai";
 import WidgetMonitoringStatus from "./WidgetMonitoringStatus";
-import RupiahIcon from "./common/RupiahIcon";
 import HalamanStok from "./HalamanStok";
 import { adaPermintaanStok, EVENT_BUKA_STOK } from "../lib/stokRental";
 import AnalitikUsaha from "./AnalitikUsaha";
@@ -21,8 +19,9 @@ import InputStokJualan from "./InputStokJualan";
 import InputTransaksi from "./InputTransaksi";
 import AnalitikKeseluruhan from "./AnalitikKeseluruhan";
 import SubTabs from "./common/SubTabs";
-import { bisnisOf, JenisTransaksi, pemasukanRental, saringPeriode, useTransaksiOwner } from "../lib/keuangan";
+import { bisnisOf, catatLogPembukuan, JenisTransaksi, pemasukanRental, pengeluaranAdminRental, ringkasPembukuan, saringPeriode, useTransaksiOwner } from "../lib/keuangan";
 import { kasUsahaHarian } from "../lib/pemasukanUsaha";
+import { isPelunasanSewa, jenisUnit, ongkirBaris, tanpaUnitKeluar } from "../lib/sewa";
 import { sinkronNotaKePembukuan } from "../lib/posPembukuan";
 import WidgetMonitoringDevice from "./WidgetMonitoringDevice";
 import {
@@ -30,15 +29,12 @@ import {
   BarChart,
   Bar,
   XAxis,
-  YAxis,
-  CartesianGrid,
   Tooltip,
   Cell,
   PieChart,
-  Pie,
-  Legend
+  Pie
 } from "recharts";
-import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
+import { toLocalYmd } from "../lib/dateLocal";
 import { useIsDark } from "../hooks/useIsDark";
 
 type PageOwnerProps = {
@@ -68,16 +64,10 @@ type PageOwnerProps = {
   filteredHistory: HistoryItem[];
   hargaItems?: any[];
   isVerifyingPayment?: boolean;
-  stokState: StokData;
   /** Stok jajanan ikut pengaturan "Tampilkan Tabel › Pemasukan Jajanan" */
   tampilJajanan?: boolean;
 };
 
-// Utils:
-const toNum = (v: any) => {
-  const n = parseInt(String(v ?? "0"), 10);
-  return Number.isFinite(n) ? n : 0;
-};
 
 const PageOwner: React.FC<PageOwnerProps> = ({
   totalHarian,
@@ -97,7 +87,6 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   rangeStart, setRangeStart, rangeEnd, setRangeEnd, filteredHistory,
   hargaItems,
   isVerifyingPayment = false,
-  stokState,
   tampilJajanan = true,
 }) => {
 
@@ -167,43 +156,6 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     return `${startDate.getDate()} ${months[startDate.getMonth()]} - ${endDate.getDate()} ${months[endDate.getMonth()]}`;
   };
 
-  const logActivity = async (action: "CREATE" | "UPDATE" | "DELETE", targetDate: string, targetDay: string, recordData: any) => {
-    try {
-      const email = auth.currentUser?.email || "owner@gmail.com";
-      const uniqueLogId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
-        ? crypto.randomUUID() 
-        : Date.now().toString() + Math.random().toString(36).slice(2);
-      
-      const data = recordData || {};
-      const totalHarian = data.totalHarian || 0;
-      const totalJajanan = data.totalJajanan || 0;
-      const totalJasaAks = data.totalJasaAks || 0;
-      const totalSewa = data.totalSewa || 0;
-      const totalIncome = totalHarian + totalJajanan + totalJasaAks + totalSewa;
-      const totalCash = data.totalCash || 0;
-      const totalTransfer = data.totalTransfer || 0;
-      const totalPengeluaran = (data.rowsPengeluaran || []).reduce((sum: number, r: any) => sum + (Number(r.harga) || 0), 0);
-
-      const logDoc = {
-        id: uniqueLogId,
-        email,
-        action,
-        targetDate,
-        targetDay,
-        timestamp: new Date().toISOString(),
-        details: {
-          totalIncome,
-          totalCash,
-          totalTransfer,
-          totalPengeluaran
-        }
-      };
-
-      await setDoc(doc(db, "pembukuan_logs", uniqueLogId), logDoc);
-    } catch (err) {
-      console.error("logActivity error:", err);
-    }
-  };
 
   const handleApproveRequest = async (req: any) => {
     if (!confirm(`Setujui request edit pembukuan tanggal ${req.tanggal}?`)) return;
@@ -217,7 +169,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
       await updateDoc(doc(db, "edit_requests", req.id), { status: "approved" });
       
       // 3. Log activity
-      await logActivity("UPDATE", req.tanggal, req.hari, req.proposedData);
+      await catatLogPembukuan("UPDATE", req.tanggal, req.hari, req.proposedData);
       
       alert("Request edit berhasil disetujui! ✅");
       setSelectedRequest(null);
@@ -316,7 +268,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     "Pemasukan Harian": "#3b82f6",
     "Jajanan & Minuman": "#f59e0b",
     "Sewa PS": "#10b981",
-    "Ongkir (Bagi Hasil)": "#06b6d4",
+    "Ongkir": "#06b6d4",
   };
   const getIncomeColor = (cat: string) => INCOME_COLORS[cat] || "#6b7280";
 
@@ -328,15 +280,10 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     filteredHistory.forEach((h) => {
       const itemIncome = pemasukanRental(h);
 
-      if (Array.isArray((h as any).rowsPengeluaran)) {
-        (h as any).rowsPengeluaran.forEach((r: any) => {
-          const x = toNum(r.harga || r.nominal);
-          if (x <= 0) return;
-          adminExpense += x;
-          const smartKategori = detectCategory(r.ket || "", "Lainnya");
-          combinedList.push({ source: "admin", nama: r.ket || "Tanpa Ket", harga: x, tanggal: r.tanggal || h.tanggal, kategori: smartKategori });
-        });
-      }
+      pengeluaranAdminRental(h).forEach((x) => {
+        adminExpense += x.harga;
+        combinedList.push({ source: "admin", ...x, kategori: detectCategory(x.nama === "Tanpa Ket" ? "" : x.nama, "Lainnya") });
+      });
 
       // Ongkir sudah masuk ke rowsPengeluaran secara otomatis, sehingga akan dihitung sebagai Pengeluaran.
       // Pendapatan Kotor (itemIncome) tidak perlu dikurangi lagi agar tidak double-deduction.
@@ -366,8 +313,8 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     let transfer = 0;
     filteredHistory.forEach((h) => {
       const usaha = kasUsahaHarian(h);
-      cash += Math.max(0, (Number((h as any).totalCash) || 0) - usaha.cash);
-      transfer += Math.max(0, (Number((h as any).totalTransfer) || 0) - usaha.transfer);
+      cash += Math.max(0, toInt(h.totalCash) - usaha.cash);
+      transfer += Math.max(0, toInt(h.totalTransfer) - usaha.transfer);
     });
     return { totalCashFiltered: cash, totalTransferFiltered: transfer };
   }, [filteredHistory]);
@@ -488,63 +435,20 @@ const PageOwner: React.FC<PageOwnerProps> = ({
 
   const combinedIncomeBulanIni = useMemo(() => {
     const list: IncomeEntry[] = [];
+    // Satu baris pemasukan -> harga tanpa ongkir (kategorinya) + ongkir (kategori Ongkir).
+    // Jumlah semua kategori = pendapatan kotor rental; bagian pengantar tercatat di pengeluaran.
+    const tambah = (h: HistoryItem, r: any, nama: string, kategori: string, ongkirBaris: number) => {
+      const harga = toInt(r.harga);
+      const ongkir = Math.min(Math.max(0, ongkirBaris), Math.max(0, harga));
+      const base = { tanggal: h.tanggal, hari: h.hari };
+      if (ongkir > 0) list.push({ ...base, nama: `Ongkir ${nama}`, harga: ongkir, kategori: "Ongkir", bayar: r._bayarOngkir || r.bayar || "" });
+      if (harga - ongkir > 0) list.push({ ...base, nama, harga: harga - ongkir, kategori, bayar: r.bayar || "" });
+    };
     filteredHistory.forEach((h) => {
-      // Harian
-      if (Array.isArray(h.rowsHarian)) {
-        h.rowsHarian.forEach((r: any) => {
-          let price = parseInt(String(r.harga).replace(/\D/g, "")) || 0;
-          if (r._ongkir) {
-            const ongkirVal = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
-            if (r._isNewOngkirSystem) {
-              const pegawaiNominal = r._ongkirPegawaiNominal || 0;
-              price -= pegawaiNominal;
-              // Owner's share of ongkir = total ongkir - employee portion
-              const ownerOngkir = ongkirVal - pegawaiNominal;
-              if (ownerOngkir > 0) {
-                list.push({ nama: `Ongkir ${r.jenisPS || "PS Harian"}`, harga: ownerOngkir, tanggal: h.tanggal, hari: h.hari, kategori: "Ongkir (Bagi Hasil)", bayar: r._bayarOngkir || r.bayar || "" });
-              }
-            } else {
-              price -= ongkirVal;
-            }
-          }
-          if (price > 0) {
-            list.push({ nama: r.jenisPS || "PS Harian", harga: price, tanggal: h.tanggal, hari: h.hari, kategori: "Pemasukan Harian", bayar: r.bayar || "" });
-          }
-        });
-      }
-      // Jajanan
-      if (Array.isArray(h.rowsJajanan)) {
-        h.rowsJajanan.forEach((r: any) => {
-          const price = parseInt(String(r.harga).replace(/\D/g, "")) || 0;
-          if (price > 0) {
-            list.push({ nama: r.jenisJajanan || "Jajanan", harga: price, tanggal: h.tanggal, hari: h.hari, kategori: "Jajanan & Minuman", bayar: r.bayar || "" });
-          }
-        });
-      }
+      (h.rowsHarian || []).forEach((r: any) => tambah(h, r, r.jenisPS || "PS Harian", "Pemasukan Harian", toInt(r._ongkir)));
+      (h.rowsJajanan || []).forEach((r: any) => tambah(h, r, r.jenisJajanan || "Jajanan", "Jajanan & Minuman", 0));
       // Rincian Pemasukan Usaha (isi game, HEN, servis, aksesoris) = pemasukan USAHA -> Analitik › Usaha
-      // Sewa PS
-      if (Array.isArray(h.rowsSewa)) {
-        h.rowsSewa.forEach((r: any) => {
-          let price = parseInt(String(r.harga).replace(/\D/g, "")) || 0;
-          if (r._ongkir) {
-            const ongkirVal = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
-            if (r._isNewOngkirSystem) {
-              const pegawaiNominal = r._ongkirPegawaiNominal || 0;
-              price -= pegawaiNominal;
-              // Owner's share of ongkir = total ongkir - employee portion
-              const ownerOngkir = ongkirVal - pegawaiNominal;
-              if (ownerOngkir > 0) {
-                list.push({ nama: `Ongkir ${r.jenisPS || "PS"} - ${r.ket || "Sewa"}`, harga: ownerOngkir, tanggal: h.tanggal, hari: h.hari, kategori: "Ongkir (Bagi Hasil)", bayar: r._bayarOngkir || r.bayar || "" });
-              }
-            } else {
-              price -= ongkirVal;
-            }
-          }
-          if (price > 0) {
-            list.push({ nama: `${r.jenisPS || "PS"} - ${r.ket || "Sewa"}`, harga: price, tanggal: h.tanggal, hari: h.hari, kategori: "Sewa PS", bayar: r.bayar || "" });
-          }
-        });
-      }
+      (h.rowsSewa || []).forEach((r: any) => tambah(h, r, `${r.jenisPS || "PS"} - ${r.ket || "Sewa"}`, "Sewa PS", ongkirBaris(r)));
     });
     list.sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime());
     return list;
@@ -582,28 +486,24 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   const topUnitsData = useMemo(() => {
     const counts = new Map<string, { revenue: number, count: number }>();
     const colors = ['#3b82f6', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#f43f5e'];
-    let cIdx = 0;
+    const LABEL_KONSOL = { PS5: "PlayStation 5", PS4: "PlayStation 4", PS3: "PlayStation 3" } as const;
 
     filteredHistory.forEach(h => {
       [...(h.rowsHarian || []), ...(h.rowsSewa || [])].forEach((r: any) => {
-         const type = String(r.jenisPS || "").trim().toUpperCase();
-         const price = parseInt(String(r.harga).replace(/\D/g, "")) || 0;
-         if (type && type !== "UNDEFINED" && r.lamaSewa !== "PELUNASAN" && (price > 0 || r.isPaid === "TIDAK")) {
-            let cleanType = "PS / Konsol Lain";
-            if (type.includes("PS3") || type.includes("PS 3")) cleanType = "PlayStation 3";
-            else if (type.includes("PS4") || type.includes("PS 4")) cleanType = "PlayStation 4";
-            else if (type.includes("PS5") || type.includes("PS 5")) cleanType = "PlayStation 5";
-            else if (type.includes("TV")) cleanType = "TV / Monitor";
-            else if (type.includes("STEAM") || type.includes("PORTA") || type.includes("SWITCH")) cleanType = "Console Portable";
-            else cleanType = type;
-
-            const actualPrice = price > 0 ? price : (parseInt(String(r._customBase || "0").replace(/\D/g, "")) || 0);
-            if (actualPrice > 0) {
-              if (!counts.has(cleanType)) counts.set(cleanType, { revenue: 0, count: 0 });
-              const item = counts.get(cleanType)!;
-              item.revenue += actualPrice;
-              item.count += 1;
-            }
+         const type = String(r.jenisPS || "").trim();
+         // Hanya ongkir / item tambahan / pelunasan bukan unit yang disewa
+         if (!type || type.toUpperCase() === "UNDEFINED" || tanpaUnitKeluar(r)) return;
+         const price = toInt(r.harga);
+         if (!(price > 0 || r.isPaid === "TIDAK")) return;
+         const unit = jenisUnit(type);
+         const cleanType = unit.konsol ? LABEL_KONSOL[unit.konsol] : unit.tv ? "TV / Monitor" : unit.portabel ? "Console Portable" : type.toUpperCase();
+         // Pendapatan unit tanpa ongkir; sewa belum dibayar memakai harga isi sendiri
+         const actualPrice = price > 0 ? price - Math.min(price, ongkirBaris(r)) : toInt(r._customBase);
+         if (actualPrice > 0) {
+           const item = counts.get(cleanType) || { revenue: 0, count: 0 };
+           item.revenue += actualPrice;
+           item.count += 1;
+           counts.set(cleanType, item);
          }
       });
     });
@@ -615,46 +515,24 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   }, [filteredHistory]);
 
   // --- 2. OCCUPANCY RATE ---
+  // Perkiraan jam pakai = pendapatan unit (tanpa ongkir) ÷ tarif per jam rata-rata.
   const occupancyData = useMemo(() => {
+    const TARIF_RATA: Record<string, number> = { PS5: 10000, PS4: 7000, PS3: 5000 };
     const uniqueDays = new Set<string>();
     let totalUsedHours = 0;
 
     filteredHistory.forEach(h => {
         uniqueDays.add(h.tanggal);
-        
         const processRow = (r: any) => {
-             const type = String(r.jenisPS || "").trim().toUpperCase();
-             const priceStr = String(r.harga).replace(/\D/g, "");
-             let price = parseInt(priceStr) || 0;
-             if (price === 0 && r.isPaid === "TIDAK") {
-                price = parseInt(String(r._customBase || "0").replace(/\D/g, "")) || 0;
-             }
-             
-             if (r._ongkir) {
-                 const ongkirVal = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
-                 price -= ongkirVal;
-                 if (price < 0) price = 0;
-             }
-             
-             if (r.lamaSewa === "PELUNASAN" || price <= 0) return;
-
-             let isPS5 = type.includes("PS5") || type.includes("PS 5");
-             let isPS4 = !isPS5 && (type.includes("PS4") || type.includes("PS 4") || type.includes("PRO") || type.includes("FAT") || type.includes("SLIM"));
-             let isPS3 = !isPS5 && (type.includes("PS3") || type.includes("PS 3") || (type.includes("PS") && !isPS4));
-             
-             if (isPS3 || isPS4 || isPS5) {
-                 const rate = isPS5 ? 10000 : (isPS4 ? 7000 : 5000);
-                 const calcHours = price / rate;
-                 totalUsedHours += calcHours;
-             }
+             if (isPelunasanSewa(r)) return;
+             let price = toInt(r.harga);
+             if (price === 0 && r.isPaid === "TIDAK") price = toInt(r._customBase);
+             price = Math.max(0, price - toInt(r._ongkir));
+             const konsol = jenisUnit(r.jenisPS).konsol;
+             if (price > 0 && konsol) totalUsedHours += price / TARIF_RATA[konsol];
         };
-
-        if (Array.isArray(h.rowsHarian)) {
-            h.rowsHarian.forEach(r => processRow(r));
-        }
-        if (Array.isArray(h.rowsSewa)) {
-            h.rowsSewa.forEach(r => processRow(r));
-        }
+        (h.rowsHarian || []).forEach(processRow);
+        (h.rowsSewa || []).forEach(processRow);
     });
 
     const totalMachines = (masterUnit.ps3 || 0) + (masterUnit.ps4 || 0) + (masterUnit.ps5 || 0);
@@ -679,7 +557,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                    const hh = parseInt(jm.split(":")[0]);
                    if (!isNaN(hh) && hh >= 0 && hh <= 23) {
                        hours[hh].count += 1;
-                       hours[hh].revenue += (parseInt(String(r.harga).replace(/\D/g,"")) || 0);
+                       hours[hh].revenue += toInt(r.harga);
                    }
                }
             });
@@ -691,7 +569,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                    const hh = parseInt(jm.split(":")[0]);
                    if (!isNaN(hh) && hh >= 0 && hh <= 23) {
                        hours[hh].count += 1;
-                       hours[hh].revenue += (parseInt(String(r.harga).replace(/\D/g,"")) || 0);
+                       hours[hh].revenue += toInt(r.harga);
                    }
                }
             });
@@ -848,12 +726,6 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   }, [totalPemasukanBulanIni, totalPengeluaranBulanIni, labaBersih, expenseChartData, occupancyData, topUnitsData, peakHoursData]);
 
   // Color logic for stok (merah jika <= 5)
-  const getStokColor = (val: number, isDark: boolean) => {
-    if (val <= 5) return isDark ? "#ff453a" : "#ff3b30";
-    if (val <= 10) return isDark ? "#ffd60a" : "#ffcc00";
-    return isDark ? "#30d158" : "#34c759";
-  };
-
   const isDark = useIsDark();
 
   return (
@@ -1503,25 +1375,8 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                       const isApproved = req.status === "approved";
                       const isRejected = req.status === "rejected";
 
-                      const getTotals = (data: any) => {
-                        if (!data) return { income: 0, cash: 0, transfer: 0, expense: 0 };
-                        const harian = toNum(data.totalHarian);
-                        const jajanan = toNum(data.totalJajanan);
-                        const jasa = toNum(data.totalJasaAks);
-                        const sewa = toNum(data.totalSewa);
-                        const cash = toNum(data.totalCash);
-                        const transfer = toNum(data.totalTransfer);
-                        const expense = (data.rowsPengeluaran || []).reduce((sum: number, r: any) => sum + toNum(r.harga), 0);
-                        return {
-                          income: harian + jajanan + jasa + sewa,
-                          cash,
-                          transfer,
-                          expense
-                        };
-                      };
-
-                      const orig = getTotals(req.originalData);
-                      const prop = getTotals(req.proposedData);
+                      const orig = ringkasPembukuan(req.originalData);
+                      const prop = ringkasPembukuan(req.proposedData);
 
                       return (
                         <div key={req.id} className="p-5 bg-white dark:bg-[#1C1C1E] border border-zinc-200/50 dark:border-white/5 rounded-2xl shadow-sm hover:shadow-md transition-all">
@@ -2102,7 +1957,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                     let title = "";
                     let originalRows: any[] = [];
                     let proposedRows: any[] = [];
-                    let renderRow = (row: any) => "";
+                    let renderRow = (_row: any) => "";
 
                     if (cat === "harian") {
                       title = "Transaksi Harian (PS Main)";

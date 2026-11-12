@@ -174,7 +174,7 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
            setLocationError(`Terlalu jauh! (${Math.round(dist)}m dari toko, akurasi GPS ±${accuracy}m). Coba dekat pintu/jendela lalu ulangi.`);
         }
       },
-      (err) => {
+      () => {
         setLocationError("Gagal akses lokasi. Pastikan GPS aktif.");
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }

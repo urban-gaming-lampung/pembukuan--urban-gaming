@@ -1,5 +1,6 @@
 import React from "react";
 import { Scale, TrendingDown, TrendingUp } from "lucide-react";
+import { rupiah } from "../../lib/format";
 
 /**
  * ARUS UANG — potongan UI bersama Analitik Keseluruhan & Analitik Usaha (SSOT).
@@ -9,9 +10,8 @@ import { Scale, TrendingDown, TrendingUp } from "lucide-react";
 export const WARNA_MASUK = "#0d9488";
 export const WARNA_KELUAR = "#e11d48";
 
-export const rp = (n: number) => `Rp ${Math.round(n || 0).toLocaleString("id-ID")}`;
 /** +Rp 1.000 / −Rp 1.000 */
-export const rpTanda = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${rp(Math.abs(n))}`;
+export const rpTanda = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${rupiah(Math.abs(n))}`;
 export const persen = (n: number) => `${Number.isFinite(n) ? (Math.abs(n) >= 10 || n === 0 ? n.toFixed(0) : n.toFixed(1).replace(".", ",")) : "0"}%`;
 
 export const Titik: React.FC<{ c: string; className?: string }> = ({ c, className = "" }) => (
@@ -36,7 +36,7 @@ export const StatusArus: React.FC<{ net: number; size?: "sm" | "md" }> = ({ net,
 
 /** Kotak "Uang masuk" / "Uang keluar". */
 export const ArusTile: React.FC<{ jenis: "masuk" | "keluar"; value: number; sub?: string }> = ({ jenis, value, sub }) => {
-  const s = rp(value);
+  const s = rupiah(value);
   return (
     <div className="rounded-2xl bg-zinc-50 dark:bg-white/5 px-3.5 py-3 min-w-0">
       <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-zinc-500 dark:text-zinc-400">
@@ -59,7 +59,7 @@ export const BarisUang: React.FC<{ jenis: "masuk" | "keluar"; label: string; not
     </span>
     <span className={`tabular-nums shrink-0 text-zinc-900 dark:text-white ${bold ? "font-black" : "font-bold"} ${value === 0 ? "opacity-40" : ""}`}>
       {jenis === "keluar" && value > 0 ? "− " : ""}
-      {rp(value)}
+      {rupiah(value)}
     </span>
   </div>
 );
@@ -69,7 +69,7 @@ export const BatangUang: React.FC<{ label: string; sub?: string; value: number; 
   <div>
     <div className="flex items-baseline justify-between gap-3 text-[13px]">
       <span className="font-bold text-zinc-800 dark:text-zinc-100 min-w-0 truncate">{label}</span>
-      <span className="font-black tabular-nums text-zinc-900 dark:text-white shrink-0">{rp(value)}</span>
+      <span className="font-black tabular-nums text-zinc-900 dark:text-white shrink-0">{rupiah(value)}</span>
     </div>
     <div className="mt-1 h-2 rounded-full bg-zinc-100 dark:bg-white/5 overflow-hidden">
       <div className="h-full rounded-full" style={{ width: `${Math.max(2, (value / Math.max(1, max)) * 100)}%`, background: jenis === "masuk" ? WARNA_MASUK : WARNA_KELUAR }} />

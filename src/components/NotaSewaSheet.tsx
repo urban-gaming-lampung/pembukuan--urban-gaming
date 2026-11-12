@@ -3,9 +3,10 @@ import { Loader2, Receipt, X } from "lucide-react";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { NotaActionButtons, NotaPreview, useNotaActions } from "./PosCheckoutSheet";
 import { ambilNomorNotaSewa, BarisSewaNota, notaSewaDariBaris } from "../lib/notaSewa";
-import { rapikanWa, waBaris } from "../lib/pengingatSewa";
+import { rapikanWa } from "../lib/wa";
+import { waBaris } from "../lib/sewa";
+import { rupiah } from "../lib/format";
 
-const rp = (n: number) => `Rp ${Math.round(n || 0).toLocaleString("id-ID")}`;
 
 /**
  * Lembar nota sewa untuk satu baris Rincian Pemasukan SEWA PS:
@@ -79,7 +80,7 @@ const NotaSewaSheet: React.FC<{
           <div className="w-10 h-10 rounded-full bg-sky-500 text-white flex items-center justify-center shrink-0"><Receipt className="w-5 h-5" /></div>
           <div className="flex-1 min-w-0">
             <h3 className="text-[17px] font-black text-zinc-900 dark:text-white leading-tight">Nota Sewa</h3>
-            <p className="text-[12px] text-zinc-500 font-mono truncate">{sale ? `${sale.noNota} · ${rp(sale.total)}` : "Menyiapkan nomor nota…"}</p>
+            <p className="text-[12px] text-zinc-500 font-mono truncate">{sale ? `${sale.noNota} · ${rupiah(sale.total)}` : "Menyiapkan nomor nota…"}</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Tutup" className="w-9 h-9 rounded-full bg-zinc-200/70 dark:bg-zinc-800 flex items-center justify-center"><X className="w-4 h-4" /></button>
         </div>

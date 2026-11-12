@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { 
-  QrCode, ScanLine, Camera, Gamepad2, Monitor, Smartphone, 
-  Plus, Trash2, Edit, Save, CheckCircle2, XCircle, AlertCircle, 
-  Upload, Activity, History, Sparkles, Download, RefreshCw, X, Eye,
+  QrCode, Camera, Gamepad2, Monitor, Smartphone, 
+  Trash2, Edit, Save, CheckCircle2, XCircle, AlertCircle, 
+  Upload, History, Sparkles, Download, X, Eye,
   Flashlight, FlashlightOff
 } from "lucide-react";
-import { doc, setDoc, onSnapshot, collection, deleteDoc, updateDoc } from "firebase/firestore";
+import { doc, setDoc, onSnapshot, deleteDoc, updateDoc } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
 import html2canvas from "html2canvas";
 import { Html5Qrcode } from "html5-qrcode";
@@ -14,7 +14,7 @@ import Section from "./common/Section";
 import jsPDF from "jspdf";
 
 import useStokData, { RegisteredDevice, DeviceType } from "../hooks/useStokData";
-import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
+import { toLocalYmd } from "../lib/dateLocal";
 import SubTabs from "./common/SubTabs";
 
 interface WidgetMonitoringDeviceProps {
@@ -101,7 +101,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
   const [isEditingMaster, setIsEditingMaster] = useState(false);
 
   // Registered Devices from global store
-  const { devices, devicesLoaded } = useStokData();
+  const { devices } = useStokData();
 
   // Scanner state
   const [showScanner, setShowScanner] = useState(false);

@@ -8,6 +8,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { UploadTransferProof } from "./TableEditor";
+import { rupiah, toInt } from "../lib/format";
 
 interface Props {
   rows: any[];
@@ -44,7 +45,7 @@ export default function RincianPengeluaran({
   };
 
   const total = rows.reduce(
-    (acc, r) => acc + (parseInt(String(r.harga).replace(/\D/g, "")) || 0),
+    (acc, r) => acc + toInt(r.harga),
     0,
   );
 
@@ -60,7 +61,7 @@ export default function RincianPengeluaran({
         }
         if (!name) name = "Admin";
         
-        const price = parseInt(String(r.harga).replace(/\D/g, "")) || 0;
+        const price = toInt(r.harga);
         groups[name] = (groups[name] || 0) + price;
       }
     });
@@ -102,7 +103,7 @@ export default function RincianPengeluaran({
               Total Pengeluaran
             </div>
             <div className="text-xl font-black text-rose-500">
-              Rp {total.toLocaleString("id-ID")}
+              {rupiah(total)}
             </div>
           </div>
         </div>
@@ -124,7 +125,7 @@ export default function RincianPengeluaran({
                 TOTAL
               </div>
               <div className="text-sm font-black text-rose-500">
-                Rp {total.toLocaleString("id-ID")}
+                {rupiah(total)}
               </div>
             </div>
           </div>
@@ -190,7 +191,7 @@ export default function RincianPengeluaran({
                       </label>
                       {isAuto ? (
                         <div className="bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/20 rounded-xl px-4 py-2.5 text-sm font-mono font-bold text-purple-700 dark:text-purple-300 select-none">
-                          Rp {Number(r.harga || 0).toLocaleString("id-ID")}
+                          {rupiah(Number(r.harga || 0))}
                         </div>
                       ) : (
                         <div className="relative">
@@ -310,7 +311,7 @@ export default function RincianPengeluaran({
                       {name}
                     </span>
                     <span className="text-xs font-black text-purple-700 dark:text-purple-400 font-mono">
-                      Rp {totalOngkir.toLocaleString("id-ID")}
+                      {rupiah(totalOngkir)}
                     </span>
                   </div>
                 ))}
@@ -500,7 +501,7 @@ export default function RincianPengeluaran({
                       <td className="py-3 px-4 relative group/input">
                         {isAuto ? (
                           <div className="text-[13px] font-mono font-bold text-purple-700 dark:text-purple-300 px-3 py-2 bg-purple-50 dark:bg-purple-500/10 rounded-lg border border-purple-200 dark:border-purple-500/20 select-none">
-                            Rp {Number(r.harga || 0).toLocaleString("id-ID")}
+                            {rupiah(Number(r.harga || 0))}
                           </div>
                         ) : (
                           <>
@@ -566,7 +567,7 @@ export default function RincianPengeluaran({
                         {/* Empty spacing for cash/transfer columns */}
                       </td>
                       <td className="py-3 px-4 font-mono font-bold text-sm text-purple-600 dark:text-purple-400">
-                        Rp {totalOngkir.toLocaleString("id-ID")}
+                        {rupiah(totalOngkir)}
                       </td>
                       {isOwner && <td className="py-3 px-4"></td>}
                     </tr>

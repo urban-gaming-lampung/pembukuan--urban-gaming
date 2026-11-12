@@ -5,7 +5,8 @@ import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadString, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "../lib/firebase";
 import { getAbsenCycleInfo, normalizeBulanTahun } from "../lib/absenPeriod";
-import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
+import { toLocalYmd, menitHariKerja } from "../lib/dateLocal";
+import { rupiah } from "../lib/format";
 
 // === KONSTANTA ABSENSI ===
 // (Catatan: Konstanta di bawah sudah dipindah ke dinamis via absenConfig, kecuali yang tidak terkait denda keterlambatan per blok)
@@ -60,18 +61,6 @@ function getHariIndonesia(yyyyMmDd: string) {
   return hari.charAt(0).toUpperCase() + hari.slice(1);
 }
 
-const convertToYmd = (dateStr: string) => {
-  if (!dateStr) return "";
-  const clean = dateStr.replace(/\//g, "-");
-  const parts = clean.split("-");
-  if (parts.length === 3) {
-    if (parts[0].length === 2 && parts[2].length === 4) {
-      return `${parts[2]}-${parts[1]}-${parts[0]}`;
-    }
-  }
-  return clean;
-};
-
 const Input: React.FC<InputProps> = ({
   tanggal,
   setTanggal,
@@ -105,7 +94,6 @@ const Input: React.FC<InputProps> = ({
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [popupAbsen, setPopupAbsen] = useState<"Masuk" | "Pulang" | null>(null);
   const [showAbsenBlockedAlert, setShowAbsenBlockedAlert] = useState(false);
-  const [isProcessingAbsen, setIsProcessingAbsen] = useState(false);
 
   const [currentTime, setCurrentTime] = useState(new Date());
   useEffect(() => {
@@ -114,7 +102,6 @@ const Input: React.FC<InputProps> = ({
   }, []);
 
   const currentHour = currentTime.getHours();
-  const currentMinute = currentTime.getMinutes();
 
   const isSudahWaktuPulang = (() => {
     if (shiftPegawai === "Libur" || shiftPegawai === "") return false;
@@ -223,7 +210,6 @@ const Input: React.FC<InputProps> = ({
     const emailTrimmed = currentUserEmail.toLowerCase().trim();
 
     try {
-      setIsProcessingAbsen(true);
       // 1. Upload photo to Firebase Storage
       const dateStr = new Date().toLocaleString("en-CA", { timeZone: "Asia/Jakarta" }).slice(0, 10);
       const safeTimeStr = waktuAbsen.replace(/[^a-zA-Z0-9]/g, "_");
@@ -383,7 +369,7 @@ const Input: React.FC<InputProps> = ({
          }
 
               });
-         alert(`🚨 PERINGATAN SISTEM\nAnda telat absen ${lateMinutes} menit (toleransi ${toleransi}m, efektif telat ${effectiveLate}m)!\nGaji Anda otomatis dipotong Rp ${denda.toLocaleString("id-ID")}`);
+         alert(`🚨 PERINGATAN SISTEM\nAnda telat absen ${lateMinutes} menit (toleransi ${toleransi}m, efektif telat ${effectiveLate}m)!\nGaji Anda otomatis dipotong ${rupiah(denda)}`);
       }
       return true;
 
@@ -391,8 +377,6 @@ const Input: React.FC<InputProps> = ({
       console.error("Gagal memproses backend absen:", err);
       alert("Terjadi kendala saat upload foto/denda. Silakan coba lagi.");
       return false;
-    } finally {
-      setIsProcessingAbsen(false);
     }
   };
 
@@ -741,7 +725,7 @@ const Input: React.FC<InputProps> = ({
         onClose={() => setPopupAbsen(null)}
         shift={shiftPegawai}
         tanggal={tanggal}
-        onSubmit={async (waktu, fotoBase64, coord, evidence) => {
+        onSubmit={async (waktu, fotoBase64, _coord, evidence) => {
            const currentMode = popupAbsen;
            if (!currentMode) return;
 
@@ -751,15 +735,8 @@ const Input: React.FC<InputProps> = ({
 
            if (onAbsenSubmit) onAbsenSubmit(); // Clear suppress flag — admin aktif absen
 
-           const toMinutes = (timeStr: string) => {
-              if (!timeStr) return 0;
-              const timePart = timeStr.split(" - ")[0]; // Extract HH:MM
-              const [h, m] = timePart.split(':').map(Number);
-              // Jika jam kurang dari 6 pagi (misal 00:xx, 01:xx, 02:xx), 
-              // anggap ini shift malam yang menyeberang hari (24 + h) agar perbandingannya valid paling besar.
-              const adjustedHour = h < 6 ? h + 24 : h;
-              return adjustedHour * 60 + m;
-           };
+           // Urutan jam dalam satu hari kerja (00:xx dini hari lebih malam dari 23:xx; "10.30" = "10:30")
+           const toMinutes = menitHariKerja;
 
            const convertToYmd = (dStr: string) => {
              const [d, m, y] = dStr.split("-");

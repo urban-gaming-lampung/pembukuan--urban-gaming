@@ -1,13 +1,12 @@
 import React from "react";
 import TableEditor, { BarisTerkunci } from "./TableEditor";
 import { RowJasaAks } from "../lib/types";
-import { toInt } from "../lib/format";
+import { rupiah, toInt } from "../lib/format";
 import { ChevronDown, Package } from "lucide-react";
 import { effectiveJasaPrices } from "../lib/priceLists";
 import type { Price } from "../constants/prices";
 import type { BarisNota, NotaBarang } from "../lib/posPembukuan";
 
-const rp = (n: number) => "Rp " + new Intl.NumberFormat("id-ID").format(Math.round(Number(n) || 0));
 const jam = (ts: number) => new Date(ts).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 
 /** Pisahkan isi keterangan & nomor nota ("… · URB-…") dari baris nota POS. */
@@ -26,7 +25,7 @@ function barisTerkunciDariNota(baris: BarisNota[]): BarisTerkunci[] {
       label: "POS",
       info,
       bayar: b.bayar,
-      ringkasan: `${String(b.tipe).toUpperCase()} - ${rp(b.harga)}`,
+      ringkasan: `${String(b.tipe).toUpperCase()} - ${rupiah(b.harga)}`,
       detail: <span className="line-clamp-2">{isi}</span>,
       nilai: {
         tipe: (
@@ -40,7 +39,7 @@ function barisTerkunciDariNota(baris: BarisNota[]): BarisTerkunci[] {
             <div className="text-[11px] font-mono text-zinc-400 mt-0.5 whitespace-nowrap">{info}</div>
           </div>
         ),
-        harga: <span className="font-mono font-medium tabular-nums whitespace-nowrap">{rp(b.harga)}</span>,
+        harga: <span className="font-mono font-medium tabular-nums whitespace-nowrap">{rupiah(b.harga)}</span>,
       },
     };
   });
@@ -60,13 +59,13 @@ const PengingatBarang: React.FC<{ nota: NotaBarang[]; tampilNominal?: boolean }>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-bold text-amber-900 dark:text-amber-200 leading-snug">
             {nota.length} nota barang{adaDp ? " & DP" : ""} hari ini
-            {tampilNominal && <span className="whitespace-nowrap"> · {rp(total)}</span>}
+            {tampilNominal && <span className="whitespace-nowrap"> · {rupiah(total)}</span>}
           </p>
           <p className="text-[12px] text-amber-800/80 dark:text-amber-300/80 leading-snug">Setor langsung ke owner — tidak masuk kas harian.</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {nota.map((n) => (
               <span key={n.id} className="px-2 py-0.5 rounded-md bg-white/80 dark:bg-white/10 text-[11px] font-mono font-semibold text-amber-900 dark:text-amber-200">
-                {n.noNota}{n.label ? ` · ${n.label}` : ""}{tampilNominal ? ` · ${rp(n.total)}` : ""}
+                {n.noNota}{n.label ? ` · ${n.label}` : ""}{tampilNominal ? ` · ${rupiah(n.total)}` : ""}
               </span>
             ))}
           </div>
@@ -131,7 +130,7 @@ const RincianJasaAksesoris: React.FC<{
                 <option value="">Pilih tipe...</option>
                 {items.map((it) => (
                   <option key={it.label} value={it.label}>
-                    {it.price > 0 ? `${it.label} — Rp ${it.price.toLocaleString("id-ID")}` : it.label}
+                    {it.price > 0 ? `${it.label} — ${rupiah(it.price)}` : it.label}
                   </option>
                 ))}
                 {value && !items.some((it) => it.label === value) && (

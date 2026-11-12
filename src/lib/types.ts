@@ -1,5 +1,4 @@
 export type Payment = "Cash" | "QRIS" | "Transfer" | "Lainnya" | "";
-export const payOptions: Payment[] = ["Cash", "QRIS", "Transfer", "Lainnya", ""];
 
 export interface RowHarian {
   jenisPS: string;

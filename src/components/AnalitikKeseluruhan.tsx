@@ -3,13 +3,14 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import { Gamepad2, Store, Loader2, BarChart3, ArrowDownLeft, ArrowUpRight, Layers } from "lucide-react";
 import FilterComp from "./Filter";
 import { useIsDark } from "../hooks/useIsDark";
-import { dihitungPenjualan, dpHangus, isDpTerbuka, PosSale, totalDibayar, usePosSales, usePosSalesLunas, waktuPenjualan } from "../lib/posSales";
+import { dpHangus, gabungNota, isDpTerbuka, tanggalPenjualan, terjualDalam, totalDibayar, usePosSales, usePosSalesLunas } from "../lib/posSales";
 import { Bisnis, bisnisOf, isBelanjaStok, pemasukanRental, pengeluaranAdminRental, periodRange, TransaksiOwner } from "../lib/keuangan";
 import type { HistoryItem } from "../lib/types";
 import { barisUsahaManual } from "../lib/pemasukanUsaha";
-import { rpShort } from "../lib/format";
+import { rpShort, rupiah } from "../lib/format";
+import { dariYmd, tanggalHariKerja, toLocalYmd } from "../lib/dateLocal";
 import {
-  ArusTile, BarisUang, BatangUang, KartuAnalitik, LegendaArus, persen, rp, rpTanda, StatusArus, Titik, WARNA_KELUAR, WARNA_MASUK,
+  ArusTile, BarisUang, BatangUang, KartuAnalitik, LegendaArus, persen, rpTanda, StatusArus, Titik, WARNA_KELUAR, WARNA_MASUK,
 } from "./common/ArusUang";
 
 type Props = {
@@ -30,13 +31,7 @@ type Props = {
 
 type Hari = { rm: number; rk: number; um: number; uk: number };
 const BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-const pad = (n: number) => String(n).padStart(2, "0");
-const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const kunciHari = (t: string) => (/^\d{4}-\d{2}-\d{2}/.test(String(t || "")) ? String(t).slice(0, 10) : ymd(new Date(t)));
-const dariYmd = (s: string) => {
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(y, (m || 1) - 1, d || 1);
-};
+const kunciHari = (t: string) => (/^\d{4}-\d{2}-\d{2}/.test(String(t || "")) ? String(t).slice(0, 10) : toLocalYmd(new Date(t)));
 const LABEL_BISNIS: Record<Bisnis, string> = { RENTAL: "Rental", USAHA: "Usaha" };
 
 type TitikGrafik = { label: string; full: string; masuk: number; keluar: number; keluarNeg: number; net: number };
@@ -49,11 +44,11 @@ const TipArus: React.FC<any> = ({ active, payload }) => {
       <div className="font-bold text-zinc-900 dark:text-white mb-1">{p.full}</div>
       <div className="flex items-center justify-between gap-3 text-zinc-600 dark:text-zinc-300">
         <span className="flex items-center gap-1.5"><Titik c={WARNA_MASUK} />Masuk</span>
-        <span className="font-bold tabular-nums text-zinc-900 dark:text-white">{rp(p.masuk)}</span>
+        <span className="font-bold tabular-nums text-zinc-900 dark:text-white">{rupiah(p.masuk)}</span>
       </div>
       <div className="flex items-center justify-between gap-3 text-zinc-600 dark:text-zinc-300">
         <span className="flex items-center gap-1.5"><Titik c={WARNA_KELUAR} />Keluar</span>
-        <span className="font-bold tabular-nums text-zinc-900 dark:text-white">{rp(p.keluar)}</span>
+        <span className="font-bold tabular-nums text-zinc-900 dark:text-white">{rupiah(p.keluar)}</span>
       </div>
       <div className="flex items-center justify-between gap-3 border-t border-zinc-100 dark:border-white/10 mt-1 pt-1">
         <span className="font-semibold text-zinc-600 dark:text-zinc-300">Selisih</span>
@@ -108,7 +103,9 @@ const KartuBisnis: React.FC<{
 export default function AnalitikKeseluruhan(props: Props) {
   const { mode, month, rangeStart, rangeEnd, filteredHistory, pengeluaran, pemasukan } = props;
   const isDark = useIsDark();
-  const period = useMemo(() => periodRange(mode, month, rangeStart, rangeEnd), [mode, month, rangeStart, rangeEnd]);
+  // Hari kerja berganti -> periode "Bulan Ini" / "7 Hari" ikut bergeser
+  const hariKerja = tanggalHariKerja();
+  const period = useMemo(() => periodRange(mode, month, rangeStart, rangeEnd), [mode, month, rangeStart, rangeEnd, hariKerja]);
   const { sales, loading: loadingPos, error } = usePosSales(period.from, period.to, 4000);
   // Nota DP yang dilunasi di periode ini (dibuat sebelumnya) — penjualan dihitung saat lunas
   const { sales: lunas, loading: loadingLunas } = usePosSalesLunas(period.from, period.to);
@@ -157,15 +154,12 @@ export default function AnalitikKeseluruhan(props: Props) {
     });
     if (r.buku) masukKe("RENTAL|buku", "Pembukuan harian rental", "Rental", r.buku);
 
-    // USAHA — nota POS lunas (nota DP dihitung saat pelunasan)
-    const semua = new Map<string, PosSale>();
-    [...sales, ...lunas].forEach((s) => semua.set(s.id || s.noNota, s));
-    semua.forEach((s) => {
-      const t = waktuPenjualan(s);
-      if (!dihitungPenjualan(s) || t < period.from || t > period.to) return;
+    // USAHA — nota POS lunas (nota DP dihitung saat pelunasan), per hari kerja
+    gabungNota(sales, lunas).forEach((s) => {
+      if (!terjualDalam(s, period.from, period.to)) return;
       u.pos += s.total;
       u.nota++;
-      tambah(s.lunasTs ? ymd(new Date(t)) : s.tanggal || ymd(new Date(s.ts)), "um", s.total);
+      tambah(tanggalPenjualan(s), "um", s.total);
     });
     if (u.pos) masukKe("USAHA|pos", "Penjualan POS", `Usaha · ${u.nota} nota`, u.pos);
     // DP yang sudah diterima: masih berjalan (belum lunas) atau hangus (pembeli batal)
@@ -175,7 +169,7 @@ export default function AnalitikKeseluruhan(props: Props) {
       if (!v) return;
       u.dp += v;
       u.dpN++;
-      tambah(s.tanggal || ymd(new Date(s.ts)), "um", v);
+      tambah(tanggalHariKerja(s.ts), "um", v);
     });
     if (u.dp) masukKe("USAHA|dp", "DP pembeli", `Usaha · ${u.dpN} nota belum lunas / hangus`, u.dp);
     if (u.buku) masukKe("USAHA|buku", "Rincian pemasukan usaha", `Usaha · ${u.bukuN} input pembukuan`, u.buku);
@@ -214,10 +208,9 @@ export default function AnalitikKeseluruhan(props: Props) {
   // Grafik arus uang: harian (<= 62 hari) atau bulanan
   const grafik = useMemo(() => {
     const keys = Array.from(d.harian.keys()).sort();
-    const akhir = Math.min(period.to, Date.now());
-    const awal = period.from > 0 ? period.from : keys.length ? dariYmd(keys[0]).getTime() : akhir;
-    const a = new Date(awal); a.setHours(0, 0, 0, 0);
-    const b = new Date(akhir); b.setHours(0, 0, 0, 0);
+    const akhir = tanggalHariKerja(Math.min(period.to, Date.now()));
+    const a = dariYmd(period.dari || keys[0] || akhir)!;
+    const b = dariYmd(akhir)!;
     const days = Math.round((b.getTime() - a.getTime()) / 86400000) + 1;
     const titik = (label: string, full: string, x?: Hari): TitikGrafik => {
       const masuk = (x?.rm || 0) + (x?.um || 0);
@@ -228,7 +221,7 @@ export default function AnalitikKeseluruhan(props: Props) {
       const out: TitikGrafik[] = [];
       const c = new Date(a);
       for (let i = 0; i < days; i++) {
-        out.push(titik(String(c.getDate()), c.toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short" }), d.harian.get(ymd(c))));
+        out.push(titik(String(c.getDate()), c.toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short" }), d.harian.get(toLocalYmd(c))));
         c.setDate(c.getDate() + 1);
       }
       return { per: "hari" as const, data: out };
@@ -247,7 +240,7 @@ export default function AnalitikKeseluruhan(props: Props) {
         return titik(BULAN[m - 1].slice(0, 3), `${BULAN[m - 1]} ${y}`, v);
       });
     return { per: "bulan" as const, data };
-  }, [d.harian, period.from, period.to]);
+  }, [d.harian, period.dari, period.to]);
 
   const hariSurplus = grafik.data.filter((x) => x.net > 0).length;
   const hariMinus = grafik.data.filter((x) => x.net < 0).length;
@@ -256,9 +249,9 @@ export default function AnalitikKeseluruhan(props: Props) {
   const kalimat = loading
     ? "Menghitung…"
     : d.net > 0
-    ? `Uang masuk lebih besar ${rp(d.net)} dari uang keluar.`
+    ? `Uang masuk lebih besar ${rupiah(d.net)} dari uang keluar.`
     : d.net < 0
-    ? `Uang keluar melebihi uang masuk sebesar ${rp(-d.net)}.`
+    ? `Uang keluar melebihi uang masuk sebesar ${rupiah(-d.net)}.`
     : kosong
     ? "Belum ada uang masuk atau keluar di periode ini."
     : "Uang masuk sama dengan uang keluar.";
@@ -407,7 +400,7 @@ export default function AnalitikKeseluruhan(props: Props) {
                   ))}
                   {d.kategori.length > 8 && (
                     <p className="text-[11.5px] text-zinc-500">
-                      +{d.kategori.length - 8} kategori lain · {rp(d.kategori.slice(8).reduce((s, x) => s + x.v, 0))}
+                      +{d.kategori.length - 8} kategori lain · {rupiah(d.kategori.slice(8).reduce((s, x) => s + x.v, 0))}
                     </p>
                   )}
                 </div>

@@ -1,9 +1,6 @@
 import { doc, setDoc, updateDoc, deleteField } from "firebase/firestore";
 import { db } from "./firebase";
 
-export const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-export const endOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
-
 export interface CatalogItem {
   price: number;
   name: string;

@@ -1,6 +1,7 @@
 import React from "react";
 import Section from "./common/Section";
 import { rupiah } from "../lib/format";
+import { totalPemasukanHarian } from "../lib/keuangan";
 import {
   Wallet,
   CreditCard,
@@ -34,7 +35,7 @@ const RekapPemasukan: React.FC<RekapPemasukanProps> = ({
   totalPengeluaran = 0,
   pendapatanBersih,
 }) => {
-  const grand = totalHarian + totalJajanan + totalJasaAks + totalSewa;
+  const grand = totalPemasukanHarian({ totalHarian, totalJajanan, totalJasaAks, totalSewa });
   const isProfit = pendapatanBersih >= 0;
 
   /* ───────────────────────────────────────────────

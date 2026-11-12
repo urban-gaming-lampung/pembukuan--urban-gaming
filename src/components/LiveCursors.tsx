@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { PresenceData } from "../hooks/usePresence";
 
 const USER_COLORS = [

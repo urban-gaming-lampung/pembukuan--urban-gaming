@@ -8,8 +8,8 @@ import { useIsDark } from "../hooks/useIsDark";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue } from "../hooks/useStokData";
-import { getMinStok, statusOf, useMinStok } from "../lib/stokJualan";
-import { cancelPosSale, deletePosSale, dihitungPenjualan, dpHangus, infoNego, isDpTerbuka, PosItem, PosSale, sisaBayar, StokRef, totalDibayar, usePosSales, usePosSalesLunas, waktuPenjualan } from "../lib/posSales";
+import { getMinStok, kunciStok, statusOf, useMinStok } from "../lib/stokJualan";
+import { cancelPosSale, deletePosSale, gabungNota, infoNego, isDpTerbuka, PosItem, PosSale, ringkasanDp, StokRef, tanggalPenjualan, terjualDalam, usePosSales, usePosSalesLunas, waktuPenjualan } from "../lib/posSales";
 import { BatalDp } from "./NotaDpSheet";
 import { fmtTanggalNota } from "../lib/posReceipt";
 import { NotaActionButtons, NotaPreview, useNotaActions } from "./PosCheckoutSheet";
@@ -17,8 +17,9 @@ import { modalPada, useModalProduk, useProdukJualan } from "../lib/barangJualan"
 import { Kondisi, kondisiProduk } from "../lib/posSales";
 import { isBelanjaStok, periodRange, TransaksiOwner } from "../lib/keuangan";
 import { tebakModalBaris, useBarisUsahaManual } from "../lib/pemasukanUsaha";
-import { rpShort } from "../lib/format";
-import { ArusTile, BarisUang, persen, rp, rpTanda, StatusArus, Titik, WARNA_KELUAR, WARNA_MASUK } from "./common/ArusUang";
+import { pad, rpShort, rupiah } from "../lib/format";
+import { dariYmd, tanggalHariKerja, toLocalYmd } from "../lib/dateLocal";
+import { ArusTile, BarisUang, persen, rpTanda, StatusArus, Titik, WARNA_KELUAR, WARNA_MASUK } from "./common/ArusUang";
 
 type FilterProps = {
   mode: string;
@@ -36,8 +37,6 @@ type FilterProps = {
 };
 
 const BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-const pad = (n: number) => String(n).padStart(2, "0");
-const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 /** Warna netral untuk "modal barang" pada batang proporsi laba */
 const WARNA_MODAL_TERANG = "#a1a1aa";
 const WARNA_MODAL_GELAP = "#71717a";
@@ -48,7 +47,6 @@ const CAT_COLOR: Record<string, string> = {
   "Unit PS": "bg-red-600", Stik: "bg-blue-600", Hardisk: "bg-violet-600", Aksesoris: "bg-amber-500", BD: "bg-cyan-600",
   "Isi Game": "bg-emerald-600", Servis: "bg-zinc-700 dark:bg-zinc-300", "Rental (POS)": "bg-pink-600", Lainnya: "bg-zinc-400",
 };
-const refKey = (r: StokRef) => `${r.kategori}||${r.item}`;
 
 // ---------- UI kecil ----------
 const Card: React.FC<{ title: string; icon?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode }> = ({ title, icon, right, children }) => (
@@ -86,7 +84,9 @@ const BarRow: React.FC<{ label: string; value: number; max: number; right: strin
 export default function AnalitikUsaha(props: FilterProps) {
   const { mode, month, rangeStart, rangeEnd } = props;
   const isDark = useIsDark();
-  const period = useMemo(() => periodRange(mode, month, rangeStart, rangeEnd), [mode, month, rangeStart, rangeEnd]);
+  // Hari kerja berganti -> periode "Bulan Ini" / "7 Hari" ikut bergeser
+  const hariKerja = tanggalHariKerja();
+  const period = useMemo(() => periodRange(mode, month, rangeStart, rangeEnd), [mode, month, rangeStart, rangeEnd, hariKerja]);
   // Ambil juga periode sebelumnya (panjang sama) untuk perbandingan
   const prevFrom = period.from > 0 ? Math.max(1, period.from - (period.to - period.from + 1)) : 0;
   const { sales: raw, loading: loadingPos, error } = usePosSales(prevFrom, period.to, 4000);
@@ -108,30 +108,15 @@ export default function AnalitikUsaha(props: FilterProps) {
   // Riwayat nota = nota yang DIBUAT di periode ini
   const inPeriod = useMemo(() => raw.filter((s) => s.ts >= period.from), [raw, period.from]);
   // Penjualan = nota lunas (nota DP dihitung pada waktu pelunasan)
-  const semua = useMemo(() => {
-    const m = new Map<string, PosSale>();
-    [...raw, ...lunasRaw].forEach((s) => m.set(s.id || s.noNota, s));
-    return Array.from(m.values());
-  }, [raw, lunasRaw]);
+  const semua = useMemo(() => gabungNota(raw, lunasRaw), [raw, lunasRaw]);
   const cur = useMemo(
-    () => semua.filter((s) => dihitungPenjualan(s) && waktuPenjualan(s) >= period.from && waktuPenjualan(s) <= period.to).sort((a, b) => waktuPenjualan(b) - waktuPenjualan(a)),
+    () => semua.filter((s) => terjualDalam(s, period.from, period.to)).sort((a, b) => waktuPenjualan(b) - waktuPenjualan(a)),
     [semua, period.from, period.to]
   );
-  const prev = useMemo(
-    () => (period.from > 0 ? semua.filter((s) => dihitungPenjualan(s) && waktuPenjualan(s) < period.from && waktuPenjualan(s) >= prevFrom) : []),
-    [semua, period.from, prevFrom]
-  );
+  const prev = useMemo(() => (period.from > 0 ? semua.filter((s) => terjualDalam(s, prevFrom, period.from - 1)) : []), [semua, period.from, prevFrom]);
   const batalCount = inPeriod.filter((s) => s.batal).length;
   // DP: uang yang sudah diterima tetapi belum menjadi penjualan, dan DP hangus (pembeli batal)
-  const dp = useMemo(() => {
-    let berjalan = 0, berjalanN = 0, sisa = 0, hangus = 0, hangusN = 0;
-    inPeriod.forEach((s) => {
-      if (isDpTerbuka(s)) { berjalan += totalDibayar(s); sisa += sisaBayar(s); berjalanN++; }
-      const h = dpHangus(s);
-      if (h > 0) { hangus += h; hangusN++; }
-    });
-    return { berjalan, berjalanN, sisa, hangus, hangusN };
-  }, [inPeriod]);
+  const dp = useMemo(() => ringkasanDp(inPeriod), [inPeriod]);
   const manualCur = useMemo(() => manualRaw.filter((r) => r.ts >= period.from && r.ts <= period.to), [manualRaw, period.from, period.to]);
   const manualPrev = useMemo(() => (period.from > 0 ? manualRaw.filter((r) => r.ts < period.from) : []), [manualRaw, period.from]);
   const adaData = cur.length > 0 || manualCur.length > 0 || dp.berjalan > 0 || dp.hangus > 0;
@@ -156,7 +141,7 @@ export default function AnalitikUsaha(props: FilterProps) {
         if (s.pembayaran[s.pembayaran.length - 1].metode === "TRANSFER") transferN++; else cashN++;
       } else if (s.metode === "TRANSFER") { transfer += s.total; transferN++; } else { cash += s.total; cashN++; }
       const tJual = waktuPenjualan(s);
-      const day = s.lunasTs ? ymd(new Date(tJual)) : s.tanggal || ymd(new Date(s.ts));
+      const day = tanggalPenjualan(s);
       const d = byDay.get(day) || { omzet: 0, nota: 0 };
       d.omzet += s.total; d.nota++; byDay.set(day, d);
       const kas = s.kasirNama || s.kasir?.split("@")[0] || "-";
@@ -173,7 +158,7 @@ export default function AnalitikUsaha(props: FilterProps) {
         const p = byProduct.get(pn) || { nama: pn, kategori: cl, qty: 0, omzet: 0 };
         p.qty += it.qty; p.omzet += it.subtotal; byProduct.set(pn, p);
         if (it.stokRef) {
-          const rk = refKey(it.stokRef);
+          const rk = kunciStok(it.stokRef);
           const x = soldStok.get(rk) || { ref: it.stokRef, qty: 0 };
           x.qty += it.qty; soldStok.set(rk, x);
         }
@@ -280,21 +265,18 @@ export default function AnalitikUsaha(props: FilterProps) {
   const warnaModal = isDark ? WARNA_MODAL_GELAP : WARNA_MODAL_TERANG;
   const growth = period.from > 0 && prevOmzet > 0 ? ((st.omzet - prevOmzet) / prevOmzet) * 100 : null;
 
-  // Grafik omzet: harian (<= 62 hari) atau bulanan
+  // Grafik omzet: harian (<= 62 hari) atau bulanan — per hari kerja (sama dengan pembukuan)
   const chart = useMemo(() => {
-    const endD = new Date(Math.min(period.to, Date.now()));
-    endD.setHours(0, 0, 0, 0);
-    const awalData = Math.min(cur.length ? cur[cur.length - 1].ts : Infinity, ...manualCur.map((r) => r.ts));
-    const startD = new Date(period.from > 0 ? period.from : Number.isFinite(awalData) ? awalData : endD.getTime());
-    startD.setHours(0, 0, 0, 0);
-    const start = startD.getTime();
-    const days = Math.round((endD.getTime() - start) / 86400000) + 1;
+    const akhir = tanggalHariKerja(Math.min(period.to, Date.now()));
+    const awalData = Array.from(st.byDay.keys()).sort()[0] || akhir;
+    const endD = dariYmd(akhir)!;
+    const startD = dariYmd(period.dari || awalData)!;
+    const days = Math.round((endD.getTime() - startD.getTime()) / 86400000) + 1;
     if (days <= 62) {
       const out: { label: string; full: string; omzet: number; nota: number }[] = [];
-      const d = new Date(start);
-      d.setHours(0, 0, 0, 0);
-      for (let i = 0; i < days && i < 62; i++) {
-        const key = ymd(d);
+      const d = new Date(startD);
+      for (let i = 0; i < days; i++) {
+        const key = toLocalYmd(d);
         const v = st.byDay.get(key);
         out.push({ label: String(d.getDate()), full: d.toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short" }), omzet: v?.omzet || 0, nota: v?.nota || 0 });
         d.setDate(d.getDate() + 1);
@@ -312,7 +294,7 @@ export default function AnalitikUsaha(props: FilterProps) {
       return { label: BULAN[mo - 1].slice(0, 3), full: `${BULAN[mo - 1]} ${y}`, ...v };
     });
     return { mode: "bulan" as const, data };
-  }, [st.byDay, period.from, period.to, cur, manualCur]);
+  }, [st.byDay, period.dari, period.to]);
   const bestDay = chart.data.reduce((b, x) => (x.omzet > (b?.omzet || 0) ? x : b), null as null | (typeof chart.data)[number]);
 
   const cats = useMemo(() => Array.from(st.byCat.entries()).map(([label, v]) => ({ label, ...v })).sort((a, b) => b.omzet - a.omzet), [st.byCat]);
@@ -344,15 +326,16 @@ export default function AnalitikUsaha(props: FilterProps) {
   }, [st.soldStok, stokData, minMap, masterJualan]);
 
   const q = cari.trim().toLowerCase();
-  const riwayat = useMemo(
-    () =>
-      !q
-        ? inPeriod
-        : inPeriod.filter((s) =>
-            [s.noNota, s.pembeli, s.pembeliWa, s.kasirNama, ...(s.items || []).map((i) => i.nama)].some((v) => String(v || "").toLowerCase().includes(q))
-          ),
-    [inPeriod, q]
-  );
+  // Riwayat = nota dibuat di periode + nota DP (dibuat sebelumnya) yang dilunasi di periode, terbaru dulu
+  const riwayat = useMemo(() => {
+    const aktivitas = (s: PosSale) => Math.max(s.ts, Number(s.lunasTs) || 0);
+    const daftar = gabungNota(inPeriod, cur).sort((a, b) => aktivitas(b) - aktivitas(a));
+    return !q
+      ? daftar
+      : daftar.filter((s) =>
+          [s.noNota, s.pembeli, s.pembeliWa, s.kasirNama, ...(s.items || []).map((i) => i.nama)].some((v) => String(v || "").toLowerCase().includes(q))
+        );
+  }, [inPeriod, cur, q]);
 
   const tickColor = isDark ? "#a1a1aa" : "#71717a";
   const gridColor = isDark ? "#27272a" : "#f0f0f0";
@@ -402,7 +385,7 @@ export default function AnalitikUsaha(props: FilterProps) {
           <div className="mt-3 flex items-center gap-1.5 text-[12px] text-zinc-500 dark:text-zinc-400">
             {growth >= 0 ? <TrendingUp className="w-3.5 h-3.5 shrink-0" /> : <TrendingDown className="w-3.5 h-3.5 shrink-0" />}
             <span>
-              Penjualan {growth >= 0 ? "naik" : "turun"} <b className="text-zinc-800 dark:text-zinc-100">{persen(Math.abs(growth))}</b> dari periode sebelumnya ({rp(prevOmzet)})
+              Penjualan {growth >= 0 ? "naik" : "turun"} <b className="text-zinc-800 dark:text-zinc-100">{persen(Math.abs(growth))}</b> dari periode sebelumnya ({rupiah(prevOmzet)})
             </span>
           </div>
         )}
@@ -421,7 +404,7 @@ export default function AnalitikUsaha(props: FilterProps) {
             ].map((x) => (
               <div key={x.l} className="rounded-2xl bg-zinc-50 dark:bg-white/5 px-3.5 py-3 min-w-0">
                 <div className="text-[11.5px] font-semibold text-zinc-500 dark:text-zinc-400">{x.l}</div>
-                <div className={`mt-1 font-black tabular-nums tracking-tight leading-tight text-zinc-900 dark:text-white ${rp(x.v).length > 13 ? "text-[14.5px]" : "text-[17px]"}`}>{x.v < 0 ? "−" : ""}{rp(Math.abs(x.v))}</div>
+                <div className={`mt-1 font-black tabular-nums tracking-tight leading-tight text-zinc-900 dark:text-white ${rupiah(x.v).length > 13 ? "text-[14.5px]" : "text-[17px]"}`}>{x.v < 0 ? "−" : ""}{rupiah(Math.abs(x.v))}</div>
                 <div className="mt-1 flex items-center gap-1.5 text-[11.5px] text-zinc-500 dark:text-zinc-400">
                   <span className="px-1.5 py-0.5 rounded-md bg-white dark:bg-white/10 font-black tabular-nums text-zinc-800 dark:text-zinc-100">{untung.terhitung > 0 ? persen(x.m) : "–"}</span>
                   margin
@@ -437,7 +420,7 @@ export default function AnalitikUsaha(props: FilterProps) {
               { k: "Biaya", v: uang.operasional, c: WARNA_KELUAR },
               { k: "Laba bersih", v: Math.max(0, untung.bersih), c: WARNA_MASUK },
             ];
-            const per100 = (v: number) => rp(Math.round(((v / untung.terhitung) * 100000) / 100) * 100);
+            const per100 = (v: number) => rupiah(Math.round(((v / untung.terhitung) * 100000) / 100) * 100);
             return (
               <div className="mt-3.5">
                 <div className="flex h-3 rounded-full overflow-hidden bg-zinc-100 dark:bg-white/10 gap-[2px]" role="img" aria-label="Proporsi penjualan: modal barang, biaya, laba bersih">
@@ -457,7 +440,7 @@ export default function AnalitikUsaha(props: FilterProps) {
                   {untung.bersih >= 0 ? (
                     <>Dari setiap <b className="text-zinc-900 dark:text-white">Rp 100.000</b> penjualan: {per100(laba.hpp)} modal barang, {per100(uang.operasional)} biaya, <b className="text-zinc-900 dark:text-white">{per100(untung.bersih)} untung</b>.</>
                   ) : (
-                    <>Modal barang & biaya lebih besar dari penjualan — usaha <b className="text-zinc-900 dark:text-white">rugi {rp(-untung.bersih)}</b> di periode ini.</>
+                    <>Modal barang & biaya lebih besar dari penjualan — usaha <b className="text-zinc-900 dark:text-white">rugi {rupiah(-untung.bersih)}</b> di periode ini.</>
                   )}
                 </p>
               </div>
@@ -467,11 +450,11 @@ export default function AnalitikUsaha(props: FilterProps) {
           <div className="mt-3 divide-y divide-zinc-100 dark:divide-white/5 text-[13.5px]">
             <div className="flex justify-between gap-3 py-2">
               <span className="text-zinc-600 dark:text-zinc-300">Penjualan{laba.penjualanTanpaModal > 0 ? " terhitung" : ""}{dp.hangus > 0 ? " + DP hangus" : ""}</span>
-              <span className="font-bold tabular-nums text-zinc-900 dark:text-white">{rp(untung.terhitung)}</span>
+              <span className="font-bold tabular-nums text-zinc-900 dark:text-white">{rupiah(untung.terhitung)}</span>
             </div>
             <div className="flex justify-between gap-3 py-2">
               <span className="text-zinc-600 dark:text-zinc-300">Modal barang terjual</span>
-              <span className="font-bold tabular-nums text-zinc-900 dark:text-white">− {rp(laba.hpp)}</span>
+              <span className="font-bold tabular-nums text-zinc-900 dark:text-white">− {rupiah(laba.hpp)}</span>
             </div>
             <div className="flex justify-between gap-3 py-2">
               <span className="font-black text-zinc-900 dark:text-white">Laba kotor</span>
@@ -479,7 +462,7 @@ export default function AnalitikUsaha(props: FilterProps) {
             </div>
             <div className="flex justify-between gap-3 py-2">
               <span className="text-zinc-600 dark:text-zinc-300">Biaya operasional usaha</span>
-              <span className="font-bold tabular-nums text-zinc-900 dark:text-white">− {rp(uang.operasional)}</span>
+              <span className="font-bold tabular-nums text-zinc-900 dark:text-white">− {rupiah(uang.operasional)}</span>
             </div>
             <div className="flex justify-between gap-3 py-2">
               <span className="font-black text-zinc-900 dark:text-white">Laba bersih</span>
@@ -501,7 +484,7 @@ export default function AnalitikUsaha(props: FilterProps) {
           {laba.qtyTanpa > 0 && (
             <p className="mt-2.5 flex items-start gap-1.5 text-[12px] text-amber-700 dark:text-amber-400">
               <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              {laba.qtyTanpa} barang terjual ({rp(laba.penjualanTanpaModal)}) belum punya harga modal / tidak dikenali, tidak ikut dihitung laba. Isi di Owner › Input › Stok Jualan.
+              {laba.qtyTanpa} barang terjual ({rupiah(laba.penjualanTanpaModal)}) belum punya harga modal / tidak dikenali, tidak ikut dihitung laba. Isi di Owner › Input › Stok Jualan.
             </p>
           )}
           {laba.perkiraan > 0 && <p className="mt-1.5 text-[12px] text-zinc-500">{laba.perkiraan} barang memakai perkiraan harga modal (modal diisi sesudah transaksi, atau barang dari pembukuan harian memakai harga modal sekarang).</p>}
@@ -553,7 +536,7 @@ export default function AnalitikUsaha(props: FilterProps) {
                     cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
                     contentStyle={{ borderRadius: 12, border: "none", background: isDark ? "#18181b" : "#fff", boxShadow: "0 8px 24px rgba(0,0,0,.15)", fontSize: 12 }}
                     labelFormatter={(_, p) => (p && p[0] ? (p[0].payload as any).full : "")}
-                    formatter={(v: any, _n: any, p: any) => [`${rp(Number(v))} · ${p?.payload?.nota || 0} nota`, "Omzet"]}
+                    formatter={(v: any, _n: any, p: any) => [`${rupiah(Number(v))} · ${p?.payload?.nota || 0} nota`, "Omzet"]}
                   />
                   <Bar dataKey="omzet" fill="#dc2626" radius={[6, 6, 0, 0]} maxBarSize={28} />
                 </BarChart>
@@ -566,7 +549,7 @@ export default function AnalitikUsaha(props: FilterProps) {
             <Card title="Laku & stok menipis" icon={<AlertTriangle className="w-4 h-4 text-amber-500" />} right={<span className="text-[11px] text-zinc-500">{restock.length} barang</span>}>
               <div className="space-y-2">
                 {restock.slice(0, 8).map((r) => (
-                  <div key={refKey(r.ref)} className="flex items-center justify-between gap-3 rounded-xl bg-zinc-50 dark:bg-white/5 px-3 py-2">
+                  <div key={kunciStok(r.ref)} className="flex items-center justify-between gap-3 rounded-xl bg-zinc-50 dark:bg-white/5 px-3 py-2">
                     <div className="min-w-0">
                       <div className="text-[13px] font-bold text-zinc-900 dark:text-white truncate">{r.ref.item}</div>
                       <div className="text-[11px] text-zinc-500 truncate">{r.ref.kategori} · terjual {r.terjual}</div>
@@ -614,7 +597,7 @@ export default function AnalitikUsaha(props: FilterProps) {
                       value={produkSort === "qty" ? p.qty : p.omzet}
                       max={produkSort === "qty" ? produk[0]?.qty || 1 : produk[0]?.omzet || 1}
                       right={produkSort === "qty" ? `${p.qty}x` : rpShort(p.omzet)}
-                      sub={`${p.kategori} · ${produkSort === "qty" ? rp(p.omzet) : `${p.qty} terjual`}${laba.perProduk.has(p.nama) ? ` · laba ${rpShort(laba.perProduk.get(p.nama)!)}` : ""}`}
+                      sub={`${p.kategori} · ${produkSort === "qty" ? rupiah(p.omzet) : `${p.qty} terjual`}${laba.perProduk.has(p.nama) ? ` · laba ${rpShort(laba.perProduk.get(p.nama)!)}` : ""}`}
                       color={i < 3 ? "bg-red-600" : "bg-zinc-400 dark:bg-zinc-600"}
                     />
                   </div>
@@ -644,7 +627,7 @@ export default function AnalitikUsaha(props: FilterProps) {
                       cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
                       contentStyle={{ borderRadius: 12, border: "none", background: isDark ? "#18181b" : "#fff", boxShadow: "0 8px 24px rgba(0,0,0,.15)", fontSize: 12 }}
                       labelFormatter={(l) => `Jam ${l}.00`}
-                      formatter={(v: any, _n: any, p: any) => [`${v} nota · ${rp(p?.payload?.omzet || 0)}`, "Transaksi"]}
+                      formatter={(v: any, _n: any, p: any) => [`${v} nota · ${rupiah(p?.payload?.omzet || 0)}`, "Transaksi"]}
                     />
                     <Bar dataKey="nota" fill="#059669" radius={[5, 5, 0, 0]} />
                   </BarChart>
@@ -700,7 +683,7 @@ export default function AnalitikUsaha(props: FilterProps) {
         )}
       </Card>
 
-      <NotaDetailSheet sale={selected} live={raw.find((s) => s.id && s.id === selected?.id) || selected} onClose={() => setSelected(null)} />
+      <NotaDetailSheet sale={selected} live={semua.find((s) => s.id && s.id === selected?.id) || selected} onClose={() => setSelected(null)} />
     </div>
   );
 }

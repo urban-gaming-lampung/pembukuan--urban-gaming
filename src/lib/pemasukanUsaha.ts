@@ -12,7 +12,10 @@ import { useEffect, useState } from "react";
 import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { db } from "./firebase";
 import type { HistoryItem } from "./types";
-import { isBarisNota, bayarCash, bayarTransfer, sebutHen } from "./posPembukuan";
+import { isBarisNota, sebutHen } from "./posPembukuan";
+import { bayarTransfer, totalBaris } from "./keuangan";
+import { dariYmd, tanggalHariKerja } from "./dateLocal";
+import { toInt } from "./format";
 import { modalPada, ModalMap, ProdukJualan } from "./barangJualan";
 import { kondisiProduk, Kondisi } from "./posSales";
 
@@ -32,11 +35,6 @@ export type BarisUsahaManual = {
   barang: boolean;
 };
 
-const toNum = (v: unknown) => {
-  const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
-  return Number.isFinite(n) ? n : 0;
-};
-
 /** Kelompok baris rincian usaha dari tipe + keterangan yang diketik admin. */
 export function kategoriBarisUsaha(tipe: string, ket: string): { kategori: KategoriUsaha; barang: boolean } {
   const t = String(tipe || "").toLowerCase();
@@ -53,8 +51,8 @@ export function kategoriBarisUsaha(tipe: string, ket: string): { kategori: Kateg
 }
 
 const tsSiang = (tanggal: string) => {
-  const [y, m, d] = String(tanggal || "").split("-").map(Number);
-  return y && m && d ? new Date(y, m - 1, d, 12, 0, 0, 0).getTime() : 0;
+  const d = dariYmd(tanggal);
+  return d ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12).getTime() : 0;
 };
 
 /** Baris manual Rincian Pemasukan Usaha satu hari pembukuan (tanpa baris nota POS). */
@@ -64,7 +62,7 @@ export function barisUsahaManual(h: HistoryItem): BarisUsahaManual[] {
   const out: BarisUsahaManual[] = [];
   rows.forEach((r: any, i: number) => {
     if (isBarisNota(r)) return;
-    const harga = toNum(r?.harga);
+    const harga = toInt(r?.harga);
     if (harga <= 0) return;
     const { kategori, barang } = kategoriBarisUsaha(r.tipe, r.ket);
     out.push({
@@ -126,15 +124,12 @@ export function tebakModalBaris(row: BarisUsahaManual, products: ProdukJualan[],
 }
 
 // ---------- Data ----------
-const pad = (n: number) => String(n).padStart(2, "0");
-const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-/** Baris manual rincian usaha dari history_pembukuan pada rentang waktu (realtime). */
+/** Baris manual rincian usaha dari history_pembukuan pada rentang waktu hari kerja (realtime). */
 export function useBarisUsahaManual(fromTs: number, toTs: number): { rows: BarisUsahaManual[]; loading: boolean } {
   const [rows, setRows] = useState<BarisUsahaManual[]>([]);
   const [loading, setLoading] = useState(true);
-  const a = fromTs > 0 ? ymd(new Date(fromTs)) : "";
-  const b = ymd(new Date(toTs || Date.now()));
+  const a = fromTs > 0 ? tanggalHariKerja(fromTs) : "";
+  const b = tanggalHariKerja(toTs || Date.now());
   useEffect(() => {
     setLoading(true);
     const base = collection(db, "history_pembukuan");
@@ -155,15 +150,5 @@ export function useBarisUsahaManual(fromTs: number, toTs: number): { rows: Baris
   return { rows, loading };
 }
 
-/** Kas jasa & barang usaha di satu hari pembukuan (semua baris rincian usaha, termasuk dari POS). */
-export function kasUsahaHarian(h: HistoryItem): { total: number; cash: number; transfer: number } {
-  let total = 0, cash = 0, transfer = 0;
-  (Array.isArray(h?.rowsJasaAks) ? h.rowsJasaAks : []).forEach((r: any) => {
-    const v = toNum(r?.harga);
-    if (v <= 0) return;
-    total += v;
-    if (bayarCash(r?.bayar)) cash += v;
-    else if (bayarTransfer(r?.bayar)) transfer += v;
-  });
-  return { total, cash, transfer };
-}
+/** Kas rincian usaha satu hari pembukuan (semua baris, termasuk dari nota POS). */
+export const kasUsahaHarian = (h: HistoryItem) => totalBaris(Array.isArray(h?.rowsJasaAks) ? h.rowsJasaAks : []);

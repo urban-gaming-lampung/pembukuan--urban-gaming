@@ -13,7 +13,7 @@ import {
 } from "recharts";
 import { HistoryItem } from "../lib/types";
 import { rupiah } from "../lib/format";
-import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
+import { toLocalYmd } from "../lib/dateLocal";
 import { pemasukanRental } from "../lib/keuangan";
 
 // ─── UTILS ──────────────────────────────────────────
@@ -107,7 +107,6 @@ const ChartTooltipDaily = ({ active, payload }: any) => {
 const ChartTooltipMonthly = ({ active, payload }: any) => {
   if (!active || !payload?.length) return null;
   const data = payload[0].payload;
-  const isDark = document.documentElement.classList.contains("dark");
 
   return (
     <div className="min-w-[180px] overflow-hidden rounded-xl bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-xl border border-zinc-200 dark:border-white/10 shadow-2xl">
@@ -446,7 +445,7 @@ const Grafik: React.FC<GrafikProps> = ({ history, filterMode = "Bulan Ini" }) =>
                       )}
                       <Tooltip cursor={{ fill: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.02)", radius: 8 }} content={<ChartTooltipMonthly />} />
                       <Bar dataKey="total" radius={[6, 6, 4, 4]} isAnimationActive={true} animationDuration={600} fill="url(#gradMonth)">
-                        {allMonthsData.map((entry, index) => (
+                        {allMonthsData.map((_, index) => (
                           <Cell key={`cell-${index}`} fill="url(#gradMonth)" />
                         ))}
                       </Bar>

@@ -11,8 +11,9 @@ import { addDoc, arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot, que
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { auth, db, storage } from "./firebase";
 import type { StokKategori } from "../hooks/useStokData";
-import { applyMasterChanges, commitStokChanges, prepareStokWrites, renameJualanItem, writeStokInTx } from "./stokJualan";
+import { applyMasterChanges, commitStokChanges, prepareStokWrites, renameJualanItem, writeStokInTx, kunciStok } from "./stokJualan";
 import type { StokItemValue } from "../hooks/useStokData";
+import { rupiah } from "./format";
 import {
   hapusStokOtomatisBilaYatim, Kondisi, namaJualan, PILIH_SAAT_CHECKOUT, planStokSync, ProdukSync, StokRef, stokBaruUntukProduk, SubKategoriJualan,
 } from "./posSales";
@@ -23,8 +24,7 @@ export type ProdukJualan = ProdukSync & { price: number; imageUrl?: string; subc
 export type ModalInfo = { hargaModal: number | null; riwayat: { dari: number; modal: number }[] };
 export type ModalMap = Record<string, ModalInfo>;
 
-const sameRef = (a?: StokRef | null, b?: StokRef | null) => (a ? `${a.kategori}||${a.item}` : "") === (b ? `${b.kategori}||${b.item}` : "");
-const rp = (n: number) => `Rp ${Math.round(n || 0).toLocaleString("id-ID")}`;
+const sameRef = (a?: StokRef | null, b?: StokRef | null) => (a ? kunciStok(a) : "") === (b ? kunciStok(b) : "");
 
 /** Semua produk JUALAN (realtime) — dipakai Input Stok, menu Stok, & analitik. */
 export function useProdukJualan(): { products: ProdukJualan[]; loaded: boolean } {
@@ -295,7 +295,7 @@ export async function tambahStokMasuk(p: { id: string; nama: string }, target: S
   await runTransaction(db, async (tx) => {
     const s = await tx.get(stokDoc);
     const jualan = (s.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
-    const w = prepareStokWrites(jualan, [{ ...target, delta: d.qty }], "masuk", `${catatanStokMasuk(p.nama)}${d.modalSatuan > 0 ? ` · modal ${rp(d.modalSatuan)}/pcs` : ""}`, oleh, now);
+    const w = prepareStokWrites(jualan, [{ ...target, delta: d.qty }], "masuk", `${catatanStokMasuk(p.nama)}${d.modalSatuan > 0 ? ` · modal ${rupiah(d.modalSatuan)}/pcs` : ""}`, oleh, now);
     writeStokInTx(tx, w, { produkId: p.id, stokMasukId: masukRef.id });
     if (expRef) {
       tx.set(expRef, {

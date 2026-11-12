@@ -1,8 +1,8 @@
 import { mergeSalaryEdits, runSalaryTransaction } from "../lib/salaryPersistence";
 import React, { useState, useEffect, useMemo } from "react";
-import { collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc, getDocs, serverTimestamp } from "firebase/firestore";
+import { collection, doc, onSnapshot, setDoc, deleteDoc, getDocs, serverTimestamp } from "firebase/firestore";
 import { db, firebaseConfig } from "../lib/firebase";
-import { initializeApp, getApp, getApps } from "firebase/app";
+import { initializeApp, getApps } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie
@@ -12,18 +12,13 @@ import Section from "./common/Section";
 import UserAvatar from "./common/UserAvatar";
 import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, getTodayYmd, BULAN_NAMES, normalizeBulanTahun, normalizeDateStr } from "../lib/absenPeriod";
 import { isUrbanUserDocId } from "../lib/urbanUsers";
-import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
+import { toLocalYmd } from "../lib/dateLocal";
+import { rupiah, toInt } from "../lib/format";
+import { ongkirPengantarTersimpan } from "../lib/sewa";
 
 // === KONSTANTA ABSENSI ===
 
 
-// Format helper
-const rupiah = (val: number) =>
-  new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(val);
 
 export default function TabPegawai({ history = [], isOwner = false }: { history?: any[]; isOwner?: boolean }) {
   const [logs, setLogs] = useState<any[]>([]);
@@ -117,18 +112,8 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   const [isDeletingEmail, setIsDeletingEmail] = useState<string | null>(null);
 
   // States for Delivery Fee (Ongkir) Report Range Filter
-  const [ongkirStart, setOngkirStart] = useState(() => {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    return `${y}-${m}-01`;
-  });
-  const [ongkirEnd, setOngkirEnd] = useState(() => {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    return `${y}-${m}-${String(d.getDate()).padStart(2, "0")}`;
-  });
+  const [ongkirStart, setOngkirStart] = useState(() => toLocalYmd().slice(0, 8) + "01");
+  const [ongkirEnd, setOngkirEnd] = useState(() => toLocalYmd());
 
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -507,12 +492,10 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                    const cycle = getAbsenCycleInfo(h.tanggal, empCutoff);
                    const bulanTahun = cycle.bulanTahun;
                    const key = `${email}_${bulanTahun}`;
-                   const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
+                   const nominalAsli = toInt(r._ongkir);
 
                    if (r._isNewOngkirSystem) {
-                       const fallbackPersen = r._ongkirPegawaiPersen ?? 70;
-                       const fallbackNominal = Math.round((nominalAsli * fallbackPersen) / 100);
-                       const pegawaiNominal = r._ongkirPegawaiNominal ?? fallbackNominal;
+                       const pegawaiNominal = ongkirPengantarTersimpan(r) ?? 0;
 
                        // Tampilan total ongkir di UI
                        ongkirMap.set(key, (ongkirMap.get(key) || 0) + pegawaiNominal);
@@ -541,13 +524,11 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                    const cycle = getAbsenCycleInfo(h.tanggal, empCutoff);
                    const bulanTahun = cycle.bulanTahun;
                    const key = `${email}_${bulanTahun}`;
-                   const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
+                   const nominalAsli = toInt(r._ongkir);
 
                    if (nominalAsli > 0) {
                        if (r._isNewOngkirSystem) {
-                           const fallbackPersen = r._ongkirPegawaiPersen ?? 70;
-                           const fallbackNominal = Math.round((nominalAsli * fallbackPersen) / 100);
-                           const pegawaiNominal = r._ongkirPegawaiNominal ?? fallbackNominal;
+                           const pegawaiNominal = ongkirPengantarTersimpan(r) ?? 0;
 
                            ongkirMap.set(key, (ongkirMap.get(key) || 0) + pegawaiNominal);
 
@@ -914,13 +895,11 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                 if (r.isOngkir === "YA" && r._ongkir && r.diantarOleh) {
                     const email = r.diantarOleh.toLowerCase().trim();
                     if (isPegawaiNonaktif(email)) return;
-                    const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
+                    const nominalAsli = toInt(r._ongkir);
 
                     let amount = nominalAsli;
                     if (r._isNewOngkirSystem) {
-                        const fallbackPersen = r._ongkirPegawaiPersen ?? 70;
-                        const fallbackNominal = Math.round((nominalAsli * fallbackPersen) / 100);
-                        amount = r._ongkirPegawaiNominal ?? fallbackNominal;
+                        amount = ongkirPengantarTersimpan(r) ?? nominalAsli;
                     }
                     map.set(email, (map.get(email) || 0) + amount);
                 }
@@ -932,14 +911,12 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                 if (r._ongkir && r.diantarOleh) {
                     const email = r.diantarOleh.toLowerCase().trim();
                     if (isPegawaiNonaktif(email)) return;
-                    const nominalAsli = parseInt(String(r._ongkir).replace(/\D/g, "")) || 0;
+                    const nominalAsli = toInt(r._ongkir);
 
                     if (nominalAsli > 0) {
                         let amount = nominalAsli;
                         if (r._isNewOngkirSystem) {
-                            const fallbackPersen = r._ongkirPegawaiPersen ?? 70;
-                            const fallbackNominal = Math.round((nominalAsli * fallbackPersen) / 100);
-                            amount = r._ongkirPegawaiNominal ?? fallbackNominal;
+                            amount = ongkirPengantarTersimpan(r) ?? nominalAsli;
                         }
                         map.set(email, (map.get(email) || 0) + amount);
                     }
@@ -1211,7 +1188,6 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                 {usersProfile.map((u) => {
                   const isOwnerAccount = u.id.toLowerCase().trim() === "owner@gmail.com";
                   const roleLabel = u.role === "super admin" ? "Super Admin" : "Admin";
-                  const initialName = u.id.split("@")[0].substring(0, 2).toUpperCase();
 
                   return (
                     <div key={u.id} className="flex items-center justify-between p-3.5 bg-zinc-50 dark:bg-black/30 border border-zinc-100 dark:border-white/5 rounded-xl shadow-sm hover:scale-[1.01] transition-transform">
@@ -2103,7 +2079,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                         <div className="w-full">
                                            <label className="text-[10px] font-bold uppercase tracking-wide text-purple-500 mb-1.5 block">Total Ongkir (Otomatis)</label>
                                            <div className="w-full bg-purple-50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-900/20 rounded-lg px-3 py-2 flex items-center justify-between overflow-hidden">
-                                              <span className="text-sm font-bold text-purple-600 dark:text-purple-400">+ Rp {Number(r.ongkirBulanIni || 0).toLocaleString("id-ID")}</span>
+                                              <span className="text-sm font-bold text-purple-600 dark:text-purple-400">+ {rupiah(Number(r.ongkirBulanIni || 0))}</span>
                                               <span className="text-[8px] sm:text-[9px] font-bold uppercase text-purple-600/50 dark:text-purple-400/50 text-right shrink-0 ml-1">Dari Histori</span>
                                            </div>
                                         </div>
@@ -2125,12 +2101,12 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                         <div className="w-full bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/20 rounded-xl p-3 flex items-center justify-between">
                                           <div className="flex flex-col">
                                             <span className="text-[10px] font-bold uppercase tracking-wide text-rose-600 dark:text-rose-400">Total Denda Absensi (⚡ Auto)</span>
-                                            <span className="text-sm font-black text-rose-600 dark:text-rose-400">- Rp {totalDendaAktif.toLocaleString("id-ID")}</span>
+                                            <span className="text-sm font-black text-rose-600 dark:text-rose-400">- {rupiah(totalDendaAktif)}</span>
                                           </div>
                                           <span className="text-[9px] font-bold uppercase bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 px-2 py-1 rounded-md">
-                                            {dendaTelatAktif > 0 && `Telat: -Rp ${dendaTelatAktif.toLocaleString("id-ID")}`}
+                                            {dendaTelatAktif > 0 && `Telat: -${rupiah(dendaTelatAktif)}`}
                                             {dendaTelatAktif > 0 && dendaAbsenAktif > 0 && ' · '}
-                                            {dendaAbsenAktif > 0 && `Bolos/Pulang: -Rp ${dendaAbsenAktif.toLocaleString("id-ID")}`}
+                                            {dendaAbsenAktif > 0 && `Bolos/Pulang: -${rupiah(dendaAbsenAktif)}`}
                                           </span>
                                         </div>
                                       );
@@ -2271,7 +2247,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                        <div className="w-full bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg px-4 py-3 flex justify-between items-center">
                                            <span className="text-[10px] font-bold text-amber-600/60 dark:text-amber-400/60 hidden sm:block">POKOK + TAMBAHAN + ONGKIR (JIKA AKTIF) - PENGURANGAN</span>
                                            <span className="text-[10px] font-bold text-amber-600/60 dark:text-amber-400/60 sm:hidden">PK+TB+ONG-KT</span>
-                                           <span className="text-lg font-black text-amber-600 dark:text-amber-400">Rp {Math.max(0, totalBersih).toLocaleString("id-ID")}</span>
+                                           <span className="text-lg font-black text-amber-600 dark:text-amber-400">{rupiah(Math.max(0, totalBersih))}</span>
                                        </div>
                                    </div>
 

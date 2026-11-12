@@ -1,4 +1,3 @@
-import React from "react";
 
 export type SubTabOption<T extends string> = { key: T; label: string; count?: number };
 

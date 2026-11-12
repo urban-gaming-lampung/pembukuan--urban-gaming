@@ -4,7 +4,7 @@ import useStokData from "../hooks/useStokData";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { toLocalYmd } from "../lib/dateLocal";
-import { getMinStok, removeJualanItem, statusOf, StokLog, useMinStok, useStokLog } from "../lib/stokJualan";
+import { getMinStok, removeJualanItem, statusOf, StokLog, useMinStok, useStokLog, kunciStok } from "../lib/stokJualan";
 import { Kondisi, kondisiProduk, kondisiStok, PILIH_SAAT_CHECKOUT, produkSubKategori, StokRef, SubKategoriJualan, syncProdukKeStok } from "../lib/posSales";
 import KondisiSwitch from "./KondisiSwitch";
 import {
@@ -12,6 +12,7 @@ import {
   StokMasuk, ubahStokMasuk, uploadFotoProduk, useModalProduk, useProdukJualan, useStokMasuk,
 } from "../lib/barangJualan";
 import { refAda, StokRefSelect } from "./StokRefSelect";
+import { rupiah } from "../lib/format";
 
 const SUBS: { key: SubKategoriJualan; label: string }[] = [
   { key: "Unit PS", label: "Unit PS" },
@@ -20,13 +21,12 @@ const SUBS: { key: SubKategoriJualan; label: string }[] = [
   { key: "Aksesoris", label: "Aksesoris" },
   { key: "BD", label: "Kaset BD" },
 ];
-const rp = (n: number) => `Rp ${Math.round(n || 0).toLocaleString("id-ID")}`;
 const rpShort = (n: number) => {
   const a = Math.abs(n);
   if (a >= 1e9) return `Rp ${(n / 1e9).toFixed(1).replace(".", ",")} M`;
   if (a >= 1e6) return `Rp ${(n / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace(".", ",")} jt`;
   if (a >= 1e3) return `Rp ${Math.round(n / 1e3)} rb`;
-  return rp(n);
+  return rupiah(n);
 };
 const digits = (s: string) => s.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
 const fmtDigits = (s: string) => (s ? Number(s).toLocaleString("id-ID") : "");
@@ -120,7 +120,7 @@ export default function InputStokJualan() {
       const r = p.stokRef;
       if (!r) return;
       if (r.item === PILIH_SAAT_CHECKOUT) (cats.find((c) => c.kategori === r.kategori)?.items || []).forEach((it) => dipakai.add(`${r.kategori}||${it}`));
-      else dipakai.add(`${r.kategori}||${r.item}`);
+      else dipakai.add(kunciStok(r));
     });
     const out: StokRef[] = [];
     cats.forEach((c) => c.items.forEach((it) => {
@@ -250,7 +250,7 @@ export default function InputStokJualan() {
           <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] border border-zinc-200/70 dark:border-white/5 overflow-hidden divide-y divide-zinc-100 dark:divide-white/5">
             {yatimShown.length === 0 && <div className="py-10 text-center text-[14px] text-zinc-500">Semua barang stok sudah punya produk 👍</div>}
             {yatimShown.map((r) => (
-              <div key={`${r.kategori}||${r.item}`} className="px-4 py-3">
+              <div key={kunciStok(r)} className="px-4 py-3">
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="text-[15px] font-semibold text-zinc-900 dark:text-white leading-snug">{r.item}</div>
@@ -286,12 +286,12 @@ export default function InputStokJualan() {
                     <div className="flex-1 min-w-0">
                       <div className="text-[15px] font-semibold text-zinc-900 dark:text-white leading-snug line-clamp-2">{p.name}</div>
                       <div className="text-[12.5px] text-zinc-500 mt-0.5 flex flex-wrap gap-x-1.5 tabular-nums">
-                        {!p.price ? <span className="font-bold text-violet-600 dark:text-violet-400">BONUS · Rp 0</span> : <span>{rp(p.price)}</span>}
+                        {!p.price ? <span className="font-bold text-violet-600 dark:text-violet-400">BONUS · Rp 0</span> : <span>{rupiah(p.price)}</span>}
                         {!p.price ? (
-                          m !== null ? <span>· biaya {rp(m)}</span> : <span className="text-amber-600 dark:text-amber-400">· modal belum diisi</span>
+                          m !== null ? <span>· biaya {rupiah(m)}</span> : <span className="text-amber-600 dark:text-amber-400">· modal belum diisi</span>
                         ) : m !== null ? (
                           <>
-                            <span>· modal {rp(m)}</span>
+                            <span>· modal {rupiah(m)}</span>
                             <span className={untung! >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600"}>· {untung! >= 0 ? "+" : ""}{p.price > 0 ? Math.round((untung! / p.price) * 100) : 0}%</span>
                           </>
                         ) : (
@@ -557,12 +557,12 @@ const BarangJualanSheet: React.FC<{
             {untung !== null ? (
               <div className={`flex items-center justify-between rounded-[12px] px-3 py-2 text-[13.5px] ${untung >= 0 ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400" : "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400"}`}>
                 <span>{untung >= 0 ? "Untung per barang" : "Rugi per barang"}</span>
-                <span className="font-semibold tabular-nums">{rp(Math.abs(untung))} · {Math.round((untung / jualN) * 100)}%</span>
+                <span className="font-semibold tabular-nums">{rupiah(Math.abs(untung))} · {Math.round((untung / jualN) * 100)}%</span>
               </div>
             ) : bonus ? (
               <p className="text-[12.5px] text-zinc-500 px-1 leading-snug">
                 {modalN !== null && modalN > 0
-                  ? <>Biaya bonus <b className="text-zinc-700 dark:text-zinc-200">{rp(modalN)}</b> per barang ikut dihitung sebagai modal, jadi laba penjualan PS di Analitik Usaha tetap akurat.</>
+                  ? <>Biaya bonus <b className="text-zinc-700 dark:text-zinc-200">{rupiah(modalN)}</b> per barang ikut dihitung sebagai modal, jadi laba penjualan PS di Analitik Usaha tetap akurat.</>
                   : <>Isi harga modal stik supaya biaya bonus ikut mengurangi laba di Analitik Usaha.</>}
               </p>
             ) : (
@@ -655,7 +655,7 @@ const BarangJualanSheet: React.FC<{
                   <div className="flex items-center justify-between gap-3 pt-1">
                     <div className="min-w-0">
                       <div className="text-[15px] text-zinc-900 dark:text-white">Catat ke Pengeluaran</div>
-                      <div className="text-[12.5px] text-zinc-500">Kategori “{KATEGORI_PENGELUARAN_STOK}” · {rp(modalMasukN * qty)}</div>
+                      <div className="text-[12.5px] text-zinc-500">Kategori “{KATEGORI_PENGELUARAN_STOK}” · {rupiah(modalMasukN * qty)}</div>
                     </div>
                     <Toggle on={catat} onChange={setCatat} label="Catat ke pengeluaran" />
                   </div>
@@ -685,7 +685,7 @@ const BarangJualanSheet: React.FC<{
                       <div className="flex-1 min-w-0">
                         <div className="text-[14.5px] text-zinc-900 dark:text-white"><b className="text-emerald-600 dark:text-emerald-400 tabular-nums">+{r.qty}</b> {r.item}</div>
                         <div className="text-[12px] text-zinc-500 truncate">
-                          {r.modalSatuan > 0 ? `${rp(r.modalSatuan)}/pcs · total ${rp(r.modalSatuan * r.qty)}` : "Tanpa harga modal"}
+                          {r.modalSatuan > 0 ? `${rupiah(r.modalSatuan)}/pcs · total ${rupiah(r.modalSatuan * r.qty)}` : "Tanpa harga modal"}
                           {r.catatPengeluaran ? " · masuk pengeluaran" : ""}
                         </div>
                       </div>
@@ -822,7 +822,7 @@ const StokMasukSheet: React.FC<{ rec: StokMasuk; produkNama: string; onClose: ()
             <div className="flex items-center justify-between gap-3 pt-1">
               <div className="min-w-0">
                 <div className="text-[15px] text-zinc-900 dark:text-white">Catat ke Pengeluaran</div>
-                <div className="text-[12.5px] text-zinc-500">Kategori “{KATEGORI_PENGELUARAN_STOK}” · {rp(modalN * qty)}</div>
+                <div className="text-[12.5px] text-zinc-500">Kategori “{KATEGORI_PENGELUARAN_STOK}” · {rupiah(modalN * qty)}</div>
               </div>
               <Toggle on={catat} onChange={setCatat} label="Catat ke pengeluaran" />
             </div>

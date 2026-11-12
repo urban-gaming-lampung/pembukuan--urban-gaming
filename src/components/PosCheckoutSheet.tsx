@@ -6,6 +6,10 @@ import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { commitPosSale, infoNego, isBonus, Kondisi, negoSatuan, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, sisaBayar, StokRef } from "../lib/posSales";
 import { UploadTransferProof } from "./TableEditor";
 import { barisPembayaran, belumDibayar, belumLunas, statusTegas, buildNotaPdf, fmtTanggalNota, isNotaSewa, judulNota, KETENTUAN_DP, kotakSyarat, labelPembeli, notaFileName, preloadNotaAssets, printNotaThermal, STORE, teksPembayaran, teksPenutup, teksStatusBayar } from "../lib/posReceipt";
+import { rupiah } from "../lib/format";
+import { toLocalYmd } from "../lib/dateLocal";
+import { kunciStok } from "../lib/stokJualan";
+import { linkWa, rapikanWa } from "../lib/wa";
 
 export type CheckoutLine = {
   id: string;
@@ -19,13 +23,6 @@ export type CheckoutLine = {
   stokRef?: StokRef | null;
 };
 
-const rp = (n: number) => `Rp ${Math.round(n || 0).toLocaleString("id-ID")}`;
-const waDigits = (s: string) => String(s || "").replace(/[^\d]/g, "");
-const waIntl = (s: string) => {
-  const d = waDigits(s);
-  return d.startsWith("0") ? "62" + d.slice(1) : d.startsWith("8") ? "62" + d : d;
-};
-const refKey = (r: StokRef) => `${r.kategori}||${r.item}`;
 
 // ============================================================
 // Pratinjau nota (sama dengan PDF / thermal)
@@ -63,12 +60,12 @@ export const NotaPreview: React.FC<{ sale: PosSale }> = ({ sale: s }) => {
           <div key={i} className="text-[11px]">
             <div className="font-bold leading-snug">{it.kategori === "ISI GAME" && it.platform ? `${it.nama} (${it.platform})` : it.nama}</div>
             <div className="flex justify-between text-zinc-700 font-mono">
-              <span>{it.qty} x {rp(it.harga)}{isBonus(it) ? " · BONUS" : ""}</span>
-              <span className="text-black">{rp(it.subtotal)}</span>
+              <span>{it.qty} x {rupiah(it.harga)}{isBonus(it) ? " · BONUS" : ""}</span>
+              <span className="text-black">{rupiah(it.subtotal)}</span>
             </div>
             {negoSatuan(it) !== 0 && (
               <div className="text-[9.5px] italic text-zinc-500 font-mono">
-                Harga normal {rp(it.hargaNormal!)} · nego kasir {negoSatuan(it) > 0 ? "−" : "+"}{rp(Math.abs(negoSatuan(it)))}/pcs
+                Harga normal {rupiah(it.hargaNormal!)} · nego kasir {negoSatuan(it) > 0 ? "−" : "+"}{rupiah(Math.abs(negoSatuan(it)))}/pcs
               </div>
             )}
           </div>
@@ -79,21 +76,21 @@ export const NotaPreview: React.FC<{ sale: PosSale }> = ({ sale: s }) => {
         <div className="space-y-0.5 text-[11px] mb-2 font-mono">
           {ng.ada && (
             <>
-              <Row l="Harga normal" r={rp(ng.hargaNormal)} />
-              <Row l={ng.labelBaris} r={`${ng.total >= 0 ? "-" : "+"}${rp(Math.abs(ng.total))}`} />
+              <Row l="Harga normal" r={rupiah(ng.hargaNormal)} />
+              <Row l={ng.labelBaris} r={`${ng.total >= 0 ? "-" : "+"}${rupiah(Math.abs(ng.total))}`} />
             </>
           )}
           {s.diskon > 0 && (
             <>
-              <Row l="Subtotal" r={rp(s.subtotal)} />
-              <Row l={`Diskon promo (${s.diskonPersen}%)`} r={`-${rp(s.diskon)}`} />
+              <Row l="Subtotal" r={rupiah(s.subtotal)} />
+              <Row l={`Diskon promo (${s.diskonPersen}%)`} r={`-${rupiah(s.diskon)}`} />
             </>
           )}
         </div>
       )}
       <div className="bg-black text-white flex items-center justify-between px-3 py-2 rounded-[3px]">
         <span className="text-[12px] font-black tracking-wider">TOTAL</span>
-        <span className="text-[15px] font-black font-mono">{rp(s.total)}</span>
+        <span className="text-[15px] font-black font-mono">{rupiah(s.total)}</span>
       </div>
       {barisPembayaran(s).length > 0 && (
         <div className="mt-2 space-y-0.5 text-[11px] font-mono">
@@ -208,14 +205,14 @@ export function useNotaActions(sale: PosSale | null) {
       `Halo ${sale.pembeli || "Kak"}, terima kasih sudah ${sewa ? "menyewa" : "berbelanja"} di *${STORE.nama}* 🙏`,
       ``,
       `No. Nota: *${sale.noNota}*`,
-      ...sale.items.map((it) => `• ${it.nama} (${it.qty}x) ${isBonus(it) ? "BONUS" : rp(it.subtotal)}`),
+      ...sale.items.map((it) => `• ${it.nama} (${it.qty}x) ${isBonus(it) ? "BONUS" : rupiah(it.subtotal)}`),
       ...(sale.infoNota || []).map((x) => `${x.l}: ${x.r}`),
       ...(infoNego(sale).ada ? [`_Catatan: ${infoNego(sale).catatan}._`] : []),
       belumDibayar(sale)
-        ? `Total: *${rp(sale.total)}* — BELUM DIBAYAR`
+        ? `Total: *${rupiah(sale.total)}* — BELUM DIBAYAR`
         : sale.status === "DP" || sale.status === "BATAL_PEMBELI" || sale.status === "BATAL_URBAN" || sale.pembayaran?.length
-          ? `Total: *${rp(sale.total)}* — *${teksStatusBayar(sale)}*`
-          : `Total: *${rp(sale.total)}* — LUNAS (${sale.metode === "TRANSFER" ? "Transfer/QRIS" : "Tunai"})`,
+          ? `Total: *${rupiah(sale.total)}* — *${teksStatusBayar(sale)}*`
+          : `Total: *${rupiah(sale.total)}* — LUNAS (${sale.metode === "TRANSFER" ? "Transfer/QRIS" : "Tunai"})`,
       ...barisPembayaran(sale).map((b) => (b.bold ? `${b.l}: *${b.r}*` : `${b.l}: ${b.r}`)),
       ``,
       ...(link ? [`📄 Nota PDF: ${link}`, ``] : []),
@@ -224,7 +221,7 @@ export function useNotaActions(sale: PosSale | null) {
         : [sewa ? `_Tunjukkan nota ini saat pengembalian unit._` : `_Simpan nota / invoice ini untuk keperluan klaim garansi._`]),
       `IG ${STORE.ig} · WA ${STORE.wa}`,
     ].join("\n");
-    const waLink = (link: string) => `https://wa.me/${waIntl(sale.pembeliWa!)}?text=${encodeURIComponent(pesan(link))}`;
+    const waLink = (link: string) => linkWa(sale.pembeliWa, pesan(link));
     const siap = notaUrl || sale.notaUrl;
     if (siap) { window.open(waLink(siap), "_blank"); return; }
     // Buka tab dulu (masih dalam ketukan pengguna), isi alamatnya setelah PDF terunggah
@@ -303,12 +300,11 @@ type Props = {
   };
 };
 
-const pad2 = (n: number) => String(n).padStart(2, "0");
 /** Tanggal (YYYY-MM-DD) n hari dari sekarang. */
 const tanggalNanti = (n: number) => {
   const d = new Date();
   d.setDate(d.getDate() + n);
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  return toLocalYmd(d);
 };
 const JATUH_TEMPO_BAWAAN = 7;
 
@@ -407,7 +403,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
   );
   const needByKey = useMemo(() => {
     const m = new Map<string, number>();
-    resolved.forEach((x) => { if (x.ref) m.set(refKey(x.ref), (m.get(refKey(x.ref)) || 0) + x.line.quantity); });
+    resolved.forEach((x) => { if (x.ref) m.set(kunciStok(x.ref), (m.get(kunciStok(x.ref)) || 0) + x.line.quantity); });
     return m;
   }, [resolved]);
   // Barang ada di master tapi belum pernah diisi stoknya = 0; null = barang sudah tidak ada di master
@@ -423,14 +419,14 @@ const PosCheckoutSheet: React.FC<Props> = ({
   const nominalDp = Math.round(Number(dpStr.replace(/[^\d]/g, "")) || 0);
   const dpSalah = isDp && (!(nominalDp > 0) || nominalDp >= hitung.total);
   const jatuhTempoSalah = isDp && (!/^\d{4}-\d{2}-\d{2}$/.test(jatuhTempo) || jatuhTempo < tanggalNanti(0));
-  const dipesanLain = (r: StokRef) => dipesan?.get(refKey(r)) || 0;
+  const dipesanLain = (r: StokRef) => dipesan?.get(kunciStok(r)) || 0;
 
   const simpan = async (mode: "pdf" | "thermal" | "none") => {
     if (saving || !lines.length) return;
     if (belumPilih.length) { setError(`Pilih varian stok untuk "${belumPilih[0].line.name}".`); return; }
     if (butuhBukti) { setError("Upload foto bukti transfer dulu."); return; }
     if (editHarga) { setError("Selesaikan ubah harga dulu (ketuk OK)."); return; }
-    if (dpSalah) { setError(`Nominal DP harus lebih dari Rp 0 dan kurang dari total ${rp(hitung.total)}.`); return; }
+    if (dpSalah) { setError(`Nominal DP harus lebih dari Rp 0 dan kurang dari total ${rupiah(hitung.total)}.`); return; }
     if (jatuhTempoSalah) { setError("Pilih tanggal jatuh tempo pelunasan (hari ini atau sesudahnya)."); return; }
     setSaving(mode);
     setError("");
@@ -455,7 +451,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
       s = await commitPosSale({
         kasirNama,
         pembeli: pembeli.trim() || "Pelanggan",
-        pembeliWa: waDigits(pembeliWa) || undefined,
+        pembeliWa: rapikanWa(pembeliWa) || undefined,
         metode,
         buktiTransfer: metode === "TRANSFER" ? bukti : undefined,
         items,
@@ -506,23 +502,23 @@ const PosCheckoutSheet: React.FC<Props> = ({
               {/* Total */}
               <div className="rounded-[20px] bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-4 py-3.5">
                 <div className="text-[11px] font-bold uppercase tracking-widest opacity-60">Total bayar</div>
-                <div className="text-[30px] font-black font-mono tracking-tight leading-none mt-1">{rp(hitung.total)}</div>
+                <div className="text-[30px] font-black font-mono tracking-tight leading-none mt-1">{rupiah(hitung.total)}</div>
                 {adaNego && (
                   <div className="text-[12px] mt-1.5 opacity-80 flex items-center gap-1.5 flex-wrap">
                     <Handshake className="w-3.5 h-3.5 shrink-0" />
-                    <span>Harga normal <span className="line-through opacity-70">{rp(hitung.subtotal + totalNego)}</span></span>
-                    <span>· nego {totalNego >= 0 ? "−" : "+"}{rp(Math.abs(totalNego))}</span>
+                    <span>Harga normal <span className="line-through opacity-70">{rupiah(hitung.subtotal + totalNego)}</span></span>
+                    <span>· nego {totalNego >= 0 ? "−" : "+"}{rupiah(Math.abs(totalNego))}</span>
                   </div>
                 )}
                 {hitung.discountAmount > 0 && (
                   <div className="text-[12px] mt-1 opacity-80">
-                    <span className="line-through opacity-60 mr-1.5">{rp(hitung.subtotal)}</span>hemat promo {rp(hitung.discountAmount)} ({hitung.discountPercent}%)
+                    <span className="line-through opacity-60 mr-1.5">{rupiah(hitung.subtotal)}</span>hemat promo {rupiah(hitung.discountAmount)} ({hitung.discountPercent}%)
                   </div>
                 )}
                 {isDp && nominalDp > 0 && !dpSalah && (
                   <div className="mt-2.5 pt-2.5 border-t border-white/15 dark:border-black/10 grid grid-cols-2 gap-2 text-[12px]">
-                    <div><div className="opacity-60">Bayar sekarang (DP)</div><div className="text-[15px] font-black font-mono">{rp(nominalDp)}</div></div>
-                    <div className="text-right"><div className="opacity-60">Sisa saat pelunasan</div><div className="text-[15px] font-black font-mono">{rp(hitung.total - nominalDp)}</div></div>
+                    <div><div className="opacity-60">Bayar sekarang (DP)</div><div className="text-[15px] font-black font-mono">{rupiah(nominalDp)}</div></div>
+                    <div className="text-right"><div className="opacity-60">Sisa saat pelunasan</div><div className="text-[15px] font-black font-mono">{rupiah(hitung.total - nominalDp)}</div></div>
                   </div>
                 )}
               </div>
@@ -611,7 +607,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
                 <div className="divide-y divide-zinc-100 dark:divide-white/5">
                   {resolved.map(({ line: l, ref, pilih }) => {
                     const sisa = ref ? sisaOf(ref) : null;
-                    const need = ref ? needByKey.get(refKey(ref)) || 0 : 0;
+                    const need = ref ? needByKey.get(kunciStok(ref)) || 0 : 0;
                     const dip = ref ? dipesanLain(ref) : 0;
                     // Stok yang benar-benar bebas = stok tercatat − barang yang sudah dipesan lewat DP
                     const sesudah = sisa === null ? null : sisa - dip - need;
@@ -626,8 +622,8 @@ const PosCheckoutSheet: React.FC<Props> = ({
                             {l.category === "ISI GAME" && l.platform ? `${l.name} (${l.platform})` : l.name}
                           </div>
                           <div className="shrink-0 text-right">
-                            <div className="text-[13px] font-black font-mono text-zinc-900 dark:text-white">{rp(h * l.quantity)}</div>
-                            <div className="text-[11px] text-zinc-400">{l.quantity} × {rp(h)}</div>
+                            <div className="text-[13px] font-black font-mono text-zinc-900 dark:text-white">{rupiah(h * l.quantity)}</div>
+                            <div className="text-[11px] text-zinc-400">{l.quantity} × {rupiah(h)}</div>
                           </div>
                         </div>
 
@@ -651,7 +647,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
                               <button type="button" onClick={() => simpanHarga(l)} className="h-11 px-4 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[13px] font-black active:scale-95">OK</button>
                               <button type="button" onClick={() => setEditHarga(null)} aria-label="Batal ubah harga" className="h-11 w-11 shrink-0 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500 flex items-center justify-center active:scale-95"><X className="w-4 h-4" /></button>
                             </div>
-                            <div className="mt-1 text-[11.5px] text-zinc-500">Harga normal {rp(l.price)}/pcs · harga baru dicatat di nota & analitik</div>
+                            <div className="mt-1 text-[11.5px] text-zinc-500">Harga normal {rupiah(l.price)}/pcs · harga baru dicatat di nota & analitik</div>
                           </div>
                         ) : (
                           <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
@@ -663,8 +659,8 @@ const PosCheckoutSheet: React.FC<Props> = ({
                             {diubah && (
                               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11.5px] font-bold bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300">
                                 <Handshake className="w-3.5 h-3.5" />
-                                Nego {nego >= 0 ? "−" : "+"}{rp(Math.abs(nego))}
-                                <span className="font-semibold opacity-70">· normal <span className="line-through">{rp(l.price)}</span></span>
+                                Nego {nego >= 0 ? "−" : "+"}{rupiah(Math.abs(nego))}
+                                <span className="font-semibold opacity-70">· normal <span className="line-through">{rupiah(l.price)}</span></span>
                               </span>
                             )}
                             <button type="button" onClick={() => mulaiUbahHarga(l)}
@@ -750,7 +746,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
               <div className="flex-1 min-w-0">
                 <h3 className="text-[17px] font-black text-zinc-900 dark:text-white leading-tight">{sale.status === "DP" ? "Nota DP tersimpan" : "Transaksi tersimpan"}</h3>
                 <p className="text-[12px] text-zinc-500 font-mono truncate">
-                  {sale.status === "DP" ? `${sale.noNota} · DP ${rp(sale.dp || 0)} · sisa ${rp(sisaBayar(sale))}` : `${sale.noNota} · ${rp(sale.total)}`}
+                  {sale.status === "DP" ? `${sale.noNota} · DP ${rupiah(sale.dp || 0)} · sisa ${rupiah(sisaBayar(sale))}` : `${sale.noNota} · ${rupiah(sale.total)}`}
                 </p>
               </div>
               <button type="button" onClick={close} aria-label="Tutup" className="w-9 h-9 rounded-full bg-zinc-200/70 dark:bg-zinc-800 flex items-center justify-center"><X className="w-4 h-4" /></button>
@@ -780,15 +776,15 @@ const PosCheckoutSheet: React.FC<Props> = ({
                   <div className="text-[11px] font-bold uppercase tracking-widest text-zinc-400 mb-1.5">Stok berkurang</div>
                   {Array.from(
                     sale.items.reduce((m, it) => {
-                      if (it.stokRef) { const k = refKey(it.stokRef); m.set(k, { ref: it.stokRef, qty: (m.get(k)?.qty || 0) + it.qty }); }
+                      if (it.stokRef) { const k = kunciStok(it.stokRef); m.set(k, { ref: it.stokRef, qty: (m.get(k)?.qty || 0) + it.qty }); }
                       return m;
                     }, new Map<string, { ref: StokRef; qty: number }>()).values()
                   ).map(({ ref, qty }) => {
-                    const now = sale.stokSesudah?.[refKey(ref)] ?? sisaOf(ref);
+                    const now = sale.stokSesudah?.[kunciStok(ref)] ?? sisaOf(ref);
                     const kurang = sale.stokKurang?.find((k) => k.kategori === ref.kategori && k.item === ref.item);
                     const terpotong = kurang ? Math.min(qty, kurang.tersedia) : qty;
                     return (
-                      <div key={refKey(ref)} className="flex items-center justify-between text-[12.5px] py-0.5">
+                      <div key={kunciStok(ref)} className="flex items-center justify-between text-[12.5px] py-0.5">
                         <span className="text-zinc-700 dark:text-zinc-300 truncate pr-2">{ref.kategori} › <b>{ref.item}</b></span>
                         <span className="shrink-0 font-mono font-bold">
                           {terpotong > 0 ? <span className="text-red-600">−{terpotong}</span> : <span className="text-amber-600">tdk terpotong</span>}

@@ -1,22 +1,15 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { AlertCircle, Clock, Monitor, Gamepad2, Smartphone, ShieldCheck, Settings2, MessageCircle } from "lucide-react";
+import { Clock, Monitor, Gamepad2, Smartphone, ShieldCheck, Settings2, MessageCircle } from "lucide-react";
 import { doc, setDoc, onSnapshot } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
 import { HistoryItem, RowSewa } from "../lib/types";
 import Section from "./common/Section";
-import { buildSewaTable, getSewaPrice } from "../lib/priceLists";
-import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
-import { batasKembali, formatWa, INGATKAN_SEBELUM_MENIT, labelPengingat, linkPengingat, pesanPengingat, tarifTelatPerJam, waBaris, waktuRelatif } from "../lib/pengingatSewa";
-
-const KUNCI_TUNDA = "urban:tunda-pengingat-sewa";
-const bacaTunda = (): Record<string, number> => {
-  try { return JSON.parse(localStorage.getItem(KUNCI_TUNDA) || "{}") || {}; } catch { return {}; }
-};
-
-// Baris "Hanya Ongkir" atau ITEM TAMBAHAN (lama sewa "-", mis. "Tambah Sewa Stik PS4") =
-// pemasukan tanpa unit yang keluar. Tidak boleh muncul sebagai BILING / unit jalan.
-const isHanyaOngkirRow = (r: any): boolean =>
-  String(r?.jenisPS ?? "").trim().toLowerCase() === "hanya ongkir" || String(r?.lamaSewa ?? "").trim() === "-";
+import { buildSewaTable } from "../lib/priceLists";
+import { formatK } from "../lib/format";
+import { formatWa } from "../lib/wa";
+import { daftarSewaBerjalan, jenisUnit, perluKonfirmasiKembali, SewaBerjalan, tagihanBelumBayar } from "../lib/sewa";
+import { batasKembali, INGATKAN_SEBELUM_MENIT, labelPengingat, tarifTelatPerJam, waktuRelatif } from "../lib/pengingatSewa";
+import PeringatanSewaHabis, { bisaIngatkan, kirimPengingatSewa, sumberSewa } from "./PeringatanSewaHabis";
 
 type WidgetMonitoringStatusProps = {
   history: HistoryItem[];
@@ -29,6 +22,11 @@ type WidgetMonitoringStatusProps = {
   hargaItems?: any[];
   isVerifyingPayment?: boolean;
 };
+
+/** Kartu unit di monitoring: data sewa (lib/sewa) + tampilan jam habis, progres & tagihan. */
+type KartuUnit = SewaBerjalan & { id: number; end: string; progress: number; _nominalBelumBayar: number };
+
+const jamMenit = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 
 const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
   history,
@@ -50,7 +48,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
 
   const [now, setNow] = useState(Date.now());
   const notifiedRefs = React.useRef<Set<string>>(new Set());
-  const [selectedUnit, setSelectedUnit] = useState<any | null>(null);
+  const [selectedUnit, setSelectedUnit] = useState<KartuUnit | null>(null);
 
   // Sync auth state
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
@@ -61,27 +59,22 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
     return () => unsub();
   }, []);
 
-  const [masterUnitLoaded, setMasterUnitLoaded] = useState(false);
-
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "data", "master_unit"), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setMasterUnit({ ps3: data.ps3 || 0, ps4: data.ps4 || 0, ps5: data.ps5 || 0, tv: data.tv || 0, portabel: data.portabel || 0 });
-        setTempPs3(String(data.ps3 || 0));
-        setTempPs4(String(data.ps4 || 0));
-        setTempPs5(String(data.ps5 || 0));
-        setTempTv(String(data.tv || 0));
-        setTempPortabel(String(data.portabel || 0));
-        setMasterUnitLoaded(true);
-      } else if (!masterUnitLoaded) {
-        // Only init if we've NEVER successfully loaded data before
-        // This prevents race conditions from overwriting real data
+      if (!snap.exists()) {
         console.warn("[MonitoringStatus] master_unit doc does not exist yet.");
+        return;
       }
+      const data = snap.data();
+      setMasterUnit({ ps3: data.ps3 || 0, ps4: data.ps4 || 0, ps5: data.ps5 || 0, tv: data.tv || 0, portabel: data.portabel || 0 });
+      setTempPs3(String(data.ps3 || 0));
+      setTempPs4(String(data.ps4 || 0));
+      setTempPs5(String(data.ps5 || 0));
+      setTempTv(String(data.tv || 0));
+      setTempPortabel(String(data.portabel || 0));
     });
     return () => unsub();
-  }, [masterUnitLoaded]);
+  }, []);
 
   useEffect(() => {
     if ("Notification" in window && Notification.permission !== "denied" && Notification.permission !== "granted") {
@@ -104,189 +97,33 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
 
   const { activeRentals, rentedPS3, rentedPS4, rentedPS5, rentedPortabel, rentedTV, readyPS3, readyPS4, readyPS5, readyPortabel, readyTV } = useMemo(() => {
     const sewaTable = buildSewaTable(hargaItems);
-    let rPS3 = 0;
-    let rPS4 = 0;
-    let rPS5 = 0;
-    let rPortabel = 0;
-    let rTV = 0;
-    const rentals: any[] = [];
-    const timeNow = new Date(now);
+    const nowD = new Date(now);
+    let rPS3 = 0, rPS4 = 0, rPS5 = 0, rPortabel = 0, rTV = 0;
+    // Satu sumber data unit berjalan (sama dengan peringatan "waktu sewa habis" di halaman Usaha Rental)
+    const rentals: KartuUnit[] = daftarSewaBerjalan({ history, rowsSewa, activeDate, now }).map((u, i) => {
+      // Unit yang belum dikonfirmasi kembali TETAP dihitung jalan (tidak otomatis READY)
+      const unit = jenisUnit(u.jenis);
+      if (unit.tv) rTV++;
+      if (unit.portabel) rPortabel++;
+      if (unit.konsol === "PS5") rPS5++;
+      else if (unit.konsol === "PS4") rPS4++;
+      else if (unit.konsol === "PS3") rPS3++;
 
-    const allRowsMap = new Map<string, any>();
-    const histSeen = new Map<string, number>();
-    const liveSeen = new Map<string, number>();
-
-    if (history && history.length > 0) {
-      history.forEach(h => {
-        const hd = new Date(h.tanggal);
-        const diffDays = (timeNow.getTime() - hd.getTime()) / (1000 * 3600 * 24);
-        if (diffDays > 31) return;
-
-        if (h.rowsSewa && h.rowsSewa.length > 0) {
-          h.rowsSewa.forEach((r: any) => {
-            if (r.lamaSewa === "PELUNASAN") return;
-            if (isHanyaOngkirRow(r)) return;
-            const price = parseInt(String(r.harga).replace(/\D/g, "")) || 0;
-            if ((price > 0 || r.isPaid === "TIDAK") && r.jenisPS && r.jamMasukSewa && r.lamaSewa) {
-              // Nomor urut kemunculan: 2 unit identik (jenis, jam, penyewa, tanggal sama) tetap dihitung 2
-              const baseKey = `${String(r.jenisPS).trim()}-${String(r.jamMasukSewa).trim()}-${String(r.ket || "").trim()}-${h.tanggal}`;
-              const n = histSeen.get(baseKey) || 0;
-              histSeen.set(baseKey, n + 1);
-              const key = `${baseKey}#${n}`;
-              allRowsMap.set(key, { ...r, _tanggal: h.tanggal, _historyId: h.id, _mapKey: key });
-            }
-          });
-        }
-      });
-    }
-
-    rowsSewa.forEach((r: any, idx) => {
-      if (r.lamaSewa === "PELUNASAN") return;
-      if (isHanyaOngkirRow(r)) return;
-      const price = parseInt(String(r.harga).replace(/\D/g, "")) || 0;
-      if ((price > 0 || r.isPaid === "TIDAK") && r.jenisPS && r.jamMasukSewa && r.lamaSewa) {
-        const tgl = activeDate || toLocalYmd(timeNow);
-        // Baris form aktif menimpa baris histori ke-n yang sama (data tanggal yang sedang diedit)
-        const baseKey = `${String(r.jenisPS).trim()}-${String(r.jamMasukSewa).trim()}-${String(r.ket || "").trim()}-${tgl}`;
-        const n = liveSeen.get(baseKey) || 0;
-        liveSeen.set(baseKey, n + 1);
-        const key = `${baseKey}#${n}`;
-        allRowsMap.set(key, { ...r, _tanggal: tgl, _isActiveSession: true, _sourceIdx: idx, _mapKey: key });
+      let end = "-";
+      let progress = 0;
+      if (u.endMs !== null && u.mulaiMs !== null) {
+        const endD = new Date(u.endMs);
+        const hariIni = endD.toDateString() === nowD.toDateString();
+        end = hariIni ? jamMenit(endD) : `${String(endD.getDate()).padStart(2, "0")}/${String(endD.getMonth() + 1).padStart(2, "0")} ${jamMenit(endD)}`;
+        progress = u.isDone ? 100 : now >= u.mulaiMs ? ((now - u.mulaiMs) / (u.endMs - u.mulaiMs)) * 100 : 0;
       }
-    });
-
-    const allRowsArr = Array.from(allRowsMap.values());
-
-    allRowsArr.forEach((r, idx) => {
-      const price = parseInt(String(r.harga).replace(/\D/g, "")) || 0;
-      if ((price > 0 || r.isPaid === "TIDAK") && r.jenisPS && r.jamMasukSewa && r.lamaSewa) {
-        const isCustom = r.lamaSewa === "Isi Sendiri";
-        let durationHours = 0;
-        if (isCustom) {
-          durationHours = parseFloat(String((r as any)._customDurasi)) || 0;
-        } else {
-          const matchJam = String(r.lamaSewa).match(/(\d+)\s*JAM/i);
-          durationHours = matchJam ? parseInt(matchJam[1]) : 0;
-          if (!durationHours) {
-            const matchHari = String(r.lamaSewa).match(/(\d+)\s*HARI/i);
-            if (matchHari) {
-              durationHours = parseInt(matchHari[1]) * 24;
-            } else if (String(r.lamaSewa).match(/HARI|SEHARI|SEMALAM/i)) {
-              durationHours = 24;
-            }
-          }
-        }
-
-        let endTimeStr = "-";
-        let isDone = false;
-        let progress = 0;
-        let endD: Date | null = null;
-
-        if (durationHours > 0) {
-          const [hStr, mStr] = r.jamMasukSewa.split(":");
-          const jamNum = parseInt(hStr || "0");
-          const mntNum = parseInt(mStr || "0");
-
-          let baseDateStr = (r as any)._tanggal || activeDate;
-          let startD: Date;
-
-          if (baseDateStr) {
-            const parts = baseDateStr.split("-");
-            startD = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]), jamNum, mntNum, 0, 0);
-          } else {
-            startD = new Date(timeNow);
-            startD.setHours(jamNum, mntNum, 0, 0);
-            if (startD.getTime() > timeNow.getTime() + 12 * 3600000) {
-              startD.setDate(startD.getDate() - 1);
-            }
-          }
-
-          endD = new Date(startD.getTime() + durationHours * 3600000);
-
-          const isToday = endD.getDate() === timeNow.getDate() && endD.getMonth() === timeNow.getMonth() && endD.getFullYear() === timeNow.getFullYear();
-
-          const endH = String(endD.getHours()).padStart(2, '0');
-          const endM = String(endD.getMinutes()).padStart(2, '0');
-
-          if (isToday) {
-            endTimeStr = `${endH}:${endM}`;
-          } else {
-            const dd = String(endD.getDate()).padStart(2, '0');
-            const mm = String(endD.getMonth() + 1).padStart(2, '0');
-            endTimeStr = `${dd}/${mm} ${endH}:${endM}`;
-          }
-
-          isDone = endD ? timeNow >= endD : false;
-          if (!isDone && endD && timeNow >= startD) {
-            progress = ((timeNow.getTime() - startD.getTime()) / (durationHours * 3600000)) * 100;
-          } else if (isDone) {
-            progress = 100;
-          }
-        }
-
-        if (!isDone || !(r as any)._verifiedReturn) {
-          // Unit yang belum dikonfirmasi kembali TETAP dihitung jalan (tidak otomatis READY),
-          // sampai pegawai/owner memverifikasi pengembalian.
-
-          const s = String(r.jenisPS).toLowerCase();
-
-          const hasTV = s.includes("tv");
-          const hasPortabel = s.includes("portabel") || s.includes("portable") || s.includes("switch") || s.includes("rog") || s.includes("steam");
-          const hasPS5 = s.includes("ps5") || s.includes("ps 5");
-          const hasPS4 = !hasPS5 && (s.includes("ps4") || s.includes("ps 4") || s.includes("pro") || s.includes("fat") || s.includes("slim"));
-          const hasPS3 = !hasPS5 && (s.includes("ps3") || s.includes("ps 3"));
-
-          const hasGenericPS = s.includes("ps") && !hasPS3 && !hasPS4 && !hasPS5;
-          const isOnlyTV = (s === "tv" || s === "hanya tv" || s === "tv only") || (hasTV && !hasPortabel && !s.includes("ps"));
-
-          if (hasTV) rTV++;
-          if (hasPortabel) rPortabel++;
-
-          if (hasPS5) rPS5++;
-          else if (hasPS4) rPS4++;
-          else if (hasPS3) rPS3++;
-          else if (hasGenericPS && !isOnlyTV) {
-            rPS3++;
-          }
-          let nominalBelumBayar = 0;
-          if ((r as any).isPaid === "TIDAK") {
-              const isCustom = r.lamaSewa === "Isi Sendiri";
-              if (isCustom) {
-                  nominalBelumBayar = parseInt(String((r as any)._customBase).replace(/\D/g, "")) || 0;
-              } else if (hargaItems) {
-                  nominalBelumBayar = getSewaPrice(sewaTable, r.jenisPS, r.lamaSewa);
-              }
-              if ((r as any).isOngkir === "YA") {
-                  nominalBelumBayar += parseInt(String((r as any)._ongkir).replace(/\D/g, "")) || 0;
-              }
-          }
-
-          rentals.push({
-            id: idx + 1,
-            uid: (r as any)._mapKey || `${idx}`,
-            jenis: r.jenisPS,
-            isTv: hasTV,
-            start: r.jamMasukSewa,
-            end: endTimeStr,
-            endMs: endD ? endD.getTime() : null,
-            progress: Math.min(100, Math.max(0, progress)),
-            namaPenyewa: (r as any).ket || "Tanpa Nama",
-            isDone,
-            isVerified: !!(r as any)._verifiedReturn,
-            addedBy: (r as any)._addedBy,
-            _historyId: (r as any)._historyId,
-            _isActiveSession: (r as any)._isActiveSession,
-            _sourceIdx: (r as any)._sourceIdx,
-            diantarOleh: (r as any).diantarOleh || "",
-            waPenyewa: waBaris(r),
-            diingatkan: (r as any)._diingatkan || [],
-            isOngkir: (r as any).isOngkir || "",
-            isPaid: (r as any).isPaid || "",
-            _nominalBelumBayar: nominalBelumBayar,
-            _rawRow: r
-          });
-        }
-      }
+      return {
+        ...u,
+        id: i + 1,
+        end,
+        progress: Math.min(100, Math.max(0, progress)),
+        _nominalBelumBayar: hargaItems ? tagihanBelumBayar(u._rawRow, sewaTable) : 0,
+      };
     });
 
     return {
@@ -304,9 +141,9 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
     };
   }, [rowsSewa, history, activeDate, now, masterUnit, hargaItems]);
 
+  // Notifikasi browser sekali per unit saat waktunya habis
   useEffect(() => {
     if (!("Notification" in window) || Notification.permission !== "granted" || !currentUserEmail) return;
-
     activeRentals.forEach(r => {
       if (r.isDone && !r.isVerified && r.addedBy === currentUserEmail && !notifiedRefs.current.has(r.uid)) {
         try {
@@ -320,94 +157,19 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
     });
   }, [activeRentals, currentUserEmail]);
 
-  const [unverifiedAdminRentals, setUnverifiedAdminRentals] = useState<any[]>([]);
-  // "Belum kembali · sudah diingatkan": peringatan waktu habis ditunda 30 menit per unit
-  const [tunda, setTunda] = useState<Record<string, number>>(() => bacaTunda());
-  const tundaPeringatan = (uid: string) => {
-    const next = { ...tunda, [uid]: Date.now() + 30 * 60000 };
-    Object.keys(next).forEach((k) => { if (next[k] < Date.now()) delete next[k]; });
-    setTunda(next);
-    try { localStorage.setItem(KUNCI_TUNDA, JSON.stringify(next)); } catch { /* abaikan */ }
-  };
-
-  useEffect(() => {
-    if (!currentUserEmail) return;
-    const unverified = activeRentals.filter(r => r.isDone && !r.isVerified && r.addedBy === currentUserEmail && !((tunda[r.uid] || 0) > now));
-    setUnverifiedAdminRentals(unverified);
-  }, [activeRentals, currentUserEmail, tunda, now]);
+  // Peringatan "waktu sewa habis" untuk sewa yang dicatat admin ini
+  const perluKonfirmasi = useMemo(() => activeRentals.filter((u) => perluKonfirmasiKembali(u, currentUserEmail, now)), [activeRentals, currentUserEmail, now]);
 
   // ===== Pengingat WhatsApp penyewa =====
-  const bisaIngatkan = (u: any) => !!(u && u.waPenyewa && u.endMs);
-  const waktunyaIngatkan = (u: any) => bisaIngatkan(u) && !u.isVerified && now >= u.endMs - INGATKAN_SEBELUM_MENIT * 60000;
-  const kirimPengingat = (u: any) => {
-    if (!bisaIngatkan(u)) return;
-    const pesan = pesanPengingat({ nama: u.namaPenyewa, jenis: u.jenis, endMs: u.endMs, now: Date.now(), noNota: u._rawRow?._noNota });
-    window.open(linkPengingat(u.waPenyewa, pesan), "_blank");
-    onPengingat?.(
-      u._isActiveSession && typeof u._sourceIdx === "number"
-        ? { isLive: true, sourceIdx: u._sourceIdx, _rawRow: u._rawRow }
-        : { isLive: false, historyId: u._historyId, _rawRow: u._rawRow }
-    );
-  };
+  const waktunyaIngatkan = (u: KartuUnit) => bisaIngatkan(u) && !u.isVerified && now >= (u.endMs || 0) - INGATKAN_SEBELUM_MENIT * 60000;
+  const kirimPengingat = (u: KartuUnit) => kirimPengingatSewa(u, onPengingat);
+  const verifikasi = (item: ReturnType<typeof sumberSewa>) => onVerifyActiveRental?.(item);
 
-  const handleVerifyPopupReturn = async (ru: any) => {
-    if (onVerifyActiveRental) {
-      if (ru._isActiveSession && typeof ru._sourceIdx === "number") {
-        onVerifyActiveRental({
-          isLive: true,
-          sourceIdx: ru._sourceIdx,
-          jenis: ru.jenis,
-          namaPenyewa: ru.namaPenyewa,
-          start: ru.start,
-          isPaid: ru.isPaid,
-          _rawRow: ru._rawRow
-        });
-      } else if (ru._historyId) {
-        onVerifyActiveRental({
-          isLive: false,
-          historyId: ru._historyId,
-          jenis: ru.jenis,
-          namaPenyewa: ru.namaPenyewa,
-          start: ru.start,
-          isPaid: ru.isPaid,
-          _rawRow: ru._rawRow
-        });
-      }
-    }
-  };
-
-  const getHumanizedTime = (endMs: number | null) => {
+  /** "Unit diperkirakan kembali besok pukul 10.00." */
+  const teksPerkiraanKembali = (endMs: number | null) => {
     if (!endMs) return "Waktu estimasi tidak spesifik.";
-    const nowD = new Date(now);
-    const end = new Date(endMs);
-
-    if (nowD >= end) return "Waktu biling sudah habis, unit seharusnya sudah kembali.";
-
-    const startOfToday = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate());
-    const startOfEnd = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-    const diffD = Math.round((startOfEnd.getTime() - startOfToday.getTime()) / (24 * 3600 * 1000));
-
-    let dayStr = "";
-    if (diffD === 0) {
-      const h = end.getHours();
-      if (h >= 18 || h < 4) dayStr = "malam ini";
-      else if (h >= 15) dayStr = "sore ini";
-      else if (h >= 10) dayStr = "siang ini";
-      else dayStr = "pagi ini";
-    } else if (diffD === 1) {
-      const h = end.getHours();
-      if (h >= 18 || h < 4) dayStr = "besok malam";
-      else if (h >= 15) dayStr = "besok sore";
-      else if (h >= 10) dayStr = "besok siang";
-      else dayStr = "besok pagi";
-    } else {
-      const hariNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
-      dayStr = `${diffD} hari lagi, hari ${hariNames[end.getDay()]}`;
-    }
-
-    const jam = String(end.getHours()).padStart(2, '0');
-    const mnt = String(end.getMinutes()).padStart(2, '0');
-    return `Unit diperkirakan kembali pada ${dayStr}, pukul ${jam}:${mnt}.`;
+    if (now >= endMs) return "Waktu biling sudah habis, unit seharusnya sudah kembali.";
+    return `Unit diperkirakan kembali ${waktuRelatif(endMs, now)}.`;
   };
 
   return (
@@ -580,17 +342,17 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
                             <span className="text-[9px] font-bold text-purple-600 dark:text-purple-400">Diantar oleh : {u.diantarOleh.split("@")[0]}</span>
                           </div>
                         )}
-                        {!u.diantarOleh && (u as any).isOngkir === "TIDAK" && (
+                        {!u.diantarOleh && u.isOngkir === "TIDAK" && (
                           <div className="bg-lime-100 dark:bg-lime-500/15 px-2 py-0.5 rounded flex items-center justify-center gap-1 mt-0.5 ring-1 ring-lime-300 dark:ring-lime-500/30">
                             <span className="text-[9px] font-black text-lime-700 dark:text-lime-400">Diambil sendiri</span>
                           </div>
                         )}
-                        {(u as any).isPaid === "TIDAK" && (
+                        {u.isPaid === "TIDAK" && (
                           <div className="bg-red-100 dark:bg-red-500/15 px-2 py-0.5 rounded flex items-center justify-center gap-1 mt-0.5 ring-1 ring-red-300 dark:ring-red-500/30">
-                            <span className="text-[9px] font-black text-red-700 dark:text-red-400">Belum dibayar {(u as any)._nominalBelumBayar ? `(Rp ${(u as any)._nominalBelumBayar / 1000}k)` : ''}</span>
+                            <span className="text-[9px] font-black text-red-700 dark:text-red-400">Belum dibayar {u._nominalBelumBayar ? `(Rp ${formatK(u._nominalBelumBayar)})` : ""}</span>
                           </div>
                         )}
-                        {(u as any).isPaid === "YA" && (
+                        {u.isPaid === "YA" && (
                           <div className="bg-emerald-100 dark:bg-emerald-500/15 px-2 py-0.5 rounded flex items-center justify-center gap-1 mt-0.5 ring-1 ring-emerald-300 dark:ring-emerald-500/30">
                             <span className="text-[9px] font-black text-emerald-700 dark:text-emerald-400">Sudah dibayar</span>
                           </div>
@@ -663,7 +425,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
 
       {selectedUnit && (() => {
         // Data terbaru unit yang dibuka (mis. sesudah "Ingatkan" dicatat)
-        const sel: any = activeRentals.find((r) => r.uid === selectedUnit.uid) || selectedUnit;
+        const sel: KartuUnit = activeRentals.find((r) => r.uid === selectedUnit.uid) || selectedUnit;
         const tarif = tarifTelatPerJam(sel.jenis);
         return (
         <div className="fixed inset-0 z-[700] flex items-center justify-center p-4">
@@ -683,30 +445,30 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
                 Diantar oleh: {sel.diantarOleh.split("@")[0]}
               </p>
             )}
-            {!sel.diantarOleh && (sel as any).isOngkir === "TIDAK" && (
+            {!sel.diantarOleh && sel.isOngkir === "TIDAK" && (
               <p className="text-[12px] font-black text-center text-lime-700 dark:text-lime-400 tracking-wide mt-1 mb-5 bg-lime-100 dark:bg-lime-500/15 px-3 py-1 rounded-lg ring-1 ring-lime-300 dark:ring-lime-500/30">
                 Diambil sendiri
               </p>
             )}
-            {(sel as any).isPaid === "TIDAK" && (
+            {sel.isPaid === "TIDAK" && (
                <p className="text-[12px] font-black text-center text-red-700 dark:text-red-400 tracking-wide mt-1 mb-5 bg-red-100 dark:bg-red-500/15 px-3 py-1 rounded-lg ring-1 ring-red-300 dark:ring-red-500/30">
-                 Belum dibayar {(sel as any)._nominalBelumBayar ? `(Rp ${(sel as any)._nominalBelumBayar / 1000}k)` : ''}
+                 Belum dibayar {sel._nominalBelumBayar ? `(Rp ${formatK(sel._nominalBelumBayar)})` : ""}
                </p>
             )}
-            {(sel as any).isPaid === "YA" && (
+            {sel.isPaid === "YA" && (
                <p className="text-[12px] font-black text-center text-emerald-700 dark:text-emerald-400 tracking-wide mt-1 mb-5 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-1 rounded-lg ring-1 ring-emerald-300 dark:ring-emerald-500/30">
                  Sudah dibayar
                </p>
             )}
-            {!sel.diantarOleh && (sel as any).isOngkir !== "TIDAK" && <div className="mb-6" />}
+            {!sel.diantarOleh && sel.isOngkir !== "TIDAK" && <div className="mb-6" />}
 
             <div className="bg-zinc-100/50 dark:bg-black/20 rounded-[20px] p-4 mb-5">
               <p className="text-[13px] font-bold text-zinc-600 dark:text-zinc-300 text-center leading-relaxed">
-                {getHumanizedTime(sel.endMs)}
+                {teksPerkiraanKembali(sel.endMs)}
               </p>
               {sel.endMs && (
                 <p className="text-[11.5px] font-semibold text-zinc-500 dark:text-zinc-400 text-center leading-snug mt-1.5">
-                  Batas kembali {waktuRelatif(batasKembali(sel.endMs), now)}{tarif ? ` · telat Rp${tarif / 1000}rb/jam` : ""}
+                  Batas kembali {waktuRelatif(batasKembali(sel.endMs), now)}{tarif ? ` · telat Rp${formatK(tarif).replace("k", "rb")}/jam` : ""}
                 </p>
               )}
             </div>
@@ -731,47 +493,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
         );
       })()}
 
-      {unverifiedAdminRentals.length > 0 && !isVerifyingPayment && (
-        <div className="fixed inset-0 z-[800] flex items-center justify-center p-6 font-sans">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-[6px] pointer-events-auto" />
-          <div className="relative w-full max-w-[320px] overflow-hidden rounded-[24px] bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-xl shadow-2xl ring-1 ring-black/10 dark:ring-white/10 animate-in zoom-in-90 duration-300">
-            <div className="p-6 text-center flex flex-col items-center">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400 ring-4 ring-red-500/10">
-                <AlertCircle className="w-8 h-8 animate-pulse" />
-              </div>
-              <h3 className="text-[19px] font-black text-zinc-900 dark:text-white mb-2 leading-tight tracking-tight">Waktu Sewa Habis!</h3>
-              {unverifiedAdminRentals.length > 0 && (() => {
-                const profileName = (currentUserEmail || "").split("@")[0];
-                const capitalizedName = profileName ? profileName.charAt(0).toUpperCase() + profileName.slice(1) : "Admin";
-                return (
-                  <>
-                    <p className="text-[14px] leading-relaxed text-zinc-600 dark:text-zinc-400 mb-4">
-                      Unit <strong className="text-zinc-900 dark:text-white bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">{unverifiedAdminRentals[0]?.jenis}</strong> atas nama <strong className="text-blue-600 dark:text-blue-400">{unverifiedAdminRentals[0]?.namaPenyewa}</strong> telah selesai durasi sewanya.
-                    </p>
-                    <p className="text-[16px] font-bold text-zinc-900 dark:text-white mb-4 leading-tight tracking-tight">Apakah sewa sudah habis atau belum, {capitalizedName}?</p>
-                  </>
-                );
-              })()}
-            </div>
-            <div className="flex flex-col border-t border-gray-200/50 dark:border-white/10">
-              <button
-                onClick={() => handleVerifyPopupReturn(unverifiedAdminRentals[0])}
-                className="w-full py-4 text-[15px] shadow-inner font-black text-blue-600 dark:text-blue-500 bg-white/50 dark:bg-black/20 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors active:bg-blue-100 dark:active:bg-blue-500/20"
-              >
-                YA, SUDAH HABIS & KEMBALI
-              </button>
-              {bisaIngatkan(unverifiedAdminRentals[0]) && (
-                <button
-                  onClick={() => { const u = unverifiedAdminRentals[0]; kirimPengingat(u); tundaPeringatan(u.uid); }}
-                  className="w-full py-3.5 text-[14px] font-bold text-emerald-700 dark:text-emerald-400 border-t border-gray-200/50 dark:border-white/10 bg-white/30 dark:bg-black/10 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors flex items-center justify-center gap-2"
-                >
-                  <MessageCircle className="w-4 h-4" />BELUM KEMBALI · INGATKAN VIA WA
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <PeringatanSewaHabis items={perluKonfirmasi} userEmail={currentUserEmail} jeda={isVerifyingPayment} onVerify={verifikasi} onPengingat={onPengingat} />
     </>
   );
 };

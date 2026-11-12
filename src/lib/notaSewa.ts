@@ -6,14 +6,11 @@
  */
 import { doc, runTransaction } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import { pad, toInt } from "./format";
+import { bayarTransfer } from "./keuangan";
+import { isHanyaOngkir, isItemTambahan, isPelunasanSewa, labelDurasi, ongkirBaris, waktuSewa } from "./sewa";
 import type { PosItem, PosSale } from "./posSales";
 import type { RowSewa } from "./types";
-
-const pad = (n: number, w = 2) => String(n).padStart(w, "0");
-const toInt = (v: unknown) => {
-  const n = parseInt(String(v ?? "").replace(/[^\d]/g, ""), 10);
-  return Number.isFinite(n) ? n : 0;
-};
 
 export type BarisSewaNota = RowSewa & {
   _customBase?: string | number;
@@ -39,36 +36,14 @@ export async function ambilNomorNotaSewa(): Promise<{ noNota: string; ts: number
   return { noNota: `SEWA-${dayKey}-${pad(seq, 3)}`, ts };
 }
 
-const isPelunasan = (r: BarisSewaNota) => r.lamaSewa === "PELUNASAN";
-const isHanyaOngkir = (r: BarisSewaNota) => r.jenisPS === "Hanya Ongkir";
-/** Item tambahan tanpa durasi (mis. "Tambah Sewa Stik PS4"): lama & jam sewa = "-". */
-const isTambahan = (r: BarisSewaNota) => r.lamaSewa === "-" && !isHanyaOngkir(r);
-
-/** Label durasi yang dibaca pelanggan. */
-export const labelDurasi = (r: BarisSewaNota) =>
-  r.lamaSewa === "Isi Sendiri" ? (toInt(r._customDurasi) ? `${toInt(r._customDurasi)} Jam` : "") : String(r.lamaSewa || "");
-
-/** Lama sewa dalam jam (null bila tidak diketahui). */
-export function jamDurasi(r: BarisSewaNota): number | null {
-  if (r.lamaSewa === "Isi Sendiri") return toInt(r._customDurasi) || null;
-  const s = String(r.lamaSewa || "").toUpperCase();
-  const hari = s.match(/(\d+)\s*HARI/);
-  if (hari) return Number(hari[1]) * 24;
-  const jam = s.match(/(\d+)\s*JAM/);
-  if (jam) return Number(jam[1]);
-  return null;
-}
-
-const ongkirOf = (r: BarisSewaNota) => (r.isOngkir === "YA" ? toInt(r._ongkir) : 0);
-
 /**
  * Harga sewa tanpa ongkir. `hargaDasar` = harga dari Edit Rincian (dipakai bila baris belum dibayar,
  * karena kolom harga baris "belum dibayar" selalu 0).
  */
 export function hargaSewaBaris(r: BarisSewaNota, hargaDasar: number): number {
-  if (isPelunasan(r)) return toInt(r.harga);
+  if (isPelunasanSewa(r)) return toInt(r.harga);
   if (r.isPaid === "TIDAK") return r.lamaSewa === "Isi Sendiri" ? toInt(r._customBase) : Math.max(0, hargaDasar);
-  return Math.max(0, toInt(r.harga) - ongkirOf(r));
+  return Math.max(0, toInt(r.harga) - ongkirBaris(r));
 }
 
 /** Baris sudah lengkap untuk dibuatkan nota? */
@@ -77,8 +52,8 @@ export function barisSiapNota(r: BarisSewaNota, hargaDasar: number): boolean {
   const nama = String(r.ket || "").trim();
   if (!nama) return false;
   const bayarOk = r.isPaid === "TIDAK" || !!String(r.bayar || "").trim();
-  if (isPelunasan(r)) return toInt(r.harga) > 0 && !!String(r.bayar || "").trim();
-  if (isTambahan(r)) return !!r.jenisPS && hargaSewaBaris(r, hargaDasar) > 0 && bayarOk;
+  if (isPelunasanSewa(r)) return toInt(r.harga) > 0 && !!String(r.bayar || "").trim();
+  if (isItemTambahan(r)) return !!r.jenisPS && hargaSewaBaris(r, hargaDasar) > 0 && bayarOk;
   return (
     !!r.jenisPS &&
     !!labelDurasi(r) &&
@@ -92,14 +67,10 @@ export function barisSiapNota(r: BarisSewaNota, hargaDasar: number): boolean {
 const fmtKembali = (d: Date) =>
   `${d.toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short" })} · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
-/** Jam kembali = tanggal pembukuan + jam ambil + lama sewa. */
+/** Jam kembali = jam ambil (hari kerja tanggal pembukuan) + lama sewa. */
 export function jamKembali(r: BarisSewaNota, tanggal: string): string | null {
-  const jam = jamDurasi(r);
-  const m = String(r.jamMasukSewa || "").match(/^(\d{1,2})[:.](\d{2})/);
-  const [y, mo, d] = String(tanggal || "").split("-").map(Number);
-  if (!jam || !m || !y || !mo || !d) return null;
-  const mulai = new Date(y, mo - 1, d, Number(m[1]), Number(m[2]));
-  return fmtKembali(new Date(mulai.getTime() + jam * 3600000));
+  const w = waktuSewa(r, tanggal);
+  return w ? fmtKembali(new Date(w.selesai)) : null;
 }
 
 const KETENTUAN_SEWA = (r: BarisSewaNota) => {
@@ -121,12 +92,12 @@ export function notaSewaDariBaris(
   const items: PosItem[] = [];
   const item = (id: string, nama: string, harga: number): PosItem => ({ id, nama, kategori: "RENTAL", harga, qty: 1, subtotal: harga });
   const harga = hargaSewaBaris(r, o.hargaDasar);
-  const ongkir = isPelunasan(r) ? 0 : ongkirOf(r);
+  const ongkir = isPelunasanSewa(r) ? 0 : ongkirBaris(r);
   const info: { l: string; r: string }[] = [];
 
-  if (isPelunasan(r)) {
+  if (isPelunasanSewa(r)) {
     items.push(item("pelunasan", `Pelunasan sewa${r.jenisPS ? ` ${r.jenisPS}` : ""}`, harga));
-  } else if (isTambahan(r)) {
+  } else if (isItemTambahan(r)) {
     items.push(item("tambahan", String(r.jenisPS), harga));
   } else {
     const durasi = labelDurasi(r);
@@ -152,7 +123,7 @@ export function notaSewaDariBaris(
     kasirNama: o.kasirNama || kasir.split("@")[0],
     pembeli: String(r.ket || "").trim() || "Pelanggan",
     ...(o.wa ? { pembeliWa: o.wa } : {}),
-    metode: /transfer|tf|qris/i.test(String(r.bayar || "")) ? "TRANSFER" : "CASH",
+    metode: bayarTransfer(r.bayar) ? "TRANSFER" : "CASH",
     items,
     subtotal: total,
     diskonPersen: 0,
@@ -160,7 +131,7 @@ export function notaSewaDariBaris(
     total,
     jenisNota: "SEWA",
     infoNota: info,
-    syaratNota: isPelunasan(r) ? { judul: "BUKTI PELUNASAN SEWA", isi: ["Simpan nota ini sebagai bukti pelunasan."] } : KETENTUAN_SEWA(r),
-    statusBayar: r.isPaid === "TIDAK" && !isPelunasan(r) ? "BELUM DIBAYAR" : "LUNAS",
+    syaratNota: isPelunasanSewa(r) ? { judul: "BUKTI PELUNASAN SEWA", isi: ["Simpan nota ini sebagai bukti pelunasan."] } : KETENTUAN_SEWA(r),
+    statusBayar: r.isPaid === "TIDAK" && !isPelunasanSewa(r) ? "BELUM DIBAYAR" : "LUNAS",
   };
 }

@@ -5,9 +5,10 @@
  * Setiap transaksi milik salah satu model usaha: RENTAL atau USAHA (toko / jualan).
  */
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
-import { db } from "./firebase";
-import { resolveMonthYear } from "./dateLocal";
+import { collection, doc, onSnapshot, orderBy, query, setDoc, where } from "firebase/firestore";
+import { auth, db } from "./firebase";
+import { dariYmd, rentangHariKerja, resolveMonthYear, tanggalHariKerja, toLocalYmd } from "./dateLocal";
+import { toInt } from "./format";
 import type { HistoryItem } from "./types";
 
 export type JenisTransaksi = "PENGELUARAN" | "PEMASUKAN";
@@ -36,25 +37,96 @@ export const isBelanjaStok = (o: Pick<TransaksiOwner, "sumber" | "kategori">) =>
 export const bisnisOf = (o: Pick<TransaksiOwner, "bisnis" | "sumber" | "kategori">): Bisnis =>
   o.bisnis === "USAHA" || o.bisnis === "RENTAL" ? o.bisnis : o.sumber === "input_stok" || o.kategori === "Stok Jualan" ? "USAHA" : "RENTAL";
 
-/** Transaksi owner (realtime) sesuai filter analitik (data diambil sedikit lebih luas, lalu disaring). */
+// ============================================================
+// Periode filter (Bulan Ini / 7 Hari / Pilih Bulan / Rentang / Semua) — SSOT
+// ============================================================
+
+const BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+
+export type Periode = {
+  /** Tanggal pembukuan awal & akhir (YYYY-MM-DD, inklusif). dari "" = sejak awal. */
+  dari: string;
+  sampai: string;
+  /** Rentang waktu hari kerja (ms) untuk data bertimestamp (nota POS): dari 06:00 tanggal awal s.d. 05:59 sesudah tanggal akhir. */
+  from: number;
+  to: number;
+  label: string;
+};
+
+/**
+ * Periode dari filter analitik / pembukuan. Satu aturan untuk pembukuan (per tanggal) dan
+ * nota POS (per waktu hari kerja), jadi nota dini hari ikut hari kerja yang sama dengan pembukuannya.
+ * "Hari ini" = hari kerja berjalan (pukul 01:00 masih hari kerja kemarin).
+ */
+export function periodRange(mode: string, month: number, rs: string, re: string, now: Date = dariYmd(tanggalHariKerja())!): Periode {
+  const hari = (d: Date) => toLocalYmd(d);
+  const buat = (dari: string, sampai: string, label: string): Periode => ({
+    dari,
+    sampai,
+    from: dari ? rentangHariKerja(dari)!.from : 0,
+    to: rentangHariKerja(sampai)!.to,
+    label,
+  });
+  const hariIni = hari(now);
+  if (mode === "Bulan Ini") {
+    const y = now.getFullYear(), m = now.getMonth();
+    return buat(hari(new Date(y, m, 1)), hari(new Date(y, m + 1, 0)), `${BULAN[m]} ${y}`);
+  }
+  if (mode === "7 Hari Terakhir") {
+    const s = new Date(now);
+    s.setDate(s.getDate() - 6); // hari ini + 6 hari sebelumnya
+    return buat(hari(s), hariIni, "7 hari terakhir");
+  }
+  if (mode === "Pilih Bulan") {
+    const y = resolveMonthYear(month, now);
+    const m = Math.min(12, Math.max(1, Number(month) || 1)) - 1;
+    return buat(hari(new Date(y, m, 1)), hari(new Date(y, m + 1, 0)), `${BULAN[m]} ${y}`);
+  }
+  if (mode === "Rentang") {
+    const ok = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
+    if (ok(rs) && ok(re)) {
+      const [a, b] = rs <= re ? [rs, re] : [re, rs];
+      const f = (s: string) => new Date(`${s}T12:00:00`).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+      return buat(a, b, `${f(a)} – ${f(b)}`);
+    }
+    // Tanggal rentang belum lengkap -> tampilkan semua (sama dengan pembukuan)
+    return buat("", hariIni, "semua waktu");
+  }
+  if (mode === "Semua Bulan") return buat("", hariIni, "semua waktu");
+  return buat(hariIni, hariIni, "hari ini");
+}
+
+/** Saring data bertanggal (pembukuan, transaksi owner) dengan periode filter yang sama. */
+export function saringPeriode<T extends { tanggal: string }>(items: T[], mode: string, month: number, rangeStart: string, rangeEnd: string): T[] {
+  if (mode === "Semua Bulan") return items;
+  const p = periodRange(mode, month, rangeStart, rangeEnd);
+  if (!p.dari) return items;
+  return items.filter((o) => {
+    const t = String(o.tanggal || "").slice(0, 10);
+    return t >= p.dari && t <= p.sampai;
+  });
+}
+
+/**
+ * Transaksi owner (realtime). Bulan Ini / 7 Hari mengambil 60 hari terakhir (daftar di
+ * Input › Transaksi ikut menampilkan bulan lalu); analitik menyaringnya dengan `saringPeriode`.
+ */
 export function useTransaksiOwner(jenis: JenisTransaksi, mode: string, month: number, rangeStart: string, rangeEnd: string): TransaksiOwner[] {
   const [items, setItems] = useState<TransaksiOwner[]>([]);
+  // Ganti hari kerja -> jendela data ikut bergeser
+  const hariKerja = tanggalHariKerja();
   useEffect(() => {
     const base = collection(db, KOLEKSI[jenis]);
+    const p = periodRange(mode, month, rangeStart, rangeEnd);
     let q;
-    if (mode === "Semua Bulan") q = query(base, orderBy("tanggal", "desc"));
-    else if (mode === "Pilih Bulan") {
-      const yyyy = resolveMonthYear(month);
-      const mm = String(month).padStart(2, "0");
-      q = query(base, where("tanggal", ">=", `${yyyy}-${mm}-01`), where("tanggal", "<=", `${yyyy}-${mm}-31`), orderBy("tanggal", "desc"));
-    } else if (mode === "Rentang" && rangeStart && rangeEnd) {
-      const [a, b] = rangeStart <= rangeEnd ? [rangeStart, rangeEnd] : [rangeEnd, rangeStart];
-      q = query(base, where("tanggal", ">=", a), where("tanggal", "<=", b), orderBy("tanggal", "desc"));
+    if (mode === "Pilih Bulan" || (mode === "Rentang" && p.dari)) {
+      q = query(base, where("tanggal", ">=", p.dari), where("tanggal", "<=", p.sampai), orderBy("tanggal", "desc"));
+    } else if (mode === "Semua Bulan" || mode === "Rentang") {
+      q = query(base, orderBy("tanggal", "desc"));
     } else {
       const c = new Date();
       c.setDate(c.getDate() - 60);
-      const ymd = `${c.getFullYear()}-${String(c.getMonth() + 1).padStart(2, "0")}-${String(c.getDate()).padStart(2, "0")}`;
-      q = query(base, where("tanggal", ">=", ymd), orderBy("tanggal", "desc"));
+      q = query(base, where("tanggal", ">=", toLocalYmd(c)), orderBy("tanggal", "desc"));
     }
     return onSnapshot(
       q,
@@ -68,85 +140,78 @@ export function useTransaksiOwner(jenis: JenisTransaksi, mode: string, month: nu
       },
       (e) => console.warn(KOLEKSI[jenis] + ":", e)
     );
-  }, [jenis, mode, month, rangeStart, rangeEnd]);
+  }, [jenis, mode, month, rangeStart, rangeEnd, hariKerja]);
   return items;
 }
 
-/** Saring transaksi dengan aturan periode yang sama dengan pembukuan rental. */
-export function saringPeriode<T extends { tanggal: string }>(items: T[], mode: string, month: number, rangeStart: string, rangeEnd: string): T[] {
-  const now = new Date();
-  const d = (s: string) => new Date(s);
-  if (mode === "Bulan Ini") return items.filter((o) => d(o.tanggal).getMonth() === now.getMonth() && d(o.tanggal).getFullYear() === now.getFullYear());
-  if (mode === "7 Hari Terakhir") {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 6); // hari ini + 6 hari sebelumnya
-    cutoff.setHours(0, 0, 0, 0);
-    return items.filter((o) => { const x = d(o.tanggal); x.setHours(0, 0, 0, 0); return x >= cutoff; });
-  }
-  if (mode === "Semua Bulan") return items;
-  if (mode === "Pilih Bulan") return items.filter((o) => d(o.tanggal).getMonth() + 1 === Number(month) && d(o.tanggal).getFullYear() === resolveMonthYear(month));
-  if (mode === "Rentang" && rangeStart && rangeEnd) {
-    const [a, b] = rangeStart <= rangeEnd ? [rangeStart, rangeEnd] : [rangeEnd, rangeStart];
-    const s = d(a); s.setHours(0, 0, 0, 0);
-    const e = d(b); e.setHours(23, 59, 59, 999);
-    return items.filter((o) => { const x = d(o.tanggal); return x >= s && x <= e; });
-  }
-  return items;
+// ============================================================
+// Uang pembukuan harian — SSOT
+// ============================================================
+
+const normBayar = (v: unknown) => String(v ?? "").trim().toLowerCase();
+/** Metode bayar sebuah baris pembukuan: tunai. */
+export const bayarCash = (v: unknown) => { const s = normBayar(v); return s.includes("cash") || s.includes("tunai"); };
+/** Metode bayar sebuah baris pembukuan: transfer / QRIS. */
+export const bayarTransfer = (v: unknown) => { const s = normBayar(v); return s.includes("transfer") || s.includes("tf") || s.includes("trx") || s.includes("qris"); };
+
+/** Total, tunai & transfer dari sekumpulan baris pembukuan (kolom harga + bayar). */
+export function totalBaris(rows: any[] | undefined): { total: number; cash: number; transfer: number } {
+  let total = 0, cash = 0, transfer = 0;
+  (rows || []).forEach((r) => {
+    const h = toInt(r?.harga);
+    total += h;
+    if (bayarCash(r?.bayar)) cash += h;
+    else if (bayarTransfer(r?.bayar)) transfer += h;
+  });
+  return { total, cash, transfer };
 }
-
-const BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-const parseYmd = (s: string) => {
-  const [y, m, d] = String(s || "").split("-").map(Number);
-  return y && m && d ? new Date(y, m - 1, d) : null;
-};
-
-/** Rentang waktu (ms) dari filter analitik — dipakai Analitik Usaha & Keseluruhan (POS memakai timestamp). */
-export function periodRange(mode: string, month: number, rs: string, re: string): { from: number; to: number; label: string } {
-  const now = new Date();
-  const sod = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const eod = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).getTime();
-  if (mode === "Bulan Ini") return { from: new Date(now.getFullYear(), now.getMonth(), 1).getTime(), to: eod(now), label: `${BULAN[now.getMonth()]} ${now.getFullYear()}` };
-  if (mode === "7 Hari Terakhir") {
-    const s = new Date(now);
-    s.setDate(s.getDate() - 6);
-    return { from: sod(s), to: eod(now), label: "7 hari terakhir" };
-  }
-  if (mode === "Pilih Bulan") {
-    const y = resolveMonthYear(month);
-    const m = Math.min(12, Math.max(1, Number(month) || 1)) - 1;
-    return { from: new Date(y, m, 1).getTime(), to: new Date(y, m + 1, 0, 23, 59, 59, 999).getTime(), label: `${BULAN[m]} ${y}` };
-  }
-  if (mode === "Rentang") {
-    let a = parseYmd(rs), b = parseYmd(re);
-    if (a && b) {
-      if (a > b) [a, b] = [b, a];
-      const f = (d: Date) => d.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
-      return { from: sod(a), to: eod(b), label: `${f(a)} – ${f(b)}` };
-    }
-    // Tanggal rentang belum lengkap -> sama dengan pembukuan rental: tampilkan semua
-    return { from: 0, to: eod(now), label: "semua waktu" };
-  }
-  if (mode === "Semua Bulan") return { from: 0, to: eod(now), label: "semua waktu" };
-  return { from: sod(now), to: eod(now), label: "hari ini" };
-}
-
-const toNum = (v: unknown) => {
-  const n = parseInt(String(v ?? "0"), 10);
-  return Number.isFinite(n) ? n : 0;
-};
 
 /**
  * Pemasukan RENTAL satu hari pembukuan: harian + jajanan + sewa.
  * Rincian Pemasukan Usaha (isi game, HEN, servis, aksesoris) adalah pemasukan USAHA —
  * dihitung di Analitik › Usaha (lib/pemasukanUsaha), walau uangnya ikut kas harian.
  */
-export const pemasukanRental = (h: HistoryItem) => toNum(h.totalHarian) + toNum(h.totalJajanan) + toNum(h.totalSewa);
+export const pemasukanRental = (h: Pick<HistoryItem, "totalHarian" | "totalJajanan" | "totalSewa">) =>
+  toInt(h.totalHarian) + toInt(h.totalJajanan) + toInt(h.totalSewa);
+
+/** Seluruh pemasukan satu hari pembukuan (rental + rincian usaha) = uang yang masuk kas harian. */
+export const totalPemasukanHarian = (h: Pick<HistoryItem, "totalHarian" | "totalJajanan" | "totalJasaAks" | "totalSewa">) =>
+  pemasukanRental(h) + toInt(h.totalJasaAks);
 
 /** Pengeluaran yang dicatat admin di pembukuan rental harian (termasuk ongkir). */
 export function pengeluaranAdminRental(h: HistoryItem): { nama: string; harga: number; tanggal: string }[] {
   const rows = (h as any).rowsPengeluaran;
   if (!Array.isArray(rows)) return [];
   return rows
-    .map((r: any) => ({ nama: r.ket || "Tanpa Ket", harga: toNum(r.harga || r.nominal), tanggal: r.tanggal || h.tanggal }))
+    .map((r: any) => ({ nama: r.ket || "Tanpa Ket", harga: toInt(r.harga || r.nominal), tanggal: r.tanggal || h.tanggal }))
     .filter((r: { harga: number }) => r.harga > 0);
+}
+
+/** Ringkasan uang satu dokumen pembukuan (log aktivitas & request edit). */
+export const ringkasPembukuan = (d: any) => ({
+  income: totalPemasukanHarian(d || {}),
+  cash: toInt(d?.totalCash),
+  transfer: toInt(d?.totalTransfer),
+  expense: (Array.isArray(d?.rowsPengeluaran) ? d.rowsPengeluaran : []).reduce((a: number, r: any) => a + toInt(r?.harga), 0),
+});
+
+/** Catat aktivitas simpan / ubah / hapus pembukuan ke `pembukuan_logs` (tidak menggagalkan proses utama). */
+export async function catatLogPembukuan(action: "CREATE" | "UPDATE" | "DELETE", targetDate: string, targetDay: string, recordData: any, emailCadangan?: string | null) {
+  try {
+    const email = auth.currentUser?.email || emailCadangan;
+    if (!email) return;
+    const id = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString() + Math.random().toString(36).slice(2);
+    const r = ringkasPembukuan(recordData);
+    await setDoc(doc(db, "pembukuan_logs", id), {
+      id,
+      email,
+      action,
+      targetDate,
+      targetDay,
+      timestamp: new Date().toISOString(),
+      details: { totalIncome: r.income, totalCash: r.cash, totalTransfer: r.transfer, totalPengeluaran: r.expense },
+    });
+  } catch (err) {
+    console.error("logActivity error:", err);
+  }
 }

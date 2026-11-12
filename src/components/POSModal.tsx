@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { X, ShoppingCart, Plus, Minus, Trash2, PlusCircle, Sparkles, Pencil, Search, Receipt, Clock, AlertTriangle } from "lucide-react";
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, setDoc, deleteDoc, deleteField } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -11,7 +11,8 @@ import NotaDpSheet from "./NotaDpSheet";
 import { StokRefSelect } from "./StokRefSelect";
 import { dipesanDari, hapusStokOtomatisBilaYatim, hariKeJatuhTempo, Kondisi, kondisiProduk, PILIH_SAAT_CHECKOUT, StokRef, stokBaruUntukProduk, useNotaDp } from "../lib/posSales";
 import KondisiSwitch from "./KondisiSwitch";
-import { getMinStok, renameJualanItem, statusOf, useMinStok } from "../lib/stokJualan";
+import { getMinStok, renameJualanItem, statusOf, useMinStok, kunciStok } from "../lib/stokJualan";
+import { rupiah } from "../lib/format";
 
 const qrisImg = new URL("/images/QRIS.jpeg", import.meta.url).href;
 
@@ -41,7 +42,6 @@ interface POSModalProps {
   isSuperAdminOrOwner: boolean;
   adminName: string;
   catalogChanges?: Record<string, "baru" | "update harga" | "update">;
-  onClearProductChange?: (id: string) => void;
 }
 
 const DEFAULT_PRODUCTS: Omit<Product, "id">[] = [
@@ -120,10 +120,9 @@ function getSubCategory(p: Product): "Unit PS" | "Stik" | "Hardisk" | "Aksesoris
   return p.subcategory || getProductSubCategory(p.name);
 }
 
-const isGameUnavailable = (name: string) => /^\s*\//.test(name || "");
 const getGameDisplayName = (name: string) => (name || "").replace(/^\s*\//, "").trim();
 
-export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName, catalogChanges = {}, onClearProductChange }: POSModalProps) {
+export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName, catalogChanges = {} }: POSModalProps) {
   const [activeSub, setActiveSub] = useState<"JUALAN" | "RENTAL" | "SERVIS" | "ISI GAME">("JUALAN");
   const [activeJualanSub, setActiveJualanSub] = useState<"Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD">("Unit PS");
   const [activeKondisi, setActiveKondisi] = useState<Kondisi>("BARU");
@@ -211,7 +210,6 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     const t = setTimeout(() => setToast(""), 3800);
     return () => clearTimeout(t);
   }, [toast]);
-  useBodyScrollLock(openDp);
 
   // Payment states
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "TRANSFER">("CASH");
@@ -301,7 +299,6 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     discountAmount,
     total,
     qualifyingCount,
-    activeRule,
     nextRule,
     gamesNeededForNext,
   } = useMemo(() => {
@@ -330,7 +327,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     const r = product.stokRef;
     if (r && r.item !== PILIH_SAAT_CHECKOUT) {
       const v = stokData?.[r.kategori]?.[r.item];
-      const d = dipesan.get(`${r.kategori}||${r.item}`) || 0;
+      const d = dipesan.get(kunciStok(r)) || 0;
       if (v && d > 0) {
         const n = Math.max(0, Math.round(Number(v.jumlah) || 0));
         const diKeranjang = (cart.find((c) => c.id === product.id)?.quantity || 0) + 1;
@@ -358,7 +355,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             i === idx ? { ...item, quantity: item.quantity - 1 } : item
           );
         }
-        return prev.filter((item, i) => i !== idx);
+        return prev.filter((_, i) => i !== idx);
       }
       return prev;
     });
@@ -604,7 +601,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     if (!v && !diMaster) return null;
     if (!v) return { label: "Stok ?", tone: "belum" };
     const n = Math.max(0, Math.round(Number(v?.jumlah) || 0));
-    const d = dipesan.get(`${r.kategori}||${r.item}`) || 0;
+    const d = dipesan.get(kunciStok(r)) || 0;
     return {
       label: n > 0 ? `Stok ${n}${d ? ` · ${d} dipesan` : ""}` : d ? `Habis · ${d} dipesan` : "Habis",
       tone: n === 0 ? "habis" : n - d <= 0 ? "menipis" : statusOf(n - d, getMinStok(minStokMap, r.kategori, r.item)),
@@ -1082,7 +1079,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                               </span>
                             ) : (
                               <span className="font-extrabold text-[12px] md:text-[14px] text-zinc-900 dark:text-zinc-100 font-mono">
-                                Rp {p.price.toLocaleString("id-ID")}
+                                {rupiah(p.price)}
                               </span>
                             )}
                             
@@ -1153,7 +1150,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                       )}
                       <div className="text-[11px] text-zinc-500 font-mono mt-0.5">
                         {!item.price && item.category === "JUALAN" ? <span className="font-sans font-black text-violet-600 dark:text-violet-400 mr-1">BONUS</span> : null}
-                        Rp {item.price.toLocaleString("id-ID")} x {item.quantity}
+                        {rupiah(item.price)} x {item.quantity}
                       </div>
                     </div>
                     
@@ -1230,7 +1227,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 <div className="space-y-1.5 pt-1">
                   <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 font-medium">
                     <span>Subtotal</span>
-                    <span className="font-mono">Rp {subtotal.toLocaleString("id-ID")}</span>
+                    <span className="font-mono">{rupiah(subtotal)}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-bold">
                     <span className="flex items-center gap-1.5">
@@ -1239,14 +1236,14 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                         {discountPercent}% OFF
                       </span>
                     </span>
-                    <span className="font-mono">-Rp {discountAmount.toLocaleString("id-ID")}</span>
+                    <span className="font-mono">-{rupiah(discountAmount)}</span>
                   </div>
                   <div className="flex items-end justify-between pt-1 border-t border-zinc-200/80 dark:border-white/10">
                     <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
                       TOTAL BAYAR
                     </span>
                     <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono tracking-tighter">
-                      Rp {total.toLocaleString("id-ID")}
+                      {rupiah(total)}
                     </span>
                   </div>
                 </div>
@@ -1263,7 +1260,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                       TOTAL HARGA
                     </span>
                     <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono tracking-tighter">
-                      Rp {total.toLocaleString("id-ID")}
+                      {rupiah(total)}
                     </span>
                   </div>
                 </div>
@@ -1302,7 +1299,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 <span className="text-[13px] tracking-wide font-black">LIHAT KERANJANG</span>
               </div>
               <span className="text-[16px] font-extrabold font-mono">
-                Rp {total.toLocaleString("id-ID")} &rarr;
+                {rupiah(total)} &rarr;
               </span>
             </button>
           </div>
@@ -1350,7 +1347,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     )}
                     <div className="text-[12px] text-zinc-500 font-mono mt-0.5">
                       {!item.price && item.category === "JUALAN" ? <span className="font-sans font-black text-violet-600 dark:text-violet-400 mr-1">BONUS</span> : null}
-                      Rp {item.price.toLocaleString("id-ID")} x {item.quantity}
+                      {rupiah(item.price)} x {item.quantity}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -1423,7 +1420,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 <div className="space-y-1.5 pt-1">
                   <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 font-medium">
                     <span>Subtotal</span>
-                    <span className="font-mono">Rp {subtotal.toLocaleString("id-ID")}</span>
+                    <span className="font-mono">{rupiah(subtotal)}</span>
                   </div>
                   <div className="flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-bold">
                     <span className="flex items-center gap-1.5">
@@ -1432,14 +1429,14 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                         {discountPercent}% OFF
                       </span>
                     </span>
-                    <span className="font-mono">-Rp {discountAmount.toLocaleString("id-ID")}</span>
+                    <span className="font-mono">-{rupiah(discountAmount)}</span>
                   </div>
                   <div className="flex items-end justify-between pt-1 border-t border-zinc-200/80 dark:border-white/10">
                     <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
                       TOTAL BAYAR
                     </span>
                     <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono">
-                      Rp {total.toLocaleString("id-ID")}
+                      {rupiah(total)}
                     </span>
                   </div>
                 </div>
@@ -1456,7 +1453,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                       TOTAL HARGA
                     </span>
                     <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono">
-                      Rp {total.toLocaleString("id-ID")}
+                      {rupiah(total)}
                     </span>
                   </div>
                 </div>
@@ -1533,7 +1530,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 />
                 {newProdPrice !== "" && newProdPrice >= 0 && (
                   <div className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 font-mono pl-1">
-                    Preview: Rp {Number(newProdPrice).toLocaleString("id-ID")}
+                    Preview: {rupiah(Number(newProdPrice))}
                   </div>
                 )}
               </div>
@@ -1653,7 +1650,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 />
                 {editProdPrice !== "" && editProdPrice >= 0 && (
                   <div className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 font-mono pl-1">
-                    Preview: Rp {Number(editProdPrice).toLocaleString("id-ID")}
+                    Preview: {rupiah(Number(editProdPrice))}
                   </div>
                 )}
               </div>

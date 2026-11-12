@@ -17,33 +17,9 @@ import { collection, getDocs, onSnapshot, orderBy, query, runTransaction, where 
 import { db } from "./firebase";
 import type { PosItem, PosSale } from "./posSales";
 import { pernahDp } from "./posSales";
-
-/** Nota sebelum jam ini (dini hari) masih milik hari kerja sebelumnya — ruko bisa tutup lewat tengah malam. */
-export const JAM_GANTI_HARI = 3;
-
-const pad = (n: number) => String(n).padStart(2, "0");
-const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-/** Tanggal hari kerja (YYYY-MM-DD) sebuah waktu: 00:00–02:59 ikut hari sebelumnya. */
-export const tanggalHariKerja = (ts: number) => ymd(new Date(ts - JAM_GANTI_HARI * 3600000));
-
-/** Rentang waktu satu hari kerja: tanggal 03:00 s.d. besoknya 02:59:59. */
-export function rentangHariKerja(tanggal: string): { from: number; to: number } | null {
-  const [y, m, d] = String(tanggal || "").split("-").map(Number);
-  if (!y || !m || !d) return null;
-  return {
-    from: new Date(y, m - 1, d, JAM_GANTI_HARI, 0, 0, 0).getTime(),
-    to: new Date(y, m - 1, d + 1, JAM_GANTI_HARI - 1, 59, 59, 999).getTime(),
-  };
-}
-
-const toNum = (v: unknown) => {
-  const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
-  return Number.isFinite(n) ? n : 0;
-};
-const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
-export const bayarCash = (v: unknown) => { const s = norm(v); return s.includes("cash") || s.includes("tunai"); };
-export const bayarTransfer = (v: unknown) => { const s = norm(v); return s.includes("transfer") || s.includes("tf") || s.includes("trx"); };
+import { rentangHariKerja, tanggalHariKerja } from "./dateLocal";
+import { toInt } from "./format";
+import { totalBaris } from "./keuangan";
 
 /** Baris rincian yang berasal dari nota POS (terkunci, tidak bisa diubah di form). */
 export type BarisNota = {
@@ -115,7 +91,9 @@ export type NotaBarang = { noNota: string; id: string; ts: number; pembeli: stri
 export function notaBarang(s: PosSale, from = 0, to = Infinity): NotaBarang[] {
   if (!s) return [];
   if (pernahDp(s)) {
-    if (s.status === "BATAL_URBAN") return []; // DP dikembalikan ke pembeli
+    // Dibatalkan URBAN (DP dikembalikan) atau dibatalkan sesudah lunas (uang dikembalikan): tidak ada setoran.
+    // Dibatalkan pembeli: DP hangus tetap disetor.
+    if (s.batal && s.status !== "BATAL_PEMBELI") return [];
     return (s.pembayaran || [])
       .map((p, i) => ({ p, i }))
       .filter(({ p }) => p.ts >= from && p.ts <= to)
@@ -155,7 +133,10 @@ export function useNotaHariKerja(tanggal: string): { baris: BarisNota[]; barang:
   const from = r?.from ?? 0;
   const to = r?.to ?? 0;
   useEffect(() => {
-    if (!from) { setSales([]); setLunas([]); setLoading(false); return; }
+    // Tanggal berganti: jangan sampai nota hari kerja sebelumnya ikut terhitung sebelum data baru tiba
+    setSales([]);
+    setLunas([]);
+    if (!from) { setLoading(false); return; }
     setLoading(true);
     const q = query(collection(db, "pos_transaksi"), where("ts", ">=", from), where("ts", "<=", to), orderBy("ts", "asc"));
     const u1 = onSnapshot(
@@ -182,19 +163,7 @@ export function useNotaHariKerja(tanggal: string): { baris: BarisNota[]; barang:
   return { baris, barang, loading };
 }
 
-/** Total kas (cash / transfer / semua) dari sekumpulan baris rincian. */
-export function totalBaris(rows: any[]): { total: number; cash: number; transfer: number } {
-  let total = 0, cash = 0, transfer = 0;
-  (rows || []).forEach((r) => {
-    const h = toNum(r?.harga);
-    total += h;
-    if (bayarCash(r?.bayar)) cash += h;
-    else if (bayarTransfer(r?.bayar)) transfer += h;
-  });
-  return { total, cash, transfer };
-}
-
-const tandaBaris = (rows: any[]) => JSON.stringify((rows || []).map((r) => [r._nota, r.tipe, toNum(r.harga), r.bayar, r.ket]));
+const tandaBaris = (rows: any[]) => JSON.stringify((rows || []).map((r) => [r._nota, r.tipe, toInt(r.harga), r.bayar, r.ket]));
 
 /**
  * Hitung ulang rincian usaha sebuah dokumen pembukuan dengan baris nota terbaru.
@@ -210,9 +179,9 @@ export function patchPembukuanDenganNota(data: any, barisBaru: BarisNota[]): Rec
   const b = totalBaris(barisBaru);
   return {
     rowsJasaAks: JSON.parse(JSON.stringify([...manual, ...barisBaru])),
-    totalJasaAks: Math.max(0, toNum(data?.totalJasaAks) - a.total + b.total),
-    totalCash: Math.max(0, toNum(data?.totalCash) - a.cash + b.cash),
-    totalTransfer: Math.max(0, toNum(data?.totalTransfer) - a.transfer + b.transfer),
+    totalJasaAks: Math.max(0, toInt(data?.totalJasaAks) - a.total + b.total),
+    totalCash: Math.max(0, toInt(data?.totalCash) - a.cash + b.cash),
+    totalTransfer: Math.max(0, toInt(data?.totalTransfer) - a.transfer + b.transfer),
   };
 }
 

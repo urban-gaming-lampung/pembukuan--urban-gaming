@@ -1,5 +1,6 @@
 import React from 'react';
-import { Trash2, Plus, Calculator, Check, X } from 'lucide-react';
+import { Calculator, Check, X } from 'lucide-react';
+import { rupiah, toInt } from "../lib/format";
 
 interface Props {
   rows: any[];
@@ -10,13 +11,10 @@ interface Props {
 }
 
 export default function RincianSetoran({ rows, setRows, currentDate, currentDay, isMobileTable }: Props) {
-  const minRows = 1;
-  const blank = { ket: "", harga: "", bayar: "" };
-
   const updateRow = (i: number, patch: any) =>
     setRows((p) => p.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
 
-  const total = rows.reduce((acc, r) => acc + (parseInt(String(r.harga).replace(/\D/g, "")) || 0), 0);
+  const total = rows.reduce((acc, r) => acc + toInt(r.harga), 0);
 
   return (
     <div className={`filter drop-shadow-sm ${isMobileTable ? "bg-transparent" : "bg-white dark:bg-[#1C1C1E] rounded-3xl overflow-hidden ring-1 ring-black/5 dark:ring-white/10"}`}>
@@ -29,7 +27,7 @@ export default function RincianSetoran({ rows, setRows, currentDate, currentDay,
                </div>
                <div className="text-right">
                   <div className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">Total Setoran</div>
-                  <div className="text-xl font-black text-teal-500">Rp {total.toLocaleString('id-ID')}</div>
+                  <div className="text-xl font-black text-teal-500">{rupiah(total)}</div>
                </div>
            </div>
         )}
@@ -45,7 +43,7 @@ export default function RincianSetoran({ rows, setRows, currentDate, currentDay,
                  </div>
                  <div className="text-right">
                     <div className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">TOTAL</div>
-                    <div className="text-sm font-black text-teal-500">Rp {total.toLocaleString('id-ID')}</div>
+                    <div className="text-sm font-black text-teal-500">{rupiah(total)}</div>
                  </div>
               </div>
 

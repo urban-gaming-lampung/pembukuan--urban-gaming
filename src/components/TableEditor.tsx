@@ -1,5 +1,5 @@
 import React from "react";
-import { toInt } from "../lib/format";
+import { rupiah, toInt } from "../lib/format";
 import Section from "./common/Section";
 import {
   Clock,
@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "../lib/firebase";
-import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
+import { toLocalYmd } from "../lib/dateLocal";
 
 // --- TYPES & UTILS ---
 
@@ -53,14 +53,6 @@ function fieldKind(key: string) {
   return "text" as const;
 }
 
-const currency = (n: number) =>
-  new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  })
-    .format(n)
-    .replace("Rp", "Rp ");
 
 function getThemeColors(title: string) {
   const t = (title || "").toLowerCase();
@@ -106,7 +98,7 @@ export type RenderCellArgs<T> = {
   updateRow: (idx: number, patch: Partial<T>) => void;
 };
 
-const SwipeableRow = ({ isMobile, className, style, children, onSwipe, disabled, isRed }: any) => {
+const SwipeableRow = ({ isMobile, className, style, children, onSwipe, disabled }: any) => {
   const [swipeX, setSwipeX] = React.useState(0);
   const [isAnimating, setIsAnimating] = React.useState(false);
   const touchStartX = React.useRef(0);
@@ -402,16 +394,6 @@ export default function TableEditor<T extends AnyRow>(props: {
     barisTerkunci = [],
   } = props;
 
-  const [isMobileScreen, setIsMobileScreen] = React.useState(
-    typeof window !== "undefined" ? window.innerWidth < 768 : false
-  );
-
-  React.useEffect(() => {
-    const handleResize = () => setIsMobileScreen(window.innerWidth < 768);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
   const isMobile = isMobileTable; // Card mode for all screen sizes if 'Baru'
   const actualMinRows = minRows;
 
@@ -539,13 +521,6 @@ export default function TableEditor<T extends AnyRow>(props: {
     setRows((prev) => [...prev, { ...(blank as any) }]);
   };
 
-  const onRemoveLastRow = () => {
-    setRows((prev) => {
-      if (prev.length <= (actualMinRows || 1)) return prev;
-      return prev.slice(0, -1);
-    });
-  };
-
   const onDeleteRow = (rowIndex: number) => {
     setRows((prev) => {
       if (prev.length <= (actualMinRows || 1)) {
@@ -575,7 +550,7 @@ export default function TableEditor<T extends AnyRow>(props: {
     const rowHarga = toInt(String(r.harga ?? ""));
     const finalHrg = hrg > 0 ? hrg : (rowHarga > 0 ? rowHarga : 0);
     
-    if (finalHrg > 0) text += `- ${currency(finalHrg)}`;
+    if (finalHrg > 0) text += `- ${rupiah(finalHrg)}`;
 
     return text.trim();
   }, [getHarga]);
@@ -600,7 +575,7 @@ export default function TableEditor<T extends AnyRow>(props: {
                 <div className="text-[10px] font-medium uppercase tracking-widest text-zinc-400">Total</div>
              )}
             <div className="text-lg font-bold tracking-tight tabular-nums whitespace-nowrap" style={{ color: theme.color }}>
-              {currency(total)}
+              {rupiah(total)}
             </div>
           </div>
         </div>

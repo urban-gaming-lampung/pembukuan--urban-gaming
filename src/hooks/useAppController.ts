@@ -1,6 +1,6 @@
 import { runSalaryTransaction } from "../lib/salaryPersistence";
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { runTransaction, collection, doc, setDoc, deleteDoc, onSnapshot, addDoc, updateDoc, query, getDocs, getDoc, where, orderBy, serverTimestamp, arrayUnion, deleteField } from "firebase/firestore";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { runTransaction, collection, doc, setDoc, deleteDoc, onSnapshot, addDoc, updateDoc, query, getDocs, getDoc, where, orderBy, serverTimestamp, arrayUnion } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth, listGameDb, storage } from "../lib/firebase";
 import { ref as storageRef, uploadString, getDownloadURL } from "firebase/storage";
@@ -12,16 +12,19 @@ import versionData from "../version.json";
 import { useGameConfig } from "../games/hooks/useGameConfig";
 import { RowHarian, RowJajanan, RowJasaAks, RowSewa, HistoryItem } from "../lib/types";
 import { DEFAULT_HARGA_HARIAN, DEFAULT_HARGA_JAJANAN, DEFAULT_HARGA_JASA_AKS, DEFAULT_HARGA_SEWA } from "../constants/prices";
-import { LS_KEY } from "../constants/storage";
-import { checkCatalogBaselineAndLogUpdates, isVersionLower, SavedCatalogState, startOfDay, endOfDay } from "../lib/catalog";
+import { checkCatalogBaselineAndLogUpdates, isVersionLower, SavedCatalogState } from "../lib/catalog";
 import useStokData from "./useStokData";
 import { bukaHalamanStok } from "../lib/stokRental";
-import { isBarisNota, sinkronNotaKePembukuan, totalBaris, useNotaHariKerja } from "../lib/posPembukuan";
-import { CatatanPengingat, waBaris, wajibWaPenyewa, waValid } from "../lib/pengingatSewa";
+import { isBarisNota, sinkronNotaKePembukuan, useNotaHariKerja } from "../lib/posPembukuan";
+import { CatatanPengingat, wajibWaPenyewa } from "../lib/pengingatSewa";
+import { waValid } from "../lib/wa";
+import { cariBarisSewa, daftarSewaBerjalan, hargaDasarSewa, ONGKIR_BAGI_HASIL_SEJAK, ongkirBaris, ongkirPengantar, perluKonfirmasiKembali, siapkanOngkirSimpan, tagihanBelumBayar, waBaris } from "../lib/sewa";
+import { bayarCash, bayarTransfer, catatLogPembukuan, periodRange, saringPeriode, totalBaris } from "../lib/keuangan";
+import { rupiah, toInt } from "../lib/format";
 import { PdfExporterHandle } from "../components/PdfExporter";
 import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr, isLogForDate } from "../lib/absenPeriod";
-import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
-import { buildSewaTable, getSewaPrice, effectiveSewaPrices, effectiveJasaPrices, cleanPriceList } from "../lib/priceLists";
+import { jamDiniHari, menitHariKerja, toLocalYmd } from "../lib/dateLocal";
+import { buildSewaTable, effectiveSewaPrices, effectiveJasaPrices, cleanPriceList } from "../lib/priceLists";
 
 type ImageQuality = "Tinggi" | "Hemat";
 type Price = { label: string; price: number };
@@ -29,32 +32,35 @@ type PriceListKey = "harian" | "jajanan" | "jasaAks" | "sewa";
 
 const getWibDate = () => new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Jakarta" }));
 
+/** Tanggal hari kerja saat ini (WIB): dini hari (sebelum JAM_GANTI_HARI) masih hari kerja kemarin. */
 const getBusinessDate = () => {
   const wib = getWibDate();
-  if (wib.getHours() < 6) {
+  if (jamDiniHari(wib.getHours())) {
     wib.setDate(wib.getDate() - 1); // Mundur 1 hari
   }
   return wib;
 };
 
-/**
- * Konversi string waktu (HH:MM atau HH.MM) ke skala menit operasional rental (06:00 s.d 03:00 keesokan harinya).
- * - Waktu 06:00 - 23:59 -> jam * 60 + menit
- * - Waktu 00:00 - 03:00 (dini hari cross-midnight) -> (24 + jam) * 60 + menit
- * Hal ini memastikan jam 00:20 dini hari diperlakukan LEBIH MALAM daripada jam 23:50 malam.
- */
-export const getBusinessMinutes = (waktuStr: string): number => {
-  if (!waktuStr) return -1;
-  const timePart = waktuStr.split(" - ")[0]?.trim().replace('.', ':');
-  if (!timePart) return -1;
-  const [h, m] = timePart.split(":").map(Number);
-  if (isNaN(h)) return -1;
-  const minuteVal = isNaN(m) ? 0 : m;
-  if (h <= 3) {
-    return (24 + h) * 60 + minuteVal;
-  }
-  return h * 60 + minuteVal;
+/** Dokumen history_pembukuan -> HistoryItem (total selalu angka). */
+const bacaDokHistory = (snap: { forEach: (cb: (d: any) => void) => void }): HistoryItem[] => {
+  const items: HistoryItem[] = [];
+  snap.forEach((d) => {
+    const data = d.data();
+    items.push({
+      id: d.id, ...data,
+      totalHarian: toInt(data.totalHarian),
+      totalJajanan: toInt(data.totalJajanan),
+      totalJasaAks: toInt(data.totalJasaAks),
+      totalSewa: toInt(data.totalSewa),
+      totalCash: toInt(data.totalCash),
+      totalTransfer: toInt(data.totalTransfer),
+    } as HistoryItem);
+  });
+  return items;
 };
+
+/** Semua dokumen pembukuan (untuk backup lengkap, tidak tergantung filter). */
+const ambilSemuaHistory = async () => bacaDokHistory(await getDocs(collection(db, "history_pembukuan")));
 
 export default function useAppController() {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -109,15 +115,11 @@ export default function useAppController() {
   const handleRunAssistant = async (a: any) => {
     try {
       const expenseRef = collection(db, "owner_expenses");
-      const d = new Date();
-      const yy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, "0");
-      const dd = String(d.getDate()).padStart(2, "0");
       await addDoc(expenseRef, {
         nama: a.nama_pengeluaran,
         kategori: a.kategori || "Lainnya",
         harga: Number(a.nominal || 0),
-        tanggal: `${yy}-${mm}-${dd}`,
+        tanggal: toLocalYmd(),
         // Asisten = tagihan rutin; tandai usahanya (default Rental) agar analitik terpisah benar
         bisnis: a.bisnis === "USAHA" ? "USAHA" : "RENTAL",
         timestamp: Date.now()
@@ -274,7 +276,7 @@ export default function useAppController() {
   };
 
   const today = getBusinessDate();
-  const [tanggal, setTanggal] = useState(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`);
+  const [tanggal, setTanggal] = useState(toLocalYmd(today));
   const [hari, setHari] = useState(() => {
     const h = new Intl.DateTimeFormat("id-ID", { weekday: "long" }).format(today);
     return h.charAt(0).toUpperCase() + h.slice(1);
@@ -289,17 +291,14 @@ export default function useAppController() {
       if (hasDataRef.current) return;
 
       const bizDate = getBusinessDate();
-      const bizDateStr = `${bizDate.getFullYear()}-${String(bizDate.getMonth() + 1).padStart(2, "0")}-${String(bizDate.getDate()).padStart(2, "0")}`;
+      const bizDateStr = toLocalYmd(bizDate);
 
       const bizAlreadySaved = historyRef.current.some(h => h.tanggal === bizDateStr);
       const targetDate = bizAlreadySaved ? getWibDate() : bizDate;
 
       if (targetDate.getDate() !== systemDateRef.current) {
         systemDateRef.current = targetDate.getDate();
-        const yyyy = targetDate.getFullYear();
-        const mm = String(targetDate.getMonth() + 1).padStart(2, "0");
-        const dd = String(targetDate.getDate()).padStart(2, "0");
-        setTanggal(`${yyyy}-${mm}-${dd}`);
+        setTanggal(toLocalYmd(targetDate));
         const h = new Intl.DateTimeFormat("id-ID", { weekday: "long" }).format(targetDate);
         setHari(h.charAt(0).toUpperCase() + h.slice(1));
       }
@@ -393,7 +392,6 @@ export default function useAppController() {
   const [userProfileLoaded, setUserProfileLoaded] = useState(false);
   const [isDeactivated, setIsDeactivated] = useState(false);
 
-  const handleClearProductChange = useCallback(() => {}, []);
 
   useEffect(() => {
     openPOSRef.current = openPOS;
@@ -493,13 +491,13 @@ export default function useAppController() {
     // 1. Urutkan semua Absen Masuk hari ini secara kronologis: PALING PAGI ada di index 0
     const allMasukLogs = logsForToday
       .filter((l: any) => l.jenisAbsen === "Masuk" && l.waktu)
-      .sort((a: any, b: any) => getBusinessMinutes(a.waktu) - getBusinessMinutes(b.waktu));
+      .sort((a: any, b: any) => menitHariKerja(a.waktu) - menitHariKerja(b.waktu));
     const earliestMasukLog = allMasukLogs[0];
 
     // 2. Urutkan semua Absen Pulang hari ini secara kronologis: PALING MALAM / DINI HARI (toleransi s.d 03:00) ada di index 0
     const allPulangLogs = logsForToday
       .filter((l: any) => l.jenisAbsen === "Pulang" && l.waktu)
-      .sort((a: any, b: any) => getBusinessMinutes(b.waktu) - getBusinessMinutes(a.waktu));
+      .sort((a: any, b: any) => menitHariKerja(b.waktu) - menitHariKerja(a.waktu));
     const latestPulangLog = allPulangLogs[0];
 
     if (currentUserEmail && !isSuperAdminOrOwner(currentUserEmail)) {
@@ -779,9 +777,7 @@ export default function useAppController() {
   }, [tanggal, editingId]);
 
   // State untuk Alert (UI Apple Style)
-  const [showDownloadAlert, setShowDownloadAlert] = useState(false);
   const [showDuplicateDateAlert, setShowDuplicateDateAlert] = useState(false);
-  const [showNewMonthAlert, setShowNewMonthAlert] = useState(false);
   const [showUnsavedAlert, setShowUnsavedAlert] = useState(false);
   const [validationAlert, setValidationAlert] = useState<{title: string, message: string} | null>(null);
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
@@ -795,6 +791,11 @@ export default function useAppController() {
       let targetId = "";
 
       switch(status) {
+          case "mandatory_empty":
+              title = "Data Belum Lengkap";
+              message = "Absen Pagi, Absen Siang, Ruko Buka, dan Ruko Tutup wajib diisi sebelum export PDF.";
+              targetId = "section-input";
+              break;
           case "transfer_proof_empty":
               title = "Bukti Transfer Belum Diupload";
               message = "Semua transaksi pemasukan dengan metode pembayaran Transfer wajib meng-upload bukti transfer!";
@@ -925,11 +926,6 @@ export default function useAppController() {
 
   // Harga sewa dari SUMBER TUNGGAL yang sama dengan tabel (lib/priceLists).
   const sewaPriceTable = useMemo(() => buildSewaTable(hargaSewa), [hargaSewa]);
-  const getHargaSewa = (r: RowSewa): number => {
-    if (!r.jenisPS) return 0;
-    if (r.jenisPS === "Hanya Ongkir") return toNum(r._ongkir);
-    return getSewaPrice(sewaPriceTable, r.jenisPS, r.lamaSewa);
-  };
 
   const getTitle = (key: PriceListKey | null) => {
     switch (key) {
@@ -1018,72 +1014,46 @@ export default function useAppController() {
     { ket: "", harga: "", bayar: "", buktiTransfer: "" }
   ]);
 
-  const toNum = (v: unknown) => {
-    const n = parseInt(String(v ?? "0"), 10);
-    return Number.isFinite(n) ? n : 0;
-  };
-
-  const totalHarian = useMemo(() => rowsHarian.reduce((s, r) => s + toNum(r.harga), 0), [rowsHarian]);
-  const totalJajanan = useMemo(() => rowsJajanan.reduce((s, r) => s + toNum(r.harga), 0), [rowsJajanan]);
+  const totalHarian = useMemo(() => rowsHarian.reduce((s, r) => s + toInt(r.harga), 0), [rowsHarian]);
+  const totalJajanan = useMemo(() => rowsJajanan.reduce((s, r) => s + toInt(r.harga), 0), [rowsJajanan]);
   // Rincian Pemasukan Usaha = baris manual (form) + baris jasa dari nota POS hari kerja ini (terkunci)
   const notaHariKerja = useNotaHariKerja(tanggal);
   const barisNotaJasa = notaHariKerja.baris;
   const notaBarangHari = notaHariKerja.barang;
   const totalNotaJasa = useMemo(() => totalBaris(barisNotaJasa), [barisNotaJasa]);
-  const totalJasaAksManual = useMemo(() => rowsJasaAks.reduce((s, r) => s + toNum(r.harga), 0), [rowsJasaAks]);
+  const totalJasaAksManual = useMemo(() => rowsJasaAks.reduce((s, r) => s + toInt(r.harga), 0), [rowsJasaAks]);
   const totalJasaAks = totalJasaAksManual + totalNotaJasa.total;
   /** Baris rincian usaha yang disimpan: manual + nota POS (SSOT untuk history, PDF & laporan). */
   const rowsJasaAksLengkap = useMemo(
     () => [...rowsJasaAks.filter((r: any) => !isBarisNota(r)), ...barisNotaJasa] as RowJasaAks[],
     [rowsJasaAks, barisNotaJasa]
   );
-  const totalSewa = useMemo(() => rowsSewa.reduce((s, r) => s + toNum(r.harga), 0), [rowsSewa]);
+  const totalSewa = useMemo(() => rowsSewa.reduce((s, r) => s + toInt(r.harga), 0), [rowsSewa]);
 
-  const normalizeBayar = (v: unknown) => String(v ?? "").trim().toLowerCase();
-  const isCash = (v: unknown) => { const s = normalizeBayar(v); return s.includes("cash") || s.includes("tunai"); };
-  const isTransfer = (v: unknown) => { const s = normalizeBayar(v); return s.includes("transfer") || s.includes("tf") || s.includes("trx"); };
-
-  const totalCashManual = useMemo(() => {
-    const allRows = [...rowsHarian, ...rowsJajanan, ...rowsJasaAks, ...rowsSewa] as Array<{ harga?: unknown; bayar?: unknown }>;
-    return allRows.reduce((sum, r) => (isCash(r.bayar) ? sum + toNum(r.harga) : sum), 0);
-  }, [rowsHarian, rowsJajanan, rowsJasaAks, rowsSewa]);
-
-  const totalTransferManual = useMemo(() => {
-    const allRows = [...rowsHarian, ...rowsJajanan, ...rowsJasaAks, ...rowsSewa] as Array<{ harga?: unknown; bayar?: unknown }>;
-    return allRows.reduce((sum, r) => (isTransfer(r.bayar) ? sum + toNum(r.harga) : sum), 0);
-  }, [rowsHarian, rowsJajanan, rowsJasaAks, rowsSewa]);
+  // Kas manual (semua rincian form) — aturan tunai / transfer SSOT lib/keuangan
+  const kasManual = useMemo(() => totalBaris([...rowsHarian, ...rowsJajanan, ...rowsJasaAks, ...rowsSewa]), [rowsHarian, rowsJajanan, rowsJasaAks, rowsSewa]);
+  const totalCashManual = kasManual.cash;
+  const totalTransferManual = kasManual.transfer;
 
   // Kas harian ikut jasa dari nota POS (barang jualan tidak — langsung disetor ke owner)
   const totalCash = totalCashManual + totalNotaJasa.cash;
   const totalTransfer = totalTransferManual + totalNotaJasa.transfer;
 
-  const totalPengeluaran = useMemo(() => rowsPengeluaran.reduce((s, r) => s + toNum(r.harga), 0), [rowsPengeluaran]);
-  const totalPengeluaranCash = useMemo(() => rowsPengeluaran.reduce((sum, r) => (r.bayar === "Cash" ? sum + toNum(r.harga) : sum), 0), [rowsPengeluaran]);
-  const manualPengeluaranCash = useMemo(() => rowsPengeluaran.reduce((sum, r: any) => (r.bayar === "Cash" && !r._autoOngkirKey ? sum + toNum(r.harga) : sum), 0), [rowsPengeluaran]);
+  const totalPengeluaran = useMemo(() => rowsPengeluaran.reduce((s, r) => s + toInt(r.harga), 0), [rowsPengeluaran]);
+  const totalPengeluaranCash = useMemo(() => rowsPengeluaran.reduce((sum, r) => (r.bayar === "Cash" ? sum + toInt(r.harga) : sum), 0), [rowsPengeluaran]);
+  const manualPengeluaranCash = useMemo(() => rowsPengeluaran.reduce((sum, r: any) => (r.bayar === "Cash" && !r._autoOngkirKey ? sum + toInt(r.harga) : sum), 0), [rowsPengeluaran]);
 
   useEffect(() => {
-    const POLICY_DATE = "2026-04-29";
-    const isNewPolicy = tanggal >= POLICY_DATE;
+    // Ongkir bagi hasil: bagian pengantar dibayar lewat gaji, bukan dari kas harian
+    const isNewPolicy = tanggal >= ONGKIR_BAGI_HASIL_SEJAK;
 
     let sisaKas: number;
 
     if (isNewPolicy) {
       sisaKas = Math.max(0, totalCash - manualPengeluaranCash);
     } else {
-      const ongkirIncomeCash = rowsSewa.reduce((sum, r: any) => (isCash(r.bayar) && r.isOngkir === "YA" ? sum + (Number(r._ongkir) || 0) : sum), 0);
-      const ongkirExpenseCash = rowsSewa.reduce((sum, r: any) => {
-        if (r._bayarOngkir === "Cash" && r.isOngkir === "YA") {
-          const ongkirCustomer = Number(r._ongkir) || 0;
-          let pegNom: number;
-          if (r._isNewOngkirSystem) {
-            pegNom = r._ongkirPegawaiNominal ?? Math.round(ongkirCustomer * (r._ongkirPegawaiPersen ?? ongkirConfig.pegawaiPersen) / 100);
-          } else {
-            pegNom = Math.round(ongkirCustomer * ongkirConfig.pegawaiPersen / 100);
-          }
-          return sum + pegNom;
-        }
-        return sum;
-      }, 0);
+      const ongkirIncomeCash = rowsSewa.reduce((sum, r: any) => (bayarCash(r.bayar) ? sum + ongkirBaris(r) : sum), 0);
+      const ongkirExpenseCash = rowsSewa.reduce((sum, r: any) => (r._bayarOngkir === "Cash" ? sum + ongkirPengantar(r, ongkirConfig.pegawaiPersen) : sum), 0);
 
       const baseIncomeCash = totalCash - ongkirIncomeCash;
       const baseExpenseCash = totalPengeluaranCash - ongkirExpenseCash;
@@ -1106,17 +1076,12 @@ export default function useAppController() {
      const ongkirEntries: { key: string; ket: string; harga: number; bayar: string; _namaPengantar?: string }[] = [];
 
      rowsSewa.forEach((r) => {
-       if (r.isOngkir === "YA" && toNum(r._ongkir) > 0 && (r as any).diantarOleh) {
-         const ongkirCustomer = toNum(r._ongkir);
+       // Pelunasan sewa dari hari lain: ongkir pengantarnya sudah dicatat di pembukuan hari sewa
+       if ((r as any)._ongkirSudahDicatat) return;
+       if (ongkirBaris(r) > 0 && (r as any).diantarOleh) {
+         const ongkirCustomer = ongkirBaris(r);
          const rowId = (r as any)._rowId || `legacy_${(r as any).ket}_${(r as any).jamMasukSewa}`;
-
-         let pegawaiNominal: number;
-         if ((r as any)._isNewOngkirSystem) {
-           pegawaiNominal = (r as any)._ongkirPegawaiNominal
-             ?? Math.round((ongkirCustomer * ((r as any)._ongkirPegawaiPersen ?? ongkirConfig.pegawaiPersen)) / 100);
-         } else {
-           pegawaiNominal = Math.round((ongkirCustomer * ongkirConfig.pegawaiPersen) / 100);
-         }
+         const pegawaiNominal = ongkirPengantar(r, ongkirConfig.pegawaiPersen);
 
          const namaPengantar = ((r as any).diantarOleh || "").split("@")[0] || "Admin";
          const fmtOngkir = ongkirCustomer.toLocaleString("id-ID");
@@ -1167,7 +1132,13 @@ export default function useAppController() {
   }, [absenPagi, absenSiang, rukoBuka, rukoTutup, shiftPegawai]);
 
   // ===== HISTORY & FILTER =====
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [histTerbaru, setHistTerbaru] = useState<HistoryItem[]>([]);
+  const [histFilter, setHistFilter] = useState<HistoryItem[]>([]);
+  const history = useMemo(() => {
+    const m = new Map<string, HistoryItem>();
+    [...histFilter, ...histTerbaru].forEach((h) => m.set(h.id, h));
+    return Array.from(m.values()).sort((a, b) => b.tanggal.localeCompare(a.tanggal) || b.id.localeCompare(a.id));
+  }, [histTerbaru, histFilter]);
 
   useEffect(() => { historyRef.current = history; }, [history]);
 
@@ -1178,41 +1149,8 @@ export default function useAppController() {
   const [rangeStart, setRangeStart] = useState("");
   const [rangeEnd, setRangeEnd] = useState("");
 
-  const filteredHistory = useMemo(() => {
-    const now = new Date();
-    if (filter === "Bulan Ini") {
-      return history.filter((h) => {
-        const d = new Date(h.tanggal);
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      });
-    }
-    if (filter === "7 Hari Terakhir") {
-      // 7 hari = hari ini + 6 hari sebelumnya (sama dengan grafik & Analitik Usaha/Keseluruhan)
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - 6);
-      const start = startOfDay(cutoff);
-      return history.filter((h) => {
-        const d = startOfDay(new Date(h.tanggal));
-        return d >= start;
-      });
-    }
-    if (filter === "Semua Bulan") return history;
-    if (filter === "Pilih Bulan") {
-      return history.filter((h) => {
-        const d = new Date(h.tanggal);
-        return (d.getMonth() + 1) === Number(filterMonth) && d.getFullYear() === resolveMonthYear(filterMonth);
-      });
-    }
-    if (filter === "Rentang" && rangeStart && rangeEnd) {
-      const s = startOfDay(new Date(rangeStart));
-      const e = endOfDay(new Date(rangeEnd));
-      return history.filter((h) => {
-        const d = startOfDay(new Date(h.tanggal));
-        return d >= s && d <= e;
-      });
-    }
-    return history;
-  }, [filter, history, filterMonth, rangeStart, rangeEnd]);
+  // Satu aturan periode untuk pembukuan, analitik & transaksi owner (lib/keuangan)
+  const filteredHistory = useMemo(() => saringPeriode(history, filter, filterMonth, rangeStart, rangeEnd), [filter, history, filterMonth, rangeStart, rangeEnd]);
 
   const exportData = useMemo(() => ({
     tanggal, hari, absenPagi, absenSiang, catatan,
@@ -1288,155 +1226,19 @@ export default function useAppController() {
 
   useFormDraft(currentFormSignature, applyRemoteDraft, activeTab, !!editingId);
 
-  const [unverifiedRentals, setUnverifiedRentals] = useState<any[]>([]);
-
-  const unverifiedListMemo = useMemo(() => {
-    if (!user || activeTab !== "USAHA RENTAL") return [];
-
-    const unverified: any[] = [];
-    const timeNowMs = Date.now();
-
-    rowsSewa.forEach((r, idx) => {
-      if (r.lamaSewa === "PELUNASAN") return;
-      const price = toNum(r.harga);
-      if ((price > 0 || r.isPaid === "TIDAK") && r.jenisPS && r.jamMasukSewa && (r as any)._addedBy === user.email && !(r as any)._verifiedReturn) {
-          const isCustom = r.lamaSewa === "Isi Sendiri";
-          let durationHours = 0;
-          if (isCustom) {
-             durationHours = parseFloat(String((r as any)._customDurasi)) || 0;
-          } else {
-             const match = String(r.lamaSewa).match(/(\d+)\s*JAM/i);
-             durationHours = match ? parseInt(match[1]) : 0;
-             if (!durationHours && String(r.lamaSewa).match(/HARI|SEHARI|SEMALAM/i)) {
-                 durationHours = 24;
-             }
-          }
-
-          if (durationHours > 0) {
-             const [hStr, mStr] = r.jamMasukSewa.split(":");
-             const jamNum = parseInt(hStr || "0");
-             const startD = new Date();
-             startD.setHours(jamNum, parseInt(mStr || "0"), 0, 0);
-
-             if (startD.getTime() > timeNowMs + 12 * 3600000) {
-                 startD.setDate(startD.getDate() - 1);
-             }
-
-             const endD = new Date(startD.getTime() + durationHours * 3600000);
-
-             unverified.push({
-                isLive: true,
-                sourceIdx: idx,
-                jenis: r.jenisPS,
-                namaPenyewa: (r as any).ket || "Tanpa Nama",
-                start: r.jamMasukSewa,
-                isPaid: r.isPaid,
-                _rawRow: { ...r, _isActiveSession: true, _sourceIdx: idx },
-                endTimeMs: endD.getTime()
-             });
-          }
-      }
-    });
-
-    if (history && history.length > 0) {
-       history.forEach(h => {
-           const hd = new Date(h.tanggal);
-           const diffDays = (timeNowMs - hd.getTime()) / (1000 * 3600 * 24);
-           if (diffDays > 31) return;
-
-           if (h.rowsSewa && h.rowsSewa.length > 0) {
-               h.rowsSewa.forEach((r: any) => {
-                    if (r.lamaSewa === "PELUNASAN") return;
-                    const price = parseInt(String(r.harga).replace(/\D/g, "")) || 0;
-                    if ((price > 0 || r.isPaid === "TIDAK") && r.jenisPS && r.jamMasukSewa && r._addedBy === user.email && !r._verifiedReturn) {
-                        const isCustom = r.lamaSewa === "Isi Sendiri";
-                        let durationHours = 0;
-                        if (isCustom) {
-                            durationHours = parseFloat(String(r._customDurasi)) || 0;
-                        } else {
-                            const matchJam = String(r.lamaSewa).match(/(\d+)\s*JAM/i);
-                            durationHours = matchJam ? parseInt(matchJam[1]) : 0;
-                            if (!durationHours) {
-                                const matchHari = String(r.lamaSewa).match(/(\d+)\s*HARI/i);
-                                if (matchHari) {
-                                    durationHours = parseInt(matchHari[1]) * 24;
-                                } else if (String(r.lamaSewa).match(/HARI|SEHARI|SEMALAM/i)) {
-                                    durationHours = 24;
-                                }
-                            }
-                        }
-
-                        if (durationHours > 0) {
-                            const [hStr, mStr] = r.jamMasukSewa.split(":");
-                            const jamNum = parseInt(hStr || "0");
-                            const parts = h.tanggal.split("-");
-                            const startD = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]), jamNum, parseInt(mStr || "0"), 0, 0);
-
-                            const endD = new Date(startD.getTime() + durationHours * 3600000);
-
-                            unverified.push({
-                                isLive: false,
-                                historyId: h.id,
-                                jenis: r.jenisPS,
-                                namaPenyewa: r.ket || "Tanpa Nama",
-                                start: r.jamMasukSewa,
-                                isPaid: r.isPaid,
-                                _rawRow: { ...r, _historyId: h.id },
-                                endTimeMs: endD.getTime()
-                            });
-                        }
-                    }
-               });
-           }
-       });
-    }
-
-    const uniq: any[] = [];
-    const keys = new Set();
-    for (const item of unverified) {
-        const k = `${String(item.jenis).trim()}-${String(item.start).trim()}-${String(item.namaPenyewa).trim()}`;
-        if (!keys.has(k)) {
-            keys.add(k);
-            uniq.push(item);
-        }
-    }
-
-    return uniq;
-  }, [rowsSewa, history, user, activeTab]);
-
+  // ===== PERINGATAN "WAKTU SEWA HABIS" (halaman Usaha Rental) =====
+  // Data unit dari sumber yang sama dengan Monitoring Status Unit (lib/sewa)
+  const [jamCek, setJamCek] = useState(() => Date.now());
   useEffect(() => {
     if (!user || activeTab !== "USAHA RENTAL") return;
-
-    const checkInterval = setInterval(() => {
-      const nowMs = Date.now();
-      const needsNotify = unverifiedListMemo.filter(item => {
-         if (nowMs >= item.endTimeMs) {
-             const endDiff = (nowMs - item.endTimeMs) / (1000 * 3600 * 24);
-             return endDiff <= 2.5;
-         }
-         return false;
-      });
-
-      setUnverifiedRentals(prev => {
-         if (prev.length === needsNotify.length && prev.every((v,i) => v._rawRow._historyId === needsNotify[i]._rawRow._historyId && v._rawRow._sourceIdx === needsNotify[i]._rawRow._sourceIdx)) {
-             return prev;
-          }
-         return needsNotify;
-      });
-    }, 15000);
-
-    const nowMsInit = Date.now();
-    const initNotify = unverifiedListMemo.filter(item => {
-       if (nowMsInit >= item.endTimeMs) {
-           const endDiff = (nowMsInit - item.endTimeMs) / (1000 * 3600 * 24);
-           return endDiff <= 2.5;
-       }
-       return false;
-    });
-    setUnverifiedRentals(initNotify);
-
-    return () => clearInterval(checkInterval);
-  }, [unverifiedListMemo, user, activeTab]);
+    setJamCek(Date.now());
+    const t = setInterval(() => setJamCek(Date.now()), 15000);
+    return () => clearInterval(t);
+  }, [user, activeTab]);
+  const unverifiedRentals = useMemo(() => {
+    if (!user?.email || activeTab !== "USAHA RENTAL") return [];
+    return daftarSewaBerjalan({ history, rowsSewa, activeDate: tanggal, now: jamCek }).filter((u) => perluKonfirmasiKembali(u, user.email, jamCek));
+  }, [history, rowsSewa, tanggal, user?.email, activeTab, jamCek]);
 
   const [paymentVerifyPrompt, setPaymentVerifyPrompt] = useState<any>(null);
 
@@ -1445,17 +1247,33 @@ export default function useAppController() {
   useBodyScrollLock(openGallery);
   useBodyScrollLock(openSettings);
   useBodyScrollLock(showChallenge);
-  useBodyScrollLock(showDownloadAlert);
   useBodyScrollLock(showDuplicateDateAlert);
-  useBodyScrollLock(showNewMonthAlert);
   useBodyScrollLock(showUnsavedAlert);
   useBodyScrollLock(!!validationAlert);
   useBodyScrollLock(showSuccessAlert);
   useBodyScrollLock(showStokConfirmation);
   useBodyScrollLock(showRecheckAlert);
   useBodyScrollLock(!!openEditRincian);
-  useBodyScrollLock(unverifiedRentals.length > 0);
   useBodyScrollLock(!!paymentVerifyPrompt);
+
+  /**
+   * Ubah SATU baris sewa di dokumen history (transaksi: aman bila beberapa HP mengubah bersamaan).
+   * `ubah` mengembalikan baris baru, atau null untuk menghapus baris itu.
+   */
+  const ubahBarisSewaHistory = async (historyId: string, target: any, ubah: (r: any) => any | null) => {
+    const ref = doc(db, "history_pembukuan", historyId);
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) return;
+      const rows = Array.isArray(snap.data().rowsSewa) ? [...snap.data().rowsSewa] : [];
+      const idx = cariBarisSewa(rows, target);
+      if (idx < 0) return;
+      const baru = ubah(rows[idx]);
+      if (baru === null) rows.splice(idx, 1);
+      else rows[idx] = baru;
+      tx.update(ref, { rowsSewa: rows });
+    });
+  };
 
   const handleVerifyReturn = async (item: any) => {
       if (item.isPaid === "TIDAK" && !item._skipPaymentCheck) {
@@ -1472,13 +1290,8 @@ export default function useAppController() {
              }
              return newRows;
           });
-          setUnverifiedRentals((prev) => prev.filter(i => i.isLive ? i.sourceIdx !== sourceIdx : true));
           return;
       }
-
-      setUnverifiedRentals((prev) => prev.filter(i => 
-          !(i.jenis === item.jenis && i.start === item.start && i.namaPenyewa === item.namaPenyewa)
-      ));
 
       if (item.isLive && typeof item.sourceIdx === "number") {
           setRowsSewa((prev) => {
@@ -1491,25 +1304,8 @@ export default function useAppController() {
       }
 
       if (item.historyId) {
-          try {
-            const ref = doc(db, "history_pembukuan", item.historyId);
-            const snap = await getDoc(ref);
-            if (snap.exists()) {
-                const data = snap.data();
-                if (data.rowsSewa && Array.isArray(data.rowsSewa)) {
-                    const newRowsSewa = [...data.rowsSewa];
-                    const targetIdx = newRowsSewa.findIndex(r => 
-                       r.jenisPS === item.jenis && r.jamMasukSewa === item.start && (r.ket || "Tanpa Nama") === item.namaPenyewa
-                    );
-                    if (targetIdx >= 0) {
-                        newRowsSewa[targetIdx] = { ...newRowsSewa[targetIdx], _verifiedReturn: true };
-                        await updateDoc(ref, { rowsSewa: newRowsSewa });
-                    }
-                }
-            }
-          } catch (e) {
-              console.error("Gagal verifikasi dari history:", e);
-          }
+          await ubahBarisSewaHistory(item.historyId, item._rawRow, (r) => ({ ...r, _verifiedReturn: true }))
+            .catch((e) => console.error("Gagal verifikasi dari history:", e));
       }
   };
 
@@ -1522,21 +1318,7 @@ export default function useAppController() {
       return;
     }
     if (!item.historyId) return;
-    try {
-      const ref = doc(db, "history_pembukuan", item.historyId);
-      const snap = await getDoc(ref);
-      if (!snap.exists()) return;
-      const rows = Array.isArray(snap.data().rowsSewa) ? [...snap.data().rowsSewa] : [];
-      const raw = item._rawRow || {};
-      const idx = raw._rowId
-        ? rows.findIndex((r: any) => r._rowId === raw._rowId)
-        : rows.findIndex((r: any) => r.jenisPS === raw.jenisPS && r.jamMasukSewa === raw.jamMasukSewa && (r.ket || "") === (raw.ket || ""));
-      if (idx < 0) return;
-      rows[idx] = tambah(rows[idx]);
-      await updateDoc(ref, { rowsSewa: rows });
-    } catch (e) {
-      console.error("Gagal mencatat pengingat:", e);
-    }
+    await ubahBarisSewaHistory(item.historyId, item._rawRow, tambah).catch((e) => console.error("Gagal mencatat pengingat:", e));
   };
 
   useEffect(() => {
@@ -1554,10 +1336,7 @@ export default function useAppController() {
     if (unpaids.length > 0) {
         let block = "";
         unpaids.forEach((r) => {
-            const isCustom = r.lamaSewa === "Isi Sendiri";
-            const totalBase = isCustom ? (toNum((r as any)._customBase) || 0) : getHargaSewa(r);
-            const nominalFormatted = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(totalBase);
-            block += `${r.ket}, belum bayar (${nominalFormatted}), sewa ${r.jenisPS}\n`;
+            block += `${r.ket}, belum bayar (${rupiah(tagihanBelumBayar(r, sewaPriceTable))}), sewa ${r.jenisPS}\n`;
         });
         const finalBlock = block.trim();
         newNotes = newNotes ? `${newNotes}\n\n${finalBlock}` : finalBlock;
@@ -1572,23 +1351,23 @@ export default function useAppController() {
   const validateTransactions = () => {
     const allLists = [ ...rowsHarian, ...rowsJajanan, ...rowsJasaAks, ...rowsSewa ] as any[];
     for (const r of allLists) {
-      const price = toNum(r.harga);
-      if (price > 0 && !isCash(r.bayar) && !isTransfer(r.bayar)) return "payment_empty";
+      const price = toInt(r.harga);
+      if (price > 0 && !bayarCash(r.bayar) && !bayarTransfer(r.bayar)) return "payment_empty";
     }
 
     for (const r of allLists) {
-      const price = toNum(r.harga);
-      if (price > 0 && isTransfer(r.bayar) && !r.buktiTransfer) {
+      const price = toInt(r.harga);
+      if (price > 0 && bayarTransfer(r.bayar) && !r.buktiTransfer) {
         return "transfer_proof_empty";
       }
     }
 
     for (const r of rowsSewa) {
-      const isFilled = r.ket || r.jenisPS || r.lamaSewa || r.jamMasukSewa || toNum(r.harga) > 0 || r.isPaid === "TIDAK";
+      const isFilled = r.ket || r.jenisPS || r.lamaSewa || r.jamMasukSewa || toInt(r.harga) > 0 || r.isPaid === "TIDAK";
       if (!isFilled) continue;
 
       if (r.jenisPS === "Hanya Ongkir") {
-        const ong = toNum(r._ongkir);
+        const ong = toInt(r._ongkir);
         if (ong <= 0 || !r._bayarOngkir) return "ongkir_invalid";
         if (!(r as any).diantarOleh) return "diantar_oleh_empty";
         continue;
@@ -1596,17 +1375,14 @@ export default function useAppController() {
 
       if (!r.isPaid) return "isPaid_empty";
 
-      let basePrice = toNum(r.harga);
-      if (r.isPaid === "TIDAK") {
-          const isCustom = r.lamaSewa === "Isi Sendiri";
-          basePrice = isCustom ? toNum((r as any)._customBase) : getHargaSewa(r);
-      }
+      // Belum dibayar: kolom harga 0, jadi cek harga dasarnya (tabel Edit Rincian / isi sendiri)
+      const basePrice = r.isPaid === "TIDAK" ? hargaDasarSewa(r, sewaPriceTable) : toInt(r.harga);
 
       if (basePrice <= 0) return "harga_sewa_empty";
 
       if (!r.isOngkir) return "ongkir_empty";
       if (r.isOngkir === "YA" && r.isPaid !== "TIDAK") {
-          const ong = toNum(r._ongkir);
+          const ong = toInt(r._ongkir);
           if (ong <= 0 || !r._bayarOngkir) return "ongkir_invalid";
       }
       if (!r.jamMasukSewa) return "jam_masuk_sewa_empty";
@@ -1620,7 +1396,7 @@ export default function useAppController() {
     }
 
     for (const r of rowsSetoran) {
-      const nominal = toNum(r.harga);
+      const nominal = toInt(r.harga);
       if (nominal > 0) {
         if (!r.ket) return "setoran_ket_empty";
         if (!r.bayar) return "setoran_tf_empty";
@@ -1628,7 +1404,7 @@ export default function useAppController() {
     }
 
     for (const r of rowsPengeluaran) {
-      const nominal = toNum(r.harga);
+      const nominal = toInt(r.harga);
       const hasInput = (r.ket && r.ket.trim() !== "") || nominal > 0;
       if (hasInput && (!r.ket || !r.bayar || nominal <= 0)) return "pengeluaran_invalid";
       if (hasInput && r.bayar === "Transfer" && !r.buktiTransfer) {
@@ -1641,7 +1417,7 @@ export default function useAppController() {
 
   const handleShareCheck = () => {
     if (!mandatoryFilled) {
-      setShowDownloadAlert(true);
+      triggerValidationError("mandatory_empty");
       return;
     }
 
@@ -1662,44 +1438,8 @@ export default function useAppController() {
     setShowStokConfirmation(true);
   };
 
-  const logActivity = async (action: "CREATE" | "UPDATE" | "DELETE", targetDate: string, targetDay: string, recordData: any) => {
-    try {
-      const email = auth.currentUser?.email || user?.email;
-      if (!email) return;
-      const uniqueLogId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
-        ? crypto.randomUUID() 
-        : Date.now().toString() + Math.random().toString(36).slice(2);
-
-      const data = recordData || {};
-      const totalHarian = data.totalHarian || 0;
-      const totalJajanan = data.totalJajanan || 0;
-      const totalJasaAks = data.totalJasaAks || 0;
-      const totalSewa = data.totalSewa || 0;
-      const totalIncome = totalHarian + totalJajanan + totalJasaAks + totalSewa;
-      const totalCash = data.totalCash || 0;
-      const totalTransfer = data.totalTransfer || 0;
-      const totalPengeluaran = (data.rowsPengeluaran || []).reduce((sum: number, r: any) => sum + (Number(r.harga) || 0), 0);
-
-      const logDoc = {
-        id: uniqueLogId,
-        email,
-        action,
-        targetDate,
-        targetDay,
-        timestamp: new Date().toISOString(),
-        details: {
-          totalIncome,
-          totalCash,
-          totalTransfer,
-          totalPengeluaran
-        }
-      };
-
-      await setDoc(doc(db, "pembukuan_logs", uniqueLogId), logDoc);
-    } catch (err) {
-      console.error("logActivity error:", err);
-    }
-  };
+  const logActivity = (action: "CREATE" | "UPDATE" | "DELETE", targetDate: string, targetDay: string, recordData: any) =>
+    catatLogPembukuan(action, targetDate, targetDay, recordData, user?.email);
 
   const addPencatatan = async () => {
     if (!tanggal) return;
@@ -1725,10 +1465,10 @@ export default function useAppController() {
     const logsForToday = allLogAbsensi.filter((l: any) => isLogForDate(l, tanggal) && l.status !== "deleted");
     const sortedMasuk = logsForToday
       .filter((l: any) => l.jenisAbsen === "Masuk" && l.waktu)
-      .sort((a: any, b: any) => getBusinessMinutes(a.waktu) - getBusinessMinutes(b.waktu));
+      .sort((a: any, b: any) => menitHariKerja(a.waktu) - menitHariKerja(b.waktu));
     const sortedPulang = logsForToday
       .filter((l: any) => l.jenisAbsen === "Pulang" && l.waktu)
-      .sort((a: any, b: any) => getBusinessMinutes(b.waktu) - getBusinessMinutes(a.waktu));
+      .sort((a: any, b: any) => menitHariKerja(b.waktu) - menitHariKerja(a.waktu));
 
     const finalAbsenPagi = sortedMasuk[0]?.waktu || absenPagi;
     const finalAbsenSiang = sortedPulang[0]?.waktu || absenSiang;
@@ -1749,22 +1489,7 @@ export default function useAppController() {
       rowsHarian: JSON.parse(JSON.stringify(rowsHarian)),
       rowsJajanan: JSON.parse(JSON.stringify(rowsJajanan)),
       rowsJasaAks: JSON.parse(JSON.stringify(rowsJasaAksLengkap)),
-      rowsSewa: JSON.parse(JSON.stringify(rowsSewa.map(row => {
-          if (row.isOngkir === "YA" && toNum((row as any)._ongkir) > 0) {
-              const ongkirAmount = toNum((row as any)._ongkir);
-              const pegNom = Math.round((ongkirAmount * ongkirConfig.pegawaiPersen) / 100);
-              const ownNom = ongkirAmount - pegNom;
-              return {
-                  ...row,
-                  _isNewOngkirSystem: true,
-                  _ongkirPegawaiPersen: ongkirConfig.pegawaiPersen,
-                  _ongkirMasukGaji: ongkirConfig.masukGaji,
-                  _ongkirPegawaiNominal: pegNom,
-                  _ongkirOwnerNominal: ownNom
-              };
-          }
-          return row;
-      }))),
+      rowsSewa: JSON.parse(JSON.stringify(rowsSewa.map((row) => siapkanOngkirSimpan(row, tanggal, ongkirConfig)))),
       rowsSetoran: JSON.parse(JSON.stringify(rowsSetoran)),
       rowsPengeluaran: JSON.parse(JSON.stringify(rowsPengeluaran)),
     };
@@ -1876,10 +1601,7 @@ export default function useAppController() {
     });
     const realNow = getWibDate();
     systemDateRef.current = realNow.getDate();
-    const yyyy = realNow.getFullYear();
-    const mm = String(realNow.getMonth() + 1).padStart(2, "0");
-    const dd = String(realNow.getDate()).padStart(2, "0");
-    setTanggal(`${yyyy}-${mm}-${dd}`);
+    setTanggal(toLocalYmd(realNow));
     const nextHari = new Intl.DateTimeFormat("id-ID", { weekday: "long" }).format(realNow);
     setHari(nextHari.charAt(0).toUpperCase() + nextHari.slice(1));
 
@@ -1909,24 +1631,7 @@ export default function useAppController() {
         rowsHarian: JSON.parse(JSON.stringify(rowsHarian)),
         rowsJajanan: JSON.parse(JSON.stringify(rowsJajanan)),
         rowsJasaAks: JSON.parse(JSON.stringify(rowsJasaAksLengkap)),
-        rowsSewa: JSON.parse(JSON.stringify(rowsSewa.map(row => {
-          if (row.isOngkir === "YA" && toNum((row as any)._ongkir) > 0) {
-              const ongkirAmount = toNum((row as any)._ongkir);
-              if ((row as any)._isNewOngkirSystem) {
-                  const oldPersen = (row as any)._ongkirPegawaiPersen ?? 100;
-                  const pegNom = Math.round((ongkirAmount * oldPersen) / 100);
-                  const ownNom = ongkirAmount - pegNom;
-                  return {
-                      ...row,
-                      _ongkirPegawaiNominal: pegNom,
-                      _ongkirOwnerNominal: ownNom
-                  };
-              } else {
-                  return row;
-              }
-          }
-          return row;
-        }))),
+        rowsSewa: JSON.parse(JSON.stringify(rowsSewa.map((row) => siapkanOngkirSimpan(row, tanggal, ongkirConfig)))),
         rowsSetoran: JSON.parse(JSON.stringify(rowsSetoran)),
         rowsPengeluaran: JSON.parse(JSON.stringify(rowsPengeluaran)),
     };
@@ -2077,75 +1782,44 @@ export default function useAppController() {
     return () => { unsubSettings(); };
   }, [user?.uid]);
 
+  // Riwayat pembukuan = 62 hari terakhir (SELALU: cek tanggal ganda saat simpan, monitoring sewa,
+  // laporan bulan berjalan, saran No. WA) + periode filter bila lebih lama (riwayat & analitik).
   useEffect(() => {
-    let q = collection(db, "history_pembukuan") as any;
-
-    if (filter === "Semua Bulan") {
-       q = query(q, orderBy("tanggal", "desc"));
-    } else if (filter === "Pilih Bulan") {
-       const yyyy = resolveMonthYear(filterMonth);
-       const mm = String(filterMonth).padStart(2, "0");
-       const startD = `${yyyy}-${mm}-01`;
-       const endD = `${yyyy}-${mm}-31`;
-       q = query(q, where("tanggal", ">=", startD), where("tanggal", "<=", endD), orderBy("tanggal", "desc"));
-    } else if (filter === "Rentang" && rangeStart && rangeEnd) {
-       q = query(q, where("tanggal", ">=", rangeStart), where("tanggal", "<=", rangeEnd), orderBy("tanggal", "desc"));
-    } else {
-       const cutoff = new Date();
-       cutoff.setDate(cutoff.getDate() - 60);
-       const yyyy = cutoff.getFullYear();
-       const mm = String(cutoff.getMonth() + 1).padStart(2, "0");
-       const dd = String(cutoff.getDate()).padStart(2, "0");
-       q = query(q, where("tanggal", ">=", `${yyyy}-${mm}-${dd}`), orderBy("tanggal", "desc"));
-    }
-
-    const unsubHistory = onSnapshot(q, (snap: any) => {
-      const items: HistoryItem[] = [];
-      snap.forEach((d: any) => {
-        const data = d.data();
-        items.push({ 
-            id: d.id, ...data,
-            totalHarian: Number(data.totalHarian) || 0,
-            totalJajanan: Number(data.totalJajanan) || 0,
-            totalJasaAks: Number(data.totalJasaAks) || 0,
-            totalSewa: Number(data.totalSewa) || 0,
-            totalCash: Number(data.totalCash) || 0,
-            totalTransfer: Number(data.totalTransfer) || 0,
-        } as HistoryItem);
-      });
-      items.sort((a,b) => b.tanggal.localeCompare(a.tanggal) || b.id.localeCompare(a.id));
-
-      if (items.length === 0 && filter === "Bulan Ini") {
-          try {
-            const raw = localStorage.getItem(LS_KEY);
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (parsed.history && Array.isArray(parsed.history)) {
-                    parsed.history.forEach((h: any) => {
-                        setDoc(doc(db, "history_pembukuan", h.id), h);
-                    });
-                }
-            }
-          } catch(e) {}
-      }
-
-      setHistory(items);
-      setHydrated(true);
-    }, (err: any) => console.error(err));
-
-    return () => { unsubHistory(); };
-  }, [filter, filterMonth, rangeStart, rangeEnd]);
+    if (!user) return;
+    const awal = new Date();
+    awal.setDate(awal.getDate() - 62);
+    return onSnapshot(
+      query(collection(db, "history_pembukuan"), where("tanggal", ">=", toLocalYmd(awal)), orderBy("tanggal", "desc")),
+      (snap) => { setHistTerbaru(bacaDokHistory(snap)); setHydrated(true); },
+      (err) => console.error("history_pembukuan:", err)
+    );
+  }, [user?.uid]);
+  useEffect(() => {
+    if (!user) return;
+    const p = periodRange(filter, filterMonth, rangeStart, rangeEnd);
+    const base = collection(db, "history_pembukuan");
+    let q;
+    if (filter === "Semua Bulan") q = query(base, orderBy("tanggal", "desc"));
+    else if (filter === "Pilih Bulan" || (filter === "Rentang" && p.dari)) q = query(base, where("tanggal", ">=", p.dari), where("tanggal", "<=", p.sampai), orderBy("tanggal", "desc"));
+    if (!q) { setHistFilter([]); return; }
+    return onSnapshot(q, (snap) => setHistFilter(bacaDokHistory(snap)), (err) => console.error("history_pembukuan (filter):", err));
+  }, [user?.uid, filter, filterMonth, rangeStart, rangeEnd]);
 
   // ===== BACKUP / RESTORE =====
   const restoreInputRef = useRef<HTMLInputElement>(null);
 
-  const doBackup = () => {
-    const payload = {
-      build: "v3.0 Alpha",
-      savedAt: new Date().toISOString(),
-      settings: { dark, kualitasGambar, priceLists: { hargaHarian, hargaJajanan, hargaJasaAks, hargaSewa } },
-      data: { history },
-    };
+  // Backup berisi SELURUH pembukuan (bukan hanya yang sedang tampil di filter)
+  const isiBackup = async () => ({
+    build: "v3.0 Alpha",
+    savedAt: new Date().toISOString(),
+    settings: { dark, kualitasGambar, priceLists: { hargaHarian, hargaJajanan, hargaJasaAks, hargaSewa } },
+    data: { history: await ambilSemuaHistory() },
+  });
+
+  const doBackup = async () => {
+    let payload;
+    try { payload = await isiBackup(); }
+    catch (e: any) { alert("Gagal membaca data untuk backup: " + (e?.message || e)); return; }
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -2161,7 +1835,6 @@ export default function useAppController() {
       setDark(json?.settings?.dark ?? dark);
       setKualitasGambar(json?.settings?.kualitasGambar ?? kualitasGambar);
       const restoredHistory = json?.data?.history ?? [];
-      setHistory(restoredHistory);
 
       restoredHistory.forEach((h: any) => {
         if (h && h.id) {
@@ -2184,14 +1857,8 @@ export default function useAppController() {
   };
 
   const handleBackupDrive = async () => {
-    const payload = {
-      build: "v3.0 Alpha",
-      savedAt: new Date().toISOString(),
-      settings: { dark, kualitasGambar, priceLists: { hargaHarian, hargaJajanan, hargaJasaAks, hargaSewa } },
-      data: { history },
-    };
     try {
-      await uploadBackupToDrive(JSON.stringify(payload, null, 2));
+      await uploadBackupToDrive(JSON.stringify(await isiBackup(), null, 2));
       alert("Berhasil dicadangkan ke Google Drive!");
     } catch (e: any) {
       alert(e.message || "Gagal backup ke Google Drive");
@@ -2206,7 +1873,6 @@ export default function useAppController() {
       setDark(json?.settings?.dark ?? dark);
       setKualitasGambar(json?.settings?.kualitasGambar ?? kualitasGambar);
       const restoredHistory = json?.data?.history ?? [];
-      setHistory(restoredHistory);
 
       restoredHistory.forEach((h: any) => {
         if (h && h.id) {
@@ -2245,13 +1911,6 @@ export default function useAppController() {
     a.href = url; a.download = `URBAN_Export_${tanggal}.csv`;
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   };
-  const handleToggleTheme = useCallback(() => {
-    const newMode = dark ? "light" : "dark";
-    setThemeMode(newMode);
-    if (user?.email) {
-      setDoc(doc(db, "users", user.email), { themeMode: newMode }, { merge: true }).catch(console.error);
-    }
-  }, [dark, setThemeMode, user]);
 
   const handleUpdateOngkirConfig = useCallback((cfg: any) => {
     const sanitizedCfg = {
@@ -2298,41 +1957,38 @@ export default function useAppController() {
     if (user?.email) setDoc(doc(db, "users", user.email), { profileColor: color }, { merge: true }).catch(console.error);
   }, [setUserProfileColor, user]);
 
+  /**
+   * Sewa yang belum dibayar sudah kembali: konfirmasi kembali, lalu baris aslinya dipindah
+   * ke form hari ini (jadi baris pelunasan / perpanjangan). Hanya SATU baris yang dihapus
+   * (2 unit identik tetap aman), dan catatan "belum bayar"-nya dibersihkan.
+   */
+  const pindahkanBarisBelumBayar = useCallback(async (prompt: any) => {
+    await handleVerifyReturn({ ...prompt, _skipPaymentCheck: true });
+    const raw = prompt._rawRow;
+    if (raw) {
+      if (raw._isActiveSession && typeof raw._sourceIdx === "number") {
+        setRowsSewa((prev) => {
+          const res = [...prev];
+          const idx = cariBarisSewa(res, raw);
+          if (idx !== -1) res.splice(idx, 1);
+          return res.length === 0 ? [newBlankSewa()] : res;
+        });
+      }
+      if (raw._historyId) {
+        await ubahBarisSewaHistory(raw._historyId, raw, () => null).catch((e) => console.error("Gagal memindah baris sewa:", e));
+      }
+    }
+    setCatatan((prev) => {
+      if (!prev) return prev;
+      const esc = (t: string) => String(t || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regex = new RegExp(`${esc(prompt.namaPenyewa)}, belum bayar \\(.*?\\), sewa ${esc(prompt.jenis)}\\n?`, "gi");
+      return prev.replace(regex, "").trim();
+    });
+  }, [handleVerifyReturn, setRowsSewa, newBlankSewa, setCatatan]);
+
   const handlePaymentVerifyNo = useCallback(async () => {
     if (!paymentVerifyPrompt) return;
-    await handleVerifyReturn({ ...paymentVerifyPrompt, _skipPaymentCheck: true });
-    if (paymentVerifyPrompt._rawRow) {
-        if (paymentVerifyPrompt._rawRow._isActiveSession && typeof paymentVerifyPrompt._rawRow._sourceIdx === "number") {
-            setRowsSewa(prev => {
-                const res = [...prev];
-                const idx = res.findIndex(r => r.jamMasukSewa === paymentVerifyPrompt.start && r.jenisPS === paymentVerifyPrompt.jenis && (r as any).ket === paymentVerifyPrompt.namaPenyewa);
-                if (idx !== -1) res.splice(idx, 1);
-                return res.length === 0 ? [newBlankSewa()] : res;
-            });
-        }
-        if (paymentVerifyPrompt._rawRow._historyId) {
-            try {
-               const ref = doc(db, "history_pembukuan", paymentVerifyPrompt._rawRow._historyId);
-               const snap = await getDoc(ref);
-               if (snap.exists()) {
-                   const data = snap.data();
-                   if (data.rowsSewa && Array.isArray(data.rowsSewa)) {
-                       const newRows = data.rowsSewa.filter((r: any) => 
-                           !(r.jamMasukSewa === paymentVerifyPrompt.start && r.jenisPS === paymentVerifyPrompt.jenis && (r.ket || "Tanpa Nama") === paymentVerifyPrompt.namaPenyewa)
-                       );
-                       await updateDoc(ref, { rowsSewa: newRows });
-                   }
-               }
-            } catch(e) { console.error(e); }
-        }
-    }
-
-    setCatatan(prev => {
-        if (!prev) return prev;
-        const escStr = paymentVerifyPrompt.jenis.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`${paymentVerifyPrompt.namaPenyewa}, belum bayar \\(.*?\\), sewa ${escStr}\\n?`, "gi");
-        return prev.replace(regex, "").trim();
-    });
+    await pindahkanBarisBelumBayar(paymentVerifyPrompt);
 
     const raw = paymentVerifyPrompt._rawRow || {};
     setPaymentVerifyPrompt(null);
@@ -2367,58 +2023,15 @@ export default function useAppController() {
        const el = document.getElementById("section-rincian");
        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
-  }, [paymentVerifyPrompt, handleVerifyReturn, setRowsSewa, newBlankSewa, setCatatan, setActiveTab]);
+  }, [paymentVerifyPrompt, pindahkanBarisBelumBayar, setRowsSewa, newBlankSewa, setActiveTab]);
 
   const handlePaymentVerifyYes = useCallback(async () => {
     if (!paymentVerifyPrompt) return;
-    await handleVerifyReturn({ ...paymentVerifyPrompt, _skipPaymentCheck: true });
-    if (paymentVerifyPrompt._rawRow) {
-        if (paymentVerifyPrompt._rawRow._isActiveSession && typeof paymentVerifyPrompt._rawRow._sourceIdx === "number") {
-            setRowsSewa(prev => {
-                const res = [...prev];
-                const idx = res.findIndex(r => r.jamMasukSewa === paymentVerifyPrompt.start && r.jenisPS === paymentVerifyPrompt.jenis && (r as any).ket === paymentVerifyPrompt.namaPenyewa);
-                if (idx !== -1) res.splice(idx, 1);
-                return res.length === 0 ? [newBlankSewa()] : res;
-            });
-        }
-        if (paymentVerifyPrompt._rawRow._historyId) {
-            try {
-               const ref = doc(db, "history_pembukuan", paymentVerifyPrompt._rawRow._historyId);
-               const snap = await getDoc(ref);
-               if (snap.exists()) {
-                   const data = snap.data();
-                   if (data.rowsSewa && Array.isArray(data.rowsSewa)) {
-                       const newRows = data.rowsSewa.filter((r: any) => 
-                           !(r.jamMasukSewa === paymentVerifyPrompt.start && r.jenisPS === paymentVerifyPrompt.jenis && (r.ket || "Tanpa Nama") === paymentVerifyPrompt.namaPenyewa)
-                       );
-                       await updateDoc(ref, { rowsSewa: newRows });
-                   }
-               }
-            } catch(e) { console.error(e); }
-        }
-    }
-
-    setCatatan(prev => {
-        if (!prev) return prev;
-        const escStr = paymentVerifyPrompt.jenis.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`${paymentVerifyPrompt.namaPenyewa}, belum bayar \\(.*?\\), sewa ${escStr}\\n?`, "gi");
-        return prev.replace(regex, "").trim();
-    });
+    await pindahkanBarisBelumBayar(paymentVerifyPrompt);
 
     const raw = paymentVerifyPrompt._rawRow || {};
-
-    let getHarga = 0;
-    const isCustom = raw.lamaSewa === "Isi Sendiri";
-    if (isCustom) {
-        getHarga = parseInt(String(raw._customBase).replace(/\D/g, "")) || 0;
-    } else if (hargaSewa) {
-        const targetStr = `${raw.jenisPS} - ${raw.lamaSewa}`;
-        const found = hargaSewa.find((h: any) => h.label === targetStr);
-        getHarga = found ? found.price : 0;
-    }
-    if (raw.isOngkir === "YA") {
-        getHarga += parseInt(String(raw._ongkir).replace(/\D/g, "")) || 0;
-    }
+    // Tagihan = harga sewa (tabel Edit Rincian / isi sendiri) + ongkir — sama dengan kartu monitoring
+    const getHarga = tagihanBelumBayar({ ...raw, isPaid: "TIDAK" }, sewaPriceTable);
 
     setPaymentVerifyPrompt(null);
 
@@ -2442,15 +2055,17 @@ export default function useAppController() {
             _ongkir: raw._ongkir !== undefined ? raw._ongkir : "",
             _bayarOngkir: raw._bayarOngkir || "",
             diantarOleh: raw.diantarOleh || "",
-            bayar: ""
-        };
+            bayar: "",
+            // Sewa dari hari lain: bagian ongkir pengantar sudah tercatat di pembukuan hari sewa
+            ...(raw._historyId ? { _ongkirSudahDicatat: true } : {}),
+        } as any;
         return newRows;
     });
     setTimeout(() => {
        const el = document.getElementById("section-rincian");
        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
-  }, [paymentVerifyPrompt, handleVerifyReturn, setRowsSewa, newBlankSewa, setCatatan, setActiveTab, hargaSewa]);
+  }, [paymentVerifyPrompt, pindahkanBarisBelumBayar, setRowsSewa, newBlankSewa, setActiveTab, sewaPriceTable]);
 
   const resetSetting = async () => {
     try { await persistPrices(priceDefaults); }
@@ -2623,12 +2238,8 @@ export default function useAppController() {
     rukoTutupDate,
     catatan,
     setCatatan,
-    showDownloadAlert,
-    setShowDownloadAlert,
     showDuplicateDateAlert,
     setShowDuplicateDateAlert,
-    showNewMonthAlert,
-    setShowNewMonthAlert,
     showUnsavedAlert,
     setShowUnsavedAlert,
     validationAlert,
@@ -2656,7 +2267,6 @@ export default function useAppController() {
     getPrices,
     rincianVisibility,
     handleUpdateRincianVisibility,
-    getHargaSewa,
     getTitle,
     handleSavePrices,
     handleResetSpecificDefault,
@@ -2686,7 +2296,6 @@ export default function useAppController() {
     hasData,
     mandatoryFilled,
     history,
-    setHistory,
     filter,
     setFilter,
     filterMonth,
@@ -2699,7 +2308,6 @@ export default function useAppController() {
     exportData,
     currentFormSignature,
     unverifiedRentals,
-    setUnverifiedRentals,
     paymentVerifyPrompt,
     setPaymentVerifyPrompt,
     handleVerifyReturn,
@@ -2724,13 +2332,11 @@ export default function useAppController() {
     catalogChanges,
     hasPOSUpdate,
     setUserProfileColor,
-    handleClearProductChange,
     handleResetRukoBuka,
     handleResetRukoTutup,
     handleResetAbsenPagi,
     handleResetAbsenSiang,
     handleResetForm,
-    handleToggleTheme,
     handleUpdateOngkirConfig,
     handleUpdateAbsenConfig,
     handleUpdateThemeMode,

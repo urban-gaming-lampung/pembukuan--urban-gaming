@@ -3,13 +3,15 @@ import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import TableEditor from "./TableEditor";
 import { RowSewa } from "../lib/types";
-import { toInt } from "../lib/format";
+import { rupiah, toInt } from "../lib/format";
 import { ChevronDown, Receipt } from "lucide-react";
 import { buildSewaTable } from "../lib/priceLists";
+import { dasarDariHarga, hargaDasarSewa, hargaKolomSewa } from "../lib/sewa";
+import { formatWa, rapikanWa, waValid } from "../lib/wa";
 import { isUrbanUserDocId } from "../lib/urbanUsers";
 import NotaSewaSheet from "./NotaSewaSheet";
 import { barisSiapNota, BarisSewaNota } from "../lib/notaSewa";
-import { formatWa, kunciNama, rapikanWa, wajibWaPenyewa, waValid } from "../lib/pengingatSewa";
+import { kunciNama, wajibWaPenyewa } from "../lib/pengingatSewa";
 
 type PriceItem = { label: string; price: number };
 
@@ -23,28 +25,6 @@ function pickKey(row: any, candidates: string[]) {
   return null;
 }
 
-
-function getHargaAuto(row: any, table: Record<string, Record<string, number>>) {
-  const jenisKey = pickKey(row, ["jenis sewa", "jenissewa", "jenis ps", "jenisps", "jenis", "ps"]);
-  const lamaKey = pickKey(row, ["lama sewa", "lamasewa", "lama", "durasi", "waktu"]);
-  const jenis = String(jenisKey ? row[jenisKey] : "");
-  const lama = String(lamaKey ? row[lamaKey] : "");
-  if (!jenis) return 0;
-  if (jenis === "Hanya Ongkir") {
-    return toInt(row._ongkir || 0);
-  }
-  if (!lama) return 0;
-
-  const fromSetting = table?.[lama]?.[jenis];
-  if (typeof fromSetting === "number" && fromSetting > 0) return fromSetting;
-
-  // Cek alias 24 JAM <-> 1 HARI
-  if (lama === "24 JAM" && table?.["1 HARI"]?.[jenis]) return table["1 HARI"][jenis];
-  if (lama === "1 HARI" && table?.["24 JAM"]?.[jenis]) return table["24 JAM"][jenis];
-
-  // Tidak ada harga cadangan di sini: semua harga berasal dari Edit Rincian (lib/priceLists).
-  return 0;
-}
 
 const SelectWrapper = ({ children }: { children: React.ReactNode }) => (
   <div className="relative w-full">
@@ -65,10 +45,8 @@ const RincianSewa: React.FC<{
   /** Nama penyewa (huruf kecil) -> No. WA terakhir, untuk saran isi cepat */
   waTerakhir?: Record<string, string>;
 }> = ({ rows, setRows, blank, hargaItems, userEmail, isMobileTable, tanggal = "", waTerakhir = {} }) => {
-  const { table, jenisOptions, lamaOptions } = React.useMemo(
-    () => buildSewaTable(hargaItems),
-    [hargaItems]
-  );
+  const sewaTable = React.useMemo(() => buildSewaTable(hargaItems), [hargaItems]);
+  const { table, jenisOptions, lamaOptions } = sewaTable;
 
   // Fetch registered active users from Firebase
   const [allUsers, setAllUsers] = useState<{ id: string }[]>([]);
@@ -95,7 +73,8 @@ const RincianSewa: React.FC<{
   // ===== Nota sewa per baris (ikon di kolom No.) =====
   const [notaIdx, setNotaIdx] = useState<number | null>(null);
   const notaRow = notaIdx !== null ? ((rows[notaIdx] as BarisSewaNota) || null) : null;
-  const hargaDasarOf = (r: any) => getHargaAuto(r, table);
+  // Harga dasar dari Edit Rincian (SSOT lib/priceLists) — semua harga baris dihitung lewat lib/sewa
+  const hargaDasarOf = (r: any) => hargaDasarSewa(r, sewaTable);
   const patchNota = (patch: Partial<BarisSewaNota>) => {
     if (notaIdx === null) return;
     const target = rows[notaIdx] as any;
@@ -185,20 +164,7 @@ const RincianSewa: React.FC<{
                       patch.lamaSewa = "";
                       patch.jamMasukSewa = "";
                     }
-                    const nextRow = { ...(row as any), ...patch };
-                    const base = getHargaAuto(nextRow, table);
-                    const isCustom = nextRow.lamaSewa === "Isi Sendiri";
-                    const ongkir = nextRow.isOngkir === "YA" ? toInt(nextRow._ongkir) : 0;
-
-                    if (nextRow.isPaid === "TIDAK") {
-                      patch.harga = 0;
-                    } else {
-                      if (isCustom) {
-                        patch.harga = toInt(nextRow._customBase) + ongkir;
-                      } else {
-                        patch.harga = base > 0 ? base + ongkir : ongkir;
-                      }
-                    }
+                    patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable);
                   }
 
                   patch._addedBy = (row as any)._addedBy || userEmail;
@@ -269,21 +235,7 @@ const RincianSewa: React.FC<{
                 onChange={(e) => {
                   const nextLama = e.target.value;
                   const patch: any = { [lamaKey]: nextLama };
-                  const nextRow = { ...(row as any), ...patch };
-                  const base = getHargaAuto(nextRow, table);
-                  const isCustom = nextRow.lamaSewa === "Isi Sendiri";
-                  const ongkir = nextRow.isOngkir === "YA" ? toInt(nextRow._ongkir) : 0;
-
-                  if (nextRow.isPaid === "TIDAK") {
-                    patch.harga = 0;
-                  } else {
-                    if (isCustom) {
-                      patch.harga = toInt(nextRow._customBase) + ongkir;
-                    } else {
-                      patch.harga = base > 0 ? base + ongkir : ongkir;
-                    }
-                  }
-
+                  patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable);
                   patch._addedBy = (row as any)._addedBy || userEmail;
                   updateRow(rowIndex, patch);
                 }}
@@ -438,19 +390,8 @@ const RincianSewa: React.FC<{
                 onChange={(e) => {
                   const nextVal = e.target.value;
                   const patch: any = { isPaid: nextVal };
-                  const nextRow = { ...(row as any), ...patch };
-
-                  const base = getHargaAuto(nextRow, table);
-                  const isCustom = nextRow.lamaSewa === "Isi Sendiri";
-                  let totalBase = isCustom ? toInt(nextRow._customBase) : base;
-
-                  if (nextVal === "TIDAK") {
-                    patch.harga = 0;
-                    patch.bayar = "";
-                  } else {
-                    const ongkir = nextRow.isOngkir === "YA" ? toInt(nextRow._ongkir) : 0;
-                    patch.harga = (totalBase > 0 ? totalBase : 0) + ongkir;
-                  }
+                  if (nextVal === "TIDAK") patch.bayar = "";
+                  patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable);
 
                   patch._addedBy = (row as any)._addedBy || userEmail;
                   updateRow(rowIndex, patch);
@@ -486,18 +427,7 @@ const RincianSewa: React.FC<{
                   onClick={() => {
                     if (isHanyaOngkir) return;
                     const patch: any = { isOngkir: "YA" };
-                    const autoPrice = getHargaAuto(row, table);
-                    const isCustom = row.lamaSewa === "Isi Sendiri";
-                    const currentHarga = toInt((row as any).harga);
-                    const currentOngkir = (row as any).isOngkir === "YA" ? toInt((row as any)._ongkir) : 0;
-
-                    const base = isCustom ? toInt((row as any)._customBase) : (autoPrice > 0 ? autoPrice : Math.max(0, currentHarga - currentOngkir));
-
-                    if (row.isPaid === "TIDAK") {
-                      patch.harga = 0;
-                    } else {
-                      patch.harga = base + toInt((row as any)._ongkir);
-                    }
+                    patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable, dasarDariHarga(row));
                     patch._addedBy = (row as any)._addedBy || userEmail;
                     updateRow(rowIndex, patch);
                   }}
@@ -516,18 +446,7 @@ const RincianSewa: React.FC<{
                   onClick={() => {
                     if (isHanyaOngkir) return;
                     const patch: any = { isOngkir: "TIDAK", _ongkir: "", _bayarOngkir: "" };
-                    const autoPrice = getHargaAuto(row, table);
-                    const isCustom = row.lamaSewa === "Isi Sendiri";
-                    const currentHarga = toInt((row as any).harga);
-                    const currentOngkir = (row as any).isOngkir === "YA" ? toInt((row as any)._ongkir) : 0;
-
-                    const base = isCustom ? toInt((row as any)._customBase) : (autoPrice > 0 ? autoPrice : Math.max(0, currentHarga - currentOngkir));
-
-                    if (row.isPaid === "TIDAK") {
-                      patch.harga = 0;
-                    } else {
-                      patch.harga = base;
-                    }
+                    patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable, dasarDariHarga(row));
                     patch._addedBy = (row as any)._addedBy || userEmail;
                     updateRow(rowIndex, patch);
                   }}
@@ -556,20 +475,7 @@ const RincianSewa: React.FC<{
                       onChange={(e) => {
                         const val = toInt(e.target.value);
                         const patch: any = { _ongkir: val };
-                        if (isHanyaOngkir) {
-                          patch.harga = val;
-                        } else {
-                          const autoPrice = getHargaAuto(row, table);
-                          const isCustom = row.lamaSewa === "Isi Sendiri";
-                          const currentHarga = toInt((row as any).harga);
-                          const currentOngkir = (row as any).isOngkir === "YA" ? toInt((row as any)._ongkir) : 0;
-                          const base = isCustom ? toInt((row as any)._customBase) : (autoPrice > 0 ? autoPrice : Math.max(0, currentHarga - currentOngkir));
-                          if (row.isPaid === "TIDAK") {
-                            patch.harga = 0;
-                          } else {
-                            patch.harga = base + val;
-                          }
-                        }
+                        patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable, dasarDariHarga(row));
                         patch._addedBy = (row as any)._addedBy || userEmail;
                         updateRow(rowIndex, patch);
                       }}
@@ -657,20 +563,16 @@ const RincianSewa: React.FC<{
           const isCustom = row.lamaSewa === "Isi Sendiri";
 
           if (isHanyaOngkir) {
-            const fmtStr = (n: number | string) => new Intl.NumberFormat("id-ID").format(Number(n) || 0);
             return (
               <div className="relative px-2 py-1.5 min-w-[120px] bg-zinc-100/50 dark:bg-black/20 rounded-lg border border-dashed border-zinc-200/80 dark:border-zinc-800">
                 <span className="font-bold text-zinc-400 dark:text-zinc-500">
-                  {currentTotal > 0 ? `Rp ${fmtStr(currentTotal)}` : "-"}
+                  {currentTotal > 0 ? rupiah(currentTotal) : "-"}
                 </span>
               </div>
             );
           }
 
           if (isCustom) {
-            const fmt = (n: number | string) =>
-              new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(Number(n) || 0).replace("Rp", "Rp ");
-
             return (
               <div className="flex flex-col gap-1 min-w-[140px]">
                 <div className="relative">
@@ -682,15 +584,8 @@ const RincianSewa: React.FC<{
                     value={(row as any)._customBase || ""}
                     placeholder="Hrg Dasar"
                     onChange={(e) => {
-                      const val = toInt(e.target.value);
-                      const patch: any = { _customBase: val };
-                      // Hitung total dengan ongkir
-                      const ongkir = row.isOngkir === "YA" ? toInt((row as any)._ongkir) : 0;
-                      if (row.isPaid === "TIDAK") {
-                        patch.harga = 0;
-                      } else {
-                        patch.harga = val + ongkir;
-                      }
+                      const patch: any = { _customBase: toInt(e.target.value) };
+                      patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable);
                       patch._addedBy = (row as any)._addedBy || userEmail;
                       updateRow(rowIndex, patch);
                     }}
@@ -698,18 +593,17 @@ const RincianSewa: React.FC<{
                   />
                 </div>
                 {row.isOngkir === "YA" && (
-                  <div className="text-[10px] text-zinc-500 font-bold ml-1 tracking-tight">Total: {fmt(currentTotal)}</div>
+                  <div className="text-[10px] text-zinc-500 font-bold ml-1 tracking-tight">Total: {rupiah(currentTotal)}</div>
                 )}
               </div>
             );
           }
 
           // Kunci Readonly Permanen
-          const fmtStr = (n: number | string) => new Intl.NumberFormat("id-ID").format(Number(n) || 0);
           return (
             <div className="relative px-2 py-1.5 min-w-[120px]">
               <span className="font-bold text-zinc-800 dark:text-zinc-200">
-                {currentTotal > 0 ? `Rp ${fmtStr(currentTotal)}` : "-"}
+                {currentTotal > 0 ? rupiah(currentTotal) : "-"}
               </span>
             </div>
           );

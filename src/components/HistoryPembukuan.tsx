@@ -4,10 +4,11 @@ import { db } from "../lib/firebase";
 import Section from "./common/Section";
 import { HistoryItem } from "../lib/types";
 import { rupiah } from "../lib/format";
+import { totalPemasukanHarian } from "../lib/keuangan";
+import { mingguKe } from "../lib/laporan";
 
 type Props = {
   items: HistoryItem[];
-  onClear?: () => void;
   onEdit?: (id: string) => void;
   onDelete?: (id: string) => void;
   isOwner?: boolean;
@@ -43,22 +44,11 @@ function EditIcon({ size = 16, className }: { size?: number, className?: string 
   );
 }
 
-function WarningIcon({ size = 16, className }: { size?: number, className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-      <line x1="12" y1="9" x2="12" y2="13" />
-      <line x1="12" y1="17" x2="12.01" y2="17" />
-    </svg>
-  );
-}
-
 // --- MAIN COMPONENT ---
 
-export default function HistoryPembukuan({ items, onClear, onEdit, onDelete, isOwner = false }: Props) {
+export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = false }: Props) {
   // Global Security State
   const [isSecurityOpen, setIsSecurityOpen] = useState(false);
-  const [securityAction, setSecurityAction] = useState<'clear' | 'delete'>('clear');
   const [actionId, setActionId] = useState<string | null>(null);
   const [passwordInput, setPasswordInput] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -106,14 +96,9 @@ export default function HistoryPembukuan({ items, onClear, onEdit, onDelete, isO
     setIsLoading(true);
 
     if (passwordInput.trim() === ADMIN_PASSWORD) {
-      if (securityAction === 'clear' && onClear) {
-        onClear();
-      } else if (securityAction === 'delete' && onDelete && actionId) {
-        onDelete(actionId);
-      }
+      if (onDelete && actionId) onDelete(actionId);
       setIsSecurityOpen(false);
       setPasswordInput("");
-      setSecurityAction('clear');
       setActionId(null);
     } else {
       setErrorMsg("Password salah. Akses ditolak.");
@@ -137,37 +122,33 @@ export default function HistoryPembukuan({ items, onClear, onEdit, onDelete, isO
     );
   }, [items]);
 
-  const subtotalGrand = subtotal.harian + subtotal.jajanan + subtotal.jasa + subtotal.sewa;
+  const subtotalGrand = totalPemasukanHarian({ totalHarian: subtotal.harian, totalJajanan: subtotal.jajanan, totalJasaAks: subtotal.jasa, totalSewa: subtotal.sewa });
 
   const itemsWithNotes = useMemo(() => {
     return sortedItems.filter(h => h.catatan && h.catatan.trim().length > 0);
   }, [sortedItems]);
 
   const weeklyGroups = useMemo(() => {
+    // Pembagian minggu sama dengan laporan teks (Minggu 5 = tanggal 29 ke atas)
     const groups = {
       1: { name: "Minggu 1", total: 0, items: [] as HistoryItem[] },
       2: { name: "Minggu 2", total: 0, items: [] as HistoryItem[] },
       3: { name: "Minggu 3", total: 0, items: [] as HistoryItem[] },
-      4: { name: "Minggu 4", total: 0, items: [] as HistoryItem[] }
+      4: { name: "Minggu 4", total: 0, items: [] as HistoryItem[] },
+      5: { name: "Minggu 5", total: 0, items: [] as HistoryItem[] }
     };
 
     sortedItems.forEach(h => {
-      // Expect format YYYY-MM-DD or similar date string
-      const dateObj = new Date(h.tanggal);
-      // if invalid date fallback to 1
-      const date = isNaN(dateObj.getTime()) ? parseInt(h.tanggal.split("-")[2] || "1") : dateObj.getDate();
-      const grand = (h.totalHarian || 0) + (h.totalJajanan || 0) + (h.totalJasaAks || 0) + (h.totalSewa || 0);
-
-      let week = 4;
-      if (date <= 7) week = 1;
-      else if (date <= 14) week = 2;
-      else if (date <= 21) week = 3;
+      const week = mingguKe(Number(String(h.tanggal).slice(8, 10)) || 1);
+      const grand = totalPemasukanHarian(h);
 
       groups[week as keyof typeof groups].items.push(h);
       groups[week as keyof typeof groups].total += grand;
     });
 
-    return Object.entries(groups).map(([w, data]) => ({ week: Number(w), ...data }));
+    return Object.entries(groups)
+      .map(([w, data]) => ({ week: Number(w), ...data }))
+      .filter((g) => g.week < 5 || g.items.length > 0);
   }, [sortedItems]);
 
   // --- APPLE DESIGN TOKENS ---
@@ -197,7 +178,6 @@ export default function HistoryPembukuan({ items, onClear, onEdit, onDelete, isO
       setActiveAction(null);
     } else if (activeAction.type === 'delete') {
       // Redirect to Security Modal
-      setSecurityAction('delete');
       setActionId(activeAction.id);
       setErrorMsg("");
       setPasswordInput("");
@@ -241,7 +221,7 @@ export default function HistoryPembukuan({ items, onClear, onEdit, onDelete, isO
                   </tr>
                 ) : (
                   sortedItems.map((h) => {
-                    const grand = (h.totalHarian || 0) + (h.totalJajanan || 0) + (h.totalJasaAks || 0) + (h.totalSewa || 0);
+                    const grand = totalPemasukanHarian(h);
                     return (
                       <tr key={h.id} className={trHover}>
                         <td className={tdStyle}>{h.tanggal}</td>
@@ -344,7 +324,7 @@ export default function HistoryPembukuan({ items, onClear, onEdit, onDelete, isO
                         <div className="text-center py-4 text-[11px] font-semibold text-zinc-400 bg-white/30 dark:bg-black/20 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">Tidak ada pemasukan di minggu ini</div>
                       ) : (
                         g.items.map(h => {
-                          const grand = (h.totalHarian || 0) + (h.totalJajanan || 0) + (h.totalJasaAks || 0) + (h.totalSewa || 0);
+                          const grand = totalPemasukanHarian(h);
                           const isItemExpanded = expandedMobile.includes(h.id);
                           return (
                             <div key={h.id} className="bg-white/80 dark:bg-black/40 rounded-[16px] p-4 border border-zinc-100 dark:border-white/5 shadow-sm">
@@ -465,28 +445,6 @@ export default function HistoryPembukuan({ items, onClear, onEdit, onDelete, isO
           </div>
         )}
 
-        {/* BERSIHKAN SEMUA DATA - di bawah Catatan */}
-        {isOwner && (
-          <div className="mt-6">
-            <button
-              onClick={() => {
-                setErrorMsg("");
-                setPasswordInput("");
-                setSecurityAction('clear');
-                setActionId(null);
-                setIsSecurityOpen(true);
-              }}
-              disabled={!onClear}
-              className={`w-full flex items-center justify-center gap-2.5 px-5 py-4 rounded-2xl text-center transition-all active:scale-[0.98] ${!onClear
-                  ? "bg-zinc-100 dark:bg-zinc-800/50 opacity-50 cursor-not-allowed text-zinc-400"
-                  : "bg-red-500/8 hover:bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/15 dark:border-red-500/20"
-                }`}
-            >
-              <LockIcon size={16} />
-              <span className="text-sm font-semibold">Bersihkan Semua Data</span>
-            </button>
-          </div>
-        )}
       </Section>
 
       {/* MODAL: ACTION CONFIRMATION (EDIT / DELETE) */}
@@ -529,12 +487,7 @@ export default function HistoryPembukuan({ items, onClear, onEdit, onDelete, isO
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-zinc-500">Total Pendapatan</span>
                   <span className="text-base font-bold text-zinc-900 dark:text-white">
-                    {rupiah(
-                      (activeAction.data.totalHarian || 0) +
-                      (activeAction.data.totalJajanan || 0) +
-                      (activeAction.data.totalJasaAks || 0) +
-                      (activeAction.data.totalSewa || 0)
-                    )}
+                    {rupiah(totalPemasukanHarian(activeAction.data))}
                   </span>
                 </div>
               </div>
@@ -578,10 +531,7 @@ export default function HistoryPembukuan({ items, onClear, onEdit, onDelete, isO
                 Restricted Access
               </h3>
               <p className="text-[13px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-6">
-                {securityAction === 'clear'
-                  ? "Masukkan password administrator untuk menghapus seluruh data pembukuan secara permanen."
-                  : "Masukkan password administrator untuk menghapus data riwayat ini."
-                }
+                Masukkan password administrator untuk menghapus data riwayat ini.
               </p>
 
               <form onSubmit={handleVerify}>
@@ -612,7 +562,7 @@ export default function HistoryPembukuan({ items, onClear, onEdit, onDelete, isO
                     disabled={!passwordInput || isLoading}
                     className="w-full rounded-xl bg-red-600 py-3 text-sm font-semibold text-white hover:bg-red-700 active:scale-[0.98] transition-all disabled:opacity-50 shadow-lg shadow-red-500/20"
                   >
-                    {isLoading ? "..." : (securityAction === 'clear' ? "Hapus Semua" : "Hapus Data")}
+                    {isLoading ? "..." : "Hapus Data"}
                   </button>
                 </div>
               </form>
@@ -625,21 +575,6 @@ export default function HistoryPembukuan({ items, onClear, onEdit, onDelete, isO
 }
 
 // --- SUB-COMPONENTS ---
-
-function SummaryCard({ label, value, color }: { label: string; value: string; color: "green" | "blue" | "zinc" }) {
-  const colors = {
-    green: "text-green-600 dark:text-green-400 bg-green-500/10 border-green-500/20",
-    blue: "text-blue-600 dark:text-blue-400 bg-blue-500/10 border-blue-500/20",
-    zinc: "text-zinc-900 dark:text-zinc-100 bg-zinc-500/10 border-zinc-500/20",
-  };
-
-  return (
-    <div className={`flex flex-col justify-center px-5 py-4 rounded-[20px] border backdrop-blur-md ${colors[color]}`}>
-      <span className="text-xs font-semibold uppercase tracking-wide opacity-70 mb-1">{label}</span>
-      <span className="text-lg md:text-xl font-bold tracking-tight">{value}</span>
-    </div>
-  );
-}
 
 function ActionButton({ onClick, disabled, icon, label, variant = "default" }: any) {
   const base = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all";

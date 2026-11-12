@@ -15,6 +15,9 @@ import { auth, db } from "./firebase";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 
 export type StokStatus = "habis" | "menipis" | "aman";
+
+/** Kunci satu barang stok: "KATEGORI||ITEM" (dipakai semua peta stok). */
+export const kunciStok = (r: { kategori: string; item: string }) => `${r.kategori}||${r.item}`;
 export type StokAlasan = "masuk" | "terjual" | "rusak" | "koreksi";
 
 export const ALASAN_LABEL: Record<StokAlasan, string> = {
@@ -182,7 +185,7 @@ export function prepareStokWrites(
   // Gabungkan perubahan untuk barang yang sama (mis. 2 baris POS ke barang stok yang sama)
   const merged = new Map<string, StokChange>();
   for (const c of changes) {
-    const k = `${c.kategori}||${c.item}`;
+    const k = kunciStok(c);
     const prev = merged.get(k);
     if (prev && typeof prev.setTo !== "number" && typeof c.setTo !== "number") {
       merged.set(k, { ...prev, delta: (prev.delta || 0) + (c.delta || 0), catatan: c.catatan ?? prev.catatan, touch: prev.touch || c.touch });
@@ -351,7 +354,7 @@ export function soldMap(logs: StokLog[], days = 30): Map<string, number> {
   const m = new Map<string, number>();
   logs.forEach((l) => {
     if (l.alasan !== "terjual" || l.ts < since || l.delta >= 0) return;
-    const k = `${l.kategori}||${l.item}`;
+    const k = kunciStok(l);
     m.set(k, (m.get(k) || 0) - l.delta);
   });
   return m;

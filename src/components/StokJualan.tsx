@@ -10,8 +10,7 @@ import { KartuStok, StatusChip, StepperStok, TileStok, BADGE_STATUS, LABEL_STATU
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import {
   ALASAN_LABEL, ALASAN_SHORT, StokAlasan, StokLog, StokRow, StokStatus, buildStokRows, commitStokChanges, defaultMinStok, fmtWaktu, isStale,
-  restockText, saveMinStok, shortName, soldMap, useMinStok, useStokLog, STALE_DAYS,
-} from "../lib/stokJualan";
+  restockText, saveMinStok, shortName, soldMap, useMinStok, useStokLog, STALE_DAYS, kunciStok } from "../lib/stokJualan";
 import { buildStokReport } from "../lib/stokReport";
 
 /**
@@ -21,7 +20,6 @@ import { buildStokReport } from "../lib/stokReport";
  */
 type Filter = "semua" | StokStatus | "cek";
 type Draft = { delta: number; setTo?: number };
-const keyOf = (r: { kategori: string; item: string }) => `${r.kategori}||${r.item}`;
 const STATUS_RANK: Record<StokStatus, number> = { habis: 0, menipis: 1, aman: 2 };
 const ALASAN_COLOR: Record<string, string> = {
   masuk: "text-emerald-600 dark:text-emerald-400",
@@ -101,13 +99,13 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
 
   // ---------- Draft ----------
   const nextQty = (r: StokRow) => {
-    const d = drafts[keyOf(r)];
+    const d = drafts[kunciStok(r)];
     if (!d) return r.jumlah;
     return Math.max(0, (typeof d.setTo === "number" ? d.setTo : r.jumlah) + d.delta);
   };
   const bump = (r: StokRow, step: number) =>
     setDrafts((prev) => {
-      const k = keyOf(r);
+      const k = kunciStok(r);
       const cur = prev[k] || { delta: 0 };
       const base = typeof cur.setTo === "number" ? cur.setTo : r.jumlah;
       const delta = Math.max(-base, cur.delta + step);
@@ -118,13 +116,13 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
   const setJumlah = (r: StokRow, n: number) =>
     setDrafts((prev) => {
       const next = { ...prev };
-      if (n === r.jumlah) delete next[keyOf(r)];
-      else next[keyOf(r)] = { delta: 0, setTo: n };
+      if (n === r.jumlah) delete next[kunciStok(r)];
+      else next[kunciStok(r)] = { delta: 0, setTo: n };
       return next;
     });
-  const changed = rowsAll.filter((r) => drafts[keyOf(r)] && nextQty(r) !== r.jumlah);
+  const changed = rowsAll.filter((r) => drafts[kunciStok(r)] && nextQty(r) !== r.jumlah);
   const autoAlasan: StokAlasan = (() => {
-    if (changed.some((r) => typeof drafts[keyOf(r)]?.setTo === "number")) return "koreksi";
+    if (changed.some((r) => typeof drafts[kunciStok(r)]?.setTo === "number")) return "koreksi";
     const ups = changed.filter((r) => nextQty(r) > r.jumlah).length;
     if (ups === changed.length) return "masuk";
     if (ups === 0) return "terjual";
@@ -135,7 +133,7 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
     try {
       const n = await commitStokChanges(
         changed.map((r) => {
-          const d = drafts[keyOf(r)];
+          const d = drafts[kunciStok(r)];
           return typeof d.setTo === "number"
             ? { kategori: r.kategori, item: r.item, setTo: Math.max(0, d.setTo + d.delta) }
             : { kategori: r.kategori, item: r.item, delta: d.delta };
@@ -176,7 +174,7 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
 
   const q = cari.trim().toLowerCase();
   const visible = rows
-    .filter((r) => (filter === "semua" ? true : filter === "cek" ? isStale(r.lastTs) : r.status === filter) || !!drafts[keyOf(r)])
+    .filter((r) => (filter === "semua" ? true : filter === "cek" ? isStale(r.lastTs) : r.status === filter) || !!drafts[kunciStok(r)])
     .filter((r) => !q || r.item.toLowerCase().includes(q) || r.kategori.toLowerCase().includes(q));
   const grouped = kategoriJualan
     .map((c) => ({
@@ -296,12 +294,12 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
             grouped.map((g) => (
               <KartuStok key={g.kategori} judul={g.kategori} kanan={`${g.items.reduce((s, r) => s + r.jumlah, 0)} pcs`}>
                 {g.items.map((r) => {
-                  const sold = sold30.get(keyOf(r)) || 0;
+                  const sold = sold30.get(kunciStok(r)) || 0;
                   const note = catatanOf(r);
                   const nq = nextQty(r);
                   const diff = nq - r.jumlah;
                   return (
-                    <div key={keyOf(r)} className={`pl-4 pr-3 py-2.5 flex items-center gap-2 border-t border-zinc-100 dark:border-white/5 ${diff ? "bg-blue-50/60 dark:bg-blue-500/5" : ""}`}>
+                    <div key={kunciStok(r)} className={`pl-4 pr-3 py-2.5 flex items-center gap-2 border-t border-zinc-100 dark:border-white/5 ${diff ? "bg-blue-50/60 dark:bg-blue-500/5" : ""}`}>
                       <button type="button" onClick={() => setSelected(r)} className="flex-1 min-w-0 text-left py-0.5 active:opacity-70">
                         <div className="flex items-center gap-2 min-w-0">
                           <span className={`w-2 h-2 rounded-full shrink-0 ${DOT_STATUS[r.status]}`} aria-hidden />
@@ -382,7 +380,7 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
                   const nq = nextQty(r);
                   const d = nq - r.jumlah;
                   return (
-                    <div key={keyOf(r)} className="px-3 py-2.5 flex items-center justify-between gap-3">
+                    <div key={kunciStok(r)} className="px-3 py-2.5 flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <div className="text-[14px] font-semibold text-zinc-900 dark:text-white truncate">{r.item}</div>
                         <div className="text-[11px] text-zinc-400 truncate">{r.kategori}</div>
@@ -436,7 +434,7 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
 
       {selected && (
         <ItemSheet
-          row={rowsAll.find((r) => keyOf(r) === keyOf(selected)) || selected}
+          row={rowsAll.find((r) => kunciStok(r) === kunciStok(selected)) || selected}
           catatan={catatanOf(selected)}
           logs={logs.filter((l) => l.kategori === selected.kategori && l.item === selected.item)}
           isOwner={isOwner}

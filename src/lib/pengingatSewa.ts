@@ -8,6 +8,9 @@
  * - No. WA penyewa wajib diisi di Rincian SEWA PS (mulai WA_WAJIB_SEJAK).
  */
 import type { HistoryItem } from "./types";
+import { pad } from "./format";
+import { waValid } from "./wa";
+import { isHanyaOngkir, isItemTambahan, isPelunasanSewa, jenisUnit, waBaris } from "./sewa";
 
 export const TOLERANSI_KEMBALI_MENIT = 60;
 export const TOLERANSI_TELAT_MENIT = 10;
@@ -16,69 +19,38 @@ export const WA_WAJIB_SEJAK = "2026-11-13";
 /** Tombol "Ingatkan" mulai tampil di kartu status unit sekian menit sebelum sewa habis. */
 export const INGATKAN_SEBELUM_MENIT = 30;
 
-const pad = (n: number) => String(n).padStart(2, "0");
-
-// ---------- Nomor WhatsApp ----------
-const digit = (s: unknown) => String(s ?? "").replace(/\D/g, "");
-/** Simpan dalam bentuk lokal 08xx (dari +62 / 62 / 8xx). */
-export function rapikanWa(s: unknown): string {
-  const d = digit(s);
-  if (!d) return "";
-  if (d.startsWith("62")) return "0" + d.slice(2);
-  if (d.startsWith("8")) return "0" + d;
-  return d;
-}
-/** Nomor HP Indonesia: 08 + 8–11 angka (total 10–13 angka). */
-export const waValid = (s: unknown) => /^08\d{8,11}$/.test(rapikanWa(s));
-/** Untuk link wa.me: 62xxx */
-export const waInternasional = (s: unknown) => {
-  const d = rapikanWa(s);
-  return d.startsWith("0") ? "62" + d.slice(1) : d;
-};
-/** Tampilan: 0812-3456-7890 */
-export const formatWa = (s: unknown) => {
-  const d = rapikanWa(s);
-  if (d.length < 8) return d;
-  return `${d.slice(0, 4)}-${d.slice(4, 8)}-${d.slice(8)}`.replace(/-$/, "");
-};
-/** No. WA penyewa sebuah baris sewa (kolom baru; data lama dari nota sewa). */
-export const waBaris = (r: any): string => rapikanWa(r?.waPenyewa || r?._waPenyewa || "");
-
+// ---------- No. WA penyewa ----------
 /** Baris yang WAJIB punya No. WA: sewa unit berdurasi (bukan ongkir saja, pelunasan, atau item tambahan). */
 export function wajibWaPenyewa(r: any, tanggal: string): boolean {
   if (!tanggal || tanggal < WA_WAJIB_SEJAK) return false;
-  if (String(r?.jenisPS || "").trim() === "Hanya Ongkir") return false;
-  const lama = String(r?.lamaSewa || "").trim();
-  if (lama === "PELUNASAN" || lama === "-") return false;
-  return true;
+  return !isHanyaOngkir(r) && !isPelunasanSewa(r) && !isItemTambahan(r);
 }
 
-/** Nama penyewa (huruf kecil) -> No. WA terakhir dari riwayat pembukuan (untuk saran isi cepat). */
+/** Kunci nama penyewa untuk mencocokkan riwayat ("  Budi  Santoso" = "budi santoso"). */
+export const kunciNama = (n: unknown) => String(n || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+/** Nama penyewa -> No. WA terakhir dari riwayat pembukuan (untuk saran isi cepat). */
 export function petaWaPenyewa(history: HistoryItem[] | undefined, rowsSekarang: any[] = []): Record<string, string> {
   const out: Record<string, string> = {};
-  const kunci = (n: unknown) => String(n || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const catat = (r: any) => {
+    const wa = waBaris(r);
+    if (wa && waValid(wa) && kunciNama(r.ket)) out[kunciNama(r.ket)] = wa;
+  };
   [...(history || [])]
     .sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal)))
-    .forEach((h) => (h.rowsSewa || []).forEach((r: any) => {
-      const wa = waBaris(r);
-      if (wa && waValid(wa) && kunci(r.ket)) out[kunci(r.ket)] = wa;
-    }));
-  rowsSekarang.forEach((r) => {
-    const wa = waBaris(r);
-    if (wa && waValid(wa) && kunci(r.ket)) out[kunci(r.ket)] = wa;
-  });
+    .forEach((h) => (h.rowsSewa || []).forEach(catat));
+  rowsSekarang.forEach(catat);
   return out;
 }
-export const kunciNama = (n: unknown) => String(n || "").trim().toLowerCase().replace(/\s+/g, " ");
 
 // ---------- Tarif keterlambatan ----------
 /** Tarif sewa tambahan per jam (null = tidak diketahui, mis. unit di luar PS3/PS4/PS5/TV). */
 export function tarifTelatPerJam(jenis: unknown): number | null {
-  const s = String(jenis || "").toLowerCase();
-  if (/ps\s?5/.test(s)) return 15000;
-  if (/ps\s?4/.test(s) || /\b(pro|fat|slim)\b/.test(s)) return 7000;
-  if (/ps\s?3/.test(s)) return 5000;
-  if (/\btv\b/.test(s)) return 5000; // Hanya TV
+  const u = jenisUnit(jenis);
+  if (u.konsol === "PS5") return 15000;
+  if (u.konsol === "PS4") return 7000;
+  if (u.konsol === "PS3") return 5000;
+  if (u.hanyaTv) return 5000;
   return null;
 }
 
@@ -111,7 +83,7 @@ export function waktuRelatif(ts: number, now: number): string {
 }
 export const batasKembali = (endMs: number) => endMs + TOLERANSI_KEMBALI_MENIT * 60000;
 
-const rpRibu = (n: number) => "Rp" + new Intl.NumberFormat("id-ID").format(n);
+const rpRapat = (n: number) => "Rp" + new Intl.NumberFormat("id-ID").format(n);
 
 /** Pesan WhatsApp pengingat pengembalian unit. */
 export function pesanPengingat(o: { nama?: string; jenis: string; endMs: number; now?: number; noNota?: string }): string {
@@ -121,7 +93,7 @@ export function pesanPengingat(o: { nama?: string; jenis: string; endMs: number;
   const sapaan = nama && nama.toLowerCase() !== "tanpa nama" ? `Kak ${nama}` : "Kak";
   const tarif = tarifTelatPerJam(o.jenis);
   const biaya = tarif
-    ? `biaya sewa tambahan sebesar *${rpRibu(tarif)}/jam*`
+    ? `biaya sewa tambahan sebesar *${rpRapat(tarif)}/jam*`
     : "biaya sewa tambahan per jam";
   const unit = `*${o.jenis}*${o.noNota ? ` (nota ${o.noNota})` : ""}`;
   const aturanTelat = `keterlambatan lebih dari ${TOLERANSI_TELAT_MENIT} menit dihitung 1 jam`;
@@ -139,9 +111,6 @@ export function pesanPengingat(o: { nama?: string; jenis: string; endMs: number;
         ];
   return [`Selamat ${salamWaktu(new Date(now))} ${sapaan} 🙏🏻`, ``, ...isi, ``, `Terima kasih 🙏🏻`].join("\n");
 }
-
-/** Link wa.me berisi pesan pengingat. */
-export const linkPengingat = (wa: string, pesan: string) => `https://wa.me/${waInternasional(wa)}?text=${encodeURIComponent(pesan)}`;
 
 export type CatatanPengingat = { ts: number; oleh: string };
 /** "Diingatkan 21.05 · galang" */

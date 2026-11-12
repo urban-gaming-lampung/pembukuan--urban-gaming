@@ -3,7 +3,7 @@ import { Activity, AlertCircle, CheckCircle, Plus, Wrench, X, EyeOff } from "luc
 import useStokData from "../hooks/useStokData";
 import { auth } from "../lib/firebase";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
-import { buildStokRows, fmtWaktu, parseLastEdit, useMinStok, StokRow } from "../lib/stokJualan";
+import { buildStokRows, fmtWaktu, parseLastEdit, useMinStok, StokRow, kunciStok } from "../lib/stokJualan";
 import {
   barisPerangkat, kategoriBarangRental, labelKategoriRental, GrupPerangkat, LABEL_GRUP, isKategoriMonitoring, isKategoriDihapus, isKategoriJajanan,
 } from "../lib/stokRental";
@@ -14,7 +14,6 @@ import { KartuStok, StatusChip, StepperStok, TileStok, DOT_STATUS } from "./comm
  * - Perangkat (konsol, stik, TV, playbox) dihitung otomatis dari Monitoring → hanya dibaca.
  * - Barang habis pakai (jajanan / kategori lain) diubah langsung dan tersimpan otomatis.
  */
-const keyOf = (r: { kategori: string; item: string }) => `${r.kategori}||${r.item}`;
 const GRUP_URUT: GrupPerangkat[] = ["KONSOL", "STIK", "PERANGKAT"];
 const SATUAN: Record<GrupPerangkat, string> = { KONSOL: "unit", STIK: "pcs", PERANGKAT: "unit" };
 
@@ -120,7 +119,7 @@ const StokRental: React.FC<{ isOwner?: boolean; tampilJajanan: boolean }> = ({ i
             return (
               <KartuStok key={c.kategori} judul={labelKategoriRental(c.kategori)} kanan={`${list.reduce((s, r) => s + r.jumlah, 0)} pcs`}>
                 {list.map((r) => (
-                  <div key={keyOf(r)} className="pl-4 pr-3 py-2.5 flex items-center gap-2 border-t border-zinc-100 dark:border-white/5">
+                  <div key={kunciStok(r)} className="pl-4 pr-3 py-2.5 flex items-center gap-2 border-t border-zinc-100 dark:border-white/5">
                     <div className="flex-1 min-w-0 py-0.5">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className={`w-2 h-2 rounded-full shrink-0 ${DOT_STATUS[r.status]}`} aria-hidden />
