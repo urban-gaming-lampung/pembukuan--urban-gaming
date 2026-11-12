@@ -7,10 +7,6 @@ export type StokKategori = {
 
 export const INITIAL_STOK_RENTAL: StokKategori[] = [
   {
-    kategori: "UPDATE STOK KEBUTUHAN",
-    items: ["Telur", "Mie Instan", "Gula", "Galon"],
-  },
-  {
     kategori: "UPDATE JAJANAN",
     items: [
       "Luwak White Coffe",

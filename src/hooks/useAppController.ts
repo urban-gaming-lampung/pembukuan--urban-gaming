@@ -15,6 +15,7 @@ import { DEFAULT_HARGA_HARIAN, DEFAULT_HARGA_JAJANAN, DEFAULT_HARGA_JASA_AKS, DE
 import { LS_KEY } from "../constants/storage";
 import { checkCatalogBaselineAndLogUpdates, isVersionLower, SavedCatalogState, startOfDay, endOfDay } from "../lib/catalog";
 import useStokData from "./useStokData";
+import { bukaHalamanStok } from "../lib/stokRental";
 import { PdfExporterHandle } from "../components/PdfExporter";
 import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr, isLogForDate } from "../lib/absenPeriod";
 import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
@@ -307,6 +308,13 @@ export default function useAppController() {
   // ===== TAB STATE =====
   const [activeTab, setActiveTab] = useState<"USAHA RENTAL" | "UPDATE STOK" | "PAGE OWNER" | "MONITORING">("USAHA RENTAL");
   const [adminMonitoringTab, setAdminMonitoringTab] = useState<"status" | "device">("status");
+  // Super admin tidak punya tab UPDATE STOK lagi (stok ada di Page Owner › STOK)
+  useEffect(() => {
+    if (isSuperAdminOrOwner && activeTab === "UPDATE STOK") {
+      setActiveTab("PAGE OWNER");
+      setTimeout(() => bukaHalamanStok("RENTAL"), 50);
+    }
+  }, [isSuperAdminOrOwner, activeTab]);
 
   const handleOpenScan = () => {
     if (isSuperAdminOrOwner) {
@@ -1584,7 +1592,14 @@ export default function useAppController() {
         return;
     }
 
-    setActiveTab("UPDATE STOK");
+    // Cek stok dulu: super admin -> Page Owner › STOK, admin -> UPDATE STOK (sub halaman STOK RENTAL)
+    if (isSuperAdminOrOwner) {
+      setActiveTab("PAGE OWNER");
+      setTimeout(() => bukaHalamanStok("RENTAL"), 100);
+    } else {
+      bukaHalamanStok("RENTAL");
+      setActiveTab("UPDATE STOK");
+    }
     setShowStokConfirmation(true);
   };
 

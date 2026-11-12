@@ -14,7 +14,8 @@ import FilterComp from "./Filter";
 import TabPegawai from "./TabPegawai";
 import WidgetMonitoringStatus from "./WidgetMonitoringStatus";
 import RupiahIcon from "./common/RupiahIcon";
-import StokJualanOwner from "./StokJualanOwner";
+import HalamanStok from "./HalamanStok";
+import { adaPermintaanStok, EVENT_BUKA_STOK } from "../lib/stokRental";
 import AnalitikUsaha from "./AnalitikUsaha";
 import InputStokJualan from "./InputStokJualan";
 import InputTransaksi from "./InputTransaksi";
@@ -64,6 +65,8 @@ type PageOwnerProps = {
   hargaItems?: any[];
   isVerifyingPayment?: boolean;
   stokState: StokData;
+  /** Stok jajanan ikut pengaturan "Tampilkan Tabel › Pemasukan Jajanan" */
+  tampilJajanan?: boolean;
 };
 
 // Utils:
@@ -89,10 +92,17 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   rangeStart, setRangeStart, rangeEnd, setRangeEnd, filteredHistory,
   hargaItems,
   isVerifyingPayment = false,
-  stokState
+  stokState,
+  tampilJajanan = true,
 }) => {
 
-  const [activeTabOwner, setActiveTabOwner] = useState<"MONITORING" | "ANALITIK" | "INPUT PENGELUARAN" | "STOK" | "PEGAWAI">("MONITORING");
+  const [activeTabOwner, setActiveTabOwner] = useState<"MONITORING" | "ANALITIK" | "INPUT PENGELUARAN" | "STOK" | "PEGAWAI">(() => (adaPermintaanStok() ? "STOK" : "MONITORING"));
+  // Dibuka dari luar (mis. cek stok sebelum kirim laporan PDF)
+  useEffect(() => {
+    const buka = () => setActiveTabOwner("STOK");
+    window.addEventListener(EVENT_BUKA_STOK, buka);
+    return () => window.removeEventListener(EVENT_BUKA_STOK, buka);
+  }, []);
   // Transaksi owner (pengeluaran & pemasukan) — satu sumber: lib/keuangan
   const ownerExpenses = useTransaksiOwner("PENGELUARAN", filterMode, filterMonth, rangeStart, rangeEnd);
   const ownerIncomes = useTransaksiOwner("PEMASUKAN", filterMode, filterMonth, rangeStart, rangeEnd);
@@ -555,7 +565,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     return combinedIncomeBulanIni.filter(x => x.kategori === selectedIncomeCategory);
   }, [selectedIncomeCategory, combinedIncomeBulanIni]);
 
-  // Stok: lihat komponen StokJualanOwner (khusus stok jualan)
+  // Stok: lihat komponen HalamanStok (STOK RENTAL · STOK JUALAN)
 
   const [masterUnit, setMasterUnit] = useState({ ps3: 0, ps4: 0, ps5: 0, tv: 0, portabel: 0 });
   useEffect(() => {
@@ -1621,7 +1631,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
         </div>
       )}
 
-      {activeTabOwner === "STOK" && <StokJualanOwner />}
+      {activeTabOwner === "STOK" && <HalamanStok isOwner tampilJajanan={tampilJajanan !== false} />}
 
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* MODAL: RINCIAN PENGELUARAN (Apple HIG Design) */}

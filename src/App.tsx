@@ -18,7 +18,7 @@ import PdfExporter from "./components/PdfExporter";
 import Pengaturan from "./components/Pengaturan";
 import EditRincian from "./components/EditRincian"; 
 import { sewaItemHint } from "./lib/priceLists";
-import UpdateStok from "./components/UpdateStok"; 
+import HalamanStok from "./components/HalamanStok";
 import PageOwner from "./components/PageOwner";
 import POSModal from "./components/POSModal";
 import GalleryModal from "./components/GalleryModal";
@@ -322,6 +322,8 @@ export default function App() {
               >
                 USAHA RENTAL
               </button>
+              {/* Super admin memakai Page Owner › STOK; tab ini khusus admin */}
+              {!isSuperAdminOrOwner && (
               <button
                 onClick={() => setActiveTab("UPDATE STOK")}
                 className={`flex-1 py-2.5 text-[13px] sm:text-sm font-bold tracking-wide rounded-[10px] transition-all duration-300 flex justify-center items-center ${
@@ -333,6 +335,7 @@ export default function App() {
               >
                 UPDATE STOK
               </button>
+              )}
             </div>
 
             {activeTab === "PAGE OWNER" && isSuperAdminOrOwner ? (
@@ -359,6 +362,7 @@ export default function App() {
                 filteredHistory={filteredHistory}
                 isVerifyingPayment={!!paymentVerifyPrompt}
                 stokState={appStokData.stokState}
+                tampilJajanan={rincianVisibility.jajanan !== false}
               />
             ) : activeTab === "MONITORING" && !isSuperAdminOrOwner ? (
               <div className="flex flex-col gap-4">
@@ -387,15 +391,8 @@ export default function App() {
                   </div>
                 )}
               </div>
-            ) : activeTab === "UPDATE STOK" ? (
-              <UpdateStok
-                adminName={user?.email}
-                isOwner={isSuperAdminOrOwner}
-                stokState={appStokData.stokState}
-                updateStok={appStokData.updateStok}
-                masterCategories={appStokData.masterCategories}
-                addStokItem={appStokData.addStokItem}
-              />
+            ) : activeTab === "UPDATE STOK" && !isSuperAdminOrOwner ? (
+              <HalamanStok isOwner={false} tampilJajanan={rincianVisibility.jajanan !== false} />
             ) : (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out fill-mode-both">
                 <div id="section-input">
