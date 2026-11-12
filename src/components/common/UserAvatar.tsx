@@ -40,21 +40,29 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
   statusBadgeColor = "bg-emerald-500",
   statusBadgeActive = true,
 }) => {
+  const [imgError, setImgError] = React.useState(false);
   const initial = getInitials(name || email);
   const bgColor = profileColor || "#3b82f6";
   const sizeClasses = SIZE_MAP[size] || SIZE_MAP.md;
+
+  React.useEffect(() => {
+    setImgError(false);
+  }, [photoUrl]);
+
+  const showImage = Boolean(photoUrl && !imgError);
 
   return (
     <div className={`relative shrink-0 ${className}`}>
       <div
         className={`${sizeClasses} rounded-full overflow-hidden flex items-center justify-center border border-black/10 dark:border-white/10 shadow-sm`}
-        style={{ backgroundColor: photoUrl ? undefined : bgColor }}
+        style={{ backgroundColor: showImage ? undefined : bgColor }}
       >
-        {photoUrl ? (
+        {showImage ? (
           <img
-            src={photoUrl}
+            src={photoUrl!}
             alt={name || email || "Avatar"}
             className="w-full h-full object-cover"
+            onError={() => setImgError(true)}
           />
         ) : (
           <span className="font-bold text-white tracking-wider select-none">

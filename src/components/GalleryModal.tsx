@@ -1290,12 +1290,23 @@ export default function GalleryModal({
                       {item.mediaType === "video" ? (
                         <div className="relative w-full h-full bg-zinc-950 flex items-center justify-center">
                           {item.thumbnailUrl ? (
-                            <img
-                              src={item.thumbnailUrl}
-                              alt={item.title}
-                              loading="lazy"
-                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                            />
+                            <>
+                              <img
+                                src={item.thumbnailUrl}
+                                alt={item.title}
+                                loading="lazy"
+                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = "none";
+                                  const fb = e.currentTarget.parentElement?.querySelector(".thumb-fallback");
+                                  if (fb) fb.classList.remove("hidden");
+                                }}
+                              />
+                              <div className="thumb-fallback hidden w-full h-full bg-gradient-to-br from-purple-950/80 via-zinc-900 to-black flex flex-col items-center justify-center p-3 text-center">
+                                <Icons.Video className="w-8 h-8 text-purple-400 mb-1 opacity-70" />
+                                <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Video Promo</span>
+                              </div>
+                            </>
                           ) : (
                             <div className="w-full h-full bg-gradient-to-br from-purple-950/80 via-zinc-900 to-black flex flex-col items-center justify-center p-3 text-center">
                               <Icons.Video className="w-8 h-8 text-purple-400 mb-1 opacity-70" />
@@ -1311,12 +1322,23 @@ export default function GalleryModal({
                           </div>
                         </div>
                       ) : (
-                        <img
-                          src={item.mediaUrl}
-                          alt={item.title}
-                          loading="lazy"
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        />
+                        <div className="relative w-full h-full flex items-center justify-center bg-zinc-900">
+                          <img
+                            src={item.mediaUrl}
+                            alt={item.title}
+                            loading="lazy"
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                              const fb = e.currentTarget.parentElement?.querySelector(".media-fallback");
+                              if (fb) fb.classList.remove("hidden");
+                            }}
+                          />
+                          <div className="media-fallback hidden flex flex-col items-center justify-center p-3 text-center gap-1.5">
+                            <Icons.Gallery className="w-8 h-8 text-zinc-600 dark:text-zinc-500" />
+                            <span className="text-[10px] text-zinc-400 font-semibold">Gagal memuat</span>
+                          </div>
+                        </div>
                       )}
 
                       {/* Top Overlay Badges */}

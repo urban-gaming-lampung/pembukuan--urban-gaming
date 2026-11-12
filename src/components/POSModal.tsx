@@ -1,10 +1,15 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { X, ShoppingCart, Plus, Minus, Trash2, Printer, Download, PlusCircle, Sparkles, Pencil, Search } from "lucide-react";
+import { X, ShoppingCart, Plus, Minus, Trash2, PlusCircle, Sparkles, Pencil, Search, Receipt, Link2 } from "lucide-react";
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage, listGameDb } from "../lib/firebase";
-import jsPDF from "jspdf";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
+import useStokData from "../hooks/useStokData";
+import type { StokItemValue } from "../hooks/useStokData";
+import PosCheckoutSheet from "./PosCheckoutSheet";
+import PosStokLinkSheet, { StokRefSelect } from "./PosStokLinkSheet";
+import { PILIH_SAAT_CHECKOUT, StokRef, stokRefLabel, suggestStokRef } from "../lib/posSales";
+import { getMinStok, statusOf, useMinStok } from "../lib/stokJualan";
 
 const qrisImg = new URL("/images/QRIS.jpeg", import.meta.url).href;
 
@@ -19,6 +24,7 @@ interface Product {
   size?: string;
   available?: boolean;
   subcategory?: "Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD";
+  stokRef?: StokRef | null; // barang stok jualan yang dipotong saat nota dibuat
 }
 
 interface CartItem extends Product {
@@ -84,116 +90,6 @@ const DEFAULT_PRODUCTS: Omit<Product, "id">[] = [
 ];
 
 import { calculatePOSDiscount, PromosConfig, DEFAULT_PROMOS_CONFIG } from "../utils/promoDiscount";
-
-const toPrinterAscii = (t: string) =>
-  String(t ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7E\n]/g, "");
-
-const STORE_ADDRESS_LINES = ["Jl. Purnawirawan Raya No.114, Gn. Terang", "Langkapura, Bandar Lampung"];
-
-function buildEscPosBytes(
-  cart: CartItem[],
-  buyerName: string,
-  subtotal: number,
-  discountPercent: number,
-  discountAmount: number,
-  total: number,
-  adminName: string,
-  paymentMethod: string
-): Uint8Array {
-  // Printer thermal hanya paham ASCII: nama game ber-aksen/emoji dulu tercetak sebagai karakter acak.
-  const utf8 = new TextEncoder();
-  const encoder = { encode: (t: string) => utf8.encode(toPrinterAscii(t)) };
-  const init = [0x1b, 0x40]; // ESC @
-  const center = [0x1b, 0x61, 0x01]; // ESC a 1
-  const left = [0x1b, 0x61, 0x00]; // ESC a 0
-  const right = [0x1b, 0x61, 0x02]; // ESC a 2
-  const boldOn = [0x1b, 0x45, 0x01]; // ESC E 1
-  const boldOff = [0x1b, 0x45, 0x00]; // ESC E 0
-  const doubleOn = [0x1d, 0x21, 0x11]; // GS ! 17 (Double size)
-  const doubleOff = [0x1d, 0x21, 0x00]; // GS ! 0
-  const cut = [0x1d, 0x56, 0x42, 0x00]; // GS V 66 0
-
-  let commands: number[] = [];
-  
-  commands.push(...init);
-  
-  // Header
-  commands.push(...center, ...doubleOn, ...boldOn);
-  commands = commands.concat(Array.from(encoder.encode("URBAN GAMING\n")));
-  commands.push(...doubleOff, ...boldOff);
-  STORE_ADDRESS_LINES.forEach((line) => {
-    commands = commands.concat(Array.from(encoder.encode(`${line}\n`)));
-  });
-  commands = commands.concat(Array.from(encoder.encode("================================================\n"))); // 48 chars for 80mm
-  
-  const dateStr = new Date().toLocaleString("id-ID", {
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit"
-  }).replace(/\./g, ":");
-  
-  commands.push(...left);
-  commands = commands.concat(Array.from(encoder.encode(`Tanggal  : ${dateStr}\n`)));
-  commands = commands.concat(Array.from(encoder.encode(`Pembeli  : ${buyerName}\n`)));
-  commands = commands.concat(Array.from(encoder.encode(`Kasir    : ${adminName}\n`)));
-  commands = commands.concat(Array.from(encoder.encode(`Bayar    : ${paymentMethod}\n`)));
-  commands = commands.concat(Array.from(encoder.encode("================================================\n")));
-  
-  // Cart Items
-  cart.forEach((item) => {
-    commands.push(...left, ...boldOn);
-    const displayName = item.category === "ISI GAME" && item.platform ? `${item.name} (${item.platform})` : item.name;
-    commands = commands.concat(Array.from(encoder.encode(`${displayName}\n`)));
-    commands.push(...boldOff);
-    
-    const qtyPriceStr = `  ${item.quantity} x Rp ${item.price.toLocaleString("id-ID")}`;
-    const itemSub = item.price * item.quantity;
-    const itemSubStr = `Rp ${itemSub.toLocaleString("id-ID")}`;
-    
-    const spacesNeeded = 48 - qtyPriceStr.length - itemSubStr.length;
-    const padding = spacesNeeded > 0 ? " ".repeat(spacesNeeded) : " ";
-    commands = commands.concat(Array.from(encoder.encode(`${qtyPriceStr}${padding}${itemSubStr}\n`)));
-  });
-  
-  commands = commands.concat(Array.from(encoder.encode("------------------------------------------------\n")));
-  
-  // Subtotal & Diskon (Jika ada diskon)
-  if (discountAmount > 0) {
-    commands.push(...left);
-    const subLabel = "Subtotal";
-    const subValStr = `Rp ${subtotal.toLocaleString("id-ID")}`;
-    const subSpaces = 48 - subLabel.length - subValStr.length;
-    const subPadding = subSpaces > 0 ? " ".repeat(subSpaces) : " ";
-    commands = commands.concat(Array.from(encoder.encode(`${subLabel}${subPadding}${subValStr}\n`)));
-
-    const discLabel = `Diskon Promo (${discountPercent}%)`;
-    const discValStr = `-Rp ${discountAmount.toLocaleString("id-ID")}`;
-    const discSpaces = 48 - discLabel.length - discValStr.length;
-    const discPadding = discSpaces > 0 ? " ".repeat(discSpaces) : " ";
-    commands = commands.concat(Array.from(encoder.encode(`${discLabel}${discPadding}${discValStr}\n`)));
-    commands = commands.concat(Array.from(encoder.encode("------------------------------------------------\n")));
-  }
-
-  // Total
-  commands.push(...left, ...boldOn);
-  const totalLabel = "TOTAL";
-  const totalValStr = `Rp ${total.toLocaleString("id-ID")}`;
-  const totalSpaces = 48 - totalLabel.length - totalValStr.length;
-  const totalPadding = totalSpaces > 0 ? " ".repeat(totalSpaces) : " ";
-  commands = commands.concat(Array.from(encoder.encode(`${totalLabel}${totalPadding}${totalValStr}\n`)));
-  commands.push(...boldOff);
-  
-  commands = commands.concat(Array.from(encoder.encode("================================================\n")));
-  
-  // Footer
-  commands.push(...center);
-  commands = commands.concat(Array.from(encoder.encode("Terima Kasih Atas Kunjungan Anda!\n\n")));
-  
-  // Feed & Cut
-  commands.push(0x1b, 0x64, 0x05); // Feed 5 lines
-  commands.push(...cut);
-  
-  return new Uint8Array(commands);
-}
 
 function getProductSubCategory(name: string): "Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD" {
   const lower = name.toLowerCase();
@@ -286,9 +182,15 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   // Cart Popup state for mobile view
   const [openMobileCart, setOpenMobileCart] = useState(false);
 
-  // Save PDF Form overlay states
-  const [openSavePdfForm, setOpenSavePdfForm] = useState(false);
-  const [buyerName, setBuyerName] = useState("");
+  // Checkout (nota + potong stok) & hubungkan produk ke stok
+  const [openCheckout, setOpenCheckout] = useState(false);
+  const [openStokLink, setOpenStokLink] = useState(false);
+  const [newProdStokRef, setNewProdStokRef] = useState<StokRef | null>(null);
+  const [editProdStokRef, setEditProdStokRef] = useState<StokRef | null>(null);
+  const { stokState, masterCategories } = useStokData();
+  const minStokMap = useMinStok();
+  const stokCats = Array.isArray(masterCategories?.jualan) ? masterCategories.jualan : [];
+  const stokData = (stokState?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
 
   // Payment states
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "TRANSFER">("CASH");
@@ -299,7 +201,6 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   useBodyScrollLock(openAddProduct);
   useBodyScrollLock(openEditProduct);
   useBodyScrollLock(openMobileCart);
-  useBodyScrollLock(openSavePdfForm);
   useBodyScrollLock(showQrisModal);
 
   // Real-time Firestore sync for products
@@ -392,9 +293,9 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       let changed = false;
       const next = prev.map((item) => {
         const src = (item.category === "ISI GAME" ? games : products).find((p) => p.id === item.id);
-        if (src && (src.price !== item.price || src.name !== item.name)) {
+        if (src && (src.price !== item.price || src.name !== item.name || JSON.stringify(src.stokRef || null) !== JSON.stringify(item.stokRef || null))) {
           changed = true;
-          return { ...item, price: src.price, name: src.name };
+          return { ...item, price: src.price, name: src.name, stokRef: src.stokRef || null };
         }
         return item;
       });
@@ -476,6 +377,9 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       if (newProdCategory === "JUALAN") {
         productPayload.subcategory = newProdSubCategory;
       }
+      if (newProdCategory === "JUALAN" || newProdCategory === "SERVIS") {
+        productPayload.stokRef = newProdStokRef || null;
+      }
 
       await addDoc(collection(db, "products"), productPayload);
 
@@ -483,6 +387,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       setNewProdName("");
       setNewProdPrice("");
       setNewProdSubCategory("Aksesoris");
+      setNewProdStokRef(null);
       setNewProdImage(null);
       setOpenAddProduct(false);
       alert("Produk berhasil ditambahkan!");
@@ -501,6 +406,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     setEditProdCategory(p.category as any);
     setEditProdSubCategory(p.subcategory || getProductSubCategory(p.name));
     setEditProdImageUrl(p.imageUrl || "");
+    setEditProdStokRef(p.stokRef || null);
     setEditProdImage(null);
     setOpenEditProduct(true);
   };
@@ -544,6 +450,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       } else {
         updateData.subcategory = null;
       }
+      updateData.stokRef = editProdCategory === "JUALAN" || editProdCategory === "SERVIS" ? editProdStokRef || null : null;
       await setDoc(docRef, updateData, { merge: true });
 
       // Sync updated product info in cart
@@ -606,157 +513,24 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     }
   };
 
-  // Print PDF Struk trigger
-  const handleSavePdf = () => {
-    if (cart.length === 0) return;
-    setOpenSavePdfForm(true);
-  };
+  // Produk JUALAN yang belum terhubung ke stok (owner)
+  const unlinkedCount = useMemo(() => products.filter((p) => p.category === "JUALAN" && !p.stokRef).length, [products]);
 
-  const handleSavePdfSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!buyerName.trim()) {
-      alert("Masukkan nama pembeli!");
-      return;
+  // Badge stok di kartu produk
+  const stokBadge = (p: Product): { label: string; tone: "habis" | "menipis" | "aman" } | null => {
+    const r = p.stokRef;
+    if (!r) return null;
+    if (r.item === PILIH_SAAT_CHECKOUT) {
+      const items = stokCats.find((c) => c.kategori === r.kategori)?.items || [];
+      if (!items.length) return null;
+      const n = items.reduce((s, it) => s + Math.max(0, Math.round(Number(stokData?.[r.kategori]?.[it]?.jumlah) || 0)), 0);
+      return { label: n > 0 ? `Stok ${n}` : "Habis", tone: n > 0 ? "aman" : "habis" };
     }
-
-    // Generate PDF — hitung tinggi kertas dari jumlah baris nama item (nama panjang dibungkus)
-    const measure = new jsPDF({ unit: "mm", format: [80, 200] });
-    measure.setFont("courier", "bold");
-    measure.setFontSize(8);
-    const itemNameLines = cart.map((item) => {
-      const displayName = item.category === "ISI GAME" && item.platform ? `${item.name} (${item.platform})` : item.name;
-      return measure.splitTextToSize(displayName, 70) as string[];
-    });
-    const itemsHeight = itemNameLines.reduce((sum, lines) => sum + lines.length * 4 + 6, 0);
-    const pageHeight = 75 + itemsHeight + (discountAmount > 0 ? 30 : 20);
-    const docPdf = new jsPDF({ unit: "mm", format: [80, pageHeight] });
-
-    docPdf.setFont("courier", "bold");
-    docPdf.setFontSize(11);
-    docPdf.text("URBAN GAMING LAMPUNG", 40, 10, { align: "center" });
-
-    docPdf.setFont("courier", "normal");
-    docPdf.setFontSize(8);
-    docPdf.text(STORE_ADDRESS_LINES[0], 40, 14, { align: "center" });
-    docPdf.text(STORE_ADDRESS_LINES[1], 40, 18, { align: "center" });
-    docPdf.text("-".repeat(38), 40, 22, { align: "center" });
-
-    const dateStr = new Date().toLocaleString("id-ID", {
-      year: "numeric", month: "2-digit", day: "2-digit",
-      hour: "2-digit", minute: "2-digit"
-    }).replace(/\./g, ":");
-
-    docPdf.text(`Tgl     : ${dateStr}`, 5, 26);
-    docPdf.text(`Pembeli : ${buyerName}`, 5, 30);
-    docPdf.text(`Kasir   : ${adminName}`, 5, 34);
-    docPdf.text(`Bayar   : ${paymentMethod}`, 5, 38);
-    docPdf.text("-".repeat(38), 40, 42, { align: "center" });
-
-    let y = 46;
-    cart.forEach((item, idx) => {
-      docPdf.setFont("courier", "bold");
-      itemNameLines[idx].forEach((line) => {
-        docPdf.text(line, 5, y);
-        y += 4;
-      });
-      docPdf.setFont("courier", "normal");
-      docPdf.text(`  ${item.quantity} x Rp ${item.price.toLocaleString("id-ID")}`, 5, y);
-      const itemSub = item.price * item.quantity;
-      docPdf.text(`Rp ${itemSub.toLocaleString("id-ID")}`, 75, y, { align: "right" });
-      y += 6;
-    });
-
-    docPdf.setFont("courier", "normal");
-    docPdf.text("-".repeat(38), 40, y, { align: "center" });
-    y += 4;
-
-    if (discountAmount > 0) {
-      docPdf.setFont("courier", "normal");
-      docPdf.text("Subtotal", 5, y);
-      docPdf.text(`Rp ${subtotal.toLocaleString("id-ID")}`, 75, y, { align: "right" });
-      y += 5;
-      docPdf.text(`Diskon (${discountPercent}%)`, 5, y);
-      docPdf.text(`-Rp ${discountAmount.toLocaleString("id-ID")}`, 75, y, { align: "right" });
-      y += 5;
-      docPdf.text("-".repeat(38), 40, y, { align: "center" });
-      y += 4;
-    }
-
-    docPdf.setFont("courier", "bold");
-    docPdf.text("TOTAL", 5, y);
-    docPdf.text(`Rp ${total.toLocaleString("id-ID")}`, 75, y, { align: "right" });
-    y += 6;
-
-    docPdf.setFont("courier", "normal");
-    docPdf.text("=".repeat(38), 40, y, { align: "center" });
-    y += 6;
-
-    docPdf.text("Terima Kasih Atas Kunjungan Anda!", 40, y, { align: "center" });
-
-    docPdf.save(`Struk_URBAN_${buyerName.trim().replace(/[^a-zA-Z0-9]+/g, "_")}_${Date.now()}.pdf`);
-    
-    // Close overlay
-    setBuyerName("");
-    setOpenSavePdfForm(false);
-  };
-
-  // Direct Thermal Printing
-  const handlePrintDirect = async () => {
-    if (cart.length === 0) return;
-    
-    const promptName = window.prompt("Nama Pembeli / Pelanggan:", "Pelanggan");
-    if (promptName === null) return; // user menekan Batal
-    const finalBuyerName = promptName.trim() || "Pelanggan";
-    const bytes = buildEscPosBytes(cart, finalBuyerName, subtotal, discountPercent, discountAmount, total, adminName, paymentMethod);
-    
-    // 1. Web Bluetooth API Attempt
-    if ((navigator as any).bluetooth) {
-      try {
-        const device = await (navigator as any).bluetooth.requestDevice({
-          filters: [
-            { services: ["000018f0-0000-1000-8000-00805f9b34fb"] },
-            { namePrefix: "Kassen" },
-            { namePrefix: "MT-80B" },
-            { namePrefix: "Thermal" },
-            { namePrefix: "Printer" },
-            { namePrefix: "MTP" }
-          ],
-          optionalServices: ["000018f0-0000-1000-8000-00805f9b34fb"]
-        });
-
-        const server = await device.gatt?.connect();
-        const service = await server?.getPrimaryService("000018f0-0000-1000-8000-00805f9b34fb");
-        const characteristics = await service?.getCharacteristics();
-        const writeChar = characteristics?.find(
-          (c: any) => c.properties.write || c.properties.writeWithoutResponse
-        );
-
-        if (writeChar) {
-          const chunkSize = 100;
-          for (let i = 0; i < bytes.length; i += chunkSize) {
-            const chunk = bytes.slice(i, i + chunkSize);
-            await writeChar.writeValue(chunk);
-          }
-          alert("Struk berhasil dikirim ke printer via Bluetooth!");
-          return;
-        } else {
-          throw new Error("Karakteristik write printer tidak ditemukan.");
-        }
-      } catch (err: any) {
-        if (err?.name === "NotFoundError" || err?.name === "AbortError") return; // user menutup pemilih printer
-        console.warn("Web Bluetooth print failed, attempting RawBT fallback:", err);
-      }
-    }
-
-    if (!/android/i.test(navigator.userAgent || "")) {
-      alert("Cetak langsung butuh printer Bluetooth (Chrome) atau aplikasi RawBT di Android. Gunakan Simpan PDF untuk perangkat ini.");
-      return;
-    }
-
-    // 2. RawBT App Intent Fallback
-    const base64Data = btoa(String.fromCharCode.apply(null, Array.from(bytes)));
-    const intentUrl = `intent:base64,${base64Data}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`;
-    window.location.href = intentUrl;
+    const v = stokData?.[r.kategori]?.[r.item];
+    const diMaster = stokCats.some((c) => c.kategori === r.kategori && c.items.includes(r.item));
+    if (!v && !diMaster) return null;
+    const n = Math.max(0, Math.round(Number(v?.jumlah) || 0));
+    return { label: n > 0 ? `Stok ${n}` : "Habis", tone: statusOf(n, getMinStok(minStokMap, r.kategori, r.item)) };
   };
 
   // Filter products by category, sort alphabetically by name, search query, and filter by sub-category if in JUALAN
@@ -809,9 +583,25 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               <ShoppingCart size={18} />
             </div>
             <h2 className="text-lg font-black tracking-tight text-zinc-900 dark:text-white uppercase">
-              Point of Sales (Kasir)
+              <span className="sm:hidden">Kasir POS</span>
+              <span className="hidden sm:inline">Point of Sales (Kasir)</span>
             </h2>
           </div>
+          <div className="flex items-center gap-2">
+          {isSuperAdminOrOwner && (
+            <button
+              onClick={() => setOpenStokLink(true)}
+              className="h-8 pl-2.5 pr-3 flex items-center gap-1.5 rounded-full bg-blue-600/10 text-blue-700 dark:text-blue-300 text-[12px] font-bold active:scale-95 transition-all"
+              title="Hubungkan produk ke stok jualan"
+            >
+              <Link2 size={14} />
+              <span className="sm:hidden">Stok</span>
+              <span className="hidden sm:inline">Hubungkan Stok</span>
+              {unlinkedCount > 0 && (
+                <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-black flex items-center justify-center">{unlinkedCount}</span>
+              )}
+            </button>
+          )}
           <button 
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-zinc-200/60 dark:bg-zinc-800 hover:bg-zinc-300/60 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 active:scale-90 transition-all"
@@ -819,6 +609,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
           >
             <X size={18} />
           </button>
+          </div>
         </div>
 
         {/* Content Body */}
@@ -1124,17 +915,36 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                         {/* Product Image */}
                         <div className={`w-full bg-zinc-100 dark:bg-black/20 flex items-center justify-center overflow-hidden shrink-0 relative ${p.category === "ISI GAME" ? "aspect-[3/4]" : "aspect-square"}`}>
                           {p.imageUrl ? (
-                            <img
-                              src={p.imageUrl}
-                              alt={p.name}
-                              className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                            />
+                            <>
+                              <img
+                                src={p.imageUrl}
+                                alt={p.name}
+                                className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = "none";
+                                  const fallback = e.currentTarget.parentElement?.querySelector(".img-fallback");
+                                  if (fallback) fallback.classList.remove("hidden");
+                                }}
+                              />
+                              <div className="img-fallback hidden text-2xl text-zinc-300 dark:text-zinc-700">
+                                📦
+                              </div>
+                            </>
                           ) : (
                             <div className="text-2xl text-zinc-300 dark:text-zinc-700">
                               📦
                             </div>
                           )}
 
+                          {/* Badge stok jualan (Bottom Left) */}
+                          {(() => {
+                            const b = stokBadge(p);
+                            return b ? (
+                              <div className={`absolute bottom-1.5 left-1.5 z-10 px-1.5 py-0.5 rounded-md text-[9.5px] font-black shadow-sm select-none ${b.tone === "habis" ? "bg-red-600 text-white" : b.tone === "menipis" ? "bg-amber-400 text-amber-950" : "bg-black/70 text-white"}`}>
+                                {b.label}
+                              </div>
+                            ) : null;
+                          })()}
                           {/* Catalog Update Badge (Top Left, Red color) */}
                           {changeType && (
                             <div className="absolute top-1.5 left-1.5 z-10 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider shadow-md border border-red-500 bg-red-600 text-white select-none animate-pulse">
@@ -1349,22 +1159,14 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 </div>
               )}
               
-              <div className="grid grid-cols-2 gap-2">
+              <div>
                 <button
                   disabled={cart.length === 0}
-                  onClick={handleSavePdf}
-                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold text-xs active:scale-95 transition-all shadow-md shadow-red-600/20"
+                  onClick={() => setOpenCheckout(true)}
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-black text-[13px] active:scale-95 transition-all shadow-md shadow-red-600/20"
                 >
-                  <Download size={14} />
-                  Simpan (PDF)
-                </button>
-                <button
-                  disabled={cart.length === 0}
-                  onClick={handlePrintDirect}
-                  className="flex items-center justify-center gap-1.5 py-3 rounded-xl bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 disabled:opacity-50 text-white dark:text-black font-bold text-xs active:scale-95 transition-all shadow-md shadow-black/25 dark:shadow-white/10"
-                >
-                  <Printer size={14} />
-                  Cetak Struk
+                  <Receipt size={16} />
+                  Selesaikan & Cetak Nota
                 </button>
               </div>
             </div>
@@ -1548,74 +1350,17 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   </div>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3 pb-4">
+              <div className="pb-4">
                 <button
-                  onClick={handleSavePdf}
-                  className="flex items-center justify-center gap-1.5 py-3.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs active:scale-95 transition-all shadow-md shadow-red-600/20"
+                  disabled={cart.length === 0}
+                  onClick={() => setOpenCheckout(true)}
+                  className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-black text-[13px] active:scale-95 transition-all shadow-md shadow-red-600/20"
                 >
-                  <Download size={14} />
-                  Simpan (PDF)
-                </button>
-                <button
-                  onClick={handlePrintDirect}
-                  className="flex items-center justify-center gap-1.5 py-3.5 rounded-xl bg-black dark:bg-white text-white dark:text-black font-bold text-xs shadow-md shadow-black/20 dark:shadow-white/10"
-                >
-                  <Printer size={14} />
-                  Cetak Struk
+                  <Receipt size={16} />
+                  Selesaikan & Cetak Nota
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ============================================================
-          SAVE PDF OVERLAY FORM
-          ============================================================ */}
-      {openSavePdfForm && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative w-full max-w-[340px] overflow-hidden rounded-[28px] bg-white dark:bg-zinc-900 p-6 shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-in zoom-in-95 duration-200">
-            <button
-              onClick={() => setOpenSavePdfForm(false)}
-              className="absolute top-4 right-4 w-7 h-7 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-white flex items-center justify-center"
-            >
-              <X size={14} />
-            </button>
-            
-            <form onSubmit={handleSavePdfSubmit} className="space-y-4">
-              <div className="text-center">
-                <div className="mx-auto w-10 h-10 rounded-full bg-black/10 dark:bg-white/20 text-black dark:text-white flex items-center justify-center mb-3">
-                  <Download size={18} />
-                </div>
-                <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase tracking-tight">
-                  Simpan Struk PDF
-                </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                  Masukkan nama pelanggan untuk dicantumkan di struk belanja
-                </p>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
-                  Nama Pelanggan / Pembeli
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Budi Santoso"
-                  value={buyerName}
-                  onChange={(e) => setBuyerName(e.target.value)}
-                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-3 bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black font-bold text-xs rounded-xl shadow-md shadow-black/25 dark:shadow-white/10 active:scale-95 transition-all"
-              >
-                Unduh PDF Struk
-              </button>
-            </form>
           </div>
         </div>
       )}
@@ -1715,6 +1460,30 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     <option value="Aksesoris">Aksesoris</option>
                     <option value="BD">BD</option>
                   </select>
+                </div>
+              )}
+
+              {/* Barang stok yang dipotong saat nota dibuat */}
+              {(newProdCategory === "JUALAN" || newProdCategory === "SERVIS") && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
+                    Barang Stok (dipotong saat nota dicetak)
+                  </label>
+                  <StokRefSelect
+                    value={newProdStokRef}
+                    onChange={setNewProdStokRef}
+                    categories={stokCats}
+                    data={stokData}
+                    className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-3 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
+                  />
+                  {newProdCategory === "JUALAN" && !newProdStokRef && newProdName.trim().length > 2 && (() => {
+                    const s = suggestStokRef(newProdName, stokCats);
+                    return s ? (
+                      <button type="button" onClick={() => setNewProdStokRef(s.ref)} className="ml-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 text-left">
+                        Saran: {stokRefLabel(s.ref)} — ketuk untuk pakai
+                      </button>
+                    ) : null;
+                  })()}
                 </div>
               )}
 
@@ -1844,6 +1613,30 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 </div>
               )}
 
+              {/* Barang stok yang dipotong saat nota dibuat */}
+              {(editProdCategory === "JUALAN" || editProdCategory === "SERVIS") && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
+                    Barang Stok (dipotong saat nota dicetak)
+                  </label>
+                  <StokRefSelect
+                    value={editProdStokRef}
+                    onChange={setEditProdStokRef}
+                    categories={stokCats}
+                    data={stokData}
+                    className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-3 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
+                  />
+                  {editProdCategory === "JUALAN" && !editProdStokRef && editProdName.trim().length > 2 && (() => {
+                    const s = suggestStokRef(editProdName, stokCats);
+                    return s ? (
+                      <button type="button" onClick={() => setEditProdStokRef(s.ref)} className="ml-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 text-left">
+                        Saran: {stokRefLabel(s.ref)} — ketuk untuk pakai
+                      </button>
+                    ) : null;
+                  })()}
+                </div>
+              )}
+
               {/* Upload Foto Baru */}
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
@@ -1929,6 +1722,42 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
         </div>
       )}
 
+      <PosCheckoutSheet
+        open={openCheckout}
+        onClose={() => setOpenCheckout(false)}
+        lines={cart.map((c) => ({
+          id: c.id,
+          name: c.name,
+          price: c.price,
+          quantity: c.quantity,
+          category: c.category,
+          platform: c.platform,
+          subcategory: c.category === "JUALAN" ? getSubCategory(c) : undefined,
+          stokRef: c.stokRef || null,
+        }))}
+        subtotal={subtotal}
+        discountPercent={discountPercent}
+        discountAmount={discountAmount}
+        total={total}
+        metode={paymentMethod}
+        setMetode={setPaymentMethod}
+        kasirNama={adminName}
+        categories={stokCats}
+        data={stokData}
+        onCompleted={() => {
+          setCart([]);
+          setOpenMobileCart(false);
+        }}
+      />
+      {isSuperAdminOrOwner && (
+        <PosStokLinkSheet
+          open={openStokLink}
+          onClose={() => setOpenStokLink(false)}
+          products={products}
+          categories={stokCats}
+          data={stokData}
+        />
+      )}
     </div>
   );
 }

@@ -15,6 +15,7 @@ import TabPegawai from "./TabPegawai";
 import WidgetMonitoringStatus from "./WidgetMonitoringStatus";
 import RupiahIcon from "./common/RupiahIcon";
 import StokJualanOwner from "./StokJualanOwner";
+import AnalitikUsaha from "./AnalitikUsaha";
 import WidgetMonitoringDevice from "./WidgetMonitoringDevice";
 import {
   ResponsiveContainer,
@@ -113,7 +114,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   const toggleExpenseCat = (key: string) => setExpandedExpenseCats(p => p.includes(key) ? p.filter(x => x !== key) : [...p, key]);
 
   // States for Analitik Sub-tabs and Logging
-  const [analitikSubTab, setAnalitikSubTab] = useState<"PEMBUKUAN" | "LOGGING">("PEMBUKUAN");
+  const [analitikSubTab, setAnalitikSubTab] = useState<"PEMBUKUAN" | "USAHA" | "LOGGING">("PEMBUKUAN");
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
   const [filterEmail, setFilterEmail] = useState<string>("Semua");
@@ -1266,33 +1267,36 @@ const PageOwner: React.FC<PageOwnerProps> = ({
 
       {activeTabOwner === "ANALITIK" && (
         <div className="space-y-6">
-          {/* Segmented Pill Switcher for Analitik Subpages */}
+          {/* Segmented Pill Switcher for Analitik Subpages (Rental · Usaha · Logging) */}
           <div className="flex justify-center z-30 relative">
-            <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-2xl border border-zinc-200/50 dark:border-white/5 shadow-inner">
-              <button
-                onClick={() => setAnalitikSubTab("PEMBUKUAN")}
-                className={`px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-xl transition-all ${
-                  analitikSubTab === "PEMBUKUAN"
-                    ? "bg-white dark:bg-[#2C2C2E] text-emerald-600 dark:text-emerald-400 shadow-sm"
-                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
-                }`}
-              >
-                Analitik Pembukuan
-              </button>
-              <button
-                onClick={() => setAnalitikSubTab("LOGGING")}
-                className={`px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-xl transition-all ${
-                  analitikSubTab === "LOGGING"
-                    ? "bg-white dark:bg-[#2C2C2E] text-emerald-600 dark:text-emerald-400 shadow-sm"
-                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
-                }`}
-              >
-                Analitik Logging
-              </button>
+            <div className="w-full sm:w-auto grid grid-cols-3 sm:flex gap-1 bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-2xl border border-zinc-200/50 dark:border-white/5 shadow-inner">
+              {([
+                ["PEMBUKUAN", "Rental", "text-emerald-600 dark:text-emerald-400"],
+                ["USAHA", "Usaha", "text-red-600 dark:text-red-400"],
+                ["LOGGING", "Logging", "text-blue-600 dark:text-blue-400"],
+              ] as const).map(([key, label, color]) => (
+                <button
+                  key={key}
+                  onClick={() => setAnalitikSubTab(key)}
+                  className={`px-2 sm:px-5 py-2 sm:py-2.5 rounded-xl transition-all uppercase leading-tight ${
+                    analitikSubTab === key
+                      ? `bg-white dark:bg-[#2C2C2E] shadow-sm ${color}`
+                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+                  }`}
+                >
+                  <span className="block sm:inline text-[9px] sm:text-xs font-bold tracking-wider opacity-70 sm:opacity-100">Analitik </span>
+                  <span className="block sm:inline text-[13px] sm:text-xs font-black sm:font-bold tracking-wide sm:tracking-wider">{label}</span>
+                </button>
+              ))}
             </div>
           </div>
 
-          {analitikSubTab === "PEMBUKUAN" ? (
+          {analitikSubTab === "USAHA" ? (
+            <AnalitikUsaha
+              mode={filterMode} setMode={setFilterMode} month={filterMonth} setMonth={setFilterMonth}
+              rangeStart={rangeStart} setRangeStart={setRangeStart} rangeEnd={rangeEnd} setRangeEnd={setRangeEnd}
+            />
+          ) : analitikSubTab === "PEMBUKUAN" ? (
             <>
           {/* 1. REKAP PEMASUKAN HARI INI */}
           <RekapPemasukan

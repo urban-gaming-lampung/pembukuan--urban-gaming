@@ -11,7 +11,7 @@
  */
 import { useEffect, useState } from "react";
 import {
-  collection, doc, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc,
+  collection, doc, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc, type Transaction,
 } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
@@ -160,45 +160,73 @@ export function restockText(rows: StokRow[]): string {
  */
 export type StokChange = { kategori: string; item: string; delta?: number; setTo?: number; catatan?: string; touch?: boolean };
 
+export type StokPatch = Record<string, Record<string, Partial<StokItemValue> & { lastEditTs?: number; catatan?: string }>>;
+
+/**
+ * Hitung perubahan stok dari data server terbaru (MURNI, tanpa Firebase) — dipakai di dalam
+ * transaksi oleh Update Stok, Tempel Laporan, dan POS supaya aturannya satu.
+ * Delta dihitung dari angka server, jadi perubahan dari HP lain tidak tertimpa.
+ */
+export function prepareStokWrites(
+  jualan: Record<string, Record<string, StokItemValue>>,
+  changes: StokChange[],
+  alasan: StokAlasan,
+  catatan: string,
+  oleh: string,
+  now: number
+): { patch: StokPatch; logs: Omit<StokLog, "id">[]; touched: number } {
+  const tz = new Date(now).toLocaleString("id-ID", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(/\./g, ":");
+  const patch: StokPatch = {};
+  const logs: Omit<StokLog, "id">[] = [];
+  let touched = 0;
+  // Gabungkan perubahan untuk barang yang sama (mis. 2 baris POS ke barang stok yang sama)
+  const merged = new Map<string, StokChange>();
+  for (const c of changes) {
+    const k = `${c.kategori}||${c.item}`;
+    const prev = merged.get(k);
+    if (prev && typeof prev.setTo !== "number" && typeof c.setTo !== "number") {
+      merged.set(k, { ...prev, delta: (prev.delta || 0) + (c.delta || 0), catatan: c.catatan ?? prev.catatan, touch: prev.touch || c.touch });
+    } else merged.set(k, c);
+  }
+  for (const c of merged.values()) {
+    if (!(typeof c.setTo === "number" || (c.delta || 0) !== 0 || typeof c.catatan === "string" || c.touch)) continue;
+    const cur = jualan?.[c.kategori]?.[c.item] as (StokItemValue & { catatan?: string }) | undefined;
+    const sebelum = Math.max(0, Math.round(Number(cur?.jumlah) || 0));
+    const sesudah = Math.max(0, typeof c.setTo === "number" ? Math.round(c.setTo) : sebelum + Math.round(c.delta || 0));
+    const delta = sesudah - sebelum;
+    const noteChanged = typeof c.catatan === "string" && c.catatan.trim() !== String(cur?.catatan || "");
+    if (delta === 0 && !noteChanged && !c.touch) continue;
+    const p: Partial<StokItemValue> & { lastEditTs?: number; catatan?: string } = {};
+    if (noteChanged) p.catatan = (c.catatan as string).trim();
+    if (delta !== 0) Object.assign(p, { jumlah: sesudah, lastEditDate: tz, lastEditDelta: delta, lastEditBy: oleh, lastEditTs: now });
+    else if (c.touch) Object.assign(p, { jumlah: sesudah, lastEditDate: tz, lastEditBy: oleh, lastEditTs: now });
+    (patch[c.kategori] ||= {})[c.item] = p;
+    touched++;
+    if (delta !== 0) logs.push({ kategori: c.kategori, item: c.item, delta, sebelum, sesudah, alasan, catatan: catatan.trim(), oleh, ts: now });
+  }
+  return { patch, logs, touched };
+}
+
+/** Tulis hasil prepareStokWrites di dalam transaksi Firestore yang sedang berjalan. */
+export function writeStokInTx(tx: Transaction, w: { patch: StokPatch; logs: Omit<StokLog, "id">[] }, extra: Record<string, unknown> = {}) {
+  if (Object.keys(w.patch).length) tx.set(doc(db, "data", "stok"), { jualan: w.patch }, { merge: true });
+  w.logs.forEach((l) => tx.set(doc(collection(db, "stok_log")), { ...l, ...extra, tipe: "jualan", waktu: serverTimestamp() }));
+}
+
 /**
  * Simpan beberapa perubahan sekaligus dalam SATU transaksi:
  * jumlah dihitung dari angka terbaru di server + delta, dan setiap perubahan dicatat di stok_log.
  */
 export async function commitStokChanges(changes: StokChange[], alasan: StokAlasan, catatan = ""): Promise<number> {
-  const real = changes.filter((c) => typeof c.setTo === "number" || (c.delta || 0) !== 0 || typeof c.catatan === "string" || c.touch);
-  if (!real.length) return 0;
+  if (!changes.length) return 0;
   const oleh = auth.currentUser?.email || "admin";
-  const stokRef = doc(db, "data", "stok");
   const now = Date.now();
-  const tz = new Date(now).toLocaleString("id-ID", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(/\./g, ":");
-
   return runTransaction(db, async (tx) => {
-    const snap = await tx.get(stokRef);
-    const jualan = (snap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
-    const patch: Record<string, Record<string, Partial<StokItemValue> & { lastEditTs?: number; catatan?: string }>> = {};
-    let touched = 0;
-    const logs: Omit<StokLog, "id">[] = [];
-
-    for (const c of real) {
-      const sebelum = Math.max(0, Math.round(Number(jualan?.[c.kategori]?.[c.item]?.jumlah) || 0));
-      const sesudah = Math.max(0, typeof c.setTo === "number" ? Math.round(c.setTo) : sebelum + Math.round(c.delta || 0));
-      const delta = sesudah - sebelum;
-      const oldNote = String((jualan?.[c.kategori]?.[c.item] as any)?.catatan || "");
-      const noteChanged = typeof c.catatan === "string" && c.catatan.trim() !== oldNote;
-      if (delta === 0 && !noteChanged && !c.touch) continue;
-      const p: Partial<StokItemValue> & { lastEditTs?: number; catatan?: string } = {};
-      if (noteChanged) p.catatan = (c.catatan as string).trim();
-      if (delta !== 0) Object.assign(p, { jumlah: sesudah, lastEditDate: tz, lastEditDelta: delta, lastEditBy: oleh, lastEditTs: now });
-      else if (c.touch) Object.assign(p, { jumlah: sesudah, lastEditDate: tz, lastEditBy: oleh, lastEditTs: now });
-      (patch[c.kategori] ||= {})[c.item] = p;
-      touched++;
-      if (delta === 0) continue;
-      logs.push({ kategori: c.kategori, item: c.item, delta, sebelum, sesudah, alasan, catatan: catatan.trim(), oleh, ts: now });
-    }
-    if (!touched) return 0;
-    tx.set(stokRef, { jualan: patch }, { merge: true });
-    logs.forEach((l) => tx.set(doc(collection(db, "stok_log")), { ...l, tipe: "jualan", waktu: serverTimestamp() }));
-    return touched;
+    const snap = await tx.get(doc(db, "data", "stok"));
+    const w = prepareStokWrites((snap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>, changes, alasan, catatan, oleh, now);
+    if (!w.touched) return 0;
+    writeStokInTx(tx, w);
+    return w.touched;
   });
 }
 

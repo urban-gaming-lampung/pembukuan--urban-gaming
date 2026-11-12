@@ -219,6 +219,15 @@ service cloud.firestore {
     }
 
     // ==========================================
+    // Transaksi POS (nota penjualan usaha)
+    // Dibuat kasir saat nota dicetak; batal / hapus hanya owner / super admin
+    // ==========================================
+    match /pos_transaksi/{saleId} {
+      allow read, create: if isUrbanStaff();
+      allow update, delete: if isSalaryAdmin();
+    }
+
+    // ==========================================
     // Aturan Share Screenshots (ProsperoEden) — tidak diubah
     // ==========================================
     match /posts/{postId} {
