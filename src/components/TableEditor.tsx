@@ -14,7 +14,8 @@ import {
   Camera,
   Loader2,
   Eye,
-  ExternalLink
+  ExternalLink,
+  Lock
 } from "lucide-react";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "../lib/firebase";
@@ -346,6 +347,22 @@ export const UploadTransferProof: React.FC<UploadTransferProofProps> = ({ value,
 
 // --- MAIN COMPONENT ---
 
+/** Baris otomatis (mis. dari nota POS): tampil di dalam tabel, hanya-baca, tidak ikut rows/setRows. */
+export type BarisTerkunci = {
+  key: string;
+  /** Isi sel per kolom (key dari `blank`) */
+  nilai: Record<string, React.ReactNode>;
+  bayar: string;
+  /** Label di kolom No. / kepala kartu, mis. "POS" */
+  label: string;
+  /** Info kecil di kepala kartu (mis. nomor nota & jam) */
+  info?: string;
+  /** Ringkasan di kepala kartu (mode kartu) */
+  ringkasan: string;
+  /** Isi kartu (mode kartu) */
+  detail?: React.ReactNode;
+};
+
 export default function TableEditor<T extends AnyRow>(props: {
   title: string;
   columns: string[];
@@ -364,6 +381,8 @@ export default function TableEditor<T extends AnyRow>(props: {
   slotAtas?: React.ReactNode;
   /** Tombol kecil di kolom No. / kepala kartu (klik tidak membuka-tutup kartu). */
   renderNo?: (row: T, rowIndex: number) => React.ReactNode;
+  /** Baris otomatis hanya-baca di bagian atas tabel (totalnya lewat extraTotal). */
+  barisTerkunci?: BarisTerkunci[];
 }) {
   const {
     title,
@@ -380,6 +399,7 @@ export default function TableEditor<T extends AnyRow>(props: {
     extraTotal = 0,
     slotAtas,
     renderNo,
+    barisTerkunci = [],
   } = props;
 
   const [isMobileScreen, setIsMobileScreen] = React.useState(
@@ -603,6 +623,68 @@ export default function TableEditor<T extends AnyRow>(props: {
               </thead>
               
               <tbody className={isMobile ? "flex flex-col gap-4" : "table-row-group divide-y divide-zinc-100 dark:divide-zinc-800/50"}>
+                {/* Baris otomatis (terkunci) */}
+                {barisTerkunci.map((b) => {
+                  const cash = parseBayar(b.bayar).has("Cash");
+                  const tf = parseBayar(b.bayar).has("Transfer");
+                  const kolom = Object.keys(blank).filter((k) => k !== "bayar" && !k.startsWith("_"));
+                  if (isMobile) {
+                    return (
+                      <tr key={b.key} className="flex flex-col rounded-[24px] ring-1 ring-black/5 dark:ring-white/10 overflow-hidden bg-white dark:bg-[#1C1C1E] shadow-sm">
+                        <td className="flex justify-between items-center gap-3 px-4 py-3.5 text-white select-none" style={{ backgroundColor: theme.color }}>
+                          <div className="flex flex-col gap-1 min-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="inline-flex items-center gap-1 bg-white/20 px-2.5 py-1 rounded-full shadow-inner shadow-black/10 text-[10px] font-extrabold tracking-widest uppercase shrink-0">
+                                <Lock size={10} strokeWidth={3} />{b.label}
+                              </span>
+                              {b.info && <span className="text-[11px] font-mono text-white/80 truncate">{b.info}</span>}
+                            </div>
+                            <span className="text-[14px] font-bold leading-relaxed truncate text-white/95 drop-shadow-sm">{b.ringkasan}</span>
+                          </div>
+                          <span className="flex shrink-0 items-center justify-center w-8 h-8 rounded-full bg-black/10 ring-1 ring-white/10" title="Otomatis — tidak bisa diubah di sini">
+                            <Lock size={15} className="text-white/90" />
+                          </span>
+                        </td>
+                        <td className="flex items-start justify-between gap-3 px-4 py-3">
+                          <div className="min-w-0 text-[13px] leading-snug text-zinc-600 dark:text-zinc-300">{b.detail}</div>
+                          <span className={`shrink-0 px-2 py-0.5 rounded-md text-[11px] font-bold ${tf ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"}`}>
+                            {tf ? "TF/QRIS" : "Cash"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return (
+                    <tr key={b.key} className="table-row bg-zinc-50/80 dark:bg-white/[0.03]">
+                      <td className="table-cell w-[50px] text-center px-1.5 py-2 align-middle" title="Otomatis — tidak bisa diubah di sini">
+                        <div className="flex flex-col items-center gap-0.5 text-zinc-400 dark:text-zinc-500">
+                          <Lock size={13} strokeWidth={2.4} />
+                          <span className="text-[9px] font-black tracking-widest">{b.label}</span>
+                        </div>
+                      </td>
+                      {kolom.map((k) => (
+                        <td key={k} className="table-cell px-2 py-2 align-middle">
+                          <div className="min-h-[36px] px-2 flex items-center text-sm text-zinc-800 dark:text-zinc-100">{b.nilai[k] ?? "-"}</div>
+                        </td>
+                      ))}
+                      <td className="table-cell w-[80px] text-center align-middle px-2 py-2">
+                        <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${cash ? "bg-emerald-500/90 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-300 dark:text-zinc-600"}`} aria-label={cash ? "Cash" : "Bukan cash"}>
+                          {cash ? <Check size={20} strokeWidth={3} /> : <Circle size={20} strokeWidth={2} />}
+                        </span>
+                      </td>
+                      <td className="table-cell w-[100px] text-center align-middle px-2 py-2">
+                        <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${tf ? "bg-blue-500/90 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-300 dark:text-zinc-600"}`} aria-label={tf ? "Transfer" : "Bukan transfer"}>
+                          {tf ? <Check size={20} strokeWidth={3} /> : <Circle size={20} strokeWidth={2} />}
+                        </span>
+                      </td>
+                      <td className="table-cell text-center align-middle px-2 py-2">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 whitespace-nowrap">
+                          <Lock size={11} />Otomatis
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {rows.map((r, i) => {
                   const rowAny = r as any;
                   const hargaKeluar = isHargaKeluar(rowAny);
