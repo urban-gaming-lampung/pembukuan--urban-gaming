@@ -5,7 +5,7 @@ import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { toLocalYmd } from "../lib/dateLocal";
 import { getMinStok, removeJualanItem, statusOf, StokLog, useMinStok, useStokLog, kunciStok } from "../lib/stokJualan";
-import { Kondisi, kondisiProduk, kondisiStok, PILIH_SAAT_CHECKOUT, produkSubKategori, StokRef, SubKategoriJualan, syncProdukKeStok } from "../lib/posSales";
+import { Kondisi, kondisiProduk, kondisiStok, PILIH_SAAT_CHECKOUT, produkSubKategori, stokBeririsan, StokRef, SubKategoriJualan, syncProdukKeStok } from "../lib/posSales";
 import KondisiSwitch from "./KondisiSwitch";
 import {
   hapusBarangJualan, hapusStokMasuk, KATEGORI_PENGELUARAN_STOK, koreksiJumlahStok, ModalMap, pratinjauOtomatis, ProdukJualan, simpanBarangJualan,
@@ -369,7 +369,8 @@ const BarangJualanSheet: React.FC<{
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [info, setInfo] = useState("");
-  const [ubahJumlah, setUbahJumlah] = useState<string | null>(null);
+  // Koreksi jumlah (hitung fisik): satu barang stok, atau satu varian bila "pilih varian saat checkout"
+  const [ubah, setUbah] = useState<{ item: string; nilai: string } | null>(null);
   const [busyStok, setBusyStok] = useState<string>("");
   const { logs } = useStokLog(300);
 
@@ -388,7 +389,8 @@ const BarangJualanSheet: React.FC<{
   const efektif = ref === undefined ? preview?.ref || null : ref;
   const sv = stokView(efektif, cats, data, minMap);
   const varianList = efektif?.item === PILIH_SAAT_CHECKOUT ? cats.find((c) => c.kategori === efektif.kategori)?.items || [] : [];
-  const dipakaiLain = efektif && efektif.item !== PILIH_SAAT_CHECKOUT ? products.filter((x) => x.id !== p?.id && x.stokRef && x.stokRef.kategori === efektif.kategori && x.stokRef.item === efektif.item) : [];
+  // Produk lain yang menghitung barang stok yang sama (termasuk lewat "pilih varian saat checkout")
+  const dipakaiLain = efektif ? products.filter((x) => x.id !== p?.id && stokBeririsan(x.stokRef, efektif)) : [];
 
   // Riwayat stok masuk (catatan yang bisa diedit) + stok masuk lama dari menu Stok (hanya dilihat)
   const { list: riwayatMasuk } = useStokMasuk(p?.id);
@@ -404,16 +406,20 @@ const BarangJualanSheet: React.FC<{
           )
           .slice(0, 5)
       : [];
-  const jumlahSekarang = efektif && efektif.item !== PILIH_SAAT_CHECKOUT ? Math.max(0, Math.round(Number(data?.[efektif.kategori]?.[efektif.item]?.jumlah) || 0)) : null;
-  const bisaUbahJumlah = !!p && !!efektif && efektif.item !== PILIH_SAAT_CHECKOUT && ref !== undefined;
+  const perVarian = efektif?.item === PILIH_SAAT_CHECKOUT;
+  const barisJumlah = !efektif ? [] : perVarian ? varianList : [efektif.item];
+  const jumlahDi = (item: string) => Math.max(0, Math.round(Number(data?.[efektif?.kategori || ""]?.[item]?.jumlah) || 0));
+  const bisaUbahJumlah = !!p && !!efektif && ref !== undefined && refAda(efektif, cats) && barisJumlah.length > 0;
+  useEffect(() => { setUbah(null); }, [efektif?.kategori, efektif?.item]);
 
   const simpanJumlah = async () => {
-    if (!p || !efektif || ubahJumlah === null) return;
+    if (!p || !efektif || !ubah) return;
+    const n = Number(ubah.nilai || 0);
     setBusyStok("jumlah"); setErr(""); setInfo("");
     try {
-      await koreksiJumlahStok(efektif, Number(ubahJumlah || 0), p.name);
-      setInfo(`Jumlah stok disamakan jadi ${Number(ubahJumlah || 0)} ✓`);
-      setUbahJumlah(null);
+      await koreksiJumlahStok({ kategori: efektif.kategori, item: ubah.item }, n, p.name);
+      setInfo(`${perVarian ? `${ubah.item}: j` : "J"}umlah stok disamakan jadi ${n} ✓`);
+      setUbah(null);
     } catch (e: any) { setErr(e?.message || String(e)); }
     finally { setBusyStok(""); }
   };
@@ -596,22 +602,38 @@ const BarangJualanSheet: React.FC<{
 
             {bisaUbahJumlah && (
               <div className="pt-1">
-                {ubahJumlah === null ? (
-                  <div className="flex items-center justify-between gap-3 px-1">
-                    <span className="text-[14px] text-zinc-700 dark:text-zinc-200">Jumlah sekarang <b className="tabular-nums">{jumlahSekarang}</b></span>
-                    <button type="button" onClick={() => setUbahJumlah(String(jumlahSekarang ?? 0))} className="text-[14px] font-medium text-blue-600 dark:text-blue-400">Ubah jumlah</button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <input autoFocus inputMode="numeric" value={ubahJumlah} onChange={(e) => setUbahJumlah(digits(e.target.value))}
-                      className="flex-1 min-w-0 h-11 px-3.5 rounded-[12px] bg-zinc-100 dark:bg-white/10 text-[16px] tabular-nums text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
-                    <button type="button" onClick={() => setUbahJumlah(null)} className="h-11 px-3 text-[14px] text-zinc-500">Batal</button>
-                    <button type="button" disabled={busyStok === "jumlah"} onClick={simpanJumlah} className="h-11 px-4 rounded-[12px] bg-blue-600 text-white text-[14px] font-semibold disabled:opacity-50">
-                      {busyStok === "jumlah" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
-                    </button>
-                  </div>
-                )}
-                {ubahJumlah !== null && <p className="mt-1.5 px-1 text-[12px] text-zinc-500">Samakan dengan hitungan fisik. Tercatat sebagai koreksi, tidak masuk pengeluaran.</p>}
+                {perVarian && <div className="px-1 pb-1.5 text-[12.5px] font-medium text-zinc-500">Stok per varian</div>}
+                <div className={perVarian ? "rounded-[14px] bg-zinc-50 dark:bg-white/5 px-3 divide-y divide-zinc-200/70 dark:divide-white/10" : ""}>
+                  {barisJumlah.map((it) => {
+                    const n = jumlahDi(it);
+                    if (ubah?.item === it) {
+                      return (
+                        <div key={it} className={`flex items-center gap-2 ${perVarian ? "py-2" : ""}`}>
+                          {perVarian && <span className="max-w-[28%] shrink-0 truncate text-[14px] font-medium text-zinc-900 dark:text-white">{it}</span>}
+                          <input autoFocus inputMode="numeric" aria-label={`Jumlah ${it}`} value={ubah.nilai} onChange={(e) => setUbah({ item: it, nilai: digits(e.target.value) })}
+                            className={`flex-1 min-w-0 h-11 px-3.5 rounded-[12px] ${perVarian ? "bg-white" : "bg-zinc-100"} dark:bg-white/10 text-[16px] tabular-nums text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40`} />
+                          <button type="button" onClick={() => setUbah(null)} className="h-11 px-2 text-[14px] text-zinc-500 shrink-0">Batal</button>
+                          <button type="button" disabled={busyStok === "jumlah"} onClick={simpanJumlah} className="h-11 px-4 rounded-[12px] bg-blue-600 text-white text-[14px] font-semibold disabled:opacity-50 shrink-0">
+                            {busyStok === "jumlah" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
+                          </button>
+                        </div>
+                      );
+                    }
+                    return perVarian ? (
+                      <div key={it} className="flex items-center gap-3 py-2.5">
+                        <span className="flex-1 min-w-0 truncate text-[14.5px] text-zinc-900 dark:text-white">{it}</span>
+                        <span className={`text-[15px] font-semibold tabular-nums ${n > 0 ? "text-zinc-900 dark:text-white" : "text-zinc-400"}`}>{n}</span>
+                        <button type="button" onClick={() => setUbah({ item: it, nilai: String(n) })} className="text-[14px] font-medium text-blue-600 dark:text-blue-400 shrink-0">Ubah</button>
+                      </div>
+                    ) : (
+                      <div key={it} className="flex items-center justify-between gap-3 px-1">
+                        <span className="text-[14px] text-zinc-700 dark:text-zinc-200">Jumlah sekarang <b className="tabular-nums">{n}</b></span>
+                        <button type="button" onClick={() => setUbah({ item: it, nilai: String(n) })} className="text-[14px] font-medium text-blue-600 dark:text-blue-400">Ubah jumlah</button>
+                      </div>
+                    );
+                  })}
+                </div>
+                {ubah !== null && <p className="mt-1.5 px-1 text-[12px] text-zinc-500">Samakan dengan hitungan fisik. Tercatat sebagai koreksi, tidak masuk pengeluaran.</p>}
               </div>
             )}
 

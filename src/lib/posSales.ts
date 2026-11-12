@@ -19,6 +19,10 @@ import { pad, rupiah } from "./format";
 export type StokRef = { kategori: string; item: string }; // item "*" = pilih saat checkout
 export const PILIH_SAAT_CHECKOUT = "*";
 
+/** Dua hubungan stok menghitung barang yang sama? ("*" = semua varian di kategori itu) */
+export const stokBeririsan = (a?: StokRef | null, b?: StokRef | null) =>
+  !!a && !!b && a.kategori === b.kategori && (a.item === b.item || a.item === PILIH_SAAT_CHECKOUT || b.item === PILIH_SAAT_CHECKOUT);
+
 export type PosItem = {
   id: string;
   nama: string;
@@ -237,7 +241,8 @@ export function infoNego(s: Pick<PosSale, "items" | "subtotal" | "negoOleh" | "k
 // Pencocokan nama produk POS -> barang stok
 // ============================================================
 
-const STOP = new Set(["DENGAN", "TANPA", "BOX", "DAN", "UNIT", "KONSOL", "AKSESORIS", "THE", "OF", "EDITION"]);
+// "BOX" sengaja TIDAK diabaikan: stik dengan box & tanpa box dihitung di stok terpisah
+const STOP = new Set(["DENGAN", "TANPA", "DAN", "UNIT", "KONSOL", "AKSESORIS", "THE", "OF", "EDITION"]);
 const HINTS = ["BARU", "SEKEN"] as const;
 
 function normText(s: string): string {
@@ -249,7 +254,10 @@ function normText(s: string): string {
     .replace(/(\d+)\s*(GB|TB)\b/g, "$1$2")
     .replace(/\bEXTERNAL\b/g, "EKSTERNAL")
     .replace(/\bORIGINAL\b/g, "ORI")
-    .replace(/\b(BEKAS|SECOND|LIKE NEW)\b/g, "SEKEN");
+    .replace(/\b(BEKAS|SECOND|LIKE NEW)\b/g, "SEKEN")
+    // "TANPA BOX / TANPA KOTAK" = barang biasa; "KOTAK / DUS" = "BOX"
+    .replace(/\bTANPA\s+(?:BOX|KOTAK|DUS)\b/g, " ")
+    .replace(/\b(?:KOTAK|DUS)\b/g, "BOX");
 }
 
 export function tokenize(s: string): string[] {
@@ -270,10 +278,15 @@ export function suggestStokRef(productName: string, categories: StokKategori[]):
   const pTok = tokenize(productName);
   const pSet = new Set(pTok);
   const pHint = hintOf(pTok);
+  // Stik dengan box & tanpa box dihitung terpisah: kategori stik yang jenis box-nya beda tidak dipakai
+  const pakai = categories.filter((c) => {
+    const t = tokenize(c.kategori);
+    return !t.includes("STIK") || t.includes("BOX") === pSet.has("BOX");
+  });
   // Unit tanpa keterangan Baru/Seken dianggap baru (seken selalu ditulis "Seken" di katalog)
   type Cand = { ref: StokRef; recall: number; matched: number; full: boolean };
   const cands: Cand[] = [];
-  categories.forEach((c) => {
+  pakai.forEach((c) => {
     const katTok = tokenize(c.kategori);
     const cHint = hintOf(katTok);
     const katCore = katTok.filter((t) => !HINTS.includes(t as any));
@@ -290,13 +303,15 @@ export function suggestStokRef(productName: string, categories: StokKategori[]):
   });
   cands.sort((a, b) => b.recall - a.recall || b.matched - a.matched);
   const top = cands[0];
-  // Nama kategori (mis. "STIK PS4") disebut lengkap tapi variannya tidak ("Semua Warna") -> pilih saat checkout
+  // Nama kategori (mis. "STIK PS4") disebut lengkap tapi variannya tidak ("Semua Warna") -> pilih saat checkout.
+  // Bila beberapa kategori cocok, pakai yang paling spesifik ("STIK PS4 + BOX" mengalahkan "STIK PS4").
   const kategoriSaja = (): StokSuggestion => {
-    const hit = categories.filter((c) => {
-      const core = tokenize(c.kategori).filter((t) => !HINTS.includes(t as any));
-      return core.length > 0 && core.every((t) => pSet.has(t));
-    });
-    return hit.length === 1 ? { ref: { kategori: hit[0].kategori, item: PILIH_SAAT_CHECKOUT }, yakin: false } : null;
+    const hit = pakai
+      .map((c) => ({ kategori: c.kategori, core: tokenize(c.kategori).filter((t) => !HINTS.includes(t as any)) }))
+      .filter((h) => h.core.length > 0 && h.core.every((t) => pSet.has(t)));
+    const maks = Math.max(0, ...hit.map((h) => h.core.length));
+    const terbaik = hit.filter((h) => h.core.length === maks);
+    return terbaik.length === 1 ? { ref: { kategori: terbaik[0].kategori, item: PILIH_SAAT_CHECKOUT }, yakin: false } : null;
   };
   if (!top || top.recall < 0.75 || top.matched < 1) return kategoriSaja();
   const ties = cands.filter((c) => Math.abs(c.recall - top.recall) < 1e-9 && c.matched === top.matched);
@@ -328,7 +343,7 @@ export function kondisiProduk(p: { name: string; kondisi?: Kondisi | null; stokR
 export function kondisiStok(kategori: string, item: string, products: ProdukSync[]): Kondisi {
   if (/SEKEN/i.test(kategori)) return "SEKEN";
   if (/BARU/i.test(kategori)) return "BARU";
-  const pakai = products.filter((p) => p.stokRef && p.stokRef.kategori === kategori && (p.stokRef.item === item || p.stokRef.item === PILIH_SAAT_CHECKOUT));
+  const pakai = products.filter((p) => stokBeririsan(p.stokRef, { kategori, item }));
   if (pakai.length) return pakai.every((p) => kondisiProduk(p) === "SEKEN") ? "SEKEN" : "BARU";
   return RE_SEKEN.test(item) ? "SEKEN" : "BARU";
 }
@@ -365,7 +380,10 @@ export function stokBaruUntukProduk(p: Pick<ProdukSync, "name" | "subcategory"> 
       .trim() || name;
   if (sub === "BD") return { kategori: KATEGORI_KASET_BD, item: clean.replace(/^(?:kaset\s+)?bd\s+/i, "").trim() || clean };
   if (sub === "Unit PS") return { kategori: seken ? "UNIT KONSOL SEKEN" : "UNIT KONSOL BARU", item: clean };
-  if (sub === "Stik") return { kategori: tok.includes("PS4") ? "STIK PS4" : tok.includes("PS3") ? "STIK PS3" : "STIK LAINNYA", item: clean };
+  if (sub === "Stik") {
+    const dasar = tok.includes("PS4") ? "STIK PS4" : tok.includes("PS3") ? "STIK PS3" : "STIK LAINNYA";
+    return { kategori: tok.includes("BOX") ? `${dasar} + BOX` : dasar, item: clean };
+  }
   return { kategori: "AKSESORIS", item: clean };
 }
 

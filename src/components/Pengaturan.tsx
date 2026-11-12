@@ -27,7 +27,6 @@ import {
   BookOpen,
   Lightbulb,
   Phone,
-  Lock,
   ChevronLeft,
   X,
   ChevronDown,
@@ -38,6 +37,7 @@ import {
 // import SopPdf from "../SOP/SOP_SewaPS_URBAN.pdf";
 import versionData from "../version.json";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
+import KonfirmasiAkun from "./KonfirmasiAkun";
 import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr } from "../lib/absenPeriod";
 import { toLocalYmd } from "../lib/dateLocal";
 import { ongkirPengantarTersimpan } from "../lib/sewa";
@@ -101,6 +101,15 @@ interface Props {
 }
 
 type TabKey = "general" | "asisten" | "edit" | "backup" | "export" | "reset" | "info" | "profile" | "gaji" | "sop";
+
+/** Aksi Backup & Restore / Reset yang wajib dikonfirmasi password akun. */
+type AksiAman = "backup" | "restore" | "restoreDrive" | "reset";
+const AKSI_AMAN: Record<AksiAman, { judul: string; pesan: string; tombol: string; bahaya: boolean }> = {
+  backup: { judul: "Backup Data", pesan: "Masukkan password akun Anda untuk mengunduh backup seluruh data pembukuan.", tombol: "Unduh", bahaya: false },
+  restore: { judul: "Restore dari File", pesan: "Masukkan password akun Anda untuk me-restore pembukuan dari file backup.", tombol: "Lanjutkan", bahaya: true },
+  restoreDrive: { judul: "Restore dari Drive", pesan: "Pembukuan dengan tanggal yang sama akan ditimpa data dari Google Drive. Masukkan password akun Anda untuk melanjutkan.", tombol: "Restore", bahaya: true },
+  reset: { judul: "Reset Pengaturan", pesan: "Semua pengaturan kembali ke bawaan. Data transaksi tetap aman. Masukkan password akun Anda untuk melanjutkan.", tombol: "Reset", bahaya: true },
+};
 
 const compressImage = (file: File, maxWidth: number, maxHeight: number, quality: number): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -378,11 +387,8 @@ const Pengaturan: React.FC<Props> = ({
 
   const isOwner = isOwnerProp ?? (userEmail?.toLowerCase().trim() === "owner@gmail.com");
 
-  const ADMIN_PASSWORD = "707426";
-  const [isSecurityOpen, setIsSecurityOpen] = useState(false);
-  const [securityAction, setSecurityAction] = useState<"backup" | "restore" | "reset" | null>(null);
-  const [passwordInput, setPasswordInput] = useState("");
-  const [errorMsg, setErrorMsg] = useState("");
+  // Aksi penting: dikonfirmasi password akun yang sedang login (tanpa password bersama di kode)
+  const [aksiAman, setAksiAman] = useState<AksiAman | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -787,31 +793,16 @@ const Pengaturan: React.FC<Props> = ({
     fn();
   };
 
-  const triggerSecurity = (action: "backup" | "restore" | "reset") => {
-    setSecurityAction(action);
-    setPasswordInput("");
-    setErrorMsg("");
-    setIsSecurityOpen(true);
-  };
-
-  const handleVerify = (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg("");
-    setIsLoading(true);
-
-    if (passwordInput.trim() === ADMIN_PASSWORD) {
-      if (securityAction === "backup") runOrAlert(onBackupData);
-      else if (securityAction === "restore") runOrAlert(onRestoreData);
-      else if (securityAction === "reset") runOrAlert(onResetSetting);
-
-      setIsSecurityOpen(false);
-      setPasswordInput("");
-      setSecurityAction(null);
-    } else {
-      setErrorMsg("Password salah. Akses ditolak.");
+  const jalankanAksiAman = async (aksi: AksiAman) => {
+    setAksiAman(null);
+    if (aksi === "backup") runOrAlert(onBackupData);
+    else if (aksi === "restore") runOrAlert(onRestoreData);
+    else if (aksi === "reset") runOrAlert(onResetSetting);
+    else if (aksi === "restoreDrive") {
+      if (!onRestoreDrive) return runOrAlert(undefined);
+      setIsLoading(true);
+      try { await onRestoreDrive(); } finally { setIsLoading(false); }
     }
-
-    setIsLoading(false);
   };
 
   const summarizeList = (list: Price[]) => {
@@ -1516,7 +1507,6 @@ const Pengaturan: React.FC<Props> = ({
               </div>
               <button disabled={isLoading} onClick={async () => {
                 if (!driveConnected) {
-                  setErrorMsg("");
                   setIsLoading(true);
                   try {
                     const { authenticateDrive } = await import("../lib/googleDrive");
@@ -1544,11 +1534,7 @@ const Pengaturan: React.FC<Props> = ({
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
                   {isLoading ? "Mengunggah..." : "Backup ke Drive"}
                 </button>
-                <button onClick={async () => {
-                  setIsLoading(true);
-                  if (onRestoreDrive) await onRestoreDrive();
-                  setIsLoading(false);
-                }} disabled={isLoading} className="flex-1 bg-teal-100 hover:bg-teal-200 dark:bg-teal-900/30 dark:hover:bg-teal-800/40 text-teal-700 dark:text-teal-400 font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 transition-all">
+                <button onClick={() => setAksiAman("restoreDrive")} disabled={isLoading} className="flex-1 bg-teal-100 hover:bg-teal-200 dark:bg-teal-900/30 dark:hover:bg-teal-800/40 text-teal-700 dark:text-teal-400 font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 transition-all">
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
                   {isLoading ? "Menarik..." : "Restore dari Drive"}
                 </button>
@@ -1556,8 +1542,8 @@ const Pengaturan: React.FC<Props> = ({
             )}
           </IOSGroup>
           <IOSGroup title="Pencadangan File (Lokal/Flashdisk)">
-            <IOSRow label="Backup Data ke File" icon={<Save size={16} />} iconColor="bg-blue-500" onClick={() => triggerSecurity("backup")} />
-            <IOSRow label="Restore dari File" icon={<FolderOpen size={16} />} iconColor="bg-green-500" isLast onClick={() => triggerSecurity("restore")} />
+            <IOSRow label="Backup Data ke File" icon={<Save size={16} />} iconColor="bg-blue-500" onClick={() => setAksiAman("backup")} />
+            <IOSRow label="Restore dari File" icon={<FolderOpen size={16} />} iconColor="bg-green-500" isLast onClick={() => setAksiAman("restore")} />
           </IOSGroup>
         </div>
       )}
@@ -1572,7 +1558,7 @@ const Pengaturan: React.FC<Props> = ({
         <IOSGroup title="Zona Bahaya">
           <IOSRow
             label="Reset Semua Pengaturan" icon={<Trash2 size={16} />} iconColor="bg-red-500" destructive isLast
-            onClick={() => triggerSecurity("reset")}
+            onClick={() => setAksiAman("reset")}
           />
         </IOSGroup>
       )}
@@ -2159,61 +2145,17 @@ const Pengaturan: React.FC<Props> = ({
         </div>
       </div>
 
-      {isSecurityOpen && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-zinc-900/20 dark:bg-black/40 backdrop-blur-sm transition-opacity"
-            onClick={() => setIsSecurityOpen(false)}
-          />
-          <div className="relative w-full max-w-[320px] overflow-hidden rounded-[24px] bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xl shadow-2xl ring-1 ring-black/5 animate-in zoom-in-95 duration-200">
-            <div className="p-6 text-center">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
-                <Lock className="text-red-600 dark:text-red-500" size={24} />
-              </div>
-              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
-                Restricted Access
-              </h3>
-              <p className="text-[13px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-6">
-                {securityAction === 'backup' && "Masukkan password administrator untuk mendownload backup data lengkap."}
-                {securityAction === 'restore' && "Masukkan password administrator untuk me-restore riwayat data sistem."}
-                {securityAction === 'reset' && "Masukkan password administrator untuk me-reset semua pengaturan. Data transaksi tetap aman."}
-              </p>
-
-              <form onSubmit={handleVerify}>
-                <input
-                  type="password"
-                  autoFocus
-                  value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="Password..."
-                  className="w-full text-center rounded-xl bg-zinc-100 dark:bg-black/50 border-0 px-4 py-3 text-base outline-none focus:ring-2 focus:ring-red-500 mb-2 dark:text-white placeholder:text-zinc-400"
-                />
-                {errorMsg && (
-                  <p className="text-xs font-medium text-red-600 mb-4 animate-pulse">
-                    {errorMsg}
-                  </p>
-                )}
-
-                <div className="grid grid-cols-2 gap-3 mt-4">
-                  <button
-                    type="button"
-                    onClick={() => setIsSecurityOpen(false)}
-                    className="w-full rounded-xl py-3 text-sm font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!passwordInput || isLoading}
-                    className="w-full rounded-xl bg-red-600 py-3 text-sm font-semibold text-white hover:bg-red-700 active:scale-[0.98] transition-all disabled:opacity-50 shadow-lg shadow-red-500/20"
-                  >
-                    {isLoading ? "..." : "Lanjutkan"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
+      {aksiAman && (
+        <KonfirmasiAkun
+          judul={AKSI_AMAN[aksiAman].judul}
+          pesan={AKSI_AMAN[aksiAman].pesan}
+          labelTombol={AKSI_AMAN[aksiAman].tombol}
+          bahaya={AKSI_AMAN[aksiAman].bahaya}
+          // Pemilih file harus dibuka dari ketukan langsung (diblokir browser HP sesudah menunggu jaringan)
+          langkahLanjut={aksiAman === "restore" ? { pesan: "Password benar. Pilih file backup URBAN (.json). Pembukuan dengan tanggal yang sama akan ditimpa.", labelTombol: "Pilih File" } : undefined}
+          onBatal={() => setAksiAman(null)}
+          onBerhasil={() => jalankanAksiAman(aksiAman)}
+        />
       )}
     </div>
   );

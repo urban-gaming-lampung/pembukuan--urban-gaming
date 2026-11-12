@@ -1736,9 +1736,15 @@ export default function useAppController() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const deleteHistoryItem = (id: string) => {
+  const deleteHistoryItem = async (id: string) => {
     const itemToDelete = history.find((h) => h.id === id);
-    deleteDoc(doc(db, "history_pembukuan", id)).catch(console.error);
+    try {
+      await deleteDoc(doc(db, "history_pembukuan", id));
+    } catch (e: any) {
+      console.error("Hapus pembukuan gagal:", e);
+      alert(e?.code === "permission-denied" ? "Hanya owner / super admin yang dapat menghapus pembukuan." : `Gagal menghapus pembukuan: ${e?.message || e}`);
+      return;
+    }
     if (itemToDelete) {
       logActivity("DELETE", itemToDelete.tanggal, itemToDelete.hari, itemToDelete);
     }

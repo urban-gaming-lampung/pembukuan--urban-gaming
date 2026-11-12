@@ -6,6 +6,7 @@ import { HistoryItem } from "../lib/types";
 import { rupiah } from "../lib/format";
 import { totalPemasukanHarian } from "../lib/keuangan";
 import { mingguKe } from "../lib/laporan";
+import KonfirmasiAkun from "./KonfirmasiAkun";
 
 type Props = {
   items: HistoryItem[];
@@ -14,23 +15,11 @@ type Props = {
   isOwner?: boolean;
 };
 
-// --- SECURITY CONFIG ---
-const ADMIN_PASSWORD = "707426";
-
 // --- ICONS ---
 function TrashIcon({ size = 16, className }: { size?: number, className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
       <path d="M9 3h6m-8 4h10m-9 0 1 16h6l1-16M10 11v8m4-8v8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function LockIcon({ size = 16, className }: { size?: number, className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-      <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
     </svg>
   );
 }
@@ -47,12 +36,8 @@ function EditIcon({ size = 16, className }: { size?: number, className?: string 
 // --- MAIN COMPONENT ---
 
 export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = false }: Props) {
-  // Global Security State
-  const [isSecurityOpen, setIsSecurityOpen] = useState(false);
-  const [actionId, setActionId] = useState<string | null>(null);
-  const [passwordInput, setPasswordInput] = useState("");
-  const [errorMsg, setErrorMsg] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  // Pembukuan yang akan dihapus (menunggu konfirmasi password akun)
+  const [hapusTarget, setHapusTarget] = useState<HistoryItem | null>(null);
 
   // Row Action State (Edit/Delete Popup)
   const [activeAction, setActiveAction] = useState<{
@@ -73,15 +58,6 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
     setExpandedWeeks(prev => prev.includes(w) ? prev.filter(i => i !== w) : [...prev, w]);
   };
 
-  const toggleAllMobile = () => {
-    if (expandedWeeks.length === 4) {
-      setExpandedWeeks([]);
-      setExpandedMobile([]);
-    } else {
-      setExpandedWeeks([1, 2, 3, 4]);
-      setExpandedMobile(items.map(h => h.id));
-    }
-  };
 
   // --- LOGIC CALCULATIONS ---
   const sortedItems = useMemo(() => {
@@ -89,23 +65,6 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
       return new Date(a.tanggal).getTime() - new Date(b.tanggal).getTime();
     });
   }, [items]);
-
-  const handleVerify = (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg("");
-    setIsLoading(true);
-
-    if (passwordInput.trim() === ADMIN_PASSWORD) {
-      if (onDelete && actionId) onDelete(actionId);
-      setIsSecurityOpen(false);
-      setPasswordInput("");
-      setActionId(null);
-    } else {
-      setErrorMsg("Password salah. Akses ditolak.");
-    }
-
-    setIsLoading(false);
-  };
 
   const subtotal = useMemo(() => {
     return items.reduce(
@@ -151,6 +110,18 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
       .filter((g) => g.week < 5 || g.items.length > 0);
   }, [sortedItems]);
 
+  // Expand / Collapse semua minggu yang tampil (termasuk Minggu 5)
+  const semuaTerbuka = weeklyGroups.every((g) => expandedWeeks.includes(g.week));
+  const toggleAllMobile = () => {
+    if (semuaTerbuka) {
+      setExpandedWeeks([]);
+      setExpandedMobile([]);
+    } else {
+      setExpandedWeeks(weeklyGroups.map((g) => g.week));
+      setExpandedMobile(items.map(h => h.id));
+    }
+  };
+
   // --- APPLE DESIGN TOKENS ---
   const glassPanel = "bg-white/60 dark:bg-zinc-900/60 backdrop-blur-xl border border-white/20 dark:border-white/5 shadow-sm";
   const glassCard = "bg-white/40 dark:bg-zinc-800/40 backdrop-blur-md border border-black/5 dark:border-white/5 shadow-[0_2px_8px_rgba(0,0,0,0.04)]";
@@ -177,12 +148,9 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
       onEdit(activeAction.id);
       setActiveAction(null);
     } else if (activeAction.type === 'delete') {
-      // Redirect to Security Modal
-      setActionId(activeAction.id);
-      setErrorMsg("");
-      setPasswordInput("");
-      setIsSecurityOpen(true);
-      setActiveAction(null); // Close the confirmation modal
+      // Lanjut ke konfirmasi password akun
+      setHapusTarget(activeAction.data);
+      setActiveAction(null);
     }
   };
 
@@ -281,7 +249,7 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
                 onClick={toggleAllMobile}
                 className="text-[11px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 px-3 py-1.5 rounded-lg active:scale-95 transition-transform"
               >
-                {expandedWeeks.length === 4 ? "Collapse All" : "Expand All"}
+                {semuaTerbuka ? "Collapse All" : "Expand All"}
               </button>
             </div>
           )}
@@ -515,60 +483,16 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
         </div>
       )}
 
-      {/* MODAL SECURITY (CLEAR ALL) */}
-      {isSecurityOpen && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-zinc-900/20 dark:bg-black/40 backdrop-blur-sm transition-opacity"
-            onClick={() => setIsSecurityOpen(false)}
-          />
-          <div className="relative w-full max-w-[320px] overflow-hidden rounded-[24px] bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xl shadow-2xl ring-1 ring-black/5 animate-in zoom-in-95 duration-200">
-            <div className="p-6 text-center">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
-                <LockIcon className="text-red-600 dark:text-red-500" size={24} />
-              </div>
-              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
-                Restricted Access
-              </h3>
-              <p className="text-[13px] text-zinc-500 dark:text-zinc-400 leading-relaxed mb-6">
-                Masukkan password administrator untuk menghapus data riwayat ini.
-              </p>
-
-              <form onSubmit={handleVerify}>
-                <input
-                  type="password"
-                  autoFocus
-                  value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="Password..."
-                  className="w-full text-center rounded-xl bg-zinc-100 dark:bg-black/50 border-0 px-4 py-3 text-base outline-none focus:ring-2 focus:ring-red-500 mb-2 dark:text-white placeholder:text-zinc-400"
-                />
-                {errorMsg && (
-                  <p className="text-xs font-medium text-red-600 mb-4 animate-pulse">
-                    {errorMsg}
-                  </p>
-                )}
-
-                <div className="grid grid-cols-2 gap-3 mt-4">
-                  <button
-                    type="button"
-                    onClick={() => setIsSecurityOpen(false)}
-                    className="w-full rounded-xl py-3 text-sm font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!passwordInput || isLoading}
-                    className="w-full rounded-xl bg-red-600 py-3 text-sm font-semibold text-white hover:bg-red-700 active:scale-[0.98] transition-all disabled:opacity-50 shadow-lg shadow-red-500/20"
-                  >
-                    {isLoading ? "..." : "Hapus Data"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
+      {/* Konfirmasi password akun sebelum menghapus */}
+      {hapusTarget && (
+        <KonfirmasiAkun
+          judul="Hapus Pembukuan"
+          pesan={<>Masukkan password akun Anda untuk menghapus pembukuan <b className="text-zinc-700 dark:text-zinc-200">{hapusTarget.hari}, {hapusTarget.tanggal}</b> secara permanen.</>}
+          labelTombol="Hapus"
+          bahaya
+          onBatal={() => setHapusTarget(null)}
+          onBerhasil={() => { onDelete?.(hapusTarget.id); setHapusTarget(null); }}
+        />
       )}
     </>
   );

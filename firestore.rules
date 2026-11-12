@@ -92,7 +92,9 @@ service cloud.firestore {
     // Aturan Database Pembukuan Sehari-hari
     // ==========================================
     match /history_pembukuan/{docId} {
-      allow read, write: if isUrbanStaff();
+      allow read, create, update: if isUrbanStaff();
+      // Hapus pembukuan hanya owner / super admin (di aplikasi juga dikonfirmasi password akun)
+      allow delete: if isSalaryAdmin();
     }
 
     // ==========================================
