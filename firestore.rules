@@ -157,6 +157,11 @@ service cloud.firestore {
       allow read, write: if isSalaryAdmin();
     }
 
+    // Pemasukan owner (modal masuk, suntikan dana, pemasukan lain) — Input › Transaksi › Pemasukan
+    match /owner_incomes/{docId} {
+      allow read, write: if isSalaryAdmin();
+    }
+
     match /owner_assistants/{docId} {
       allow read, write: if isSalaryAdmin();
     }

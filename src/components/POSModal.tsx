@@ -1755,6 +1755,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
           setCart([]);
           setOpenMobileCart(false);
         }}
+        hitungDiskon={(items) => calculatePOSDiscount(items, promosConfig)}
       />
     </div>
   );

@@ -17,6 +17,10 @@ import RupiahIcon from "./common/RupiahIcon";
 import StokJualanOwner from "./StokJualanOwner";
 import AnalitikUsaha from "./AnalitikUsaha";
 import InputStokJualan from "./InputStokJualan";
+import InputTransaksi from "./InputTransaksi";
+import AnalitikKeseluruhan from "./AnalitikKeseluruhan";
+import SubTabs from "./common/SubTabs";
+import { bisnisOf, JenisTransaksi, pemasukanRental, saringPeriode, useTransaksiOwner } from "../lib/keuangan";
 import WidgetMonitoringDevice from "./WidgetMonitoringDevice";
 import {
   ResponsiveContainer,
@@ -33,15 +37,6 @@ import {
 } from "recharts";
 import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
 import { useIsDark } from "../hooks/useIsDark";
-
-type OwnerExpense = {
-  id: string;
-  nama: string;
-  harga: number;
-  kategori: string;
-  tanggal: string; // YYYY-MM-DD
-  timestamp: number;
-};
 
 type PageOwnerProps = {
   totalHarian: number;
@@ -98,7 +93,9 @@ const PageOwner: React.FC<PageOwnerProps> = ({
 }) => {
 
   const [activeTabOwner, setActiveTabOwner] = useState<"MONITORING" | "ANALITIK" | "INPUT PENGELUARAN" | "STOK" | "PEGAWAI">("MONITORING");
-  const [ownerExpenses, setOwnerExpenses] = useState<OwnerExpense[]>([]);
+  // Transaksi owner (pengeluaran & pemasukan) — satu sumber: lib/keuangan
+  const ownerExpenses = useTransaksiOwner("PENGELUARAN", filterMode, filterMonth, rangeStart, rangeEnd);
+  const ownerIncomes = useTransaksiOwner("PEMASUKAN", filterMode, filterMonth, rangeStart, rangeEnd);
   const [showAnalitikModal, setShowAnalitikModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showIncomeModal, setShowIncomeModal] = useState(false);
@@ -107,23 +104,17 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   useBodyScrollLock(showAnalitikModal);
   useBodyScrollLock(showIncomeModal);
 
-  // States for Input Pengeluaran Grouping
-  const [expandedExpenseMonths, setExpandedExpenseMonths] = useState<string[]>([]);
-  const toggleExpenseMonth = (m: string) => setExpandedExpenseMonths(p => p.includes(m) ? p.filter(x => x !== m) : [...p, m]);
-
-  const [expandedExpenseCats, setExpandedExpenseCats] = useState<string[]>([]);
-  const toggleExpenseCat = (key: string) => setExpandedExpenseCats(p => p.includes(key) ? p.filter(x => x !== key) : [...p, key]);
-
   // States for Analitik Sub-tabs and Logging
-  const [analitikSubTab, setAnalitikSubTab] = useState<"PEMBUKUAN" | "USAHA" | "LOGGING">("PEMBUKUAN");
-  const [inputSubTab, setInputSubTab] = useState<"PENGELUARAN" | "STOK">("PENGELUARAN");
+  const [analitikSubTab, setAnalitikSubTab] = useState<"KESELURUHAN" | "PEMBUKUAN" | "USAHA">("KESELURUHAN");
+  const [inputSubTab, setInputSubTab] = useState<"TRANSAKSI" | "STOK">("TRANSAKSI");
+  const [transaksiSubTab, setTransaksiSubTab] = useState<JenisTransaksi>("PENGELUARAN");
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
   const [filterEmail, setFilterEmail] = useState<string>("Semua");
   const [filterAction, setFilterAction] = useState<string>("Semua");
 
   // States for Pegawai Sub-tabs and Requests
-  const [pegawaiSubTab, setPegawaiSubTab] = useState<"DASHBOARD" | "REQUEST">("DASHBOARD");
+  const [pegawaiSubTab, setPegawaiSubTab] = useState<"DASHBOARD" | "REQUEST" | "LOGGING">("DASHBOARD");
   const [editRequests, setEditRequests] = useState<any[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
@@ -254,7 +245,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   };
 
   useEffect(() => {
-    if (activeTabOwner !== "ANALITIK" || analitikSubTab !== "LOGGING") return;
+    if (activeTabOwner !== "PEGAWAI" || pegawaiSubTab !== "LOGGING") return;
     
     setLoadingLogs(true);
     const q = query(collection(db, "pembukuan_logs"), orderBy("timestamp", "desc"));
@@ -267,93 +258,14 @@ const PageOwner: React.FC<PageOwnerProps> = ({
       setLoadingLogs(false);
     });
     return () => unsub();
-  }, [activeTabOwner, analitikSubTab]);
+  }, [activeTabOwner, pegawaiSubTab]);
 
-  useEffect(() => {
-    let q = collection(db, "owner_expenses") as any;
-    
-    if (filterMode === "Semua Bulan") {
-       q = query(q, orderBy("tanggal", "desc"));
-    } else if (filterMode === "Pilih Bulan") {
-       const yyyy = resolveMonthYear(filterMonth);
-       const mm = String(filterMonth).padStart(2, "0");
-       const startD = `${yyyy}-${mm}-01`;
-       const endD = `${yyyy}-${mm}-31`;
-       q = query(q, where("tanggal", ">=", startD), where("tanggal", "<=", endD), orderBy("tanggal", "desc"));
-    } else if (filterMode === "Rentang" && rangeStart && rangeEnd) {
-       q = query(q, where("tanggal", ">=", rangeStart), where("tanggal", "<=", rangeEnd), orderBy("tanggal", "desc"));
-    } else {
-       const cutoff = new Date();
-       cutoff.setDate(cutoff.getDate() - 60);
-       const yyyy = cutoff.getFullYear();
-       const mm = String(cutoff.getMonth() + 1).padStart(2, "0");
-       const dd = String(cutoff.getDate()).padStart(2, "0");
-       q = query(q, where("tanggal", ">=", `${yyyy}-${mm}-${dd}`), orderBy("tanggal", "desc"));
-    }
-
-    const unsub = onSnapshot(q, (snap: any) => {
-      const res: OwnerExpense[] = [];
-      snap.forEach((d: any) => res.push({ id: d.id, ...d.data() } as OwnerExpense));
-      setOwnerExpenses(res.sort((a, b) => b.timestamp - a.timestamp));
-    });
-    return () => unsub();
-  }, [filterMode, filterMonth, rangeStart, rangeEnd]);
-
-  const filteredOwnerExpenses = useMemo(() => {
-    const now = new Date();
-    if (filterMode === "Bulan Ini") {
-      return ownerExpenses.filter((o) => {
-        const d = new Date(o.tanggal);
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      });
-    }
-    if (filterMode === "7 Hari Terakhir") {
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - 7);
-      cutoff.setHours(0, 0, 0, 0);
-      return ownerExpenses.filter((o) => {
-        const d = new Date(o.tanggal);
-        d.setHours(0, 0, 0, 0);
-        return d >= cutoff;
-      });
-    }
-    if (filterMode === "Semua Bulan") return ownerExpenses;
-    if (filterMode === "Pilih Bulan") {
-      return ownerExpenses.filter((o) => {
-        const d = new Date(o.tanggal);
-        return (d.getMonth() + 1) === Number(filterMonth) && d.getFullYear() === resolveMonthYear(filterMonth);
-      });
-    }
-    if (filterMode === "Rentang" && rangeStart && rangeEnd) {
-      const s = new Date(rangeStart); s.setHours(0,0,0,0);
-      const e = new Date(rangeEnd); e.setHours(23,59,59,999);
-      return ownerExpenses.filter((o) => {
-        const d = new Date(o.tanggal);
-        return d >= s && d <= e;
-      });
-    }
-    return ownerExpenses;
-  }, [filterMode, ownerExpenses, filterMonth, rangeStart, rangeEnd]);
-
-  // Moved uniqueNames & uniqueCategories below formExpense for sorting based on user input
-
-  const groupedOwnerExpenses = useMemo(() => {
-    const map = new Map<string, OwnerExpense[]>();
-    ownerExpenses.forEach(o => {
-        const d = new Date(o.tanggal);
-        const mm = String(d.getMonth() + 1).padStart(2, "0");
-        const yy = String(d.getFullYear()).slice(-2);
-        const key = `${mm}/${yy}`;
-        if(!map.has(key)) map.set(key, []);
-        map.get(key)!.push(o);
-    });
-    return Array.from(map.entries()).sort((a,b) => {
-        const [m1, y1] = a[0].split("/");
-        const [m2, y2] = b[0].split("/");
-        if (y1 !== y2) return parseInt(y2) - parseInt(y1);
-        return parseInt(m2) - parseInt(m1);
-    });
-  }, [ownerExpenses]);
+  const filteredOwnerExpenses = useMemo(() => saringPeriode(ownerExpenses, filterMode, filterMonth, rangeStart, rangeEnd), [filterMode, ownerExpenses, filterMonth, rangeStart, rangeEnd]);
+  const filteredOwnerIncomes = useMemo(() => saringPeriode(ownerIncomes, filterMode, filterMonth, rangeStart, rangeEnd), [filterMode, ownerIncomes, filterMonth, rangeStart, rangeEnd]);
+  // Pemisahan model usaha: Analitik Rental hanya menghitung pengeluaran RENTAL
+  const pengeluaranOwnerRental = useMemo(() => filteredOwnerExpenses.filter((o) => bisnisOf(o) === "RENTAL"), [filteredOwnerExpenses]);
+  const pengeluaranOwnerUsaha = useMemo(() => filteredOwnerExpenses.filter((o) => bisnisOf(o) === "USAHA"), [filteredOwnerExpenses]);
+  const pemasukanOwnerUsaha = useMemo(() => filteredOwnerIncomes.filter((o) => bisnisOf(o) === "USAHA"), [filteredOwnerIncomes]);
 
   // --- Smart Auto-Categorization ---
   const detectCategory = (nama: string, fallback: string): string => {
@@ -398,11 +310,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     const combinedList: { source: string, nama: string, harga: number, tanggal: string, kategori: string }[] = [];
 
     filteredHistory.forEach((h) => {
-      let itemIncome =
-        toNum(h.totalHarian) +
-        toNum(h.totalJajanan) +
-        toNum(h.totalJasaAks) +
-        toNum(h.totalSewa);
+      const itemIncome = pemasukanRental(h);
 
       if (Array.isArray((h as any).rowsPengeluaran)) {
         (h as any).rowsPengeluaran.forEach((r: any) => {
@@ -421,7 +329,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     });
 
     let ownerExpense = 0;
-    filteredOwnerExpenses.forEach(o => {
+    pengeluaranOwnerRental.forEach(o => {
         ownerExpense += o.harga;
         const smartKategori = detectCategory(o.nama, o.kategori);
         combinedList.push({ source: "owner", nama: o.nama, harga: o.harga, tanggal: o.tanggal, kategori: smartKategori });
@@ -430,7 +338,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     combinedList.sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime());
 
     return { totalPemasukanBulanIni: income, totalPengeluaranBulanIni: adminExpense + ownerExpense, combinedExpensesBulanIni: combinedList };
-  }, [filteredHistory, filteredOwnerExpenses]);
+  }, [filteredHistory, pengeluaranOwnerRental]);
 
   const labaKotor = totalPemasukanBulanIni;
   const labaBersih = totalPemasukanBulanIni - totalPengeluaranBulanIni;
@@ -938,134 +846,6 @@ const PageOwner: React.FC<PageOwnerProps> = ({
 
   const isDark = useIsDark();
 
-  const [formExpense, setFormExpense] = useState({ nama: "", harga: "", kategori: "", tanggal: toLocalYmd() });
-  const [loadingEx, setLoadingEx] = useState(false);
-  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
-
-  // --- Auto Suggestions Logic (with Smart Filtering) ---
-  const uniqueNames = useMemo(() => {
-    const counts = new Map<string, number>();
-    ownerExpenses.forEach(e => {
-        if(e.nama) counts.set(e.nama.trim(), (counts.get(e.nama.trim()) || 0) + 1);
-    });
-    
-    let arr = Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(x => x[0]);
-      
-    const currentInput = formExpense.nama.trim().toLowerCase();
-    if (currentInput) {
-      arr = arr.filter(x => x.toLowerCase().includes(currentInput));
-    }
-    
-    return arr.slice(0, 10);
-  }, [ownerExpenses, formExpense.nama]);
-
-  const uniqueCategories = useMemo(() => {
-    const counts = new Map<string, number>();
-    ownerExpenses.forEach(e => {
-        if(e.kategori) counts.set(e.kategori.trim(), (counts.get(e.kategori.trim()) || 0) + 1);
-    });
-    
-    let arr = Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(x => x[0]);
-      
-    const currentInput = formExpense.kategori.trim().toLowerCase();
-    if (currentInput) {
-      arr = arr.filter(x => x.toLowerCase().includes(currentInput));
-    }
-    
-    return arr;
-  }, [ownerExpenses, formExpense.kategori]);
-
-  // --- Relasi Nama Pengeluaran -> Kategori (dipelajari dari riwayat input owner) ---
-  // Untuk setiap nama (tidak peka huruf besar/kecil), ambil kategori yang PALING SERING
-  // dipakai owner. Seri -> pakai yang paling baru. "Lainnya" hanya dipakai kalau memang
-  // tidak ada kategori lain, karena "Lainnya" adalah isian otomatis saat kategori kosong.
-  const kategoriByNama = useMemo(() => {
-    const stats = new Map<string, Map<string, { label: string; count: number; last: number }>>();
-    ownerExpenses.forEach(e => {
-      const namaKey = (e.nama || "").trim().toLowerCase();
-      const kat = (e.kategori || "").trim();
-      if (!namaKey || !kat) return;
-      const katKey = kat.toLowerCase();
-      const ts = Number(e.timestamp) || Date.parse(e.tanggal) || 0;
-      if (!stats.has(namaKey)) stats.set(namaKey, new Map());
-      const perNama = stats.get(namaKey)!;
-      const cur = perNama.get(katKey);
-      if (cur) {
-        cur.count += 1;
-        if (ts >= cur.last) { cur.last = ts; cur.label = kat; }
-      } else {
-        perNama.set(katKey, { label: kat, count: 1, last: ts });
-      }
-    });
-
-    const result = new Map<string, string>();
-    stats.forEach((perNama, namaKey) => {
-      const ranked = Array.from(perNama.entries())
-        .sort((a, b) => (b[1].count - a[1].count) || (b[1].last - a[1].last));
-      const best = ranked.find(([k]) => k !== "lainnya") || ranked[0];
-      if (best) result.set(namaKey, best[1].label);
-    });
-    return result;
-  }, [ownerExpenses]);
-
-  const [kategoriAuto, setKategoriAuto] = useState(false);
-
-  const handlePickNamaSuggestion = (n: string) => {
-    const kat = kategoriByNama.get(n.trim().toLowerCase());
-    setFormExpense(prev => ({ ...prev, nama: n, kategori: kat ?? prev.kategori }));
-    setKategoriAuto(!!kat);
-  };
-
-  const handleSimpanOwnerExpense = async () => {
-    if (!formExpense.nama || !formExpense.harga || !formExpense.tanggal) return;
-    setLoadingEx(true);
-    try {
-      if (editingExpenseId) {
-        await updateDoc(doc(db, "owner_expenses", editingExpenseId), {
-          nama: formExpense.nama.trim(),
-          harga: parseInt(formExpense.harga.replace(/\D/g, "") || "0", 10),
-          kategori: formExpense.kategori || "Lainnya",
-          tanggal: formExpense.tanggal
-        });
-        setEditingExpenseId(null);
-      } else {
-        await addDoc(collection(db, "owner_expenses"), {
-          nama: formExpense.nama.trim(),
-          harga: parseInt(formExpense.harga.replace(/\D/g, "") || "0", 10),
-          kategori: formExpense.kategori || "Lainnya",
-          tanggal: formExpense.tanggal,
-          timestamp: Date.now()
-        });
-      }
-      setFormExpense({ nama: "", harga: "", kategori: "", tanggal: toLocalYmd() });
-      setKategoriAuto(false);
-    } catch (e) { console.error(e); }
-    setLoadingEx(false);
-  };
-
-  const handleEditOwnerExpense = (o: OwnerExpense) => {
-    setFormExpense({
-      nama: o.nama,
-      harga: String(o.harga),
-      kategori: o.kategori,
-      tanggal: o.tanggal
-    });
-    setEditingExpenseId(o.id);
-    setKategoriAuto(false);
-    
-    const section = document.getElementById("input-pengeluaran-section");
-    if (section) section.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
-  const handleDeleteOwnerExpense = async (id: string) => {
-    if (!confirm("Hapus pengeluaran ini?")) return;
-    await deleteDoc(doc(db, "owner_expenses", id));
-  };
-
   return (
     <div className="space-y-3 sm:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out fill-mode-both">
 
@@ -1104,183 +884,26 @@ const PageOwner: React.FC<PageOwnerProps> = ({
       </div>
 
       {activeTabOwner === "INPUT PENGELUARAN" && (
-        <div className="flex justify-center">
-          <div className="w-full sm:w-auto grid grid-cols-2 sm:flex gap-1 bg-zinc-200/60 dark:bg-white/10 p-1 rounded-[12px]">
-            {([["PENGELUARAN", "Pengeluaran"], ["STOK", "Stok Jualan"]] as const).map(([k, l]) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setInputSubTab(k)}
-                className={`h-9 sm:px-6 rounded-[9px] text-[14px] font-semibold transition-all ${
-                  inputSubTab === k ? "bg-white dark:bg-[#3a3a3c] text-zinc-900 dark:text-white shadow-sm" : "text-zinc-500 dark:text-zinc-400"
-                }`}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {activeTabOwner === "INPUT PENGELUARAN" && inputSubTab === "STOK" && <InputStokJualan />}
-
-      {activeTabOwner === "INPUT PENGELUARAN" && inputSubTab === "PENGELUARAN" && (
-        <div id="input-pengeluaran-section" className="bg-white dark:bg-[#1C1C1E] rounded-3xl p-6 border border-zinc-200 dark:border-white/10 shadow-sm">
-          <h2 className="text-xl font-black text-purple-600 dark:text-purple-400 mb-6 flex items-center gap-2">
-            <RupiahIcon /> Input Pengeluaran
-          </h2>
-          <div className="grid grid-cols-1 gap-4 mb-6">
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-bold text-zinc-500 uppercase">Tanggal</label>
-              <input type="date" value={formExpense.tanggal} onChange={e => setFormExpense({ ...formExpense, tanggal: e.target.value })} className="bg-zinc-50 dark:bg-black rounded-xl px-4 py-3 border border-zinc-200 dark:border-zinc-800 text-sm font-bold w-full custom-date-input" />
-            </div>
-            
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-bold text-zinc-500 uppercase">Harga Pengeluaran</label>
-              <input type="text" inputMode="numeric" pattern="[0-9]*" value={formExpense.harga === "" ? "" : rupiah(parseInt(formExpense.harga.replace(/\D/g, "") || "0"))} onChange={e => setFormExpense({ ...formExpense, harga: e.target.value })} className="bg-zinc-50 dark:bg-black rounded-xl px-4 py-3 border border-zinc-200 dark:border-zinc-800 text-sm font-bold w-full" placeholder="Rp 0" />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-bold text-zinc-500 uppercase">Nama Pengeluaran</label>
-              <input type="text" value={formExpense.nama} onChange={e => setFormExpense({ ...formExpense, nama: e.target.value })} className="bg-zinc-50 dark:bg-black rounded-xl px-4 py-3 border border-zinc-200 dark:border-zinc-800 text-sm font-bold w-full" placeholder="Contoh: Bayar Wi-Fi" />
-              {uniqueNames.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {uniqueNames.map(n => (
-                    <button key={`nama-${n}`} type="button" onClick={() => handlePickNamaSuggestion(n)} title={kategoriByNama.get(n.trim().toLowerCase()) ? `Kategori otomatis: ${kategoriByNama.get(n.trim().toLowerCase())}` : undefined} className="px-3 py-1.5 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 dark:bg-purple-500/10 dark:hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 rounded-lg transition-colors border border-purple-200/50 dark:border-purple-500/20 active:scale-95">
-                      {n}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-2">
-                Kategori
-                {kategoriAuto && formExpense.kategori && (
-                  <span className="normal-case px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400 border border-purple-200/50 dark:border-purple-500/20">
-                    Otomatis dari riwayat
-                  </span>
-                )}
-              </label>
-              <input type="text" value={formExpense.kategori} onChange={e => { setKategoriAuto(false); setFormExpense({ ...formExpense, kategori: e.target.value }); }} className="bg-zinc-50 dark:bg-black rounded-xl px-4 py-3 border border-zinc-200 dark:border-zinc-800 text-sm font-bold w-full" placeholder="Ketik kategori pengeluaran..." />
-              {uniqueCategories.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {uniqueCategories.map(c => (
-                    <button key={`cat-${c}`} type="button" onClick={() => { setKategoriAuto(false); setFormExpense({ ...formExpense, kategori: c }); }} className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-colors border active:scale-95 ${c.toLowerCase() === formExpense.kategori.trim().toLowerCase() ? "bg-purple-600 text-white border-purple-600 dark:bg-purple-500 dark:border-purple-500" : "bg-zinc-100 hover:bg-zinc-200 dark:bg-[#2C2C2E] dark:hover:bg-white/10 text-zinc-600 dark:text-zinc-300 border-zinc-200/50 dark:border-white/5"}`}>
-                      {c}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="flex gap-3 mb-8">
-            <button disabled={loadingEx || !formExpense.nama || !formExpense.harga} onClick={handleSimpanOwnerExpense} className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold rounded-xl py-3.5 shadow-lg shadow-purple-500/20 transition-all active:scale-95">
-              {loadingEx ? "Menyimpan..." : editingExpenseId ? "Simpan Perubahan" : "Simpan Pengeluaran"}
-            </button>
-            {editingExpenseId && (
-              <button onClick={() => { setEditingExpenseId(null); setKategoriAuto(false); setFormExpense({ nama: "", harga: "", kategori: "", tanggal: toLocalYmd() }); }} className="px-6 bg-zinc-200 hover:bg-zinc-300 dark:bg-white/10 dark:hover:bg-white/20 text-zinc-700 dark:text-zinc-300 font-bold rounded-xl py-3.5 transition-all active:scale-95">
-                Batal
-              </button>
-            )}
-          </div>
-
-          <h3 className="text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-4 uppercase tracking-wider">Histori Pengeluaran</h3>
-          <div className="flex flex-col gap-3">
-            {groupedOwnerExpenses.length === 0 && <p className="text-center text-sm text-zinc-500 py-4">Belum ada pengeluaran.</p>}
-            {groupedOwnerExpenses.map(([gKey, gItems]) => {
-              const isExpanded = expandedExpenseMonths.includes(gKey);
-              const totalGroup = gItems.reduce((acc, o) => acc + o.harga, 0);
-
-              const catsMap = new Map<string, typeof gItems>();
-              gItems.forEach(o => {
-                 const c = o.kategori || "Lainnya";
-                 if (!catsMap.has(c)) catsMap.set(c, []);
-                 catsMap.get(c)!.push(o);
-              });
-              const groupedCats = Array.from(catsMap.entries()).sort((a,b) => b[1].reduce((sum, x) => sum + x.harga, 0) - a[1].reduce((sum, x) => sum + x.harga, 0));
-
-              return (
-                <div key={gKey} className="bg-zinc-50 dark:bg-[#18181A] rounded-[20px] overflow-hidden border border-zinc-200 dark:border-white/5 transition-all">
-                  <div 
-                    onClick={() => toggleExpenseMonth(gKey)}
-                    className="flex items-center justify-between p-4 sm:p-5 cursor-pointer active:bg-zinc-100 dark:active:bg-white/5 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-xl border transition-colors ${isExpanded ? 'bg-purple-100 border-purple-200 text-purple-600 dark:bg-purple-500/20 dark:border-purple-500/30 dark:text-purple-400' : 'bg-white border-zinc-200 text-zinc-500 dark:bg-[#2C2C2E] dark:border-white/5 dark:text-zinc-400'}`}>
-                        <svg className={`w-5 h-5 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-                      </div>
-                      <div>
-                        <div className="text-[13px] font-black uppercase tracking-wider text-zinc-800 dark:text-zinc-200">
-                          Pengeluaran <span className="text-purple-600 dark:text-purple-400">{gKey}</span>
-                        </div>
-                        <div className="text-[11px] font-bold text-zinc-400 mt-0.5">{gItems.length} Transaksi</div>
-                      </div>
-                    </div>
-                    <div className="text-right flex flex-col items-end justify-center">
-                       <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-0.5">Total</span>
-                       <span className="text-base sm:text-lg font-black text-rose-500">{rupiah(totalGroup)}</span>
-                    </div>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="flex flex-col gap-3 p-4 pt-1 bg-zinc-100/50 dark:bg-black/20 border-t border-zinc-200 dark:border-white/5 animate-in fade-in slide-in-from-top-2 duration-300">
-                      {groupedCats.map(([cKey, cItems]) => {
-                        const totalCat = cItems.reduce((acc, o) => acc + o.harga, 0);
-                        const catFullKey = `${gKey}-${cKey}`;
-                        const isCatExpanded = expandedExpenseCats.includes(catFullKey);
-                        return (
-                          <div key={catFullKey} className="bg-white dark:bg-[#1C1C1E] border border-zinc-200/60 dark:border-white/5 rounded-[16px] overflow-hidden shadow-sm transition-all">
-                             
-                             {/* Category Header */}
-                             <div 
-                                onClick={(e) => { e.stopPropagation(); toggleExpenseCat(catFullKey); }}
-                                className="flex items-center justify-between p-3 sm:p-4 cursor-pointer active:bg-zinc-50 dark:active:bg-white/5 transition-colors"
-                             >
-                               <div className="flex items-center gap-3">
-                                 <div className={`p-1.5 rounded-lg border transition-colors ${isCatExpanded ? 'bg-purple-50 border-purple-200 text-purple-600 dark:bg-purple-500/10 dark:border-purple-500/30 dark:text-purple-400' : 'bg-zinc-50 border-zinc-200 text-zinc-500 dark:bg-[#2C2C2E] dark:border-white/5 dark:text-zinc-400'}`}>
-                                    <svg className={`w-4 h-4 transition-transform duration-300 ${isCatExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-                                 </div>
-                                 <div>
-                                    <div className="text-[13px] font-bold text-zinc-800 dark:text-zinc-200">{cKey}</div>
-                                    <div className="text-[10px] font-semibold text-zinc-400">{cItems.length} Transaksi</div>
-                                 </div>
-                               </div>
-                               <div className="text-right">
-                                  <div className="text-[14px] font-black text-rose-500">{rupiah(totalCat)}</div>
-                               </div>
-                             </div>
-
-                             {/* Items in Category */}
-                             {isCatExpanded && (
-                               <div className="flex flex-col gap-2 p-3 bg-zinc-50 dark:bg-[#18181A] border-t border-zinc-200/60 dark:border-white/5">
-                                 {cItems.map(o => (
-                                    <div key={o.id} className="flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-[#1C1C1E] border border-zinc-200/60 dark:border-white/5 p-3 rounded-xl gap-3 shadow-sm">
-                                      <div>
-                                        <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-1">{o.tanggal}</div>
-                                        <div className="text-[13px] font-bold text-zinc-900 dark:text-white leading-tight">{o.nama}</div>
-                                      </div>
-                                      <div className="flex items-center justify-between sm:justify-end gap-3 h-full">
-                                        <div className="text-[14px] font-black text-rose-500 whitespace-nowrap">{rupiah(o.harga)}</div>
-                                        <div className="flex items-center gap-2">
-                                          <button onClick={(e) => { e.stopPropagation(); handleEditOwnerExpense(o); }} className="text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-500/10 dark:hover:bg-blue-500/20 px-2 py-1.5 rounded-lg transition-colors border border-blue-100 dark:border-blue-500/20 active:scale-95">Edit</button>
-                                          <button onClick={(e) => { e.stopPropagation(); handleDeleteOwnerExpense(o.id); }} className="text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 px-2 py-1.5 rounded-lg transition-colors border border-red-100 dark:border-red-500/20 active:scale-95">Hapus</button>
-                                        </div>
-                                      </div>
-                                    </div>
-                                 ))}
-                               </div>
-                             )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+        <div className="space-y-4">
+          <SubTabs
+            ariaLabel="Halaman input"
+            value={inputSubTab}
+            onChange={setInputSubTab}
+            options={[{ key: "TRANSAKSI", label: "Transaksi" }, { key: "STOK", label: "Stok Jualan" }]}
+          />
+          {inputSubTab === "TRANSAKSI" ? (
+            <>
+              <SubTabs<JenisTransaksi>
+                ariaLabel="Jenis transaksi"
+                value={transaksiSubTab}
+                onChange={setTransaksiSubTab}
+                options={[{ key: "PENGELUARAN", label: "Pengeluaran" }, { key: "PEMASUKAN", label: "Pemasukan" }]}
+              />
+              <InputTransaksi key={transaksiSubTab} jenis={transaksiSubTab} items={transaksiSubTab === "PENGELUARAN" ? ownerExpenses : ownerIncomes} />
+            </>
+          ) : (
+            <InputStokJualan />
+          )}
         </div>
       )}
 
@@ -1290,37 +913,33 @@ const PageOwner: React.FC<PageOwnerProps> = ({
 
       {activeTabOwner === "ANALITIK" && (
         <div className="space-y-6">
-          {/* Segmented Pill Switcher for Analitik Subpages (Rental · Usaha · Logging) */}
-          <div className="flex justify-center z-30 relative">
-            <div className="w-full sm:w-auto grid grid-cols-3 sm:flex gap-1 bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-2xl border border-zinc-200/50 dark:border-white/5 shadow-inner">
-              {([
-                ["PEMBUKUAN", "Rental", "text-emerald-600 dark:text-emerald-400"],
-                ["USAHA", "Usaha", "text-red-600 dark:text-red-400"],
-                ["LOGGING", "Logging", "text-blue-600 dark:text-blue-400"],
-              ] as const).map(([key, label, color]) => (
-                <button
-                  key={key}
-                  onClick={() => setAnalitikSubTab(key)}
-                  className={`px-2 sm:px-5 py-2 sm:py-2.5 rounded-xl transition-all uppercase leading-tight ${
-                    analitikSubTab === key
-                      ? `bg-white dark:bg-[#2C2C2E] shadow-sm ${color}`
-                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
-                  }`}
-                >
-                  <span className="block sm:inline text-[9px] sm:text-xs font-bold tracking-wider opacity-70 sm:opacity-100">Analitik </span>
-                  <span className="block sm:inline text-[13px] sm:text-xs font-black sm:font-bold tracking-wide sm:tracking-wider">{label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <SubTabs
+            ariaLabel="Halaman analitik"
+            value={analitikSubTab}
+            onChange={setAnalitikSubTab}
+            options={[
+              { key: "KESELURUHAN", label: "Keseluruhan" },
+              { key: "PEMBUKUAN", label: "Rental" },
+              { key: "USAHA", label: "Usaha" },
+            ]}
+          />
 
-          {analitikSubTab === "USAHA" ? (
+          {analitikSubTab === "KESELURUHAN" ? (
+            <AnalitikKeseluruhan
+              mode={filterMode} setMode={setFilterMode} month={filterMonth} setMonth={setFilterMonth}
+              rangeStart={rangeStart} setRangeStart={setRangeStart} rangeEnd={rangeEnd} setRangeEnd={setRangeEnd}
+              filteredHistory={filteredHistory}
+              pengeluaran={filteredOwnerExpenses}
+              pemasukan={filteredOwnerIncomes}
+            />
+          ) : analitikSubTab === "USAHA" ? (
             <AnalitikUsaha
               mode={filterMode} setMode={setFilterMode} month={filterMonth} setMonth={setFilterMonth}
               rangeStart={rangeStart} setRangeStart={setRangeStart} rangeEnd={rangeEnd} setRangeEnd={setRangeEnd}
-              pengeluaran={filteredOwnerExpenses}
+              pengeluaran={pengeluaranOwnerUsaha}
+              pemasukan={pemasukanOwnerUsaha}
             />
-          ) : analitikSubTab === "PEMBUKUAN" ? (
+          ) : (
             <>
           {/* 1. REKAP PEMASUKAN HARI INI */}
           <RekapPemasukan
@@ -1650,7 +1269,28 @@ const PageOwner: React.FC<PageOwnerProps> = ({
           {/* HISTORY PEMBUKUAN */}
           <HistoryPembukuan items={filteredHistory} isOwner={true} />
             </>
-          ) : (
+          )}
+        </div>
+      )}
+
+      {activeTabOwner === "PEGAWAI" && (
+        <div className="space-y-6">
+          <SubTabs
+            ariaLabel="Halaman pegawai"
+            value={pegawaiSubTab}
+            onChange={setPegawaiSubTab}
+            options={[
+              { key: "DASHBOARD", label: "Dashboard Pegawai" },
+              { key: "REQUEST", label: "Request Pegawai" },
+              { key: "LOGGING", label: "Logging Pegawai" },
+            ]}
+          />
+
+          {pegawaiSubTab === "DASHBOARD" ? (
+            <div className="animate-in fade-in duration-200">
+              <TabPegawai history={history} isOwner={true} />
+            </div>
+          ) : pegawaiSubTab === "LOGGING" ? (
             <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-4">
               <div className="bg-white dark:bg-black text-zinc-800 dark:text-zinc-300 font-mono text-[13px] border border-zinc-200 dark:border-white/5 rounded-3xl p-5 shadow-2xl relative overflow-hidden ring-1 ring-black/5 dark:ring-white/10">
                  {/* Console Header Bar */}
@@ -1837,42 +1477,6 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                     </div>
                  )}
               </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTabOwner === "PEGAWAI" && (
-        <div className="space-y-6">
-          {/* Segmented Pill Switcher for Pegawai Subpages */}
-          <div className="flex justify-center z-10 relative">
-            <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-2xl border border-zinc-200/50 dark:border-white/5 shadow-inner">
-              <button
-                onClick={() => setPegawaiSubTab("DASHBOARD")}
-                className={`px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-xl transition-all ${
-                  pegawaiSubTab === "DASHBOARD"
-                    ? "bg-white dark:bg-[#2C2C2E] text-pink-600 dark:text-pink-400 shadow-sm"
-                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
-                }`}
-              >
-                Dashboard Pegawai
-              </button>
-              <button
-                onClick={() => setPegawaiSubTab("REQUEST")}
-                className={`px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-xl transition-all ${
-                  pegawaiSubTab === "REQUEST"
-                    ? "bg-white dark:bg-[#2C2C2E] text-pink-600 dark:text-pink-400 shadow-sm"
-                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
-                }`}
-              >
-                Request Pegawai
-              </button>
-            </div>
-          </div>
-
-          {pegawaiSubTab === "DASHBOARD" ? (
-            <div className="animate-in fade-in duration-200">
-              <TabPegawai history={history} isOwner={true} />
             </div>
           ) : (
             <div className="animate-in fade-in duration-200 space-y-6">
@@ -2705,31 +2309,12 @@ const UnitStatusWidget = ({ rowsSewa, history, activeDate, onVerifyActiveRental,
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Segmented Pill Switcher */}
-      <div className="flex justify-center z-10">
-        <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-2xl border border-zinc-200/50 dark:border-white/5 shadow-inner">
-          <button
-            onClick={() => setActiveSlide("status")}
-            className={`px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-xl transition-all ${
-              activeSlide === "status"
-                ? "bg-white dark:bg-[#2C2C2E] text-emerald-600 dark:text-emerald-400 shadow-sm"
-                : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
-            }`}
-          >
-            Monitoring Status Unit
-          </button>
-          <button
-            onClick={() => setActiveSlide("device")}
-            className={`px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-xl transition-all ${
-              activeSlide === "device"
-                ? "bg-white dark:bg-[#2C2C2E] text-emerald-600 dark:text-emerald-400 shadow-sm"
-                : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
-            }`}
-          >
-            Monitoring Kondisi Unit
-          </button>
-        </div>
-      </div>
+      <SubTabs
+        ariaLabel="Halaman monitoring"
+        value={activeSlide}
+        onChange={setActiveSlide}
+        options={[{ key: "status", label: "Status Unit" }, { key: "device", label: "Kondisi Unit" }]}
+      />
 
       {/* Widget Container with fast fade transition */}
       <div className="w-full">

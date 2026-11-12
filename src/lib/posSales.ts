@@ -22,7 +22,9 @@ export type PosItem = {
   kategori: string; // JUALAN | SERVIS | RENTAL | ISI GAME
   subkategori?: string | null;
   platform?: string | null;
-  harga: number;
+  harga: number; // harga satuan AKHIR (sesudah nego kasir) — dipakai semua analitik
+  /** Harga satuan normal bila kasir mengubah harga (nego). Tidak ada = harga tidak diubah. */
+  hargaNormal?: number;
   qty: number;
   subtotal: number;
   stokRef?: StokRef | null; // barang stok yang benar-benar dikurangi
@@ -44,7 +46,12 @@ export type PosSale = {
   /** Link PDF nota (Firebase Storage) untuk dikirim ke WhatsApp pembeli */
   notaUrl?: string;
   items: PosItem[];
+  /** Jumlah harga barang SESUDAH nego, sebelum diskon promo */
   subtotal: number;
+  /** Total selisih nego kasir: Σ (harga normal − harga akhir) × qty. Positif = potongan untuk pembeli. */
+  nego?: number;
+  /** Nama kasir yang mengubah harga */
+  negoOleh?: string;
   diskonPersen: number;
   diskon: number;
   total: number;
@@ -57,6 +64,32 @@ export type PosSale = {
   /** Hanya di hasil commitPosSale (tidak disimpan): sisa stok sesudah transaksi per "kategori||item". */
   stokSesudah?: Record<string, number>;
 };
+
+// ============================================================
+// Nego harga oleh kasir — SSOT untuk checkout, nota (layar / PDF / thermal / WA) & analitik
+// ============================================================
+
+/** Selisih nego per SATUAN barang (positif = lebih murah dari harga normal). 0 = harga tidak diubah. */
+export const negoSatuan = (it: Pick<PosItem, "harga" | "hargaNormal">) =>
+  typeof it.hargaNormal === "number" && it.hargaNormal !== it.harga ? it.hargaNormal - it.harga : 0;
+
+/** Ringkasan nego satu nota (dihitung dari barang, aman untuk nota lama tanpa field `nego`). */
+export function infoNego(s: Pick<PosSale, "items" | "subtotal" | "negoOleh" | "kasirNama" | "kasir">) {
+  const barang = (s.items || []).filter((it) => negoSatuan(it) !== 0);
+  const total = barang.reduce((a, it) => a + negoSatuan(it) * it.qty, 0);
+  const oleh = s.negoOleh || s.kasirNama || String(s.kasir || "").split("@")[0] || "kasir";
+  return {
+    ada: barang.length > 0,
+    jumlahBarang: barang.length,
+    /** positif = potongan, negatif = harga dinaikkan */
+    total,
+    oleh,
+    /** jumlah harga normal sebelum nego */
+    hargaNormal: (s.subtotal || 0) + total,
+    labelBaris: total >= 0 ? "Potongan nego kasir" : "Penyesuaian harga kasir",
+    catatan: `Harga ${barang.length} jenis barang diubah oleh kasir ${oleh} (nego) · ${total >= 0 ? "potongan" : "tambahan"} Rp ${Math.abs(Math.round(total)).toLocaleString("id-ID")}`,
+  };
+}
 
 // ============================================================
 // Pencocokan nama produk POS -> barang stok

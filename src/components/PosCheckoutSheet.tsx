@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { X, CheckCircle2, Download, Printer, Share2, AlertTriangle, Package, Loader2, MessageCircle, PlusCircle, Link2Off } from "lucide-react";
+import { X, CheckCircle2, Download, Printer, Share2, AlertTriangle, Package, Loader2, MessageCircle, PlusCircle, Link2Off, Handshake, Pencil, RotateCcw } from "lucide-react";
 import logoBlack from "../assets/urban-logo-black.png";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
-import { commitPosSale, Kondisi, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, StokRef } from "../lib/posSales";
+import { commitPosSale, infoNego, Kondisi, negoSatuan, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, StokRef } from "../lib/posSales";
 import { UploadTransferProof } from "./TableEditor";
 import { buildNotaPdf, fmtTanggalNota, GARANSI_JUDUL, GARANSI_TEKS, notaFileName, preloadNotaAssets, printNotaThermal, STORE } from "../lib/posReceipt";
 
@@ -32,6 +32,7 @@ const refKey = (r: StokRef) => `${r.kategori}||${r.item}`;
 // ============================================================
 
 export const NotaPreview: React.FC<{ sale: PosSale }> = ({ sale: s }) => {
+  const ng = infoNego(s);
   const Row = ({ l, r, bold }: { l: string; r: string; bold?: boolean }) => (
     <div className={`flex justify-between gap-3 ${bold ? "font-bold" : ""}`}>
       <span className="text-zinc-600 shrink-0">{l}</span>
@@ -64,14 +65,29 @@ export const NotaPreview: React.FC<{ sale: PosSale }> = ({ sale: s }) => {
               <span>{it.qty} x {rp(it.harga)}</span>
               <span className="text-black">{rp(it.subtotal)}</span>
             </div>
+            {negoSatuan(it) !== 0 && (
+              <div className="text-[9.5px] italic text-zinc-500 font-mono">
+                Harga normal {rp(it.hargaNormal!)} · nego kasir {negoSatuan(it) > 0 ? "−" : "+"}{rp(Math.abs(negoSatuan(it)))}/pcs
+              </div>
+            )}
           </div>
         ))}
       </div>
       <div className="border-t border-dashed border-zinc-400 my-2.5" />
-      {s.diskon > 0 && (
+      {(ng.ada || s.diskon > 0) && (
         <div className="space-y-0.5 text-[11px] mb-2 font-mono">
-          <Row l="Subtotal" r={rp(s.subtotal)} />
-          <Row l={`Diskon promo (${s.diskonPersen}%)`} r={`-${rp(s.diskon)}`} />
+          {ng.ada && (
+            <>
+              <Row l="Harga normal" r={rp(ng.hargaNormal)} />
+              <Row l={ng.labelBaris} r={`${ng.total >= 0 ? "-" : "+"}${rp(Math.abs(ng.total))}`} />
+            </>
+          )}
+          {s.diskon > 0 && (
+            <>
+              <Row l="Subtotal" r={rp(s.subtotal)} />
+              <Row l={`Diskon promo (${s.diskonPersen}%)`} r={`-${rp(s.diskon)}`} />
+            </>
+          )}
         </div>
       )}
       <div className="bg-black text-white flex items-center justify-between px-3 py-2 rounded-[3px]">
@@ -81,6 +97,11 @@ export const NotaPreview: React.FC<{ sale: PosSale }> = ({ sale: s }) => {
       <div className="text-center text-[10.5px] font-bold mt-2 tracking-wide">
         LUNAS · {s.metode === "TRANSFER" ? "TRANSFER / QRIS" : "TUNAI"}
       </div>
+      {ng.ada && (
+        <div className="mt-2.5 rounded-md border border-dashed border-zinc-500 px-2.5 py-1.5 text-center text-[10px] leading-snug text-zinc-700">
+          <b>Catatan:</b> {ng.catatan}.
+        </div>
+      )}
       <div className="mt-3 rounded-md border-[1.5px] border-black px-3 py-2 text-center">
         <div className="text-[11px] font-black tracking-wide">{GARANSI_JUDUL}</div>
         <div className="text-[10px] leading-snug text-zinc-700 mt-0.5">{GARANSI_TEKS}</div>
@@ -173,6 +194,7 @@ export function useNotaActions(sale: PosSale | null) {
       ``,
       `No. Nota: *${sale.noNota}*`,
       ...sale.items.map((it) => `• ${it.nama} (${it.qty}x) ${rp(it.subtotal)}`),
+      ...(infoNego(sale).ada ? [`_Catatan: ${infoNego(sale).catatan}._`] : []),
       `Total: *${rp(sale.total)}* — LUNAS (${sale.metode === "TRANSFER" ? "Transfer/QRIS" : "Tunai"})`,
       ``,
       ...(link ? [`📄 Nota PDF: ${link}`, ``] : []),
@@ -247,10 +269,22 @@ type Props = {
   data: Record<string, Record<string, StokItemValue>>;
   /** Dipanggil begitu transaksi tersimpan (kosongkan keranjang). */
   onCompleted: (sale: PosSale) => void;
+  /** Hitung ulang diskon promo bila kasir mengubah harga (aturan promo yang sama dengan keranjang). */
+  hitungDiskon?: (items: { price: number; quantity: number; platform?: string; category: string }[]) => {
+    subtotal: number;
+    discountPercent: number;
+    discountAmount: number;
+    total: number;
+  };
+};
+
+const ribuan = (s: string) => {
+  const d = String(s || "").replace(/[^\d]/g, "").replace(/^0+(?=\d)/, "");
+  return d ? Number(d).toLocaleString("id-ID") : "";
 };
 
 const PosCheckoutSheet: React.FC<Props> = ({
-  open, onClose, lines, subtotal, discountPercent, discountAmount, total, metode, setMetode, kasirNama, categories, data, onCompleted,
+  open, onClose, lines, subtotal, discountPercent, discountAmount, total, metode, setMetode, kasirNama, categories, data, onCompleted, hitungDiskon,
 }) => {
   useBodyScrollLock(open);
   const [pembeli, setPembeli] = useState("");
@@ -260,13 +294,58 @@ const PosCheckoutSheet: React.FC<Props> = ({
   const [saving, setSaving] = useState<"" | "pdf" | "thermal" | "none">("");
   const [error, setError] = useState("");
   const [sale, setSale] = useState<PosSale | null>(null);
+  // Nego: harga satuan baru per baris keranjang (id -> harga)
+  const [hargaNego, setHargaNego] = useState<Record<string, number>>({});
+  const [editHarga, setEditHarga] = useState<string | null>(null);
+  const [draftHarga, setDraftHarga] = useState("");
   const actions = useNotaActions(sale);
 
   useEffect(() => { if (open) preloadNotaAssets(); }, [open]);
 
   const reset = () => {
     setPembeli(""); setPembeliWa(""); setVariant({}); setBukti(""); setError(""); setSale(null); setSaving(""); actions.setMsg("");
+    setHargaNego({}); setEditHarga(null); setDraftHarga("");
   };
+
+  // ---------- Nego harga oleh kasir ----------
+  const hargaAkhir = (l: CheckoutLine) => (typeof hargaNego[l.id] === "number" ? hargaNego[l.id] : l.price);
+  const negoBaris = (l: CheckoutLine) => (l.price - hargaAkhir(l)) * l.quantity;
+  const totalNego = lines.reduce((s, l) => s + negoBaris(l), 0);
+  const adaNego = lines.some((l) => hargaAkhir(l) !== l.price);
+  const hitung = useMemo(() => {
+    if (!adaNego) return { subtotal, discountPercent, discountAmount, total };
+    const items = lines.map((l) => ({ price: hargaAkhir(l), quantity: l.quantity, platform: l.platform, category: l.category }));
+    if (hitungDiskon) return hitungDiskon(items);
+    const sub = items.reduce((s, it) => s + it.price * it.quantity, 0);
+    const disk = Math.min(discountAmount, sub);
+    return { subtotal: sub, discountPercent, discountAmount: disk, total: sub - disk };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adaNego, lines, hargaNego, subtotal, discountPercent, discountAmount, total, hitungDiskon]);
+
+  const mulaiUbahHarga = (l: CheckoutLine) => {
+    setEditHarga(l.id);
+    setDraftHarga(ribuan(String(hargaAkhir(l))));
+    setError("");
+  };
+  const simpanHarga = (l: CheckoutLine) => {
+    const digit = draftHarga.replace(/[^\d]/g, "");
+    if (!digit) { setEditHarga(null); return; }
+    const n = Math.round(Number(digit));
+    if (n === 0 && !window.confirm(`Jadikan ${l.name} GRATIS (Rp 0)?`)) return;
+    setHargaNego((m) => {
+      const x = { ...m };
+      if (n === l.price) delete x[l.id];
+      else x[l.id] = n;
+      return x;
+    });
+    setEditHarga(null);
+  };
+  const kembalikanHarga = (id: string) =>
+    setHargaNego((m) => {
+      const x = { ...m };
+      delete x[id];
+      return x;
+    });
   const close = () => {
     if (saving) return;
     const wasDone = !!sale;
@@ -306,20 +385,25 @@ const PosCheckoutSheet: React.FC<Props> = ({
     if (saving || !lines.length) return;
     if (belumPilih.length) { setError(`Pilih varian stok untuk "${belumPilih[0].line.name}".`); return; }
     if (butuhBukti) { setError("Upload foto bukti transfer dulu."); return; }
+    if (editHarga) { setError("Selesaikan ubah harga dulu (ketuk OK)."); return; }
     setSaving(mode);
     setError("");
-    const items: PosItem[] = resolved.map(({ line: l, ref }) => ({
-      id: l.id,
-      nama: l.name,
-      kategori: l.category,
-      subkategori: l.subcategory || null,
-      ...(l.kondisi ? { kondisi: l.kondisi } : {}),
-      platform: l.platform || null,
-      harga: l.price,
-      qty: l.quantity,
-      subtotal: l.price * l.quantity,
-      stokRef: ref,
-    }));
+    const items: PosItem[] = resolved.map(({ line: l, ref }) => {
+      const h = hargaAkhir(l);
+      return {
+        id: l.id,
+        nama: l.name,
+        kategori: l.category,
+        subkategori: l.subcategory || null,
+        ...(l.kondisi ? { kondisi: l.kondisi } : {}),
+        platform: l.platform || null,
+        harga: h, // harga akhir (sesudah nego) -> analitik mengikuti harga ini
+        ...(h !== l.price ? { hargaNormal: l.price } : {}),
+        qty: l.quantity,
+        subtotal: h * l.quantity,
+        stokRef: ref,
+      };
+    });
     let s: PosSale;
     try {
       s = await commitPosSale({
@@ -329,10 +413,11 @@ const PosCheckoutSheet: React.FC<Props> = ({
         metode,
         buktiTransfer: metode === "TRANSFER" ? bukti : undefined,
         items,
-        subtotal,
-        diskonPersen: discountPercent,
-        diskon: discountAmount,
-        total,
+        subtotal: hitung.subtotal,
+        ...(adaNego ? { nego: totalNego, negoOleh: kasirNama } : {}),
+        diskonPersen: hitung.discountPercent,
+        diskon: hitung.discountAmount,
+        total: hitung.total,
       });
     } catch (e: any) {
       setError("Transaksi gagal disimpan: " + (e?.message || e) + ". Stok tidak berubah, coba lagi.");
@@ -375,10 +460,17 @@ const PosCheckoutSheet: React.FC<Props> = ({
               {/* Total */}
               <div className="rounded-[20px] bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-4 py-3.5">
                 <div className="text-[11px] font-bold uppercase tracking-widest opacity-60">Total bayar</div>
-                <div className="text-[30px] font-black font-mono tracking-tight leading-none mt-1">{rp(total)}</div>
-                {discountAmount > 0 && (
-                  <div className="text-[12px] mt-1.5 opacity-80">
-                    <span className="line-through opacity-60 mr-1.5">{rp(subtotal)}</span>hemat {rp(discountAmount)} ({discountPercent}%)
+                <div className="text-[30px] font-black font-mono tracking-tight leading-none mt-1">{rp(hitung.total)}</div>
+                {adaNego && (
+                  <div className="text-[12px] mt-1.5 opacity-80 flex items-center gap-1.5 flex-wrap">
+                    <Handshake className="w-3.5 h-3.5 shrink-0" />
+                    <span>Harga normal <span className="line-through opacity-70">{rp(hitung.subtotal + totalNego)}</span></span>
+                    <span>· nego {totalNego >= 0 ? "−" : "+"}{rp(Math.abs(totalNego))}</span>
+                  </div>
+                )}
+                {hitung.discountAmount > 0 && (
+                  <div className="text-[12px] mt-1 opacity-80">
+                    <span className="line-through opacity-60 mr-1.5">{rp(hitung.subtotal)}</span>hemat promo {rp(hitung.discountAmount)} ({hitung.discountPercent}%)
                   </div>
                 )}
               </div>
@@ -414,7 +506,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
               {/* Barang & stok */}
               <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] p-3.5">
                 <div className="flex items-center justify-between mb-2">
-                  <div className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Barang & stok</div>
+                  <div className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Barang, harga & stok</div>
                   <Package className="w-4 h-4 text-zinc-300" />
                 </div>
                 <div className="divide-y divide-zinc-100 dark:divide-white/5">
@@ -423,6 +515,9 @@ const PosCheckoutSheet: React.FC<Props> = ({
                     const need = ref ? needByKey.get(refKey(ref)) || 0 : 0;
                     const sesudah = sisa === null ? null : sisa - need;
                     const kategoriItems = pilih ? categories.find((c) => c.kategori === pilih)?.items || [] : [];
+                    const h = hargaAkhir(l);
+                    const nego = negoBaris(l);
+                    const diubah = h !== l.price;
                     return (
                       <div key={l.id} className="py-2.5 first:pt-0 last:pb-0">
                         <div className="flex items-start justify-between gap-3">
@@ -430,10 +525,54 @@ const PosCheckoutSheet: React.FC<Props> = ({
                             {l.category === "ISI GAME" && l.platform ? `${l.name} (${l.platform})` : l.name}
                           </div>
                           <div className="shrink-0 text-right">
-                            <div className="text-[13px] font-black font-mono text-zinc-900 dark:text-white">{rp(l.price * l.quantity)}</div>
-                            <div className="text-[11px] text-zinc-400">{l.quantity} × {rp(l.price)}</div>
+                            <div className="text-[13px] font-black font-mono text-zinc-900 dark:text-white">{rp(h * l.quantity)}</div>
+                            <div className="text-[11px] text-zinc-400">{l.quantity} × {rp(h)}</div>
                           </div>
                         </div>
+
+                        {/* Nego harga */}
+                        {editHarga === l.id ? (
+                          <div className="mt-2">
+                            <div className="flex items-center gap-2">
+                              <label className="flex-1 min-w-0 flex items-center h-11 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 ring-2 ring-violet-500/40">
+                                <span className="text-[13px] font-bold text-zinc-400 mr-1.5">Rp</span>
+                                <input
+                                  autoFocus
+                                  inputMode="numeric"
+                                  aria-label={`Harga satuan baru ${l.name}`}
+                                  value={draftHarga}
+                                  onChange={(e) => setDraftHarga(ribuan(e.target.value))}
+                                  onKeyDown={(e) => { if (e.key === "Enter") simpanHarga(l); if (e.key === "Escape") setEditHarga(null); }}
+                                  className="flex-1 min-w-0 bg-transparent text-[15px] font-bold tabular-nums text-zinc-900 dark:text-white focus:outline-none"
+                                />
+                                <span className="text-[11px] font-semibold text-zinc-400 ml-1">/pcs</span>
+                              </label>
+                              <button type="button" onClick={() => simpanHarga(l)} className="h-11 px-4 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[13px] font-black active:scale-95">OK</button>
+                              <button type="button" onClick={() => setEditHarga(null)} aria-label="Batal ubah harga" className="h-11 w-11 shrink-0 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500 flex items-center justify-center active:scale-95"><X className="w-4 h-4" /></button>
+                            </div>
+                            <div className="mt-1 text-[11.5px] text-zinc-500">Harga normal {rp(l.price)}/pcs · harga baru dicatat di nota & analitik</div>
+                          </div>
+                        ) : (
+                          <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                            {diubah && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11.5px] font-bold bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300">
+                                <Handshake className="w-3.5 h-3.5" />
+                                Nego {nego >= 0 ? "−" : "+"}{rp(Math.abs(nego))}
+                                <span className="font-semibold opacity-70">· normal <span className="line-through">{rp(l.price)}</span></span>
+                              </span>
+                            )}
+                            <button type="button" onClick={() => mulaiUbahHarga(l)}
+                              className="inline-flex items-center gap-1 h-9 px-3 rounded-lg text-[12px] font-bold text-zinc-700 dark:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 active:scale-95">
+                              <Pencil className="w-3.5 h-3.5" />{diubah ? "Ubah lagi" : "Ubah harga"}
+                            </button>
+                            {diubah && (
+                              <button type="button" onClick={() => kembalikanHarga(l.id)}
+                                className="inline-flex items-center gap-1 h-9 px-2.5 rounded-lg text-[12px] font-bold text-zinc-500 active:scale-95">
+                                <RotateCcw className="w-3.5 h-3.5" />Harga normal
+                              </button>
+                            )}
+                          </div>
+                        )}
                         {pilih && (
                           <select value={variant[l.id] || ""} onChange={(e) => { setVariant((v) => ({ ...v, [l.id]: e.target.value })); setError(""); }}
                             className={`mt-2 w-full h-11 px-3 rounded-xl text-[13px] font-semibold ${variant[l.id] ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white" : "bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 ring-1 ring-amber-300/60"}`}>

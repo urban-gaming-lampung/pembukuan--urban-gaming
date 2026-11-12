@@ -32,6 +32,7 @@ import AdminNotes from "./components/AdminNotes";
 import { Package, AlertCircle, Bot } from "lucide-react";
 import { GAME_NAMES_ID } from "./games/constants";
 import useAppController from "./hooks/useAppController";
+import SubTabs from "./components/common/SubTabs";
 
 const ChallengeModal = lazy(() => import("./games/components/ChallengeModal"));
 
@@ -361,31 +362,12 @@ export default function App() {
               />
             ) : activeTab === "MONITORING" && !isSuperAdminOrOwner ? (
               <div className="flex flex-col gap-4">
-                {/* Segmented Pill Switcher for Admin */}
-                <div className="flex justify-center z-10">
-                  <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-2xl border border-zinc-200/50 dark:border-white/5 shadow-inner">
-                    <button
-                      onClick={() => setAdminMonitoringTab("status")}
-                      className={`px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-xl transition-all ${
-                        adminMonitoringTab === "status"
-                          ? "bg-white dark:bg-[#2C2C2E] text-emerald-600 dark:text-emerald-400 shadow-sm"
-                          : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
-                      }`}
-                    >
-                      Monitoring Status Unit
-                    </button>
-                    <button
-                      onClick={() => setAdminMonitoringTab("device")}
-                      className={`px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-xl transition-all ${
-                        adminMonitoringTab === "device"
-                          ? "bg-white dark:bg-[#2C2C2E] text-emerald-600 dark:text-emerald-400 shadow-sm"
-                          : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
-                      }`}
-                    >
-                      Monitoring Kondisi Unit
-                    </button>
-                  </div>
-                </div>
+                <SubTabs
+                  ariaLabel="Halaman monitoring"
+                  value={adminMonitoringTab}
+                  onChange={setAdminMonitoringTab}
+                  options={[{ key: "status", label: "Status Unit" }, { key: "device", label: "Kondisi Unit" }]}
+                />
 
                 {adminMonitoringTab === "status" ? (
                   <div className="animate-in fade-in duration-200">

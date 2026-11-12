@@ -301,6 +301,7 @@ export async function tambahStokMasuk(p: { id: string; nama: string }, target: S
         nama: namaPengeluaran(p.nama, target.item, d.qty),
         harga: Math.round(d.modalSatuan * d.qty),
         kategori: KATEGORI_PENGELUARAN_STOK,
+        bisnis: "USAHA", // belanja stok jualan = pengeluaran model usaha (toko)
         tanggal: d.tanggal,
         timestamp: now,
         sumber: "input_stok",
@@ -352,7 +353,7 @@ export async function ubahStokMasuk(rec: StokMasuk, d: StokMasukData, produkNama
     if (mau && expenseId) tx.update(doc(db, "owner_expenses", expenseId), dataExp);
     else if (mau) {
       const ref = doc(collection(db, "owner_expenses"));
-      tx.set(ref, { ...dataExp, kategori: KATEGORI_PENGELUARAN_STOK, timestamp: now, sumber: "input_stok", produkId: rec.produkId, stokMasukId: rec.id, stok: { kategori: rec.kategori, item: rec.item } });
+      tx.set(ref, { ...dataExp, kategori: KATEGORI_PENGELUARAN_STOK, bisnis: "USAHA", timestamp: now, sumber: "input_stok", produkId: rec.produkId, stokMasukId: rec.id, stok: { kategori: rec.kategori, item: rec.item } });
       expenseId = ref.id;
     } else if (expenseId) {
       tx.delete(doc(db, "owner_expenses", expenseId));

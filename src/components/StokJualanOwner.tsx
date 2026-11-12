@@ -10,6 +10,7 @@ import {
   restockText, saveMinStok, shortName, soldMap, useMinStok, useStokLog, STALE_DAYS,
 } from "../lib/stokJualan";
 import { buildStokReport } from "../lib/stokReport";
+import SubTabs from "./common/SubTabs";
 
 /**
  * Page Owner > STOK — pusat pantau STOK JUALAN (mobile-first).
@@ -184,18 +185,12 @@ const StokJualanOwner: React.FC = () => {
       </div>
 
       {/* Tab */}
-      <div className="flex p-1 rounded-xl bg-zinc-200/60 dark:bg-white/5">
-        {([["barang", "Barang"], ["riwayat", "Riwayat"]] as const).map(([k, t]) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => setTab(k)}
-            className={`flex-1 h-10 rounded-[10px] text-[13px] font-bold ${tab === k ? "bg-white dark:bg-[#2c2c2e] text-zinc-900 dark:text-white shadow-sm" : "text-zinc-500"}`}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+      <SubTabs
+        ariaLabel="Halaman stok jualan"
+        value={tab}
+        onChange={setTab}
+        options={[{ key: "barang", label: "Barang" }, { key: "riwayat", label: "Riwayat" }]}
+      />
 
       {tab === "barang" ? (
         <>

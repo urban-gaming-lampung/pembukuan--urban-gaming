@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { INITIAL_STOK_RENTAL, INITIAL_STOK_JUALAN, StokKategori, StokItemValue, StokData, MasterStokCategories } from "../hooks/useStokData";
 import { Package, Activity } from "lucide-react";
 import StokJualanEditor from "./StokJualanEditor";
+import SubTabs from "./common/SubTabs";
 
 const INTEGRATED_CATEGORIES = [
   "UPDATE STIK - STIK PS3",
@@ -302,28 +303,12 @@ export default function UpdateStok({ adminName, isOwner, stokState, updateStok, 
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out fill-mode-both">
-      <div className="flex w-full mb-6 bg-zinc-200/50 dark:bg-[#1C1C1E] p-1 rounded-[14px] ring-1 ring-zinc-300/50 dark:ring-white/5 backdrop-blur-sm relative gap-1">
-        <button
-          onClick={() => setActiveSubTab("RENTAL")}
-          className={`flex-1 py-2.5 text-[13px] sm:text-sm font-bold tracking-wide rounded-[10px] transition-all duration-300 flex justify-center items-center ${
-            activeSubTab === "RENTAL"
-              ? "bg-white dark:bg-[#2C2C2E] text-pink-600 dark:text-pink-400 shadow-sm ring-1 ring-black/5 dark:ring-white/10"
-              : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-          }`}
-        >
-          STOK RENTAL
-        </button>
-        <button
-          onClick={() => setActiveSubTab("JUALAN")}
-          className={`flex-1 py-2.5 text-[13px] sm:text-sm font-bold tracking-wide rounded-[10px] transition-all duration-300 flex justify-center items-center ${
-            activeSubTab === "JUALAN"
-              ? "bg-white dark:bg-[#2C2C2E] text-lime-600 dark:text-lime-400 shadow-sm ring-1 ring-black/5 dark:ring-white/10"
-              : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-          }`}
-        >
-          STOK JUALAN
-        </button>
-      </div>
+      <SubTabs
+        ariaLabel="Jenis stok"
+        value={activeSubTab}
+        onChange={setActiveSubTab}
+        options={[{ key: "RENTAL", label: "Stok Rental" }, { key: "JUALAN", label: "Stok Jualan" }]}
+      />
 
       {activeSubTab === "RENTAL" && isOwner && (
          <MasterInventarisForm type="rental" catList={masterCategories.rental} onAdd={addStokItem} isOwner={isOwner} />

@@ -15,6 +15,7 @@ import jsPDF from "jspdf";
 
 import useStokData, { RegisteredDevice, DeviceType } from "../hooks/useStokData";
 import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
+import SubTabs from "./common/SubTabs";
 
 interface WidgetMonitoringDeviceProps {
   isOwner?: boolean;
@@ -787,43 +788,19 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
           <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 dark:bg-emerald-500/5 blur-3xl rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-teal-500/10 dark:bg-teal-500/5 blur-3xl rounded-full translate-y-1/2 -translate-x-1/2 pointer-events-none" />
 
-          {/* Owner Tab Pill Switcher */}
+          {/* Sub halaman owner — gaya SubTabs (SSOT) */}
           {isOwner && (
-            <div className="flex bg-zinc-100/80 dark:bg-[#1c1c1e] p-1 rounded-2xl self-start w-full sm:w-auto z-10 border border-zinc-200/50 dark:border-white/5 backdrop-blur-md">
-              <button
-                onClick={() => setActiveSubTab("kondisi")}
-                className={`flex-1 sm:flex-initial px-5 py-2.5 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1.5 ${
-                  activeSubTab === "kondisi"
-                    ? "bg-white dark:bg-black text-emerald-600 dark:text-emerald-400 shadow-sm"
-                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
-                }`}
-              >
-                <Activity className="w-3.5 h-3.5" /> Kondisi Device
-              </button>
-              <button
-                onClick={() => {
-                  setActiveSubTab("generator");
-                  setEditingStickerId(null);
-                }}
-                className={`flex-1 sm:flex-initial px-5 py-2.5 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1.5 ${
-                  activeSubTab === "generator"
-                    ? "bg-white dark:bg-black text-emerald-600 dark:text-emerald-400 shadow-sm"
-                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5" /> Sticker Generator
-              </button>
-              <button
-                onClick={() => setActiveSubTab("history")}
-                className={`flex-1 sm:flex-initial px-5 py-2.5 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1.5 ${
-                  activeSubTab === "history"
-                    ? "bg-white dark:bg-black text-emerald-600 dark:text-emerald-400 shadow-sm"
-                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
-                }`}
-              >
-                <History className="w-3.5 h-3.5" /> Riwayat Sticker
-              </button>
-            </div>
+            <SubTabs
+              className="relative z-10 w-full"
+              ariaLabel="Halaman device"
+              value={activeSubTab}
+              onChange={(k) => { setActiveSubTab(k); if (k === "generator") setEditingStickerId(null); }}
+              options={[
+                { key: "kondisi", label: "Kondisi Device" },
+                { key: "generator", label: "Sticker Generator" },
+                { key: "history", label: "Riwayat Sticker" },
+              ]}
+            />
           )}
 
           {/* Tab 1: Kondisi Device (Visible to Admin & Owner) */}

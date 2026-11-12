@@ -129,10 +129,10 @@ export default function InputStokJualan() {
     return out;
   }, [semuaProduk, cats, kondisi]);
 
-  // Nilai stok (modal): jumlah barang x rata-rata modal produk yang memakainya
+  // Nilai stok (modal) SELURUH barang jualan (baru + seken): jumlah barang x rata-rata modal produk yang memakainya
   const nilaiStok = useMemo(() => {
     const per = new Map<string, number[]>();
-    products.forEach((p) => {
+    semuaProduk.forEach((p) => {
       const m = modalOf(p.id);
       const r = p.stokRef;
       if (m === null || !r) return;
@@ -147,9 +147,18 @@ export default function InputStokJualan() {
     });
     return total;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products, modalMap, cats, data]);
+  }, [semuaProduk, modalMap, cats, data]);
 
   const tanpaModal = products.filter((p) => modalOf(p.id) === null);
+  const tanpaModalSemua = semuaProduk.filter((p) => modalOf(p.id) === null);
+  const lihatTanpaModal = () => {
+    // Halaman ini kosong tapi halaman lain punya barang tanpa modal -> pindah ke sana
+    if (!tanpaModal.length) {
+      const lain: Kondisi = kondisi === "BARU" ? "SEKEN" : "BARU";
+      if (tanpaModalSemua.some((p) => kondisiProduk(p) === lain)) setKondisi(lain);
+    }
+    setFilter("tanpaModal");
+  };
   const q = cari.trim().toLowerCase();
   const list = useMemo(() => {
     let l = products;
@@ -181,15 +190,12 @@ export default function InputStokJualan() {
 
   return (
     <div className="space-y-4">
-      {/* Halaman Baru / Seken */}
-      <KondisiSwitch value={kondisi} onChange={(k) => { setKondisi(k); setFilter("semua"); }} counts={kondisiCount} />
-
-      {/* Ringkasan */}
+      {/* Ringkasan seluruh barang jualan (baru + seken) */}
       <div className="grid grid-cols-3 gap-2">
         {[
-          { l: "Barang", v: String(products.length), on: undefined },
+          { l: "Barang", v: String(semuaProduk.length), on: undefined },
           { l: "Nilai stok", v: rpShort(nilaiStok), on: undefined },
-          { l: "Tanpa modal", v: String(tanpaModal.length), on: () => setFilter("tanpaModal"), warn: tanpaModal.length > 0 },
+          { l: "Tanpa modal", v: String(tanpaModalSemua.length), on: tanpaModalSemua.length ? lihatTanpaModal : undefined, warn: tanpaModalSemua.length > 0 },
         ].map((x) => (
           <button key={x.l} type="button" onClick={x.on} disabled={!x.on}
             className="rounded-[18px] bg-white dark:bg-[#1c1c1e] border border-zinc-200/70 dark:border-white/5 px-3 py-3 text-left disabled:cursor-default">
@@ -198,6 +204,9 @@ export default function InputStokJualan() {
           </button>
         ))}
       </div>
+
+      {/* Halaman Baru / Seken */}
+      <KondisiSwitch value={kondisi} onChange={(k) => { setKondisi(k); setFilter("semua"); }} counts={kondisiCount} />
 
       {syncInfo && (
         <div className="rounded-[18px] bg-blue-50 dark:bg-blue-500/10 px-4 py-3 flex items-start gap-3">

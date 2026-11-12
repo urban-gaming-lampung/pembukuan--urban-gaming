@@ -5,6 +5,7 @@
  */
 import jsPDF from "jspdf";
 import logoBlackUrl from "../assets/urban-logo-black.png";
+import { infoNego, negoSatuan } from "./posSales";
 import type { PosSale } from "./posSales";
 
 export const STORE = {
@@ -24,6 +25,8 @@ export const toAscii = (t: string) =>
     .replace(/[‘’]/g, "'")
     .replace(/[“”]/g, '"')
     .replace(/…/g, "...")
+    .replace(/[·•]/g, "-")
+    .replace(/−/g, "-")
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^\x20-\x7E\n]/g, "");
@@ -130,16 +133,28 @@ function drawNota(pdf: jsPDF, s: PosSale, logo: { url: string; ratio: number } |
     const nama = it.kategori === "ISI GAME" && it.platform ? `${it.nama} (${it.platform})` : it.nama;
     (pdf.splitTextToSize(toAscii(nama), CW) as string[]).forEach((line) => { pdf.text(line, M, y); y += 3.4; });
     row(`${it.qty} x ${rp(it.harga)}`, rp(it.subtotal), 7.5);
+    const n = negoSatuan(it);
+    if (n) {
+      pdf.setFont("helvetica", "italic");
+      pdf.setFontSize(6.6);
+      pdf.text(toAscii(`Harga normal ${rp(it.hargaNormal!)} - nego kasir ${n > 0 ? "-" : "+"}${rp(Math.abs(n))}/pcs`), M, y);
+      y += 3;
+    }
     y += 1.4;
   });
   dashed(4);
 
   // Total
+  const ng = infoNego(s);
+  if (ng.ada) {
+    row("Harga normal", rp(ng.hargaNormal));
+    row(ng.labelBaris, `${ng.total >= 0 ? "-" : "+"}${rp(Math.abs(ng.total))}`);
+  }
   if (s.diskon > 0) {
     row("Subtotal", rp(s.subtotal));
     row(`Diskon promo (${s.diskonPersen}%)`, `-${rp(s.diskon)}`);
-    y += 1;
   }
+  if (ng.ada || s.diskon > 0) y += 1;
   pdf.setFillColor(0, 0, 0);
   pdf.rect(M, y - 1, CW, 8.5, "F");
   pdf.setTextColor(255, 255, 255);
@@ -152,6 +167,21 @@ function drawNota(pdf: jsPDF, s: PosSale, logo: { url: string; ratio: number } |
   y += 12;
   center(`LUNAS  -  ${s.metode === "TRANSFER" ? "TRANSFER / QRIS" : "TUNAI"}`, 7.5, "bold", 3.4);
   y += 2.5;
+
+  // Catatan nego kasir
+  if (ng.ada) {
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(6.8);
+    const nLines = pdf.splitTextToSize(toAscii(`Catatan: ${ng.catatan}.`), CW - 6) as string[];
+    const nh = 3 + nLines.length * 3;
+    pdf.setLineDashPattern([0.8, 0.8], 0);
+    pdf.setLineWidth(0.25);
+    pdf.roundedRect(M, y, CW, nh, 1.2, 1.2, "S");
+    pdf.setLineDashPattern([], 0);
+    let ny = y + 3.6;
+    nLines.forEach((l) => { pdf.text(l, W / 2, ny, { align: "center" }); ny += 3; });
+    y += nh + 3;
+  }
 
   // Ketentuan garansi
   pdf.setFont("helvetica", "normal");
@@ -283,8 +313,15 @@ export async function buildNotaEscPos(s: PosSale): Promise<Uint8Array> {
     const nama = it.kategori === "ISI GAME" && it.platform ? `${it.nama} (${it.platform})` : it.nama;
     bold(true); wrap(nama).forEach(line); bold(false);
     line(lr(`  ${it.qty} x ${rp(it.harga)}`, rp(it.subtotal)));
+    const n = negoSatuan(it);
+    if (n) wrap(`  Normal ${rp(it.hargaNormal!)}, nego ${n > 0 ? "-" : "+"}${rp(Math.abs(n))}/pcs`).forEach(line);
   });
   rule();
+  const ng = infoNego(s);
+  if (ng.ada) {
+    line(lr("Harga normal", rp(ng.hargaNormal)));
+    line(lr(ng.labelBaris, `${ng.total >= 0 ? "-" : "+"}${rp(Math.abs(ng.total))}`));
+  }
   if (s.diskon > 0) {
     line(lr("Subtotal", rp(s.subtotal)));
     line(lr(`Diskon promo (${s.diskonPersen}%)`, `-${rp(s.diskon)}`));
@@ -292,6 +329,7 @@ export async function buildNotaEscPos(s: PosSale): Promise<Uint8Array> {
   bold(true); size(0x01); line(lr("TOTAL", rp(s.total))); size(0x00); bold(false);
   align(1);
   line(`LUNAS - ${s.metode === "TRANSFER" ? "TRANSFER / QRIS" : "TUNAI"}`);
+  if (ng.ada) wrap(`Catatan: ${ng.catatan}.`).forEach(line);
   rule("*");
   bold(true); line(GARANSI_JUDUL); bold(false);
   wrap(GARANSI_TEKS).forEach(line);

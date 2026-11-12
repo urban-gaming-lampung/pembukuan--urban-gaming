@@ -115,6 +115,8 @@ export default function useAppController() {
         kategori: a.kategori || "Lainnya",
         harga: Number(a.nominal || 0),
         tanggal: `${yy}-${mm}-${dd}`,
+        // Asisten = tagihan rutin; tandai usahanya (default Rental) agar analitik terpisah benar
+        bisnis: a.bisnis === "USAHA" ? "USAHA" : "RENTAL",
         timestamp: Date.now()
       });
       await updateDoc(doc(db, "owner_assistants", a.id), {
@@ -1150,8 +1152,9 @@ export default function useAppController() {
       });
     }
     if (filter === "7 Hari Terakhir") {
+      // 7 hari = hari ini + 6 hari sebelumnya (sama dengan grafik & Analitik Usaha/Keseluruhan)
       const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - 7);
+      cutoff.setDate(cutoff.getDate() - 6);
       const start = startOfDay(cutoff);
       return history.filter((h) => {
         const d = startOfDay(new Date(h.tanggal));
