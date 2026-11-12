@@ -26,6 +26,7 @@ export type PosItem = {
   qty: number;
   subtotal: number;
   stokRef?: StokRef | null; // barang stok yang benar-benar dikurangi
+  kondisi?: Kondisi; // khusus JUALAN: BARU / SEKEN
 };
 
 export type PosSale = {
@@ -136,7 +137,26 @@ export function suggestStokRef(productName: string, categories: StokKategori[]):
 // Sinkron otomatis Produk POS <-> Stok Jualan
 // ============================================================
 
-export type ProdukSync = { id: string; name: string; category: string; subcategory?: string | null; stokRef?: StokRef | null; stokAuto?: boolean };
+export type Kondisi = "BARU" | "SEKEN";
+export const KONDISI_LABEL: Record<Kondisi, string> = { BARU: "Baru", SEKEN: "Seken" };
+export type ProdukSync = { id: string; name: string; category: string; subcategory?: string | null; stokRef?: StokRef | null; stokAuto?: boolean; kondisi?: Kondisi | null };
+
+const RE_SEKEN = /\b(SEKEN|SECOND|BEKAS)\b|LIKE NEW/i;
+/** Kondisi barang jualan: dari field `kondisi`; bila belum diisi, ditebak dari kategori stok / nama. */
+export function kondisiProduk(p: { name: string; kondisi?: Kondisi | null; stokRef?: StokRef | null }): Kondisi {
+  if (p.kondisi === "BARU" || p.kondisi === "SEKEN") return p.kondisi;
+  if (/SEKEN/i.test(p.stokRef?.kategori || "")) return "SEKEN";
+  if (/BARU/i.test(p.stokRef?.kategori || "")) return "BARU";
+  return RE_SEKEN.test(p.name || "") ? "SEKEN" : "BARU";
+}
+/** Kondisi barang stok: dari nama kategori (UNIT KONSOL BARU/SEKEN), produk yang memakainya, atau namanya. */
+export function kondisiStok(kategori: string, item: string, products: ProdukSync[]): Kondisi {
+  if (/SEKEN/i.test(kategori)) return "SEKEN";
+  if (/BARU/i.test(kategori)) return "BARU";
+  const pakai = products.filter((p) => p.stokRef && p.stokRef.kategori === kategori && (p.stokRef.item === item || p.stokRef.item === PILIH_SAAT_CHECKOUT));
+  if (pakai.length) return pakai.every((p) => kondisiProduk(p) === "SEKEN") ? "SEKEN" : "BARU";
+  return RE_SEKEN.test(item) ? "SEKEN" : "BARU";
+}
 export type SubKategoriJualan = "Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD";
 
 /** Sub-kategori produk jualan dari namanya (sama dengan katalog POS). */
@@ -158,8 +178,9 @@ export const KATEGORI_KASET_BD = "KASET BD";
 export const namaJualan = (s: string) => String(s || "").replace(/\s+/g, " ").trim().toUpperCase();
 
 /** Kategori & nama barang stok baru untuk produk yang belum punya padanan di stok. */
-export function stokBaruUntukProduk(p: Pick<ProdukSync, "name" | "subcategory">): StokRef {
+export function stokBaruUntukProduk(p: Pick<ProdukSync, "name" | "subcategory"> & { kondisi?: Kondisi | null }): StokRef {
   const name = namaJualan(p.name);
+  const seken = kondisiProduk({ name, kondisi: p.kondisi }) === "SEKEN";
   const sub = (p.subcategory as SubKategoriJualan) || produkSubKategori(name);
   const tok = tokenize(name);
   const clean =
@@ -168,7 +189,7 @@ export function stokBaruUntukProduk(p: Pick<ProdukSync, "name" | "subcategory">)
       .replace(/\s+(?:baru|seken)\s*$/i, "")
       .trim() || name;
   if (sub === "BD") return { kategori: KATEGORI_KASET_BD, item: clean.replace(/^(?:kaset\s+)?bd\s+/i, "").trim() || clean };
-  if (sub === "Unit PS") return { kategori: tok.includes("SEKEN") ? "UNIT KONSOL SEKEN" : "UNIT KONSOL BARU", item: clean };
+  if (sub === "Unit PS") return { kategori: seken ? "UNIT KONSOL SEKEN" : "UNIT KONSOL BARU", item: clean };
   if (sub === "Stik") return { kategori: tok.includes("PS4") ? "STIK PS4" : tok.includes("PS3") ? "STIK PS3" : "STIK LAINNYA", item: clean };
   return { kategori: "AKSESORIS", item: clean };
 }
@@ -188,7 +209,9 @@ export function planStokSync(products: ProdukSync[], master: StokKategori[]) {
     .filter((p) => p.category === "JUALAN" && p.stokRef === undefined)
     .sort((a, b) => a.name.localeCompare(b.name, "id"))
     .forEach((p) => {
-      const s = suggestStokRef(p.name, cats);
+      // Kondisi ikut dipakai untuk memilih Unit Baru / Unit Seken
+      const k = kondisiProduk(p);
+      const s = suggestStokRef(RE_SEKEN.test(p.name) || /\bBARU\b/i.test(p.name) ? p.name : `${p.name} ${k}`, cats);
       if (s && (s.yakin || s.ref.item === PILIH_SAAT_CHECKOUT)) {
         links.push({ id: p.id, ref: s.ref, baru: false });
         return;

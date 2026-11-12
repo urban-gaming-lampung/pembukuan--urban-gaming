@@ -8,7 +8,8 @@ import useStokData from "../hooks/useStokData";
 import type { StokItemValue } from "../hooks/useStokData";
 import PosCheckoutSheet from "./PosCheckoutSheet";
 import { StokRefSelect } from "./StokRefSelect";
-import { hapusStokOtomatisBilaYatim, PILIH_SAAT_CHECKOUT, StokRef, stokBaruUntukProduk } from "../lib/posSales";
+import { hapusStokOtomatisBilaYatim, Kondisi, kondisiProduk, PILIH_SAAT_CHECKOUT, StokRef, stokBaruUntukProduk } from "../lib/posSales";
+import KondisiSwitch from "./KondisiSwitch";
 import { getMinStok, renameJualanItem, statusOf, useMinStok } from "../lib/stokJualan";
 
 const qrisImg = new URL("/images/QRIS.jpeg", import.meta.url).href;
@@ -26,6 +27,7 @@ interface Product {
   subcategory?: "Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD";
   stokRef?: StokRef | null; // barang stok jualan yang dipotong saat nota dibuat (undefined = belum disinkron)
   stokAuto?: boolean; // barang stok dibuat otomatis khusus untuk produk ini
+  kondisi?: Kondisi | null; // JUALAN: BARU / SEKEN
 }
 
 interface CartItem extends Product {
@@ -127,6 +129,8 @@ const getGameDisplayName = (name: string) => (name || "").replace(/^\s*\//, "").
 export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName, catalogChanges = {}, onClearProductChange }: POSModalProps) {
   const [activeSub, setActiveSub] = useState<"JUALAN" | "RENTAL" | "SERVIS" | "ISI GAME">("JUALAN");
   const [activeJualanSub, setActiveJualanSub] = useState<"Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD">("Unit PS");
+  const [activeKondisi, setActiveKondisi] = useState<Kondisi>("BARU");
+  const jualanSubCount = (k: Kondisi, sub: string) => products.filter((p) => p.category === "JUALAN" && kondisiProduk(p) === k && getSubCategory(p) === sub).length;
   const [activeIsiGameSub, setActiveIsiGameSub] = useState<"PS3 CFW/HEN" | "PS4 HEN" | "PS5 HEN" | "Switch CFW" | "PC">("PS4 HEN");
   const [searchQuery, setSearchQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
@@ -139,6 +143,14 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     setSearchQuery("");
   }, [activeSub]);
   
+  // Halaman Baru / Seken: bila sub-kategori aktif kosong, pindah ke yang ada isinya
+  useEffect(() => {
+    if (activeSub !== "JUALAN" || products.length === 0 || jualanSubCount(activeKondisi, activeJualanSub) > 0) return;
+    const ada = (["Unit PS", "Stik", "Hardisk", "Aksesoris", "BD"] as const).find((s) => jualanSubCount(activeKondisi, s) > 0);
+    if (ada) setActiveJualanSub(ada);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeKondisi, activeSub, products]);
+
   // Form states for adding product
   const [openAddProduct, setOpenAddProduct] = useState(false);
   const [newProdName, setNewProdName] = useState("");
@@ -591,21 +603,22 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     }
 
     let result = products.filter((p) => p.category === activeSub);
+    const searching = searchQuery.trim() !== "";
     
     // Search query filter
-    if (searchQuery.trim() !== "") {
+    if (searching) {
       const q = searchQuery.toLowerCase();
       result = result.filter((p) => p.name.toLowerCase().includes(q));
     }
     
-    // If activeSub is JUALAN, filter by activeJualanSub
-    if (activeSub === "JUALAN") {
-      result = result.filter((p) => getSubCategory(p) === activeJualanSub);
+    // JUALAN: halaman Baru / Seken + sub-kategori (saat mencari, cari di semua barang jualan)
+    if (activeSub === "JUALAN" && !searching) {
+      result = result.filter((p) => kondisiProduk(p) === activeKondisi && getSubCategory(p) === activeJualanSub);
     }
     
     // Sort alphabetically by name
     return result.sort((a, b) => a.name.localeCompare(b.name));
-  }, [products, games, activeSub, activeJualanSub, activeIsiGameSub, searchQuery]);
+  }, [products, games, activeSub, activeJualanSub, activeKondisi, activeIsiGameSub, searchQuery]);
 
   return (
     <div className={`fixed inset-0 z-[100] items-center justify-center bg-black/40 backdrop-blur-md transition-opacity duration-300 font-sans ${open ? "flex" : "hidden"}`}>
@@ -811,11 +824,23 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
             {/* Sub-Category Pills for JUALAN */}
             {activeSub === "JUALAN" && (
-              <div className="px-4 py-3 border-b border-zinc-200/50 dark:border-white/5 bg-zinc-50/50 dark:bg-black/10 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+              <div className="px-4 pt-3 border-b border-zinc-200/50 dark:border-white/5 bg-zinc-50/50 dark:bg-black/10 shrink-0">
+              {/* Halaman Barang Baru / Seken */}
+              <KondisiSwitch
+                size="sm"
+                value={activeKondisi}
+                onChange={setActiveKondisi}
+                counts={{
+                  BARU: products.filter((p) => p.category === "JUALAN" && kondisiProduk(p) === "BARU").length,
+                  SEKEN: products.filter((p) => p.category === "JUALAN" && kondisiProduk(p) === "SEKEN").length,
+                }}
+              />
+              <div className="py-3 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
                 {(["Unit PS", "Stik", "Hardisk", "Aksesoris", "BD"] as const).map((subJualan) => {
-                  const count = products.filter(p => p.category === "JUALAN" && getSubCategory(p) === subJualan).length;
+                  const count = jualanSubCount(activeKondisi, subJualan);
+                  if (count === 0 && activeJualanSub !== subJualan) return null; // sembunyikan sub-kategori kosong
                   
-                  const hasSubUpdate = products.some(p => p.category === "JUALAN" && getSubCategory(p) === subJualan && catalogChanges[p.id] !== undefined);
+                  const hasSubUpdate = products.some(p => p.category === "JUALAN" && kondisiProduk(p) === activeKondisi && getSubCategory(p) === subJualan && catalogChanges[p.id] !== undefined);
 
                   return (
                     <button
@@ -843,6 +868,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     </button>
                   );
                 })}
+              </div>
               </div>
             )}
 
@@ -893,7 +919,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     Katalog Kosong
                   </h3>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-[240px]">
-                    Belum ada produk di kategori {activeSub}.
+                    {activeSub === "JUALAN" ? `Belum ada barang ${activeKondisi === "SEKEN" ? "seken" : "baru"} di kategori ini.` : `Belum ada produk di kategori ${activeSub}.`}
                     {isSuperAdminOrOwner && (activeSub === "JUALAN" ? " Tambahkan lewat Owner › Input › Stok Jualan." : " Klik tombol di bawah untuk menambahkan produk.")}
                   </p>
                   {isSuperAdminOrOwner && (activeSub === "RENTAL" || activeSub === "SERVIS") && (
@@ -991,6 +1017,11 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                             <h4 className="font-bold text-[11px] md:text-xs text-zinc-900 dark:text-zinc-100 leading-snug line-clamp-2 h-8">
                               {p.name}
                             </h4>
+                            {p.category === "JUALAN" && searchQuery.trim() !== "" && (
+                              <span className={`self-start text-[9px] font-extrabold px-1.5 py-0.5 rounded ${kondisiProduk(p) === "SEKEN" ? "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"}`}>
+                                {kondisiProduk(p) === "SEKEN" ? "SEKEN" : "BARU"}
+                              </span>
+                            )}
                             {p.category === "ISI GAME" && (
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className="text-[9px] font-extrabold px-1 py-0.2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded">
@@ -1708,6 +1739,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
           category: c.category,
           platform: c.platform,
           subcategory: c.category === "JUALAN" ? getSubCategory(c) : undefined,
+          kondisi: c.category === "JUALAN" ? kondisiProduk(c) : undefined,
           stokRef: c.stokRef || null,
         }))}
         subtotal={subtotal}

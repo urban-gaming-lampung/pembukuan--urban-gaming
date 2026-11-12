@@ -13,7 +13,8 @@ import { cancelPosSale, deletePosSale, PosItem, PosSale, StokRef, usePosSales } 
 import { resolveMonthYear } from "../lib/dateLocal";
 import { fmtTanggalNota } from "../lib/posReceipt";
 import { NotaActionButtons, NotaPreview, useNotaActions } from "./PosCheckoutSheet";
-import { KATEGORI_PENGELUARAN_STOK, modalPada, useModalProduk } from "../lib/barangJualan";
+import { KATEGORI_PENGELUARAN_STOK, modalPada, useModalProduk, useProdukJualan } from "../lib/barangJualan";
+import { Kondisi, kondisiProduk } from "../lib/posSales";
 
 type FilterProps = {
   mode: string;
@@ -177,13 +178,20 @@ export default function AnalitikUsaha(props: FilterProps) {
 
   // Modal & laba barang jualan (harga modal saat transaksi, dari riwayat harga modal)
   const { map: modalMap } = useModalProduk();
+  const { products: produkJualan } = useProdukJualan();
   const laba = useMemo(() => {
     let penjualan = 0, denganModal = 0, hpp = 0, qtyTanpa = 0, perkiraan = 0;
     const perProduk = new Map<string, number>();
+    const perKondisi: Record<Kondisi, { penjualan: number; laba: number; qty: number }> = { BARU: { penjualan: 0, laba: 0, qty: 0 }, SEKEN: { penjualan: 0, laba: 0, qty: 0 } };
+    const byId = new Map(produkJualan.map((p) => [p.id, p]));
     cur.forEach((s) =>
       (s.items || []).forEach((it) => {
         if (it.kategori !== "JUALAN") return;
         penjualan += it.subtotal;
+        const prod = byId.get(it.id);
+        const kd: Kondisi = it.kondisi || (prod ? kondisiProduk(prod) : kondisiProduk({ name: it.nama, stokRef: it.stokRef }));
+        perKondisi[kd].penjualan += it.subtotal;
+        perKondisi[kd].qty += it.qty;
         const m = modalPada(modalMap[it.id], s.ts);
         if (!m) { qtyTanpa += it.qty; return; }
         if (m.perkiraan) perkiraan += it.qty;
@@ -191,11 +199,12 @@ export default function AnalitikUsaha(props: FilterProps) {
         hpp += m.modal * it.qty;
         const key = String(it.nama || "").toUpperCase();
         perProduk.set(key, (perProduk.get(key) || 0) + it.subtotal - m.modal * it.qty);
+        perKondisi[kd].laba += it.subtotal - m.modal * it.qty;
       })
     );
     const kotor = denganModal - hpp;
-    return { penjualan, denganModal, hpp, kotor, margin: denganModal > 0 ? (kotor / denganModal) * 100 : 0, qtyTanpa, perkiraan, perProduk };
-  }, [cur, modalMap]);
+    return { penjualan, denganModal, hpp, kotor, margin: denganModal > 0 ? (kotor / denganModal) * 100 : 0, qtyTanpa, perkiraan, perProduk, perKondisi };
+  }, [cur, modalMap, produkJualan]);
   const belanjaStok = useMemo(
     () => (props.pengeluaran || []).filter((e) => e.kategori === KATEGORI_PENGELUARAN_STOK).reduce((s, e) => s + (Number(e.harga) || 0), 0),
     [props.pengeluaran]
@@ -335,6 +344,17 @@ export default function AnalitikUsaha(props: FilterProps) {
           <div className="divide-y divide-zinc-100 dark:divide-white/5 text-[13.5px]">
             <div className="flex justify-between py-2"><span className="text-zinc-500">Penjualan barang jualan</span><span className="font-bold tabular-nums text-zinc-900 dark:text-white">{rp(laba.penjualan)}</span></div>
             <div className="flex justify-between py-2"><span className="text-zinc-500">Modal barang terjual</span><span className="font-bold tabular-nums text-zinc-900 dark:text-white">− {rp(laba.hpp)}</span></div>
+            {laba.penjualan > 0 && (
+              <div className="grid grid-cols-2 gap-2 py-2.5">
+                {(["BARU", "SEKEN"] as const).map((k) => (
+                  <div key={k} className="rounded-xl bg-zinc-50 dark:bg-white/5 px-3 py-2">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">{k === "BARU" ? "Barang baru" : "Barang seken"}</div>
+                    <div className="text-[14px] font-black tabular-nums text-zinc-900 dark:text-white mt-0.5">{rpShort(laba.perKondisi[k].penjualan)}</div>
+                    <div className="text-[11.5px] text-zinc-500">{laba.perKondisi[k].qty} terjual · laba <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{rpShort(laba.perKondisi[k].laba)}</span></div>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex justify-between py-2">
               <span className="text-zinc-500">Belanja stok <span className="text-zinc-400">(uang keluar)</span></span>
               <span className="font-bold tabular-nums text-zinc-900 dark:text-white">{rp(belanjaStok)}</span>

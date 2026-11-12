@@ -3,7 +3,7 @@ import { X, CheckCircle2, Download, Printer, Share2, AlertTriangle, Package, Loa
 import logoBlack from "../assets/urban-logo-black.png";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
-import { commitPosSale, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, StokRef } from "../lib/posSales";
+import { commitPosSale, Kondisi, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, StokRef } from "../lib/posSales";
 import { UploadTransferProof } from "./TableEditor";
 import { buildNotaPdf, fmtTanggalNota, GARANSI_JUDUL, GARANSI_TEKS, notaFileName, preloadNotaAssets, printNotaThermal, STORE } from "../lib/posReceipt";
 
@@ -15,6 +15,7 @@ export type CheckoutLine = {
   category: string;
   platform?: string;
   subcategory?: string;
+  kondisi?: Kondisi;
   stokRef?: StokRef | null;
 };
 
@@ -312,6 +313,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
       nama: l.name,
       kategori: l.category,
       subkategori: l.subcategory || null,
+      ...(l.kondisi ? { kondisi: l.kondisi } : {}),
       platform: l.platform || null,
       harga: l.price,
       qty: l.quantity,

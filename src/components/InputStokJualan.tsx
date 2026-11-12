@@ -1,16 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Search, Plus, Minus, X, ChevronRight, Camera, Package, Sparkles, Trash2, Loader2, AlertTriangle, Link2Off, History } from "lucide-react";
-import { collection, onSnapshot } from "firebase/firestore";
-import { db } from "../lib/firebase";
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { toLocalYmd } from "../lib/dateLocal";
 import { getMinStok, removeJualanItem, statusOf, StokLog, useMinStok, useStokLog } from "../lib/stokJualan";
-import { PILIH_SAAT_CHECKOUT, produkSubKategori, StokRef, SubKategoriJualan, syncProdukKeStok } from "../lib/posSales";
+import { Kondisi, kondisiProduk, kondisiStok, PILIH_SAAT_CHECKOUT, produkSubKategori, StokRef, SubKategoriJualan, syncProdukKeStok } from "../lib/posSales";
+import KondisiSwitch from "./KondisiSwitch";
 import {
   hapusBarangJualan, hapusStokMasuk, KATEGORI_PENGELUARAN_STOK, koreksiJumlahStok, ModalMap, pratinjauOtomatis, ProdukJualan, simpanBarangJualan,
-  StokMasuk, ubahStokMasuk, uploadFotoProduk, useModalProduk, useStokMasuk,
+  StokMasuk, ubahStokMasuk, uploadFotoProduk, useModalProduk, useProdukJualan, useStokMasuk,
 } from "../lib/barangJualan";
 import { refAda, StokRefSelect } from "./StokRefSelect";
 
@@ -73,23 +72,17 @@ const Toggle: React.FC<{ on: boolean; onChange: (v: boolean) => void; label: str
 );
 
 type Filter = "semua" | SubKategoriJualan | "tanpaModal" | "yatim";
-type EditorInit = { produk: ProdukJualan | null; nama?: string; stokRef?: StokRef | null; sub?: SubKategoriJualan };
+type EditorInit = { produk: ProdukJualan | null; nama?: string; stokRef?: StokRef | null; sub?: SubKategoriJualan; kondisi?: Kondisi };
 
 export default function InputStokJualan() {
-  const [products, setProducts] = useState<ProdukJualan[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  useEffect(
-    () =>
-      onSnapshot(
-        collection(db, "products"),
-        (s) => {
-          setProducts(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) })).filter((p) => p.category === "JUALAN"));
-          setLoaded(true);
-        },
-        (e) => { console.warn("products:", e); setLoaded(true); }
-      ),
-    []
-  );
+  const { products: semuaProduk, loaded } = useProdukJualan();
+  const [kondisi, setKondisi] = useState<Kondisi>("BARU");
+  const kondisiCount = {
+    BARU: semuaProduk.filter((p) => kondisiProduk(p) === "BARU").length,
+    SEKEN: semuaProduk.filter((p) => kondisiProduk(p) === "SEKEN").length,
+  };
+  // Halaman Baru / Seken: semua ringkasan & daftar mengikuti kondisi terpilih
+  const products = useMemo(() => semuaProduk.filter((p) => kondisiProduk(p) === kondisi), [semuaProduk, kondisi]);
   const { map: modalMap } = useModalProduk();
   const { stokState, masterCategories } = useStokData();
   const minMap = useMinStok();
@@ -111,28 +104,30 @@ export default function InputStokJualan() {
   const [syncInfo, setSyncInfo] = useState<{ linked: number; created: number } | null>(null);
   const syncTried = useRef(false);
   useEffect(() => {
-    if (!loaded || syncTried.current || !products.some((p) => p.stokRef === undefined)) return;
+    if (!loaded || syncTried.current || !semuaProduk.some((p) => p.stokRef === undefined)) return;
     syncTried.current = true;
-    syncProdukKeStok(products)
+    syncProdukKeStok(semuaProduk)
       .then((r) => { if (r.linked || r.created) setSyncInfo(r); })
       .catch((e) => console.warn("Sinkron produk ke stok gagal:", e));
-  }, [loaded, products]);
+  }, [loaded, semuaProduk]);
 
   const modalOf = (id: string) => modalMap[id]?.hargaModal ?? null;
 
   // Barang di stok yang belum dipakai produk mana pun
   const yatim = useMemo(() => {
     const dipakai = new Set<string>();
-    products.forEach((p) => {
+    semuaProduk.forEach((p) => {
       const r = p.stokRef;
       if (!r) return;
       if (r.item === PILIH_SAAT_CHECKOUT) (cats.find((c) => c.kategori === r.kategori)?.items || []).forEach((it) => dipakai.add(`${r.kategori}||${it}`));
       else dipakai.add(`${r.kategori}||${r.item}`);
     });
     const out: StokRef[] = [];
-    cats.forEach((c) => c.items.forEach((it) => { if (!dipakai.has(`${c.kategori}||${it}`)) out.push({ kategori: c.kategori, item: it }); }));
+    cats.forEach((c) => c.items.forEach((it) => {
+      if (!dipakai.has(`${c.kategori}||${it}`) && kondisiStok(c.kategori, it, semuaProduk) === kondisi) out.push({ kategori: c.kategori, item: it });
+    }));
     return out;
-  }, [products, cats]);
+  }, [semuaProduk, cats, kondisi]);
 
   // Nilai stok (modal): jumlah barang x rata-rata modal produk yang memakainya
   const nilaiStok = useMemo(() => {
@@ -172,7 +167,7 @@ export default function InputStokJualan() {
 
   const chips: { key: Filter; label: string; n?: number; warn?: boolean }[] = [
     { key: "semua", label: "Semua", n: products.length },
-    ...SUBS.map((s) => ({ key: s.key as Filter, label: s.label, n: products.filter((p) => subOf(p) === s.key).length })),
+    ...SUBS.map((s) => ({ key: s.key as Filter, label: s.label, n: products.filter((p) => subOf(p) === s.key).length })).filter((c) => c.n > 0 || filter === c.key),
     { key: "tanpaModal", label: "Tanpa modal", n: tanpaModal.length, warn: tanpaModal.length > 0 },
     { key: "yatim", label: "Stok tanpa produk", n: yatim.length, warn: yatim.length > 0 },
   ];
@@ -186,6 +181,9 @@ export default function InputStokJualan() {
 
   return (
     <div className="space-y-4">
+      {/* Halaman Baru / Seken */}
+      <KondisiSwitch value={kondisi} onChange={(k) => { setKondisi(k); setFilter("semua"); }} counts={kondisiCount} />
+
       {/* Ringkasan */}
       <div className="grid grid-cols-3 gap-2">
         {[
@@ -218,7 +216,7 @@ export default function InputStokJualan() {
           <input value={cari} onChange={(e) => setCari(e.target.value)} placeholder="Cari barang jualan" className="flex-1 min-w-0 bg-transparent text-[15px] focus:outline-none text-zinc-900 dark:text-white placeholder:text-zinc-400" />
           {cari && <button type="button" onClick={() => setCari("")} aria-label="Hapus pencarian"><X className="w-4 h-4 text-zinc-400" /></button>}
         </div>
-        <button type="button" onClick={() => setEditor({ produk: null })}
+        <button type="button" onClick={() => setEditor({ produk: null, kondisi })}
           className="h-11 pl-3 pr-4 rounded-[14px] bg-blue-600 text-white text-[15px] font-semibold flex items-center gap-1.5 active:opacity-80 shrink-0">
           <Plus className="w-[18px] h-[18px]" />Barang
         </button>
@@ -252,7 +250,7 @@ export default function InputStokJualan() {
                   <StokPill v={stokView(r, cats, data, minMap)} />
                 </div>
                 <div className="flex items-center gap-2 mt-2">
-                  <button type="button" onClick={() => setEditor({ produk: null, nama: r.item, stokRef: r, sub: subDariKategori(r.kategori, r.item) })}
+                  <button type="button" onClick={() => setEditor({ produk: null, nama: r.item, stokRef: r, sub: subDariKategori(r.kategori, r.item), kondisi: kondisiStok(r.kategori, r.item, semuaProduk) })}
                     className="h-8 px-3.5 rounded-full bg-blue-50 dark:bg-blue-500/15 text-blue-600 dark:text-blue-300 text-[13px] font-semibold">Jadikan produk</button>
                   <button type="button" onClick={() => hapusYatim(r)} className="h-8 px-3 rounded-full text-[13px] font-medium text-red-600 dark:text-red-400 flex items-center gap-1"><Trash2 className="w-3.5 h-3.5" />Hapus</button>
                 </div>
@@ -307,7 +305,7 @@ export default function InputStokJualan() {
       {editor && (
         <BarangJualanSheet
           init={editor}
-          products={products}
+          products={semuaProduk}
           modalMap={modalMap}
           cats={cats}
           data={data}
@@ -345,6 +343,8 @@ const BarangJualanSheet: React.FC<{
   const [nama, setNama] = useState(p?.name || init.nama || "");
   const [sub, setSub] = useState<SubKategoriJualan>(p ? subOf(p) : init.sub || produkSubKategori(init.nama || ""));
   const [subManual, setSubManual] = useState(!!p || !!init.sub);
+  const [kondisiB, setKondisiB] = useState<Kondisi>(p ? kondisiProduk(p) : init.kondisi || "BARU");
+  const [kondisiManual, setKondisiManual] = useState(!!p);
   const [jual, setJual] = useState(p ? String(p.price || "") : "");
   const [modal, setModal] = useState(modalAwal !== null ? String(modalAwal) : "");
   const [foto, setFoto] = useState<File | null>(null);
@@ -363,13 +363,15 @@ const BarangJualanSheet: React.FC<{
   const { logs } = useStokLog(300);
 
   useEffect(() => { if (!subManual) setSub(produkSubKategori(nama)); }, [nama, subManual]);
+  // Nama mengandung "SEKEN" -> otomatis Seken (sampai dipilih manual)
+  useEffect(() => { if (!kondisiManual && /\b(SEKEN|SECOND|BEKAS)\b|LIKE NEW/i.test(nama)) setKondisiB("SEKEN"); }, [nama, kondisiManual]);
   useEffect(() => () => { if (foto && fotoPreview.startsWith("blob:")) URL.revokeObjectURL(fotoPreview); }, [foto, fotoPreview]);
 
   const jualN = Number(jual || 0);
   const modalN = modal === "" ? null : Number(modal);
   const untung = modalN !== null && jualN > 0 ? jualN - modalN : null;
   const modalMasukN = modalMasuk === "" ? modalN || 0 : Number(modalMasuk);
-  const preview = useMemo(() => (ref === undefined ? pratinjauOtomatis(nama, sub, cats) : null), [ref, nama, sub, cats]);
+  const preview = useMemo(() => (ref === undefined ? pratinjauOtomatis(nama, sub, kondisiB, cats) : null), [ref, nama, sub, kondisiB, cats]);
   const efektif = ref === undefined ? preview?.ref || null : ref;
   const sv = stokView(efektif, cats, data, minMap);
   const varianList = efektif?.item === PILIH_SAAT_CHECKOUT ? cats.find((c) => c.kategori === efektif.kategori)?.items || [] : [];
@@ -421,7 +423,7 @@ const BarangJualanSheet: React.FC<{
       const imageUrl = foto ? await uploadFotoProduk(foto) : p?.imageUrl || "";
       const jumlah = (r: StokRef) => data?.[r.kategori]?.[r.item]?.jumlah;
       const r = await simpanBarangJualan(
-        { id: p?.id, nama, subkategori: sub, hargaJual: jualN, hargaModal: modalN, imageUrl, stokRef: ref },
+        { id: p?.id, nama, subkategori: sub, kondisi: kondisiB, hargaJual: jualN, hargaModal: modalN, imageUrl, stokRef: ref },
         p,
         products,
         modalAwal,
@@ -479,6 +481,12 @@ const BarangJualanSheet: React.FC<{
               <textarea value={nama} onChange={(e) => setNama(e.target.value.toUpperCase())} rows={2} placeholder="CONTOH: STIK PS4 BARU - HITAM" autoCapitalize="characters"
                 className="w-full px-3 py-2 rounded-[12px] bg-zinc-100 dark:bg-white/10 text-[16px] leading-snug text-zinc-900 dark:text-white placeholder:text-zinc-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
             </div>
+          </div>
+
+          {/* Kondisi */}
+          <div>
+            <span className={label}>Kondisi</span>
+            <KondisiSwitch value={kondisiB} onChange={(k) => { setKondisiB(k); setKondisiManual(true); }} />
           </div>
 
           {/* Sub-kategori */}
@@ -539,6 +547,12 @@ const BarangJualanSheet: React.FC<{
               <p className="text-[12.5px] text-zinc-500 px-1 leading-snug">Stok ini dipakai bersama: {dipakaiLain.map((x) => x.name).join(", ")}</p>
             )}
             {ref === null && <p className="text-[12.5px] text-amber-600 dark:text-amber-400 px-1">Stok tidak akan berkurang saat barang ini terjual.</p>}
+            {efektif && /\b(BARU|SEKEN)\b/.test(efektif.kategori) && !efektif.kategori.includes(kondisiB) && (
+              <p className="flex items-start gap-1.5 text-[12.5px] text-amber-600 dark:text-amber-400 px-1">
+                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                Kondisi {kondisiB === "SEKEN" ? "Seken" : "Baru"}, tapi stoknya dihitung di {efektif.kategori}. Pilih barang stok yang sesuai{ref !== undefined ? " atau pilih ✨ Otomatis" : ""}.
+              </p>
+            )}
 
             {bisaUbahJumlah && (
               <div className="pt-1">

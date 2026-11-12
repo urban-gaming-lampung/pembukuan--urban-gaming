@@ -1,6 +1,9 @@
 import React, { useMemo, useState } from "react";
 import { AlertCircle, CheckCircle, Clock, Copy, Search, ShoppingCart, X, Minus, Plus, Trash2, TrendingUp, History } from "lucide-react";
 import useStokData from "../hooks/useStokData";
+import { Kondisi, kondisiStok } from "../lib/posSales";
+import { useProdukJualan } from "../lib/barangJualan";
+import KondisiSwitch from "./KondisiSwitch";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import {
   ALASAN_SHORT, StokLog, StokRow, StokStatus, buildStokRows, defaultMinStok, fmtWaktu, isStale,
@@ -75,10 +78,16 @@ const StokJualanOwner: React.FC = () => {
   const [cari, setCari] = useState("");
   const [selected, setSelected] = useState<StokRow | null>(null);
 
-  const rows = useMemo(
+  const { products } = useProdukJualan();
+  const [kondisi, setKondisi] = useState<Kondisi>("BARU");
+  const rowsAll = useMemo(
     () => buildStokRows(masterCategories?.jualan, stokState?.jualan, minMap),
     [masterCategories, stokState, minMap]
   );
+  // Halaman Baru / Seken
+  const kondisiOf = (r: { kategori: string; item: string }) => kondisiStok(r.kategori, r.item, products);
+  const rows = useMemo(() => rowsAll.filter((r) => kondisiOf(r) === kondisi), [rowsAll, products, kondisi]); // eslint-disable-line react-hooks/exhaustive-deps
+  const kondisiCount = { BARU: rowsAll.filter((r) => kondisiOf(r) === "BARU").length, SEKEN: rowsAll.filter((r) => kondisiOf(r) === "SEKEN").length };
   const sold30 = useMemo(() => soldMap(logs, 30), [logs]);
   const catatanOf = (r: { kategori: string; item: string }) =>
     String((stokState?.jualan as any)?.[r.kategori]?.[r.item]?.catatan || "");
@@ -94,10 +103,11 @@ const StokJualanOwner: React.FC = () => {
   const terlaris = useMemo(
     () =>
       Array.from(sold30.entries())
+        .filter(([k]) => kondisiStok(k.split("||")[0], k.split("||")[1], products) === kondisi)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
         .map(([k, n]) => ({ item: k.split("||")[1], kategori: k.split("||")[0], n })),
-    [sold30]
+    [sold30, products, kondisi]
   );
 
   const q = cari.trim().toLowerCase();
@@ -133,6 +143,9 @@ const StokJualanOwner: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      {/* Halaman Baru / Seken */}
+      <KondisiSwitch value={kondisi} onChange={(k) => { setKondisi(k); setFilter("semua"); }} counts={kondisiCount} />
+
       {/* Ringkasan */}
       <div className="grid grid-cols-2 gap-2.5">
         {tiles.map((t) => (

@@ -7,6 +7,9 @@ import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import {
   ALASAN_LABEL, StokAlasan, StokRow, buildStokRows, commitStokChanges, fmtWaktu, useMinStok,
 } from "../lib/stokJualan";
+import { Kondisi, kondisiStok } from "../lib/posSales";
+import { useProdukJualan } from "../lib/barangJualan";
+import KondisiSwitch from "./KondisiSwitch";
 
 /**
  * Update Stok Jualan (pegawai & owner) — mobile-first.
@@ -43,6 +46,10 @@ const StokJualanEditor: React.FC<{
   const [cari, setCari] = useState("");
   const [kat, setKat] = useState<string>("SEMUA");
   const [hanyaKurang, setHanyaKurang] = useState(false);
+  // Halaman Baru / Seken (draft di halaman lain tetap ikut tersimpan)
+  const { products } = useProdukJualan();
+  const [kondisi, setKondisi] = useState<Kondisi>("BARU");
+  const kondisiOf = (r: { kategori: string; item: string }) => kondisiStok(r.kategori, r.item, products);
   const [editKey, setEditKey] = useState<string | null>(null);
   const [editVal, setEditVal] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -93,6 +100,7 @@ const StokJualanEditor: React.FC<{
   const q = cari.trim().toLowerCase();
   const visible = rows.filter(
     (r) =>
+      kondisiOf(r) === kondisi &&
       (kat === "SEMUA" || r.kategori === kat) &&
       (!q || r.item.toLowerCase().includes(q) || r.kategori.toLowerCase().includes(q)) &&
       (!hanyaKurang || r.status !== "aman" || drafts[keyOf(r)])
@@ -100,7 +108,8 @@ const StokJualanEditor: React.FC<{
   const grouped = categories
     .map((c) => ({ kategori: c.kategori, items: visible.filter((r) => r.kategori === c.kategori) }))
     .filter((g) => g.items.length > 0);
-  const kurangCount = rows.filter((r) => r.status !== "aman").length;
+  const kurangCount = rows.filter((r) => r.status !== "aman" && kondisiOf(r) === kondisi).length;
+  const katDiKondisi = categories.filter((c) => rows.some((r) => r.kategori === c.kategori && kondisiOf(r) === kondisi)).map((c) => c.kategori);
 
   const save = async () => {
     setSaving(true);
@@ -152,6 +161,11 @@ const StokJualanEditor: React.FC<{
 
       {/* Cari + filter */}
       <div className="space-y-2">
+        <KondisiSwitch
+          value={kondisi}
+          onChange={(k) => { setKondisi(k); setKat("SEMUA"); }}
+          counts={{ BARU: rows.filter((r) => kondisiOf(r) === "BARU").length, SEKEN: rows.filter((r) => kondisiOf(r) === "SEKEN").length }}
+        />
         <div className="flex items-center gap-2 h-11 px-3 rounded-xl bg-white dark:bg-[#1c1c1e] border border-zinc-200 dark:border-white/10">
           <Search className="w-4 h-4 text-zinc-400 shrink-0" />
           <input
@@ -176,7 +190,7 @@ const StokJualanEditor: React.FC<{
           >
             Perlu restock ({kurangCount})
           </button>
-          {["SEMUA", ...categories.map((c) => c.kategori)].map((k) => (
+          {["SEMUA", ...katDiKondisi].map((k) => (
             <button
               key={k}
               type="button"

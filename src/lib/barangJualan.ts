@@ -14,7 +14,7 @@ import type { StokKategori } from "../hooks/useStokData";
 import { applyMasterChanges, commitStokChanges, prepareStokWrites, renameJualanItem, writeStokInTx } from "./stokJualan";
 import type { StokItemValue } from "../hooks/useStokData";
 import {
-  hapusStokOtomatisBilaYatim, namaJualan, PILIH_SAAT_CHECKOUT, planStokSync, ProdukSync, StokRef, stokBaruUntukProduk, SubKategoriJualan,
+  hapusStokOtomatisBilaYatim, Kondisi, namaJualan, PILIH_SAAT_CHECKOUT, planStokSync, ProdukSync, StokRef, stokBaruUntukProduk, SubKategoriJualan,
 } from "./posSales";
 
 export const KATEGORI_PENGELUARAN_STOK = "Stok Jualan";
@@ -25,6 +25,25 @@ export type ModalMap = Record<string, ModalInfo>;
 
 const sameRef = (a?: StokRef | null, b?: StokRef | null) => (a ? `${a.kategori}||${a.item}` : "") === (b ? `${b.kategori}||${b.item}` : "");
 const rp = (n: number) => `Rp ${Math.round(n || 0).toLocaleString("id-ID")}`;
+
+/** Semua produk JUALAN (realtime) — dipakai Input Stok, menu Stok, & analitik. */
+export function useProdukJualan(): { products: ProdukJualan[]; loaded: boolean } {
+  const [products, setProducts] = useState<ProdukJualan[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(
+    () =>
+      onSnapshot(
+        collection(db, "products"),
+        (s) => {
+          setProducts(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) })).filter((p) => p.category === "JUALAN"));
+          setLoaded(true);
+        },
+        (e) => { console.warn("products:", e); setLoaded(true); }
+      ),
+    []
+  );
+  return { products, loaded };
+}
 
 /** Harga modal semua produk (owner / super admin). */
 export function useModalProduk(enabled = true): { map: ModalMap; loaded: boolean } {
@@ -92,9 +111,9 @@ export async function uploadFotoProduk(file: File): Promise<string> {
 }
 
 /** Pratinjau: barang stok mana yang akan dipakai bila "Otomatis". */
-export function pratinjauOtomatis(nama: string, sub: SubKategoriJualan, master: StokKategori[]): { ref: StokRef; baru: boolean } | null {
+export function pratinjauOtomatis(nama: string, sub: SubKategoriJualan, kondisi: Kondisi, master: StokKategori[]): { ref: StokRef; baru: boolean } | null {
   if (!nama.trim()) return null;
-  const plan = planStokSync([{ id: "_", name: namaJualan(nama), category: "JUALAN", subcategory: sub, stokRef: undefined }], master);
+  const plan = planStokSync([{ id: "_", name: namaJualan(nama), category: "JUALAN", subcategory: sub, kondisi, stokRef: undefined }], master);
   return plan.links[0] ? { ref: plan.links[0].ref, baru: plan.links[0].baru } : null;
 }
 
@@ -102,6 +121,7 @@ export type BarangJualanInput = {
   id?: string;
   nama: string;
   subkategori: SubKategoriJualan;
+  kondisi: Kondisi;
   hargaJual: number;
   hargaModal: number | null;
   imageUrl: string;
@@ -136,7 +156,7 @@ export async function simpanBarangJualan(
     const snap = await getDoc(doc(db, "data", "master_stok_categories"));
     const master = snap.data()?.jualan;
     if (!Array.isArray(master)) throw new Error("Master stok belum terbaca, coba lagi.");
-    const plan = planStokSync([{ id: "_", name: nama, category: "JUALAN", subcategory: input.subkategori, stokRef: undefined }], master as StokKategori[]);
+    const plan = planStokSync([{ id: "_", name: nama, category: "JUALAN", subcategory: input.subkategori, kondisi: input.kondisi, stokRef: undefined }], master as StokKategori[]);
     const l = plan.links[0];
     ref = l.ref;
     dibuat = l.baru;
@@ -150,7 +170,7 @@ export async function simpanBarangJualan(
       // Barang stok yang dibuat khusus untuk produk ini ikut ganti nama
       const dipakaiLain = !!ref && lain.some((p) => sameRef(p.stokRef, ref));
       if (ref && auto && !dipakaiLain && nama !== sebelum.name && ref.item !== PILIH_SAAT_CHECKOUT) {
-        const target = stokBaruUntukProduk({ name: nama, subcategory: input.subkategori }).item;
+        const target = stokBaruUntukProduk({ name: nama, subcategory: input.subkategori, kondisi: input.kondisi }).item;
         try {
           const renamed = await renameJualanItem(ref.kategori, ref.item, target);
           if (renamed) ref = { kategori: ref.kategori, item: renamed };
@@ -169,6 +189,7 @@ export async function simpanBarangJualan(
     price: Math.round(input.hargaJual),
     category: "JUALAN",
     subcategory: input.subkategori,
+    kondisi: input.kondisi,
     imageUrl: input.imageUrl || "",
     stokRef: ref,
     stokAuto: auto,
