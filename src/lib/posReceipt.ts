@@ -5,7 +5,7 @@
  */
 import jsPDF from "jspdf";
 import logoBlackUrl from "../assets/urban-logo-black.png";
-import { infoNego, negoSatuan } from "./posSales";
+import { infoNego, isBonus, negoSatuan } from "./posSales";
 import type { PosSale } from "./posSales";
 
 export const STORE = {
@@ -132,7 +132,7 @@ function drawNota(pdf: jsPDF, s: PosSale, logo: { url: string; ratio: number } |
     pdf.setFontSize(8);
     const nama = it.kategori === "ISI GAME" && it.platform ? `${it.nama} (${it.platform})` : it.nama;
     (pdf.splitTextToSize(toAscii(nama), CW) as string[]).forEach((line) => { pdf.text(line, M, y); y += 3.4; });
-    row(`${it.qty} x ${rp(it.harga)}`, rp(it.subtotal), 7.5);
+    row(`${it.qty} x ${rp(it.harga)}${isBonus(it) ? "  (BONUS)" : ""}`, rp(it.subtotal), 7.5);
     const n = negoSatuan(it);
     if (n) {
       pdf.setFont("helvetica", "italic");
@@ -312,7 +312,7 @@ export async function buildNotaEscPos(s: PosSale): Promise<Uint8Array> {
   s.items.forEach((it) => {
     const nama = it.kategori === "ISI GAME" && it.platform ? `${it.nama} (${it.platform})` : it.nama;
     bold(true); wrap(nama).forEach(line); bold(false);
-    line(lr(`  ${it.qty} x ${rp(it.harga)}`, rp(it.subtotal)));
+    line(lr(`  ${it.qty} x ${rp(it.harga)}${isBonus(it) ? " (BONUS)" : ""}`, rp(it.subtotal)));
     const n = negoSatuan(it);
     if (n) wrap(`  Normal ${rp(it.hargaNormal!)}, nego ${n > 0 ? "-" : "+"}${rp(Math.abs(n))}/pcs`).forEach(line);
   });

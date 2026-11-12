@@ -286,8 +286,10 @@ export default function InputStokJualan() {
                     <div className="flex-1 min-w-0">
                       <div className="text-[15px] font-semibold text-zinc-900 dark:text-white leading-snug line-clamp-2">{p.name}</div>
                       <div className="text-[12.5px] text-zinc-500 mt-0.5 flex flex-wrap gap-x-1.5 tabular-nums">
-                        <span>{rp(p.price)}</span>
-                        {m !== null ? (
+                        {!p.price ? <span className="font-bold text-violet-600 dark:text-violet-400">BONUS · Rp 0</span> : <span>{rp(p.price)}</span>}
+                        {!p.price ? (
+                          m !== null ? <span>· biaya {rp(m)}</span> : <span className="text-amber-600 dark:text-amber-400">· modal belum diisi</span>
+                        ) : m !== null ? (
                           <>
                             <span>· modal {rp(m)}</span>
                             <span className={untung! >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600"}>· {untung! >= 0 ? "+" : ""}{p.price > 0 ? Math.round((untung! / p.price) * 100) : 0}%</span>
@@ -354,7 +356,7 @@ const BarangJualanSheet: React.FC<{
   const [subManual, setSubManual] = useState(!!p || !!init.sub);
   const [kondisiB, setKondisiB] = useState<Kondisi>(p ? kondisiProduk(p) : init.kondisi || "BARU");
   const [kondisiManual, setKondisiManual] = useState(!!p);
-  const [jual, setJual] = useState(p ? String(p.price || "") : "");
+  const [jual, setJual] = useState(p ? String(p.price ?? "") : "");
   const [modal, setModal] = useState(modalAwal !== null ? String(modalAwal) : "");
   const [foto, setFoto] = useState<File | null>(null);
   const [fotoPreview, setFotoPreview] = useState<string>(p?.imageUrl || "");
@@ -377,6 +379,8 @@ const BarangJualanSheet: React.FC<{
   useEffect(() => () => { if (foto && fotoPreview.startsWith("blob:")) URL.revokeObjectURL(fotoPreview); }, [foto, fotoPreview]);
 
   const jualN = Number(jual || 0);
+  // Rp 0 = barang bonus / paket (mis. stik bonus pembelian PS): gratis di nota, stok tetap berkurang
+  const bonus = jual !== "" && jualN === 0;
   const modalN = modal === "" ? null : Number(modal);
   const untung = modalN !== null && jualN > 0 ? jualN - modalN : null;
   const modalMasukN = modalMasuk === "" ? modalN || 0 : Number(modalMasuk);
@@ -424,7 +428,7 @@ const BarangJualanSheet: React.FC<{
   const simpan = async () => {
     setErr("");
     if (!nama.trim()) return setErr("Nama barang wajib diisi.");
-    if (!(jualN > 0)) return setErr("Harga jual wajib diisi.");
+    if (jual === "") return setErr("Harga jual wajib diisi. Untuk barang bonus paket, nyalakan “Barang bonus”.");
     if (qty > 0 && varianList.length && !varian) return setErr("Pilih varian untuk stok masuk.");
     if (qty > 0 && ref === null) return setErr("Barang tidak dihubungkan ke stok, jadi stok masuk tidak bisa dicatat.");
     setSaving(true);
@@ -513,13 +517,34 @@ const BarangJualanSheet: React.FC<{
 
           {/* Harga */}
           <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] p-4 space-y-3">
+            {/* Barang bonus / paket (Rp 0) */}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={bonus}
+              onClick={() => setJual(bonus ? "" : "0")}
+              className="w-full flex items-center gap-3 text-left"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="text-[15px] font-semibold text-zinc-900 dark:text-white">Barang bonus</div>
+                <div className="text-[12.5px] text-zinc-500 leading-snug">Rp 0 di kasir & nota, mis. stik bonus pembelian PS. Stok tetap berkurang.</div>
+              </div>
+              <span className={`w-12 h-7 rounded-full transition-colors flex items-center px-[3px] shrink-0 ${bonus ? "bg-violet-500" : "bg-zinc-300 dark:bg-zinc-600"}`}>
+                <span className={`w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform ${bonus ? "translate-x-[20px]" : "translate-x-0"}`} />
+              </span>
+            </button>
+            <div className="h-px bg-zinc-100 dark:bg-white/5" />
             <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
               <div>
                 <span className={label}>Harga jual</span>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[15px] text-zinc-400">Rp</span>
-                  <input inputMode="numeric" value={fmtDigits(jual)} onChange={(e) => setJual(digits(e.target.value))} placeholder="0" className={`${field} pl-10 tabular-nums`} />
-                </div>
+                {bonus ? (
+                  <div className="h-12 px-4 rounded-[14px] bg-violet-50 dark:bg-violet-500/10 flex items-center text-[15px] font-black tracking-wide text-violet-700 dark:text-violet-300">BONUS · Rp 0</div>
+                ) : (
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[15px] text-zinc-400">Rp</span>
+                    <input inputMode="numeric" value={fmtDigits(jual)} onChange={(e) => setJual(digits(e.target.value))} placeholder="0" className={`${field} pl-10 tabular-nums`} />
+                  </div>
+                )}
               </div>
               <div>
                 <span className={label}>Harga modal</span>
@@ -534,6 +559,12 @@ const BarangJualanSheet: React.FC<{
                 <span>{untung >= 0 ? "Untung per barang" : "Rugi per barang"}</span>
                 <span className="font-semibold tabular-nums">{rp(Math.abs(untung))} · {Math.round((untung / jualN) * 100)}%</span>
               </div>
+            ) : bonus ? (
+              <p className="text-[12.5px] text-zinc-500 px-1 leading-snug">
+                {modalN !== null && modalN > 0
+                  ? <>Biaya bonus <b className="text-zinc-700 dark:text-zinc-200">{rp(modalN)}</b> per barang ikut dihitung sebagai modal, jadi laba penjualan PS di Analitik Usaha tetap akurat.</>
+                  : <>Isi harga modal stik supaya biaya bonus ikut mengurangi laba di Analitik Usaha.</>}
+              </p>
             ) : (
               <p className="text-[12.5px] text-zinc-500 px-1">Isi harga modal supaya laba & margin terhitung di Analitik Usaha. Harga modal tidak tampil di kasir.</p>
             )}

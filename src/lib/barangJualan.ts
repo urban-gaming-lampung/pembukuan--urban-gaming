@@ -144,7 +144,8 @@ export async function simpanBarangJualan(
 ): Promise<{ id: string; stokRef: StokRef | null; dibuat: boolean }> {
   const nama = namaJualan(input.nama);
   if (!nama) throw new Error("Nama barang wajib diisi.");
-  if (!(input.hargaJual > 0)) throw new Error("Harga jual wajib diisi.");
+  // Rp 0 = barang bonus / paket (mis. stik bonus pembelian PS): gratis di nota, stok tetap berkurang
+  if (!Number.isFinite(input.hargaJual) || input.hargaJual < 0) throw new Error("Harga jual tidak valid.");
   const lain = semuaProduk.filter((p) => p.id !== input.id);
 
   // 1. Tentukan barang stok

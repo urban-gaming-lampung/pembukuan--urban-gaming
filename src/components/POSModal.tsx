@@ -1037,9 +1037,15 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                           </div>
                           
                           <div className="flex items-center justify-between mt-1">
-                            <span className="font-extrabold text-[12px] md:text-[14px] text-zinc-900 dark:text-zinc-100 font-mono">
-                              Rp {p.price.toLocaleString("id-ID")}
-                            </span>
+                            {p.category === "JUALAN" && !p.price ? (
+                              <span className="px-1.5 py-0.5 rounded-md bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 text-[10.5px] md:text-[12px] font-black tracking-wide">
+                                BONUS · Rp 0
+                              </span>
+                            ) : (
+                              <span className="font-extrabold text-[12px] md:text-[14px] text-zinc-900 dark:text-zinc-100 font-mono">
+                                Rp {p.price.toLocaleString("id-ID")}
+                              </span>
+                            )}
                             
                             {/* Decrement button if selected */}
                             {qty > 0 && (
@@ -1107,6 +1113,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                         </div>
                       )}
                       <div className="text-[11px] text-zinc-500 font-mono mt-0.5">
+                        {!item.price && item.category === "JUALAN" ? <span className="font-sans font-black text-violet-600 dark:text-violet-400 mr-1">BONUS</span> : null}
                         Rp {item.price.toLocaleString("id-ID")} x {item.quantity}
                       </div>
                     </div>
@@ -1303,6 +1310,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                       </div>
                     )}
                     <div className="text-[12px] text-zinc-500 font-mono mt-0.5">
+                      {!item.price && item.category === "JUALAN" ? <span className="font-sans font-black text-violet-600 dark:text-violet-400 mr-1">BONUS</span> : null}
                       Rp {item.price.toLocaleString("id-ID")} x {item.quantity}
                     </div>
                   </div>

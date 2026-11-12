@@ -3,7 +3,7 @@ import { X, CheckCircle2, Download, Printer, Share2, AlertTriangle, Package, Loa
 import logoBlack from "../assets/urban-logo-black.png";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
-import { commitPosSale, infoNego, Kondisi, negoSatuan, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, StokRef } from "../lib/posSales";
+import { commitPosSale, infoNego, isBonus, Kondisi, negoSatuan, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, StokRef } from "../lib/posSales";
 import { UploadTransferProof } from "./TableEditor";
 import { buildNotaPdf, fmtTanggalNota, GARANSI_JUDUL, GARANSI_TEKS, notaFileName, preloadNotaAssets, printNotaThermal, STORE } from "../lib/posReceipt";
 
@@ -62,7 +62,7 @@ export const NotaPreview: React.FC<{ sale: PosSale }> = ({ sale: s }) => {
           <div key={i} className="text-[11px]">
             <div className="font-bold leading-snug">{it.kategori === "ISI GAME" && it.platform ? `${it.nama} (${it.platform})` : it.nama}</div>
             <div className="flex justify-between text-zinc-700 font-mono">
-              <span>{it.qty} x {rp(it.harga)}</span>
+              <span>{it.qty} x {rp(it.harga)}{isBonus(it) ? " · BONUS" : ""}</span>
               <span className="text-black">{rp(it.subtotal)}</span>
             </div>
             {negoSatuan(it) !== 0 && (
@@ -193,7 +193,7 @@ export function useNotaActions(sale: PosSale | null) {
       `Halo ${sale.pembeli || "Kak"}, terima kasih sudah berbelanja di *${STORE.nama}* 🙏`,
       ``,
       `No. Nota: *${sale.noNota}*`,
-      ...sale.items.map((it) => `• ${it.nama} (${it.qty}x) ${rp(it.subtotal)}`),
+      ...sale.items.map((it) => `• ${it.nama} (${it.qty}x) ${isBonus(it) ? "BONUS" : rp(it.subtotal)}`),
       ...(infoNego(sale).ada ? [`_Catatan: ${infoNego(sale).catatan}._`] : []),
       `Total: *${rp(sale.total)}* — LUNAS (${sale.metode === "TRANSFER" ? "Transfer/QRIS" : "Tunai"})`,
       ``,
@@ -554,6 +554,11 @@ const PosCheckoutSheet: React.FC<Props> = ({
                           </div>
                         ) : (
                           <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                            {!diubah && l.price === 0 && (
+                              <span className="inline-flex items-center px-2 py-1 rounded-lg text-[11.5px] font-bold bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300">
+                                Bonus paket · stok tetap berkurang
+                              </span>
+                            )}
                             {diubah && (
                               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11.5px] font-bold bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300">
                                 <Handshake className="w-3.5 h-3.5" />

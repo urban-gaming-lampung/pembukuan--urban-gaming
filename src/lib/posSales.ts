@@ -73,6 +73,9 @@ export type PosSale = {
 export const negoSatuan = (it: Pick<PosItem, "harga" | "hargaNormal">) =>
   typeof it.hargaNormal === "number" && it.hargaNormal !== it.harga ? it.hargaNormal - it.harga : 0;
 
+/** Barang bonus / paket: harga jualnya memang Rp 0 (mis. stik bonus pembelian PS), bukan hasil nego. Stok tetap berkurang. */
+export const isBonus = (it: Pick<PosItem, "harga" | "hargaNormal">) => !(Number(it.harga) > 0) && negoSatuan(it) === 0;
+
 /** Ringkasan nego satu nota (dihitung dari barang, aman untuk nota lama tanpa field `nego`). */
 export function infoNego(s: Pick<PosSale, "items" | "subtotal" | "negoOleh" | "kasirNama" | "kasir">) {
   const barang = (s.items || []).filter((it) => negoSatuan(it) !== 0);
