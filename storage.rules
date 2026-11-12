@@ -51,6 +51,16 @@ service firebase.storage {
       allow list, update, delete: if isOwner();
     }
 
+    // PDF Nota POS: dibuat kasir, dikirim ke pembeli lewat link unduhan (bertoken)
+    match /nota/{bulan}/{fileName} {
+      allow create: if request.auth != null && request.auth.token.email != null
+        && request.resource.contentType == 'application/pdf'
+        && request.resource.size < 3 * 1024 * 1024;
+      allow get: if request.auth != null;
+      allow list: if isOwner();
+      allow update, delete: if false;
+    }
+
     // Foto Produk POS (Firestore products dikunci super admin)
     match /products/{allPaths=**} {
       allow get: if request.auth != null;

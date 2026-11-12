@@ -329,7 +329,9 @@ export default function UpdateStok({ adminName, isOwner, stokState, updateStok, 
          <MasterInventarisForm type="rental" catList={masterCategories.rental} onAdd={addStokItem} isOwner={isOwner} />
       )}
       {activeSubTab === "JUALAN" && isOwner && (
-         <MasterInventarisForm type="jualan" catList={masterCategories.jualan} onAdd={addStokItem} isOwner={isOwner} />
+        <div className="rounded-2xl bg-zinc-100 dark:bg-white/5 px-4 py-3 text-[13px] leading-snug text-zinc-600 dark:text-zinc-300">
+          Barang jualan baru ditambahkan lewat <b className="text-zinc-900 dark:text-white">Owner › Input › Stok Jualan</b> (sekalian harga jual, modal & foto). Di sini cukup hitung jumlahnya.
+        </div>
       )}
 
       {activeSubTab === "RENTAL" ? (

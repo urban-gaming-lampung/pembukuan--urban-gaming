@@ -16,6 +16,7 @@ import WidgetMonitoringStatus from "./WidgetMonitoringStatus";
 import RupiahIcon from "./common/RupiahIcon";
 import StokJualanOwner from "./StokJualanOwner";
 import AnalitikUsaha from "./AnalitikUsaha";
+import InputStokJualan from "./InputStokJualan";
 import WidgetMonitoringDevice from "./WidgetMonitoringDevice";
 import {
   ResponsiveContainer,
@@ -115,6 +116,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
 
   // States for Analitik Sub-tabs and Logging
   const [analitikSubTab, setAnalitikSubTab] = useState<"PEMBUKUAN" | "USAHA" | "LOGGING">("PEMBUKUAN");
+  const [inputSubTab, setInputSubTab] = useState<"PENGELUARAN" | "STOK">("PENGELUARAN");
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
   const [filterEmail, setFilterEmail] = useState<string>("Semua");
@@ -1102,6 +1104,27 @@ const PageOwner: React.FC<PageOwnerProps> = ({
       </div>
 
       {activeTabOwner === "INPUT PENGELUARAN" && (
+        <div className="flex justify-center">
+          <div className="w-full sm:w-auto grid grid-cols-2 sm:flex gap-1 bg-zinc-200/60 dark:bg-white/10 p-1 rounded-[12px]">
+            {([["PENGELUARAN", "Pengeluaran"], ["STOK", "Stok Jualan"]] as const).map(([k, l]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setInputSubTab(k)}
+                className={`h-9 sm:px-6 rounded-[9px] text-[14px] font-semibold transition-all ${
+                  inputSubTab === k ? "bg-white dark:bg-[#3a3a3c] text-zinc-900 dark:text-white shadow-sm" : "text-zinc-500 dark:text-zinc-400"
+                }`}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeTabOwner === "INPUT PENGELUARAN" && inputSubTab === "STOK" && <InputStokJualan />}
+
+      {activeTabOwner === "INPUT PENGELUARAN" && inputSubTab === "PENGELUARAN" && (
         <div id="input-pengeluaran-section" className="bg-white dark:bg-[#1C1C1E] rounded-3xl p-6 border border-zinc-200 dark:border-white/10 shadow-sm">
           <h2 className="text-xl font-black text-purple-600 dark:text-purple-400 mb-6 flex items-center gap-2">
             <RupiahIcon /> Input Pengeluaran
@@ -1295,6 +1318,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
             <AnalitikUsaha
               mode={filterMode} setMode={setFilterMode} month={filterMonth} setMonth={setFilterMonth}
               rangeStart={rangeStart} setRangeStart={setRangeStart} rangeEnd={rangeEnd} setRangeEnd={setRangeEnd}
+              pengeluaran={filteredOwnerExpenses}
             />
           ) : analitikSubTab === "PEMBUKUAN" ? (
             <>

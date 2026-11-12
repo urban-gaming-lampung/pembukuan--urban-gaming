@@ -3,15 +3,15 @@ import { ClipboardPaste, X, ArrowLeft, AlertTriangle } from "lucide-react";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { MatchedLine, matchReport, normKey, parseStokReport } from "../lib/stokReport";
-import { applyMasterChanges, commitStokChanges, StokChange } from "../lib/stokJualan";
+import { commitStokChanges, StokChange } from "../lib/stokJualan";
 
 /**
  * Tempel laporan stok format WhatsApp → pratinjau → simpan.
- * Barang yang cocok diperbarui jumlah & catatannya; barang yang belum ada bisa ditambahkan,
- * disamakan dengan barang lain, atau dilewati.
+ * Barang yang cocok diperbarui jumlah & catatannya. Barang yang belum terdaftar bisa disamakan
+ * dengan barang lain atau dilewati — barang jualan baru hanya dibuat lewat Owner › Input › Stok Jualan.
  */
-type Decision = "baru" | "lewati" | `map:${string}`;
-type StaleAction = "biarkan" | "nol" | "hapus";
+type Decision = "lewati" | `map:${string}`;
+type StaleAction = "biarkan" | "nol";
 
 const CONTOH = `*UNIT KONSOL BARU*\n• PS4 SLIM 1TB - 1 Unit\n\n*STIK PS3*\n• Hitam - 10\n• Putih - 9 (1 baret)`;
 
@@ -34,11 +34,10 @@ const StokReportPaste: React.FC<{
 
   const qtyOf = (kat: string, item: string) => Math.max(0, Math.round(Number(data?.[kat]?.[item]?.jumlah) || 0));
   const noteOf = (kat: string, item: string) => String(data?.[kat]?.[item]?.catatan || "");
-  const decisionOf = (i: number, m: MatchedLine): Decision => (m.item ? `map:${m.item}` : decisions[i] || "baru");
+  const decisionOf = (i: number, m: MatchedLine): Decision => (m.item ? `map:${m.item}` : decisions[i] || "lewati");
   const targetOf = (i: number, m: MatchedLine): string | null => {
     const d = decisionOf(i, m);
     if (d === "lewati") return null;
-    if (d === "baru") return m.nama;
     return d.slice(4);
   };
 
@@ -60,8 +59,7 @@ const StokReportPaste: React.FC<{
     let berubah = 0, sama = 0, baru = 0, lewati = 0;
     matched.forEach((m, i) => {
       const d = decisionOf(i, m);
-      if (d === "lewati") { lewati++; return; }
-      if (d === "baru") { baru++; return; }
+      if (d === "lewati") { lewati++; if (!m.item) baru++; return; }
       const t = d.slice(4);
       const changed = qtyOf(m.kategori, t) !== m.jumlah || (m.catatan || "") !== noteOf(m.kategori, t);
       changed ? berubah++ : sama++;
@@ -76,23 +74,15 @@ const StokReportPaste: React.FC<{
   const save = async () => {
     setSaving(true);
     try {
-      const add: Record<string, string[]> = {};
-      const remove: Record<string, string[]> = {};
       const byKey = new Map<string, StokChange>(); // baris terakhir menang bila ada nama kembar
       matched.forEach((m, i) => {
-        const d = decisionOf(i, m);
         const target = targetOf(i, m);
         if (!target) return;
-        if (d === "baru") (add[m.kategori] ||= []).push(target);
         byKey.set(`${m.kategori}||${normKey(target)}`, { kategori: m.kategori, item: target, setTo: m.jumlah, catatan: m.catatan || "", touch: true });
       });
       if (staleAction === "nol") stale.forEach((s) => byKey.set(`${s.kategori}||${normKey(s.item)}`, { kategori: s.kategori, item: s.item, setTo: 0 }));
-      if (staleAction === "hapus" && isOwner) stale.forEach((s) => (remove[s.kategori] ||= []).push(s.item));
-
-      await applyMasterChanges(add, remove);
       const n = await commitStokChanges(Array.from(byKey.values()), "koreksi", "Tempel laporan stok");
-      const addedCount = Object.values(add).reduce((s, l) => s + l.length, 0);
-      alert(`Laporan stok tersimpan ✅\n${stats.berubah} berubah${addedCount ? ` · ${addedCount} barang baru` : ""}\n${n} barang tercatat sudah dicek hari ini.`);
+      alert(`Laporan stok tersimpan ✅\n${stats.berubah} berubah\n${n} barang tercatat sudah dicek hari ini.${stats.baru ? `\n${stats.baru} barang belum terdaftar dilewati — tambahkan lewat Owner › Input › Stok Jualan.` : ""}`);
       reset();
       onClose();
     } catch (e: any) {
@@ -171,7 +161,7 @@ const StokReportPaste: React.FC<{
                 {[
                   { t: "Berubah", v: stats.berubah, c: "text-blue-600 dark:text-blue-400" },
                   { t: "Sama", v: stats.sama, c: "text-zinc-500" },
-                  { t: "Baru", v: stats.baru, c: "text-emerald-600 dark:text-emerald-400" },
+                  { t: "Blm terdaftar", v: stats.baru, c: "text-amber-600 dark:text-amber-400" },
                   { t: "Lewati", v: stats.lewati, c: "text-zinc-400" },
                 ].map((x) => (
                   <div key={x.t} className="rounded-xl bg-zinc-100 dark:bg-zinc-800 py-2 text-center">
@@ -194,12 +184,12 @@ const StokReportPaste: React.FC<{
                   <div key={kat} className="rounded-2xl border border-zinc-200 dark:border-white/10 overflow-hidden">
                     <div className="px-3 py-2 bg-zinc-50 dark:bg-white/5 flex items-center justify-between">
                       <span className="text-[11px] font-black uppercase tracking-wider text-zinc-500">{kat}</span>
-                      {!cat && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">Kategori baru</span>}
+                      {!cat && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">Kategori belum ada</span>}
                     </div>
                     {list.map(({ m, i }) => {
                       const d = decisionOf(i, m);
                       const target = targetOf(i, m);
-                      const isNew = d === "baru";
+                      const isNew = false;
                       const before = target && !isNew ? qtyOf(kat, target) : null;
                       const changed = before !== null && (before !== m.jumlah || (m.catatan || "") !== noteOf(kat, target!));
                       return (
@@ -214,7 +204,7 @@ const StokReportPaste: React.FC<{
                             </div>
                             <div className="text-[13px] font-bold tabular-nums shrink-0 text-right">
                               {d === "lewati" ? (
-                                <span className="text-zinc-400">dilewati</span>
+                                <span className={m.item ? "text-zinc-400" : "text-amber-600 dark:text-amber-400"}>{m.item ? "dilewati" : "belum terdaftar"}</span>
                               ) : isNew ? (
                                 <span className="text-emerald-600 dark:text-emerald-400">BARU · {m.jumlah}</span>
                               ) : changed ? (
@@ -226,6 +216,9 @@ const StokReportPaste: React.FC<{
                           </div>
                           {!m.item && (
                             <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                              {d === "lewati" && (
+                                <span className="basis-full text-[11px] text-zinc-500">Barang baru ditambahkan lewat Owner › Input › Stok Jualan, lalu tempel ulang.</span>
+                              )}
                               {m.saran && d !== `map:${m.saran}` && (
                                 <button
                                   type="button"
@@ -240,8 +233,7 @@ const StokReportPaste: React.FC<{
                                 onChange={(e) => setDecisions((p) => ({ ...p, [i]: e.target.value as Decision }))}
                                 className="h-8 px-2 rounded-lg text-[12px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 max-w-full"
                               >
-                                <option value="baru">+ Tambah barang baru</option>
-                                <option value="lewati">Lewati</option>
+                                <option value="lewati">Lewati (belum terdaftar)</option>
                                 {(cat?.items || []).map((it) => (
                                   <option key={it} value={`map:${it}`}>Samakan dgn: {it}</option>
                                 ))}
@@ -260,7 +252,7 @@ const StokReportPaste: React.FC<{
                   <div className="text-[13px] font-black text-zinc-900 dark:text-white">Ada di daftar, tidak ada di laporan ({stale.length})</div>
                   <div className="text-[12px] text-zinc-500 line-clamp-3">{stale.map((s) => s.item).join(", ")}</div>
                   <div className={`grid gap-2 ${isOwner ? "grid-cols-3" : "grid-cols-2"}`}>
-                    {([["biarkan", "Biarkan"], ["nol", "Jadikan 0"], ...(isOwner ? [["hapus", "Hapus dari daftar"]] : [])] as [StaleAction, string][]).map(([k, t]) => (
+                    {([["biarkan", "Biarkan"], ["nol", "Jadikan 0"]] as [StaleAction, string][]).map(([k, t]) => (
                       <button
                         key={k}
                         type="button"
@@ -271,7 +263,6 @@ const StokReportPaste: React.FC<{
                       </button>
                     ))}
                   </div>
-                  {staleAction === "hapus" && <p className="text-[11px] text-zinc-400">Barang hanya dihilangkan dari daftar; riwayat & angka lama tetap tersimpan.</p>}
                 </div>
               )}
             </div>
@@ -282,7 +273,7 @@ const StokReportPaste: React.FC<{
                 disabled={saving || stats.lewati === matched.length}
                 className="w-full h-12 rounded-2xl bg-blue-600 text-white text-[15px] font-black disabled:opacity-40 active:scale-[0.98]"
               >
-                {saving ? "Menyimpan…" : `Simpan laporan · ${stats.berubah} berubah · ${stats.baru} baru`}
+                {saving ? "Menyimpan…" : `Simpan laporan · ${stats.berubah} berubah`}
               </button>
             </div>
           </>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { X, ShoppingCart, Plus, Minus, Trash2, PlusCircle, Sparkles, Pencil, Search, Receipt, Link2 } from "lucide-react";
+import { X, ShoppingCart, Plus, Minus, Trash2, PlusCircle, Sparkles, Pencil, Search, Receipt } from "lucide-react";
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, setDoc, deleteDoc, deleteField } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage, listGameDb } from "../lib/firebase";
@@ -7,8 +7,8 @@ import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue } from "../hooks/useStokData";
 import PosCheckoutSheet from "./PosCheckoutSheet";
-import PosStokLinkSheet, { refAda, StokRefSelect } from "./PosStokLinkSheet";
-import { hapusStokOtomatisBilaYatim, PILIH_SAAT_CHECKOUT, StokRef, stokBaruUntukProduk, stokRefLabel, suggestStokRef, syncProdukKeStok } from "../lib/posSales";
+import { StokRefSelect } from "./StokRefSelect";
+import { hapusStokOtomatisBilaYatim, PILIH_SAAT_CHECKOUT, StokRef, stokBaruUntukProduk } from "../lib/posSales";
 import { getMinStok, renameJualanItem, statusOf, useMinStok } from "../lib/stokJualan";
 
 const qrisImg = new URL("/images/QRIS.jpeg", import.meta.url).href;
@@ -143,7 +143,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   const [openAddProduct, setOpenAddProduct] = useState(false);
   const [newProdName, setNewProdName] = useState("");
   const [newProdPrice, setNewProdPrice] = useState<number | "">("");
-  const [newProdCategory, setNewProdCategory] = useState<"JUALAN" | "RENTAL" | "SERVIS">("JUALAN");
+  const [newProdCategory, setNewProdCategory] = useState<"JUALAN" | "RENTAL" | "SERVIS">("RENTAL");
   const [newProdSubCategory, setNewProdSubCategory] = useState<"Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD">("Aksesoris");
   const [newProdImage, setNewProdImage] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -153,7 +153,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   const [selectedProductForEdit, setSelectedProductForEdit] = useState<Product | null>(null);
   const [editProdName, setEditProdName] = useState("");
   const [editProdPrice, setEditProdPrice] = useState<number | "">("");
-  const [editProdCategory, setEditProdCategory] = useState<"JUALAN" | "RENTAL" | "SERVIS">("JUALAN");
+  const [editProdCategory, setEditProdCategory] = useState<"JUALAN" | "RENTAL" | "SERVIS">("RENTAL");
   const [editProdSubCategory, setEditProdSubCategory] = useState<"Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD">("Aksesoris");
   const [editProdImage, setEditProdImage] = useState<File | null>(null);
   const [editProdImageUrl, setEditProdImageUrl] = useState("");
@@ -162,8 +162,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   useEffect(() => {
     const lower = newProdName.toLowerCase();
     if (lower.startsWith("bd ") || lower.includes(" bd ") || lower.includes("kaset") || lower.includes("blu-ray") || lower.startsWith("kaset bd")) {
-      setNewProdCategory("JUALAN");
-      setNewProdSubCategory("BD");
+      if (newProdCategory === "JUALAN") setNewProdSubCategory("BD");
     } else if (newProdCategory === "JUALAN") {
       setNewProdSubCategory(getProductSubCategory(newProdName));
     }
@@ -173,8 +172,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   useEffect(() => {
     const lower = editProdName.toLowerCase();
     if (lower.startsWith("bd ") || lower.includes(" bd ") || lower.includes("kaset") || lower.includes("blu-ray") || lower.startsWith("kaset bd")) {
-      setEditProdCategory("JUALAN");
-      setEditProdSubCategory("BD");
+      if (editProdCategory === "JUALAN") setEditProdSubCategory("BD");
     } else if (editProdCategory === "JUALAN") {
       setEditProdSubCategory(getProductSubCategory(editProdName));
     }
@@ -185,13 +183,9 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
   // Checkout (nota + potong stok) & hubungkan produk ke stok
   const [openCheckout, setOpenCheckout] = useState(false);
-  const [openStokLink, setOpenStokLink] = useState(false);
   // undefined = Otomatis (sistem hubungkan / buat barang stok)
   const [newProdStokRef, setNewProdStokRef] = useState<StokRef | null | undefined>(undefined);
   const [editProdStokRef, setEditProdStokRef] = useState<StokRef | null | undefined>(undefined);
-  const [syncInfo, setSyncInfo] = useState<{ linked: number; created: number } | null>(null);
-  const syncTried = useRef<Set<string>>(new Set());
-  const syncBusy = useRef(false);
   const { stokState, masterCategories } = useStokData();
   const minStokMap = useMinStok();
   const stokCats = Array.isArray(masterCategories?.jualan) ? masterCategories.jualan : [];
@@ -559,27 +553,6 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     }
   };
 
-  // Produk JUALAN yang belum terhubung ke stok (owner)
-  const unlinkedCount = useMemo(
-    () => products.filter((p) => p.category === "JUALAN" && (p.stokRef === undefined || (p.stokRef && stokCats.length > 0 && !refAda(p.stokRef, stokCats)))).length,
-    [products, stokCats]
-  );
-
-  // SINKRON OTOMATIS: produk jualan yang belum punya barang stok -> dihubungkan / dibuatkan (owner & super admin)
-  useEffect(() => {
-    if (!open || !isSuperAdminOrOwner || syncBusy.current || products.length === 0) return;
-    const pending = products.filter((p) => p.category === "JUALAN" && p.stokRef === undefined && !syncTried.current.has(p.id));
-    if (!pending.length) return;
-    syncBusy.current = true;
-    pending.forEach((p) => syncTried.current.add(p.id));
-    syncProdukKeStok(products)
-      .then((r) => {
-        if (r.linked || r.created) setSyncInfo((prev) => ({ linked: (prev?.linked || 0) + r.linked, created: (prev?.created || 0) + r.created }));
-      })
-      .catch((e) => console.warn("Sinkron produk ke stok gagal:", e))
-      .finally(() => { syncBusy.current = false; });
-  }, [open, isSuperAdminOrOwner, products]);
-
   // Badge stok di kartu produk
   const stokBadge = (p: Product): { label: string; tone: "habis" | "menipis" | "aman" | "belum" } | null => {
     const r = p.stokRef;
@@ -654,20 +627,6 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             </h2>
           </div>
           <div className="flex items-center gap-2">
-          {isSuperAdminOrOwner && (
-            <button
-              onClick={() => setOpenStokLink(true)}
-              className="h-8 pl-2.5 pr-3 flex items-center gap-1.5 rounded-full bg-blue-600/10 text-blue-700 dark:text-blue-300 text-[12px] font-bold active:scale-95 transition-all"
-              title="Hubungkan produk ke stok jualan"
-            >
-              <Link2 size={14} />
-              <span className="sm:hidden">Stok</span>
-              <span className="hidden sm:inline">Hubungkan Stok</span>
-              {unlinkedCount > 0 && (
-                <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-black flex items-center justify-center">{unlinkedCount}</span>
-              )}
-            </button>
-          )}
           <button 
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-zinc-200/60 dark:bg-zinc-800 hover:bg-zinc-300/60 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 active:scale-90 transition-all"
@@ -713,11 +672,17 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               })}
             </div>
             
+            {/* Barang jualan hanya lewat Owner › Input › Stok Jualan */}
+            {isSuperAdminOrOwner && activeSub === "JUALAN" && (
+              <p className="mt-3 text-[12px] leading-snug text-zinc-500 dark:text-zinc-400">
+                Tambah & ubah barang jualan (harga, modal, stok) di <b className="text-zinc-700 dark:text-zinc-200">Owner › Input › Stok Jualan</b>.
+              </p>
+            )}
             {/* Add product button for Super Admin on Mobile */}
-            {isSuperAdminOrOwner && activeSub !== "ISI GAME" && (
+            {isSuperAdminOrOwner && (activeSub === "RENTAL" || activeSub === "SERVIS") && (
               <div className="mt-3 flex gap-2">
                 <button 
-                  onClick={() => setOpenAddProduct(true)}
+                  onClick={() => { setNewProdCategory(activeSub === "SERVIS" ? "SERVIS" : "RENTAL"); setOpenAddProduct(true); }}
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black shadow-md shadow-black/25 dark:shadow-white/10 active:scale-95 transition-all"
                 >
                   <PlusCircle size={14} />
@@ -788,9 +753,9 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   Inisialisasi Produk
                 </button>
               )}
-              {isSuperAdminOrOwner && activeSub !== "ISI GAME" && (
+              {isSuperAdminOrOwner && (activeSub === "RENTAL" || activeSub === "SERVIS") && (
                 <button
-                  onClick={() => setOpenAddProduct(true)}
+                  onClick={() => { setNewProdCategory(activeSub === "SERVIS" ? "SERVIS" : "RENTAL"); setOpenAddProduct(true); }}
                   className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black shadow-md shadow-black/25 dark:shadow-white/10 active:scale-95 transition-all"
                 >
                   <PlusCircle size={14} />
@@ -810,9 +775,9 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
                   Katalog {activeSub} &mdash; Klik item untuk menambahkan ke keranjang
                 </span>
-                {activeSub !== "ISI GAME" && products.length > 0 && (
+                {(activeSub === "RENTAL" || activeSub === "SERVIS") && products.length > 0 && (
                   <button
-                    onClick={() => setOpenAddProduct(true)}
+                    onClick={() => { setNewProdCategory(activeSub === "SERVIS" ? "SERVIS" : "RENTAL"); setOpenAddProduct(true); }}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700 font-bold text-xs transition-all active:scale-95"
                   >
                     <PlusCircle size={13} />
@@ -929,11 +894,11 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   </h3>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-[240px]">
                     Belum ada produk di kategori {activeSub}.
-                    {isSuperAdminOrOwner && " Klik tombol di bawah untuk menambahkan produk."}
+                    {isSuperAdminOrOwner && (activeSub === "JUALAN" ? " Tambahkan lewat Owner › Input › Stok Jualan." : " Klik tombol di bawah untuk menambahkan produk.")}
                   </p>
-                  {isSuperAdminOrOwner && (
+                  {isSuperAdminOrOwner && (activeSub === "RENTAL" || activeSub === "SERVIS") && (
                     <button
-                      onClick={() => setOpenAddProduct(true)}
+                      onClick={() => { setNewProdCategory(activeSub === "SERVIS" ? "SERVIS" : "RENTAL"); setOpenAddProduct(true); }}
                       className="mt-4 px-4 py-2 text-xs font-bold bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black rounded-lg active:scale-95 shadow-md shadow-black/20 dark:shadow-white/5"
                     >
                       Tambah Produk Pertama
@@ -942,18 +907,6 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                 </div>
               ) : (
                 <>
-                {syncInfo && isSuperAdminOrOwner && (
-                  <div className="mb-3 rounded-2xl border border-blue-200 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/10 px-3.5 py-3 flex items-start gap-3">
-                    <Sparkles size={18} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0 text-[12.5px] leading-snug text-blue-900 dark:text-blue-100">
-                      <b>Sinkron stok otomatis:</b> {syncInfo.linked > 0 && <>{syncInfo.linked} produk dihubungkan ke barang stok yang sudah ada</>}
-                      {syncInfo.linked > 0 && syncInfo.created > 0 && ", "}
-                      {syncInfo.created > 0 && <>{syncInfo.created} barang baru ditambahkan ke stok jualan (jumlahnya belum dihitung — isi di menu Stok)</>}.
-                      <button type="button" onClick={() => setOpenStokLink(true)} className="block mt-1 font-bold text-blue-700 dark:text-blue-300 underline underline-offset-2">Lihat & koreksi</button>
-                    </div>
-                    <button type="button" onClick={() => setSyncInfo(null)} aria-label="Tutup info" className="w-7 h-7 rounded-full flex items-center justify-center text-blue-700/70 dark:text-blue-300/70 shrink-0"><X size={14} /></button>
-                  </div>
-                )}
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-3 pb-24 md:pb-6">
                   {filteredProducts.map((p) => {
                     const cartItem = cart.find(item => item.id === p.id);
@@ -978,7 +931,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                         )}
 
                         {/* Super Admin Edit Product Button (Right) */}
-                        {isSuperAdminOrOwner && p.category !== "ISI GAME" && (
+                        {isSuperAdminOrOwner && p.category !== "ISI GAME" && p.category !== "JUALAN" && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -1517,54 +1470,24 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   onChange={(e) => setNewProdCategory(e.target.value as any)}
                   className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
                 >
-                  <option value="JUALAN">JUALAN (Produk Fisik / Jasa Dagang)</option>
                   <option value="RENTAL">RENTAL (Sewa PS / Paket Jam)</option>
                   <option value="SERVIS">SERVIS (Jasa Service Stik / Konsol)</option>
                 </select>
               </div>
 
-              {/* Sub-Kategori */}
-              {newProdCategory === "JUALAN" && (
-                <div className="space-y-1 animate-in fade-in duration-200">
-                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
-                    Sub-Kategori
-                  </label>
-                  <select
-                    value={newProdSubCategory}
-                    onChange={(e) => setNewProdSubCategory(e.target.value as any)}
-                    className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
-                  >
-                    <option value="Unit PS">Unit PS</option>
-                    <option value="Stik">Stik</option>
-                    <option value="Hardisk">Hardisk</option>
-                    <option value="Aksesoris">Aksesoris</option>
-                    <option value="BD">BD</option>
-                  </select>
-                </div>
-              )}
-
               {/* Barang stok yang dipotong saat nota dibuat */}
-              {(newProdCategory === "JUALAN" || newProdCategory === "SERVIS") && (
+              {newProdCategory === "SERVIS" && (
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
                     Barang Stok (dipotong saat nota dicetak)
                   </label>
                   <StokRefSelect
-                    allowAuto={newProdCategory === "JUALAN"}
                     value={newProdStokRef}
                     onChange={setNewProdStokRef}
                     categories={stokCats}
                     data={stokData}
                     className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-3 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
                   />
-                  {newProdCategory === "JUALAN" && !newProdStokRef && newProdName.trim().length > 2 && (() => {
-                    const s = suggestStokRef(newProdName, stokCats);
-                    return s ? (
-                      <button type="button" onClick={() => setNewProdStokRef(s.ref)} className="ml-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 text-left">
-                        Saran: {stokRefLabel(s.ref)} — ketuk untuk pakai
-                      </button>
-                    ) : null;
-                  })()}
                 </div>
               )}
 
@@ -1668,54 +1591,24 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                   onChange={(e) => setEditProdCategory(e.target.value as any)}
                   className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
                 >
-                  <option value="JUALAN">JUALAN (Produk Fisik / Jasa Dagang)</option>
                   <option value="RENTAL">RENTAL (Sewa PS / Paket Jam)</option>
                   <option value="SERVIS">SERVIS (Jasa Service Stik / Konsol)</option>
                 </select>
               </div>
 
-              {/* Sub-Kategori */}
-              {editProdCategory === "JUALAN" && (
-                <div className="space-y-1 animate-in fade-in duration-200">
-                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
-                    Sub-Kategori
-                  </label>
-                  <select
-                    value={editProdSubCategory}
-                    onChange={(e) => setEditProdSubCategory(e.target.value as any)}
-                    className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
-                  >
-                    <option value="Unit PS">Unit PS</option>
-                    <option value="Stik">Stik</option>
-                    <option value="Hardisk">Hardisk</option>
-                    <option value="Aksesoris">Aksesoris</option>
-                    <option value="BD">BD</option>
-                  </select>
-                </div>
-              )}
-
               {/* Barang stok yang dipotong saat nota dibuat */}
-              {(editProdCategory === "JUALAN" || editProdCategory === "SERVIS") && (
+              {editProdCategory === "SERVIS" && (
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
                     Barang Stok (dipotong saat nota dicetak)
                   </label>
                   <StokRefSelect
-                    allowAuto={editProdCategory === "JUALAN"}
                     value={editProdStokRef}
                     onChange={setEditProdStokRef}
                     categories={stokCats}
                     data={stokData}
                     className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-3 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
                   />
-                  {editProdCategory === "JUALAN" && !editProdStokRef && editProdName.trim().length > 2 && (() => {
-                    const s = suggestStokRef(editProdName, stokCats);
-                    return s ? (
-                      <button type="button" onClick={() => setEditProdStokRef(s.ref)} className="ml-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 text-left">
-                        Saran: {stokRefLabel(s.ref)} — ketuk untuk pakai
-                      </button>
-                    ) : null;
-                  })()}
                 </div>
               )}
 
@@ -1831,15 +1724,6 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
           setOpenMobileCart(false);
         }}
       />
-      {isSuperAdminOrOwner && (
-        <PosStokLinkSheet
-          open={openStokLink}
-          onClose={() => setOpenStokLink(false)}
-          products={products}
-          categories={stokCats}
-          data={stokData}
-        />
-      )}
     </div>
   );
 }

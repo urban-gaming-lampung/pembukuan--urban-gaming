@@ -7,8 +7,9 @@
  *   pos_transaksi, pengurangan stok jualan, dan riwayat stok "Terjual".
  */
 import { useEffect, useState } from "react";
-import { collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, where, writeBatch } from "firebase/firestore";
-import { auth, db } from "./firebase";
+import { collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, updateDoc, where, writeBatch } from "firebase/firestore";
+import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
+import { auth, db, storage } from "./firebase";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { applyMasterChanges, prepareStokWrites, removeJualanItem, writeStokInTx, StokChange } from "./stokJualan";
 
@@ -37,6 +38,10 @@ export type PosSale = {
   pembeli: string;
   pembeliWa?: string;
   metode: "CASH" | "TRANSFER";
+  /** Foto bukti transfer (wajib bila metode TRANSFER) — sama dengan bukti transfer pembukuan rental */
+  buktiTransfer?: string;
+  /** Link PDF nota (Firebase Storage) untuk dikirim ke WhatsApp pembeli */
+  notaUrl?: string;
   items: PosItem[];
   subtotal: number;
   diskonPersen: number;
@@ -248,6 +253,7 @@ export async function commitPosSale(
   for (const it of input.items) {
     if (it.stokRef?.item === PILIH_SAAT_CHECKOUT) throw new Error(`Pilih varian stok untuk "${it.nama}" dulu.`);
   }
+  if (input.metode === "TRANSFER" && !input.buktiTransfer) throw new Error("Bukti transfer wajib diupload.");
 
   return runTransaction(db, async (tx) => {
     const [cSnap, sSnap] = await Promise.all([tx.get(counterRef), tx.get(stokRef)]);
@@ -350,6 +356,17 @@ export async function cancelPosSale(sale: PosSale, alasan = ""): Promise<void> {
     writeStokInTx(tx, w, { noNota: cur.noNota });
     tx.update(saleRef, { batal: true, batalOleh: oleh, batalTs: now, batalAlasan: alasan.trim() || null });
   });
+}
+
+/** Unggah PDF nota ke Storage (link untuk WhatsApp pembeli) & simpan link-nya di transaksi. */
+export async function simpanNotaOnline(sale: PosSale, file: File): Promise<string> {
+  const d = new Date(sale.ts);
+  const bulan = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  const r = storageRef(storage, `nota/${bulan}/${sale.noNota}_${Date.now()}.pdf`);
+  await uploadBytes(r, file, { contentType: "application/pdf" });
+  const url = await getDownloadURL(r);
+  if (sale.id) await updateDoc(doc(db, "pos_transaksi", sale.id), { notaUrl: url }).catch((e) => console.warn("notaUrl:", e));
+  return url;
 }
 
 // ============================================================

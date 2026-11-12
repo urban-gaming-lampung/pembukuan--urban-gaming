@@ -224,7 +224,15 @@ service cloud.firestore {
     // ==========================================
     match /pos_transaksi/{saleId} {
       allow read, create: if isUrbanStaff();
-      allow update, delete: if isSalaryAdmin();
+      // Kasir hanya boleh menambahkan link PDF nota (untuk dikirim ke WhatsApp pembeli)
+      allow update: if isSalaryAdmin()
+        || (isUrbanStaff() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notaUrl']));
+      allow delete: if isSalaryAdmin();
+    }
+
+    // Harga modal barang jualan (privat: products dibaca publik, jadi modal disimpan terpisah)
+    match /product_costs/{productId} {
+      allow read, write: if isSalaryAdmin();
     }
 
     // ==========================================

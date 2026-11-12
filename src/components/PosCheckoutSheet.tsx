@@ -3,7 +3,8 @@ import { X, CheckCircle2, Download, Printer, Share2, AlertTriangle, Package, Loa
 import logoBlack from "../assets/urban-logo-black.png";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
-import { commitPosSale, PILIH_SAAT_CHECKOUT, PosItem, PosSale, StokRef } from "../lib/posSales";
+import { commitPosSale, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, StokRef } from "../lib/posSales";
+import { UploadTransferProof } from "./TableEditor";
 import { buildNotaPdf, fmtTanggalNota, GARANSI_JUDUL, GARANSI_TEKS, notaFileName, preloadNotaAssets, printNotaThermal, STORE } from "../lib/posReceipt";
 
 export type CheckoutLine = {
@@ -98,15 +99,28 @@ export const NotaPreview: React.FC<{ sale: PosSale }> = ({ sale: s }) => {
 /** Unduh / bagikan / cetak ulang nota yang sudah tersimpan. */
 export function useNotaActions(sale: PosSale | null) {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [busy, setBusy] = useState<"" | "pdf" | "thermal" | "share">("");
+  const [busy, setBusy] = useState<"" | "pdf" | "thermal" | "share" | "wa">("");
   const [msg, setMsg] = useState("");
+  const [notaUrl, setNotaUrl] = useState<string>("");
+  const uploading = React.useRef<Promise<string> | null>(null);
   useEffect(() => {
     setPdfFile(null);
+    setNotaUrl(sale?.notaUrl || "");
+    uploading.current = null;
     if (!sale) return;
     let alive = true;
     // PDF disiapkan lebih dulu supaya tombol Bagikan tetap dalam "gesture" pengguna
     buildNotaPdf(sale)
-      .then((p) => { if (alive) setPdfFile(new File([p.output("blob")], notaFileName(sale), { type: "application/pdf" })); })
+      .then((p) => {
+        if (!alive) return;
+        const file = new File([p.output("blob")], notaFileName(sale), { type: "application/pdf" });
+        setPdfFile(file);
+        // Ada nomor WA pembeli -> PDF langsung diunggah supaya "Kirim WA" instan
+        if (sale.pembeliWa && !sale.notaUrl && !uploading.current) {
+          uploading.current = simpanNotaOnline(sale, file);
+          uploading.current.then((u) => { if (alive) setNotaUrl(u); }).catch(() => { uploading.current = null; });
+        }
+      })
       .catch(() => {});
     return () => { alive = false; };
   }, [sale]);
@@ -151,19 +165,41 @@ export function useNotaActions(sale: PosSale | null) {
       if (e?.name !== "AbortError") setMsg("Gagal membagikan: " + (e?.message || e));
     } finally { setBusy(""); }
   };
-  const kirimWa = () => {
+  const kirimWa = async () => {
     if (!sale?.pembeliWa) return;
-    const text = [
+    const pesan = (link: string) => [
       `Halo ${sale.pembeli || "Kak"}, terima kasih sudah berbelanja di *${STORE.nama}* 🙏`,
       ``,
       `No. Nota: *${sale.noNota}*`,
       ...sale.items.map((it) => `• ${it.nama} (${it.qty}x) ${rp(it.subtotal)}`),
       `Total: *${rp(sale.total)}* — LUNAS (${sale.metode === "TRANSFER" ? "Transfer/QRIS" : "Tunai"})`,
       ``,
+      ...(link ? [`📄 Nota PDF: ${link}`, ``] : []),
       `_Simpan nota / invoice ini untuk keperluan klaim garansi._`,
       `IG ${STORE.ig} · WA ${STORE.wa}`,
     ].join("\n");
-    window.open(`https://wa.me/${waIntl(sale.pembeliWa)}?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+    const waLink = (link: string) => `https://wa.me/${waIntl(sale.pembeliWa!)}?text=${encodeURIComponent(pesan(link))}`;
+    const siap = notaUrl || sale.notaUrl;
+    if (siap) { window.open(waLink(siap), "_blank"); return; }
+    // Buka tab dulu (masih dalam ketukan pengguna), isi alamatnya setelah PDF terunggah
+    const w = window.open("", "_blank");
+    setBusy("wa");
+    let link = "";
+    try {
+      if (!uploading.current) {
+        const file = pdfFile || new File([(await buildNotaPdf(sale)).output("blob")], notaFileName(sale), { type: "application/pdf" });
+        uploading.current = simpanNotaOnline(sale, file);
+      }
+      link = await uploading.current;
+      setNotaUrl(link);
+    } catch (e: any) {
+      uploading.current = null;
+      setMsg("PDF gagal diunggah, nota dikirim tanpa link: " + (e?.message || e));
+    } finally {
+      setBusy("");
+    }
+    if (w) w.location.href = waLink(link);
+    else window.location.href = waLink(link);
   };
   return { pdfFile, canShare, busy, msg, setMsg, unduh, cetak, bagikan, kirimWa };
 }
@@ -179,8 +215,8 @@ export const NotaActionButtons: React.FC<{ sale: PosSale; actions: ReturnType<ty
         {a.busy === "pdf" ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}Unduh PDF
       </button>
       {sale.pembeliWa ? (
-        <button type="button" onClick={a.kirimWa} className={`${btn} bg-emerald-600 text-white`}>
-          <MessageCircle className="w-5 h-5" />Kirim WA
+        <button type="button" disabled={!!a.busy} onClick={a.kirimWa} className={`${btn} bg-emerald-600 text-white`}>
+          {a.busy === "wa" ? <Loader2 className="w-5 h-5 animate-spin" /> : <MessageCircle className="w-5 h-5" />}Kirim WA
         </button>
       ) : a.canShare ? (
         <button type="button" disabled={!!a.busy} onClick={a.bagikan} className={`${btn} bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white`}>
@@ -219,6 +255,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
   const [pembeli, setPembeli] = useState("");
   const [pembeliWa, setPembeliWa] = useState("");
   const [variant, setVariant] = useState<Record<string, string>>({});
+  const [bukti, setBukti] = useState("");
   const [saving, setSaving] = useState<"" | "pdf" | "thermal" | "none">("");
   const [error, setError] = useState("");
   const [sale, setSale] = useState<PosSale | null>(null);
@@ -227,7 +264,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
   useEffect(() => { if (open) preloadNotaAssets(); }, [open]);
 
   const reset = () => {
-    setPembeli(""); setPembeliWa(""); setVariant({}); setError(""); setSale(null); setSaving(""); actions.setMsg("");
+    setPembeli(""); setPembeliWa(""); setVariant({}); setBukti(""); setError(""); setSale(null); setSaving(""); actions.setMsg("");
   };
   const close = () => {
     if (saving) return;
@@ -262,10 +299,12 @@ const PosCheckoutSheet: React.FC<Props> = ({
   };
   const belumPilih = resolved.filter((x) => x.pilih && !x.ref);
   const jumlahBarang = lines.reduce((s, l) => s + l.quantity, 0);
+  const butuhBukti = metode === "TRANSFER" && !bukti;
 
   const simpan = async (mode: "pdf" | "thermal" | "none") => {
     if (saving || !lines.length) return;
     if (belumPilih.length) { setError(`Pilih varian stok untuk "${belumPilih[0].line.name}".`); return; }
+    if (butuhBukti) { setError("Upload foto bukti transfer dulu."); return; }
     setSaving(mode);
     setError("");
     const items: PosItem[] = resolved.map(({ line: l, ref }) => ({
@@ -286,6 +325,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
         pembeli: pembeli.trim() || "Pelanggan",
         pembeliWa: waDigits(pembeliWa) || undefined,
         metode,
+        buktiTransfer: metode === "TRANSFER" ? bukti : undefined,
         items,
         subtotal,
         diskonPersen: discountPercent,
@@ -356,6 +396,17 @@ const PosCheckoutSheet: React.FC<Props> = ({
                     </button>
                   ))}
                 </div>
+                {metode === "TRANSFER" && (
+                  <div className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 ${bukti ? "bg-blue-50 dark:bg-blue-500/10" : "bg-amber-50 dark:bg-amber-500/10 ring-1 ring-amber-300/60 dark:ring-amber-500/30"}`}>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[14px] font-bold text-zinc-900 dark:text-white">Bukti transfer</div>
+                      <div className={`text-[12px] ${bukti ? "text-blue-700 dark:text-blue-300" : "text-amber-700 dark:text-amber-400"}`}>
+                        {bukti ? "Terupload ✓ · ketuk foto untuk lihat" : "Wajib · foto / screenshot bukti transfer"}
+                      </div>
+                    </div>
+                    <UploadTransferProof value={bukti} onChange={setBukti} />
+                  </div>
+                )}
               </div>
 
               {/* Barang & stok */}
@@ -421,17 +472,18 @@ const PosCheckoutSheet: React.FC<Props> = ({
 
             <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] bg-white dark:bg-[#1c1c1e] border-t border-zinc-200/70 dark:border-white/5 space-y-2">
               {error && <div className="text-[12.5px] font-semibold text-red-600 bg-red-50 dark:bg-red-500/10 rounded-xl px-3 py-2">{error}</div>}
+              {butuhBukti && !error && <div className="text-[12.5px] font-semibold text-amber-700 dark:text-amber-400 text-center">Upload bukti transfer untuk melanjutkan</div>}
               <div className="grid grid-cols-2 gap-2">
-                <button type="button" disabled={!!saving || !lines.length} onClick={() => simpan("thermal")}
+                <button type="button" disabled={!!saving || !lines.length || butuhBukti} onClick={() => simpan("thermal")}
                   className="h-[52px] rounded-2xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[14px] font-black flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]">
                   {saving === "thermal" ? <Loader2 className="w-5 h-5 animate-spin" /> : <Printer className="w-5 h-5" />}Cetak Struk
                 </button>
-                <button type="button" disabled={!!saving || !lines.length} onClick={() => simpan("pdf")}
+                <button type="button" disabled={!!saving || !lines.length || butuhBukti} onClick={() => simpan("pdf")}
                   className="h-[52px] rounded-2xl bg-red-600 text-white text-[14px] font-black flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]">
                   {saving === "pdf" ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}Nota PDF
                 </button>
               </div>
-              <button type="button" disabled={!!saving || !lines.length} onClick={() => simpan("none")}
+              <button type="button" disabled={!!saving || !lines.length || butuhBukti} onClick={() => simpan("none")}
                 className="w-full h-9 text-[12.5px] font-bold text-zinc-500 disabled:opacity-50">
                 {saving === "none" ? "Menyimpan…" : "Simpan tanpa cetak"}
               </button>

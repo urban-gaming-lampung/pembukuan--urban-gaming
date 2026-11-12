@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import {
-  Receipt, TrendingUp, TrendingDown, ShoppingBag, Package, Search, X, AlertTriangle, Users, Clock, Wallet, Ban, Loader2, BadgePercent, Store, Trash2,
+  Receipt, TrendingUp, TrendingDown, ShoppingBag, Package, Search, X, AlertTriangle, Users, Clock, Wallet, Ban, Loader2, BadgePercent, Store, Trash2, Coins, Image as ImageIcon,
 } from "lucide-react";
 import FilterComp from "./Filter";
 import { useIsDark } from "../hooks/useIsDark";
@@ -13,6 +13,7 @@ import { cancelPosSale, deletePosSale, PosItem, PosSale, StokRef, usePosSales } 
 import { resolveMonthYear } from "../lib/dateLocal";
 import { fmtTanggalNota } from "../lib/posReceipt";
 import { NotaActionButtons, NotaPreview, useNotaActions } from "./PosCheckoutSheet";
+import { KATEGORI_PENGELUARAN_STOK, modalPada, useModalProduk } from "../lib/barangJualan";
 
 type FilterProps = {
   mode: string;
@@ -23,6 +24,8 @@ type FilterProps = {
   setRangeStart: (v: string) => void;
   rangeEnd: string;
   setRangeEnd: (v: string) => void;
+  /** Pengeluaran owner pada periode filter yang sama (untuk "Belanja stok") */
+  pengeluaran?: { harga: number | string; kategori?: string }[];
 };
 
 const rp = (n: number) => `Rp ${Math.round(n || 0).toLocaleString("id-ID")}`;
@@ -171,6 +174,31 @@ export default function AnalitikUsaha(props: FilterProps) {
   }, [cur]);
 
   const prevOmzet = useMemo(() => prev.reduce((s, x) => s + x.total, 0), [prev]);
+
+  // Modal & laba barang jualan (harga modal saat transaksi, dari riwayat harga modal)
+  const { map: modalMap } = useModalProduk();
+  const laba = useMemo(() => {
+    let penjualan = 0, denganModal = 0, hpp = 0, qtyTanpa = 0, perkiraan = 0;
+    const perProduk = new Map<string, number>();
+    cur.forEach((s) =>
+      (s.items || []).forEach((it) => {
+        if (it.kategori !== "JUALAN") return;
+        penjualan += it.subtotal;
+        const m = modalPada(modalMap[it.id], s.ts);
+        if (!m) { qtyTanpa += it.qty; return; }
+        if (m.perkiraan) perkiraan += it.qty;
+        denganModal += it.subtotal;
+        hpp += m.modal * it.qty;
+        perProduk.set(it.nama, (perProduk.get(it.nama) || 0) + it.subtotal - m.modal * it.qty);
+      })
+    );
+    const kotor = denganModal - hpp;
+    return { penjualan, denganModal, hpp, kotor, margin: denganModal > 0 ? (kotor / denganModal) * 100 : 0, qtyTanpa, perkiraan, perProduk };
+  }, [cur, modalMap]);
+  const belanjaStok = useMemo(
+    () => (props.pengeluaran || []).filter((e) => e.kategori === KATEGORI_PENGELUARAN_STOK).reduce((s, e) => s + (Number(e.harga) || 0), 0),
+    [props.pengeluaran]
+  );
   const growth = period.from > 0 && prevOmzet > 0 ? ((st.omzet - prevOmzet) / prevOmzet) * 100 : null;
 
   // Grafik omzet: harian (<= 62 hari) atau bulanan
@@ -293,6 +321,32 @@ export default function AnalitikUsaha(props: FilterProps) {
         </div>
       </section>
 
+      {(cur.length > 0 || belanjaStok > 0) && (
+        <section className="rounded-[22px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 shadow-sm space-y-3">
+          <h3 className="flex items-center gap-2 text-[15px] font-black text-zinc-900 dark:text-white"><Coins className="w-4 h-4 text-emerald-600" />Modal & laba barang jualan</h3>
+          <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 px-4 py-3">
+            <div className="text-[11px] font-bold uppercase tracking-widest text-emerald-700/70 dark:text-emerald-400/70">Laba kotor</div>
+            <div className="flex items-end justify-between gap-2 mt-1">
+              <div className={`text-[26px] font-black tabular-nums tracking-tight leading-none ${laba.kotor >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-600"}`}>{rp(laba.kotor)}</div>
+              {laba.denganModal > 0 && <div className="text-[13px] font-bold text-emerald-700 dark:text-emerald-400 mb-0.5">margin {laba.margin.toFixed(0)}%</div>}
+            </div>
+          </div>
+          <div className="divide-y divide-zinc-100 dark:divide-white/5 text-[13.5px]">
+            <div className="flex justify-between py-2"><span className="text-zinc-500">Penjualan barang jualan</span><span className="font-bold tabular-nums text-zinc-900 dark:text-white">{rp(laba.penjualan)}</span></div>
+            <div className="flex justify-between py-2"><span className="text-zinc-500">Modal barang terjual</span><span className="font-bold tabular-nums text-zinc-900 dark:text-white">− {rp(laba.hpp)}</span></div>
+            <div className="flex justify-between py-2">
+              <span className="text-zinc-500">Belanja stok <span className="text-zinc-400">(uang keluar)</span></span>
+              <span className="font-bold tabular-nums text-zinc-900 dark:text-white">{rp(belanjaStok)}</span>
+            </div>
+          </div>
+          {laba.qtyTanpa > 0 && (
+            <p className="flex items-start gap-1.5 text-[12px] text-amber-700 dark:text-amber-400"><AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />{laba.qtyTanpa} barang terjual belum punya harga modal, belum masuk hitungan laba. Isi di Owner › Input › Stok Jualan.</p>
+          )}
+          {laba.perkiraan > 0 && <p className="text-[12px] text-zinc-500">{laba.perkiraan} barang memakai harga modal yang diisi sesudah transaksi (perkiraan).</p>}
+          <p className="text-[11.5px] text-zinc-400 leading-snug">Laba = penjualan − modal barang yang terjual. Belanja stok diambil dari Pengeluaran kategori “{KATEGORI_PENGELUARAN_STOK}” pada periode yang sama.</p>
+        </section>
+      )}
+
       {!loading && cur.length === 0 ? (
         <div className="rounded-[22px] border border-dashed border-zinc-300 dark:border-zinc-700 p-6 text-center">
           <Receipt className="w-8 h-8 mx-auto text-zinc-300 dark:text-zinc-600" />
@@ -388,7 +442,7 @@ export default function AnalitikUsaha(props: FilterProps) {
                       value={produkSort === "qty" ? p.qty : p.omzet}
                       max={produkSort === "qty" ? produk[0]?.qty || 1 : produk[0]?.omzet || 1}
                       right={produkSort === "qty" ? `${p.qty}x` : rpShort(p.omzet)}
-                      sub={`${p.kategori} · ${produkSort === "qty" ? rp(p.omzet) : `${p.qty} terjual`}`}
+                      sub={`${p.kategori} · ${produkSort === "qty" ? rp(p.omzet) : `${p.qty} terjual`}${laba.perProduk.has(p.nama) ? ` · laba ${rpShort(laba.perProduk.get(p.nama)!)}` : ""}`}
                       color={i < 3 ? "bg-red-600" : "bg-zinc-400 dark:bg-zinc-600"}
                     />
                   </div>
@@ -533,6 +587,19 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
               <b>Nota dibatalkan</b>{live.batalOleh ? ` oleh ${live.batalOleh.split("@")[0]}` : ""}{live.batalTs ? ` · ${new Date(live.batalTs).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}
               {live.batalAlasan ? <div className="mt-0.5">Alasan: {live.batalAlasan}</div> : null}
             </div>
+          )}
+          {live.buktiTransfer && (
+            <a href={live.buktiTransfer} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-2xl bg-white dark:bg-[#1c1c1e] p-3 active:opacity-80">
+              <img src={live.buktiTransfer} alt="Bukti transfer" className="w-14 h-14 rounded-xl object-cover bg-zinc-100" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[14px] font-bold text-zinc-900 dark:text-white">Bukti transfer</div>
+                <div className="text-[12px] text-zinc-500">Ketuk untuk lihat ukuran penuh</div>
+              </div>
+              <ImageIcon className="w-4 h-4 text-zinc-400" />
+            </a>
+          )}
+          {live.metode === "TRANSFER" && !live.buktiTransfer && (
+            <div className="rounded-2xl bg-amber-50 dark:bg-amber-500/10 p-3 text-[12px] text-amber-800 dark:text-amber-300">Transfer tanpa bukti (nota lama sebelum bukti transfer diwajibkan).</div>
           )}
           {(live.stokKurang?.length || 0) > 0 && (
             <div className="rounded-2xl bg-amber-50 dark:bg-amber-500/10 p-3 text-[12px] text-amber-800 dark:text-amber-300">

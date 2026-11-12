@@ -4,7 +4,7 @@ import useStokData from "../hooks/useStokData";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import {
   ALASAN_SHORT, StokLog, StokRow, StokStatus, buildStokRows, defaultMinStok, fmtWaktu, isStale,
-  removeJualanItem, restockText, saveMinStok, shortName, soldMap, useMinStok, useStokLog, STALE_DAYS,
+  restockText, saveMinStok, shortName, soldMap, useMinStok, useStokLog, STALE_DAYS,
 } from "../lib/stokJualan";
 import { buildStokReport } from "../lib/stokReport";
 
@@ -301,11 +301,6 @@ const ItemSheet: React.FC<{ row: StokRow; catatan: string; logs: StokLog[]; onCl
     catch (e: any) { alert("Gagal menyimpan: " + (e?.message || e)); }
     finally { setSaving(false); }
   };
-  const hapus = async () => {
-    if (!confirm(`Hapus "${row.item}" dari daftar ${row.kategori}?\nAngka & riwayatnya tetap tersimpan.`)) return;
-    try { await removeJualanItem(row.kategori, row.item); onClose(); }
-    catch (e: any) { alert("Gagal menghapus: " + (e?.message || e)); }
-  };
 
   return (
     <div className="fixed inset-0 z-[320] flex items-end sm:items-center justify-center">
@@ -367,9 +362,9 @@ const ItemSheet: React.FC<{ row: StokRow; catatan: string; logs: StokLog[]; onCl
             )}
           </div>
 
-          <button type="button" onClick={hapus} className="w-full h-11 rounded-xl text-[14px] font-bold text-red-600 bg-red-50 dark:bg-red-500/10 flex items-center justify-center gap-2">
-            <Trash2 className="w-4 h-4" /> Hapus dari daftar
-          </button>
+          <p className="text-center text-[12px] text-zinc-400 leading-snug px-2">
+            Ubah nama, harga, atau hapus barang lewat Owner › Input › Stok Jualan.
+          </p>
         </div>
       </div>
     </div>
