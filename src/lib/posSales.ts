@@ -73,9 +73,79 @@ export type PosSale = {
   infoNota?: { l: string; r: string }[];
   /** Kotak ketentuan pengganti kotak garansi. */
   syaratNota?: { judul: string; isi: string[] };
-  /** Status pembayaran (bawaan: LUNAS). */
+  /** Status pembayaran nota sewa (bawaan: LUNAS). */
   statusBayar?: "LUNAS" | "BELUM DIBAYAR";
+
+  // ---------- DP (bayar sebagian) ----------
+  /**
+   * Status nota. Tidak ada = LUNAS (nota biasa).
+   * DP            : baru dibayar sebagian — stok BELUM berkurang (barang "dipesan").
+   * LUNAS         : lunas (nota DP yang sudah dilunasi juga LUNAS + lunasTs).
+   * BATAL_PEMBELI : DP dibatalkan pembeli — DP hangus (pemasukan usaha).
+   * BATAL_URBAN   : DP dibatalkan URBAN — DP dikembalikan penuh (bukan pemasukan).
+   */
+  status?: StatusNota;
+  /** Nominal DP awal */
+  dp?: number;
+  /** Jatuh tempo pelunasan (YYYY-MM-DD) */
+  jatuhTempo?: string;
+  /** Riwayat pembayaran nota DP (DP lalu pelunasan) */
+  pembayaran?: PembayaranNota[];
+  /** Waktu pelunasan — penjualan nota DP dihitung pada waktu ini */
+  lunasTs?: number;
+  lunasOleh?: string;
 };
+
+export type StatusNota = "DP" | "LUNAS" | "BATAL_PEMBELI" | "BATAL_URBAN";
+export type PembayaranNota = {
+  jenis: "DP" | "PELUNASAN";
+  jumlah: number;
+  metode: "CASH" | "TRANSFER";
+  buktiTransfer?: string;
+  ts: number;
+  oleh: string;
+  olehNama?: string;
+};
+
+// ============================================================
+// DP — SSOT status & angka (dipakai nota, POS, pembukuan & analitik)
+// ============================================================
+
+/** Nota DP yang masih menunggu pelunasan. */
+export const isDpTerbuka = (s: Pick<PosSale, "status" | "batal">) => s.status === "DP" && !s.batal;
+/** Nota yang memakai DP (masih DP, sudah lunas, atau dibatalkan). */
+export const pernahDp = (s: Pick<PosSale, "pembayaran" | "dp">) =>
+  typeof s.dp === "number" || (s.pembayaran || []).some((p) => p.jenis === "DP");
+/** Jumlah uang yang sudah diterima untuk nota ini. */
+export const totalDibayar = (s: Pick<PosSale, "pembayaran" | "status" | "dp" | "total">) =>
+  s.pembayaran?.length ? s.pembayaran.reduce((a, p) => a + (Number(p.jumlah) || 0), 0) : s.status === "DP" ? Number(s.dp) || 0 : Number(s.total) || 0;
+export const sisaBayar = (s: Pick<PosSale, "pembayaran" | "status" | "dp" | "total">) => Math.max(0, (Number(s.total) || 0) - totalDibayar(s));
+/** Nota yang dihitung sebagai PENJUALAN (bukan batal, bukan DP yang belum lunas). */
+export const dihitungPenjualan = (s: Pick<PosSale, "batal" | "status">) => !s.batal && s.status !== "DP";
+/** Waktu penjualan: nota DP dihitung saat lunas (barang diserahkan & stok berkurang). */
+export const waktuPenjualan = (s: Pick<PosSale, "lunasTs" | "ts">) => Number(s.lunasTs) || s.ts;
+/** DP yang hangus karena dibatalkan pembeli (pemasukan usaha). */
+export const dpHangus = (s: Pick<PosSale, "status" | "pembayaran" | "dp" | "total">) => (s.status === "BATAL_PEMBELI" ? totalDibayar(s) : 0);
+/** Selisih hari ke jatuh tempo (negatif = sudah lewat). */
+export function hariKeJatuhTempo(jatuhTempo: string | undefined, now = Date.now()): number | null {
+  const [y, m, d] = String(jatuhTempo || "").split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const a = new Date(now); a.setHours(0, 0, 0, 0);
+  return Math.round((new Date(y, m - 1, d).getTime() - a.getTime()) / 86400000);
+}
+/** Barang yang sedang dipesan lewat nota DP: "kategori||item" -> jumlah. */
+export function dipesanDari(notaDp: PosSale[]): Map<string, number> {
+  const m = new Map<string, number>();
+  notaDp.forEach((s) => {
+    if (!isDpTerbuka(s)) return;
+    (s.items || []).forEach((it) => {
+      if (!it.stokRef || it.stokRef.item === PILIH_SAAT_CHECKOUT) return;
+      const k = `${it.stokRef.kategori}||${it.stokRef.item}`;
+      m.set(k, (m.get(k) || 0) + (Number(it.qty) || 0));
+    });
+  });
+  return m;
+}
 
 // ============================================================
 // Nego harga oleh kasir — SSOT untuk checkout, nota (layar / PDF / thermal / WA) & analitik
@@ -313,7 +383,9 @@ const pad = (n: number, w = 2) => String(n).padStart(w, "0");
 const ymdLocal = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 export async function commitPosSale(
-  input: Omit<PosSale, "noNota" | "ts" | "tanggal" | "kasir" | "stokKurang">
+  input: Omit<PosSale, "noNota" | "ts" | "tanggal" | "kasir" | "stokKurang">,
+  /** Bayar DP: stok belum berkurang sampai pelunasan. */
+  opsi: { dp?: { jumlah: number; jatuhTempo: string } } = {}
 ): Promise<PosSale> {
   const kasir = auth.currentUser?.email || "admin";
   const now = Date.now();
@@ -328,6 +400,11 @@ export async function commitPosSale(
     if (it.stokRef?.item === PILIH_SAAT_CHECKOUT) throw new Error(`Pilih varian stok untuk "${it.nama}" dulu.`);
   }
   if (input.metode === "TRANSFER" && !input.buktiTransfer) throw new Error("Bukti transfer wajib diupload.");
+  const dp = opsi.dp ? Math.round(Number(opsi.dp.jumlah) || 0) : null;
+  if (opsi.dp) {
+    if (!(dp! > 0) || dp! >= input.total) throw new Error("Nominal DP harus lebih dari 0 dan kurang dari total.");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(opsi.dp.jatuhTempo || ""))) throw new Error("Isi tanggal jatuh tempo pelunasan.");
+  }
 
   const hasil = await runTransaction(db, async (tx) => {
     const [cSnap, sSnap] = await Promise.all([tx.get(counterRef), tx.get(stokRef)]);
@@ -352,11 +429,18 @@ export async function commitPosSale(
       changes.push({ kategori: n.kategori, item: n.item, delta: -n.qty });
     });
 
-    const w = prepareStokWrites(jualan, changes, "terjual", `Nota ${noNota}${input.pembeli ? ` · ${input.pembeli}` : ""}`, kasir, now);
-    writeStokInTx(tx, w, { noNota });
+    // Nota DP: stok baru dipotong saat pelunasan (barang berstatus "dipesan")
+    const w = dp ? { patch: {}, logs: [] as any[] } : prepareStokWrites(jualan, changes, "terjual", `Nota ${noNota}${input.pembeli ? ` · ${input.pembeli}` : ""}`, kasir, now);
+    if (!dp) writeStokInTx(tx, w as any, { noNota });
 
-    const sale: PosSale = { ...input, noNota, ts: now, tanggal, kasir, stokKurang };
-    const stokSesudah = Object.fromEntries(w.logs.map((l) => [`${l.kategori}||${l.item}`, l.sesudah]));
+    const sale: PosSale = dp
+      ? {
+          ...input, noNota, ts: now, tanggal, kasir, stokKurang: [],
+          status: "DP", dp, jatuhTempo: opsi.dp!.jatuhTempo,
+          pembayaran: [{ jenis: "DP", jumlah: dp, metode: input.metode, ...(input.buktiTransfer ? { buktiTransfer: input.buktiTransfer } : {}), ts: now, oleh: kasir, olehNama: input.kasirNama }],
+        }
+      : { ...input, noNota, ts: now, tanggal, kasir, stokKurang };
+    const stokSesudah = Object.fromEntries((w.logs as any[]).map((l) => [`${l.kategori}||${l.item}`, l.sesudah]));
     tx.set(counterRef, { day: dayKey, seq }, { merge: true });
     // Firestore menolak nilai undefined -> bersihkan dulu (data polos, aman di-JSON)
     tx.set(saleRef, { ...JSON.parse(JSON.stringify(sale)), waktu: serverTimestamp() });
@@ -402,7 +486,8 @@ export async function deletePosSale(sale: PosSale): Promise<void> {
     const [sSnap, stSnap] = await Promise.all([tx.get(saleRef), tx.get(stokDoc)]);
     if (!sSnap.exists()) throw new Error("Nota sudah tidak ada.");
     const cur = sSnap.data() as PosSale;
-    if (!cur.batal) {
+    // Nota DP yang belum lunas tidak pernah memotong stok
+    if (!cur.batal && cur.status !== "DP") {
       const jualan = (stSnap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
       const w = prepareStokWrites(jualan, restoreChanges(cur), "koreksi", "", oleh, now);
       if (Object.keys(w.patch).length) tx.set(stokDoc, { jualan: w.patch }, { merge: true }); // tanpa log: riwayatnya ikut dihapus
@@ -428,6 +513,7 @@ export async function cancelPosSale(sale: PosSale, alasan = ""): Promise<void> {
     if (!sSnap.exists()) throw new Error("Nota tidak ditemukan.");
     const cur = sSnap.data() as PosSale;
     if (cur.batal) throw new Error("Nota ini sudah dibatalkan.");
+    if (cur.status === "DP") throw new Error("Nota DP dibatalkan lewat pilihan Dibatalkan pembeli / Dibatalkan URBAN.");
     const jualan = (stSnap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
     const changes = restoreChanges(cur);
     const w = prepareStokWrites(jualan, changes, "koreksi", `Batal nota ${cur.noNota}${alasan.trim() ? ` · ${alasan.trim()}` : ""}`, oleh, now);
@@ -435,6 +521,105 @@ export async function cancelPosSale(sale: PosSale, alasan = ""): Promise<void> {
     tx.update(saleRef, { batal: true, batalOleh: oleh, batalTs: now, batalAlasan: alasan.trim() || null });
   });
   sinkronNotaDiam(sale.ts);
+}
+
+/**
+ * PELUNASAN nota DP (kasir boleh): sisa tagihan dibayar, stok barang baru dipotong,
+ * nota berubah menjadi LUNAS dengan riwayat pembayaran.
+ */
+export async function lunasiNotaDp(
+  sale: PosSale,
+  bayar: { metode: "CASH" | "TRANSFER"; buktiTransfer?: string; kasirNama: string }
+): Promise<PosSale> {
+  if (!sale.id) throw new Error("ID nota tidak ditemukan.");
+  if (bayar.metode === "TRANSFER" && !bayar.buktiTransfer) throw new Error("Bukti transfer wajib diupload.");
+  const oleh = auth.currentUser?.email || "admin";
+  const now = Date.now();
+  const saleRef = doc(db, "pos_transaksi", sale.id);
+  const stokDoc = doc(db, "data", "stok");
+  return runTransaction(db, async (tx) => {
+    const [sSnap, stSnap] = await Promise.all([tx.get(saleRef), tx.get(stokDoc)]);
+    if (!sSnap.exists()) throw new Error("Nota tidak ditemukan.");
+    const cur = { ...(sSnap.data() as PosSale), id: sale.id };
+    if (cur.batal || cur.status !== "DP") throw new Error("Nota ini sudah tidak menunggu pelunasan.");
+    const sisa = sisaBayar(cur);
+    const jualan = (stSnap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
+    const need = new Map<string, { kategori: string; item: string; qty: number }>();
+    (cur.items || []).forEach((it) => {
+      if (!it.stokRef || it.stokRef.item === PILIH_SAAT_CHECKOUT) return;
+      const k = `${it.stokRef.kategori}||${it.stokRef.item}`;
+      const n = need.get(k) || { ...it.stokRef, qty: 0 };
+      n.qty += it.qty;
+      need.set(k, n);
+    });
+    const stokKurang: NonNullable<PosSale["stokKurang"]> = [];
+    const changes: StokChange[] = [];
+    need.forEach((n) => {
+      const tersedia = Math.max(0, Math.round(Number(jualan?.[n.kategori]?.[n.item]?.jumlah) || 0));
+      if (tersedia < n.qty) stokKurang.push({ kategori: n.kategori, item: n.item, diminta: n.qty, tersedia });
+      changes.push({ kategori: n.kategori, item: n.item, delta: -n.qty });
+    });
+    const w = prepareStokWrites(jualan, changes, "terjual", `Pelunasan nota ${cur.noNota}${cur.pembeli ? ` · ${cur.pembeli}` : ""}`, oleh, now);
+    writeStokInTx(tx, w, { noNota: cur.noNota });
+    const pembayaran: PembayaranNota[] = [
+      ...(cur.pembayaran || []),
+      { jenis: "PELUNASAN", jumlah: sisa, metode: bayar.metode, ...(bayar.buktiTransfer ? { buktiTransfer: bayar.buktiTransfer } : {}), ts: now, oleh, olehNama: bayar.kasirNama },
+    ];
+    const patch = { status: "LUNAS" as StatusNota, lunasTs: now, lunasOleh: oleh, pembayaran, stokKurang };
+    tx.update(saleRef, JSON.parse(JSON.stringify(patch)));
+    const stokSesudah = Object.fromEntries(w.logs.map((l) => [`${l.kategori}||${l.item}`, l.sesudah]));
+    return { ...cur, ...patch, stokSesudah };
+  });
+}
+
+/**
+ * Batalkan nota DP (owner / super admin). Stok tidak berubah (belum pernah dipotong).
+ * PEMBELI = DP hangus (dicatat sebagai pemasukan usaha); URBAN = DP dikembalikan penuh.
+ */
+export async function batalkanNotaDp(sale: PosSale, pihak: "PEMBELI" | "URBAN", alasan = ""): Promise<PosSale> {
+  if (!sale.id) throw new Error("ID nota tidak ditemukan.");
+  const oleh = auth.currentUser?.email || "admin";
+  const now = Date.now();
+  const saleRef = doc(db, "pos_transaksi", sale.id);
+  return runTransaction(db, async (tx) => {
+    const sSnap = await tx.get(saleRef);
+    if (!sSnap.exists()) throw new Error("Nota tidak ditemukan.");
+    const cur = { ...(sSnap.data() as PosSale), id: sale.id };
+    if (cur.batal || cur.status !== "DP") throw new Error("Nota ini bukan DP yang masih berjalan.");
+    const patch = {
+      batal: true,
+      status: (pihak === "PEMBELI" ? "BATAL_PEMBELI" : "BATAL_URBAN") as StatusNota,
+      batalOleh: oleh,
+      batalTs: now,
+      batalAlasan: alasan.trim() || null,
+    };
+    tx.update(saleRef, patch);
+    return { ...cur, ...patch };
+  });
+}
+
+/** Nota DP yang masih menunggu pelunasan (realtime), urut jatuh tempo terdekat. */
+export function useNotaDp(): { list: PosSale[]; loading: boolean } {
+  const [list, setList] = useState<PosSale[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(
+    () =>
+      onSnapshot(
+        query(collection(db, "pos_transaksi"), where("status", "==", "DP")),
+        (s) => {
+          setList(
+            s.docs
+              .map((d) => ({ id: d.id, ...(d.data() as PosSale) }))
+              .filter(isDpTerbuka)
+              .sort((a, b) => String(a.jatuhTempo || "").localeCompare(String(b.jatuhTempo || "")) || a.ts - b.ts)
+          );
+          setLoading(false);
+        },
+        (e) => { console.warn("nota DP:", e); setLoading(false); }
+      ),
+    []
+  );
+  return { list, loading };
 }
 
 /** Unggah PDF nota ke Storage (link untuk WhatsApp pembeli) & simpan link-nya di transaksi. */
@@ -451,6 +636,25 @@ export async function simpanNotaOnline(sale: PosSale, file: File): Promise<strin
 // ============================================================
 // Baca penjualan (Analitik Usaha & riwayat nota)
 // ============================================================
+
+/** Nota DP yang DILUNASI pada rentang waktu (penjualannya dihitung saat lunas). */
+export function usePosSalesLunas(fromTs: number, toTs: number): { sales: PosSale[]; loading: boolean } {
+  const [sales, setSales] = useState<PosSale[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    setLoading(true);
+    const q = query(collection(db, "pos_transaksi"), where("lunasTs", ">=", Math.max(1, fromTs)), where("lunasTs", "<=", toTs));
+    return onSnapshot(
+      q,
+      (s) => {
+        setSales(s.docs.map((d) => ({ id: d.id, ...(d.data() as PosSale) })).filter((x) => (x.lunasTs || 0) >= fromTs && (x.lunasTs || 0) <= toTs));
+        setLoading(false);
+      },
+      (e) => { console.warn("pos_transaksi (lunas):", e); setSales([]); setLoading(false); }
+    );
+  }, [fromTs, toTs]);
+  return { sales, loading };
+}
 
 export function usePosSales(fromTs: number, toTs: number, max = 3000): { sales: PosSale[]; loading: boolean; error: string | null } {
   const [sales, setSales] = useState<PosSale[]>([]);

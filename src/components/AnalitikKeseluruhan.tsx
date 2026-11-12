@@ -3,7 +3,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import { Gamepad2, Store, Loader2, BarChart3, ArrowDownLeft, ArrowUpRight, Layers } from "lucide-react";
 import FilterComp from "./Filter";
 import { useIsDark } from "../hooks/useIsDark";
-import { usePosSales } from "../lib/posSales";
+import { dihitungPenjualan, dpHangus, isDpTerbuka, PosSale, totalDibayar, usePosSales, usePosSalesLunas, waktuPenjualan } from "../lib/posSales";
 import { Bisnis, bisnisOf, isBelanjaStok, pemasukanRental, pengeluaranAdminRental, periodRange, TransaksiOwner } from "../lib/keuangan";
 import type { HistoryItem } from "../lib/types";
 import { barisUsahaManual } from "../lib/pemasukanUsaha";
@@ -109,7 +109,10 @@ export default function AnalitikKeseluruhan(props: Props) {
   const { mode, month, rangeStart, rangeEnd, filteredHistory, pengeluaran, pemasukan } = props;
   const isDark = useIsDark();
   const period = useMemo(() => periodRange(mode, month, rangeStart, rangeEnd), [mode, month, rangeStart, rangeEnd]);
-  const { sales, loading, error } = usePosSales(period.from, period.to, 4000);
+  const { sales, loading: loadingPos, error } = usePosSales(period.from, period.to, 4000);
+  // Nota DP yang dilunasi di periode ini (dibuat sebelumnya) — penjualan dihitung saat lunas
+  const { sales: lunas, loading: loadingLunas } = usePosSalesLunas(period.from, period.to);
+  const loading = loadingPos || loadingLunas;
 
   const d = useMemo(() => {
     const harian = new Map<string, Hari>();
@@ -121,7 +124,7 @@ export default function AnalitikKeseluruhan(props: Props) {
       harian.set(key, x);
     };
     const r = { buku: 0, lain: 0, admin: 0, owner: 0 };
-    const u = { pos: 0, nota: 0, buku: 0, bukuN: 0, lain: 0, stok: 0, ops: 0 };
+    const u = { pos: 0, nota: 0, buku: 0, bukuN: 0, dp: 0, dpN: 0, lain: 0, stok: 0, ops: 0 };
     const sumber = new Map<string, { label: string; sub: string; v: number }>();
     const kategori = new Map<string, { label: string; sub: string; v: number }>();
     const masukKe = (key: string, label: string, sub: string, v: number) => {
@@ -154,14 +157,27 @@ export default function AnalitikKeseluruhan(props: Props) {
     });
     if (r.buku) masukKe("RENTAL|buku", "Pembukuan harian rental", "Rental", r.buku);
 
-    // USAHA — semua nota POS yang tidak dibatalkan
-    sales.forEach((s) => {
-      if (s.batal || s.ts < period.from || s.ts > period.to) return;
+    // USAHA — nota POS lunas (nota DP dihitung saat pelunasan)
+    const semua = new Map<string, PosSale>();
+    [...sales, ...lunas].forEach((s) => semua.set(s.id || s.noNota, s));
+    semua.forEach((s) => {
+      const t = waktuPenjualan(s);
+      if (!dihitungPenjualan(s) || t < period.from || t > period.to) return;
       u.pos += s.total;
       u.nota++;
-      tambah(s.tanggal || ymd(new Date(s.ts)), "um", s.total);
+      tambah(s.lunasTs ? ymd(new Date(t)) : s.tanggal || ymd(new Date(s.ts)), "um", s.total);
     });
     if (u.pos) masukKe("USAHA|pos", "Penjualan POS", `Usaha · ${u.nota} nota`, u.pos);
+    // DP yang sudah diterima: masih berjalan (belum lunas) atau hangus (pembeli batal)
+    sales.forEach((s) => {
+      if (s.ts < period.from || s.ts > period.to) return;
+      const v = isDpTerbuka(s) ? totalDibayar(s) : dpHangus(s);
+      if (!v) return;
+      u.dp += v;
+      u.dpN++;
+      tambah(s.tanggal || ymd(new Date(s.ts)), "um", v);
+    });
+    if (u.dp) masukKe("USAHA|dp", "DP pembeli", `Usaha · ${u.dpN} nota belum lunas / hangus`, u.dp);
     if (u.buku) masukKe("USAHA|buku", "Rincian pemasukan usaha", `Usaha · ${u.bukuN} input pembukuan`, u.buku);
 
     // Transaksi owner (Input › Transaksi)
@@ -185,7 +201,7 @@ export default function AnalitikKeseluruhan(props: Props) {
     });
 
     const rental = { masuk: r.buku + r.lain, keluar: r.admin + r.owner };
-    const usaha = { masuk: u.pos + u.buku + u.lain, keluar: u.stok + u.ops };
+    const usaha = { masuk: u.pos + u.buku + u.dp + u.lain, keluar: u.stok + u.ops };
     const masuk = rental.masuk + usaha.masuk;
     const keluar = rental.keluar + usaha.keluar;
     return {
@@ -193,7 +209,7 @@ export default function AnalitikKeseluruhan(props: Props) {
       sumber: Array.from(sumber.values()).sort((a, b) => b.v - a.v),
       kategori: Array.from(kategori.values()).sort((a, b) => b.v - a.v),
     };
-  }, [filteredHistory, pemasukan, pengeluaran, sales, period.from, period.to]);
+  }, [filteredHistory, pemasukan, pengeluaran, sales, lunas, period.from, period.to]);
 
   // Grafik arus uang: harian (<= 62 hari) atau bulanan
   const grafik = useMemo(() => {
@@ -322,6 +338,7 @@ export default function AnalitikKeseluruhan(props: Props) {
           rows={[
             { jenis: "masuk", label: "Penjualan POS", note: `${d.u.nota} nota`, v: d.u.pos },
             { jenis: "masuk", label: "Rincian pembukuan", note: `${d.u.bukuN} input`, v: d.u.buku },
+            ...(d.u.dp ? [{ jenis: "masuk" as const, label: "DP pembeli", note: `${d.u.dpN} nota`, v: d.u.dp }] : []),
             { jenis: "masuk", label: "Pemasukan lain", v: d.u.lain },
             { jenis: "keluar", label: "Belanja stok", v: d.u.stok },
             { jenis: "keluar", label: "Biaya operasional", v: d.u.ops },

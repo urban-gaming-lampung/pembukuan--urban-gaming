@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import {
   Receipt, TrendingUp, TrendingDown, ShoppingBag, Package, Search, X, AlertTriangle, Users, Clock, Wallet, Ban, Loader2, BadgePercent, Store, Trash2, Coins, Image as ImageIcon, Handshake,
@@ -9,7 +9,8 @@ import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue } from "../hooks/useStokData";
 import { getMinStok, statusOf, useMinStok } from "../lib/stokJualan";
-import { cancelPosSale, deletePosSale, infoNego, PosItem, PosSale, StokRef, usePosSales } from "../lib/posSales";
+import { cancelPosSale, deletePosSale, dihitungPenjualan, dpHangus, infoNego, isDpTerbuka, PosItem, PosSale, sisaBayar, StokRef, totalDibayar, usePosSales, usePosSalesLunas, waktuPenjualan } from "../lib/posSales";
+import { BatalDp } from "./NotaDpSheet";
 import { fmtTanggalNota } from "../lib/posReceipt";
 import { NotaActionButtons, NotaPreview, useNotaActions } from "./PosCheckoutSheet";
 import { modalPada, useModalProduk, useProdukJualan } from "../lib/barangJualan";
@@ -89,9 +90,11 @@ export default function AnalitikUsaha(props: FilterProps) {
   // Ambil juga periode sebelumnya (panjang sama) untuk perbandingan
   const prevFrom = period.from > 0 ? Math.max(1, period.from - (period.to - period.from + 1)) : 0;
   const { sales: raw, loading: loadingPos, error } = usePosSales(prevFrom, period.to, 4000);
+  // Nota DP yang dilunasi di periode ini (penjualannya dihitung saat lunas, walau nota dibuat sebelumnya)
+  const { sales: lunasRaw, loading: loadingLunas } = usePosSalesLunas(prevFrom, period.to);
   // Rincian Pemasukan Usaha yang diketik admin di pembukuan harian (termasuk riwayat lama)
   const { rows: manualRaw, loading: loadingManual } = useBarisUsahaManual(prevFrom, period.to);
-  const loading = loadingPos || loadingManual;
+  const loading = loadingPos || loadingManual || loadingLunas;
   const { stokState, masterCategories } = useStokData();
   const minMap = useMinStok();
   const stokData = (stokState?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
@@ -102,13 +105,36 @@ export default function AnalitikUsaha(props: FilterProps) {
   const [showN, setShowN] = useState(20);
   const [selected, setSelected] = useState<PosSale | null>(null);
 
+  // Riwayat nota = nota yang DIBUAT di periode ini
   const inPeriod = useMemo(() => raw.filter((s) => s.ts >= period.from), [raw, period.from]);
-  const cur = useMemo(() => inPeriod.filter((s) => !s.batal), [inPeriod]);
-  const prev = useMemo(() => (period.from > 0 ? raw.filter((s) => !s.batal && s.ts < period.from) : []), [raw, period.from]);
-  const batalCount = inPeriod.length - cur.length;
+  // Penjualan = nota lunas (nota DP dihitung pada waktu pelunasan)
+  const semua = useMemo(() => {
+    const m = new Map<string, PosSale>();
+    [...raw, ...lunasRaw].forEach((s) => m.set(s.id || s.noNota, s));
+    return Array.from(m.values());
+  }, [raw, lunasRaw]);
+  const cur = useMemo(
+    () => semua.filter((s) => dihitungPenjualan(s) && waktuPenjualan(s) >= period.from && waktuPenjualan(s) <= period.to).sort((a, b) => waktuPenjualan(b) - waktuPenjualan(a)),
+    [semua, period.from, period.to]
+  );
+  const prev = useMemo(
+    () => (period.from > 0 ? semua.filter((s) => dihitungPenjualan(s) && waktuPenjualan(s) < period.from && waktuPenjualan(s) >= prevFrom) : []),
+    [semua, period.from, prevFrom]
+  );
+  const batalCount = inPeriod.filter((s) => s.batal).length;
+  // DP: uang yang sudah diterima tetapi belum menjadi penjualan, dan DP hangus (pembeli batal)
+  const dp = useMemo(() => {
+    let berjalan = 0, berjalanN = 0, sisa = 0, hangus = 0, hangusN = 0;
+    inPeriod.forEach((s) => {
+      if (isDpTerbuka(s)) { berjalan += totalDibayar(s); sisa += sisaBayar(s); berjalanN++; }
+      const h = dpHangus(s);
+      if (h > 0) { hangus += h; hangusN++; }
+    });
+    return { berjalan, berjalanN, sisa, hangus, hangusN };
+  }, [inPeriod]);
   const manualCur = useMemo(() => manualRaw.filter((r) => r.ts >= period.from && r.ts <= period.to), [manualRaw, period.from, period.to]);
   const manualPrev = useMemo(() => (period.from > 0 ? manualRaw.filter((r) => r.ts < period.from) : []), [manualRaw, period.from]);
-  const adaData = cur.length > 0 || manualCur.length > 0;
+  const adaData = cur.length > 0 || manualCur.length > 0 || dp.berjalan > 0 || dp.hangus > 0;
 
   const st = useMemo(() => {
     let omzet = 0, qty = 0, diskon = 0, cash = 0, transfer = 0, cashN = 0, transferN = 0, nego = 0, negoN = 0, posOmzet = 0, manualOmzet = 0;
@@ -124,14 +150,19 @@ export default function AnalitikUsaha(props: FilterProps) {
       diskon += s.diskon || 0;
       const ng = infoNego(s);
       if (ng.ada) { nego += ng.total; negoN++; }
-      if (s.metode === "TRANSFER") { transfer += s.total; transferN++; } else { cash += s.total; cashN++; }
-      const day = s.tanggal || ymd(new Date(s.ts));
+      // Nota DP yang sudah lunas: tunai / transfer mengikuti tiap pembayaran
+      if (s.pembayaran?.length) {
+        s.pembayaran.forEach((p) => { if (p.metode === "TRANSFER") transfer += Number(p.jumlah) || 0; else cash += Number(p.jumlah) || 0; });
+        if (s.pembayaran[s.pembayaran.length - 1].metode === "TRANSFER") transferN++; else cashN++;
+      } else if (s.metode === "TRANSFER") { transfer += s.total; transferN++; } else { cash += s.total; cashN++; }
+      const tJual = waktuPenjualan(s);
+      const day = s.lunasTs ? ymd(new Date(tJual)) : s.tanggal || ymd(new Date(s.ts));
       const d = byDay.get(day) || { omzet: 0, nota: 0 };
       d.omzet += s.total; d.nota++; byDay.set(day, d);
       const kas = s.kasirNama || s.kasir?.split("@")[0] || "-";
       const k = byKasir.get(kas) || { omzet: 0, nota: 0 };
       k.omzet += s.total; k.nota++; byKasir.set(kas, k);
-      const h = byHour[new Date(s.ts).getHours()];
+      const h = byHour[new Date(tJual).getHours()];
       h.nota++; h.omzet += s.total;
       (s.items || []).forEach((it) => {
         qty += it.qty;
@@ -184,7 +215,7 @@ export default function AnalitikUsaha(props: FilterProps) {
         const kd: Kondisi = it.kondisi || (prod ? kondisiProduk(prod) : kondisiProduk({ name: it.nama, stokRef: it.stokRef }));
         perKondisi[kd].penjualan += it.subtotal;
         perKondisi[kd].qty += it.qty;
-        const m = modalPada(modalMap[it.id], s.ts);
+        const m = modalPada(modalMap[it.id], waktuPenjualan(s));
         if (!m) { qtyTanpa += it.qty; penjualanTanpaModal += it.subtotal; return; }
         if (m.perkiraan) perkiraan += it.qty;
         denganModal += it.subtotal;
@@ -225,16 +256,17 @@ export default function AnalitikUsaha(props: FilterProps) {
       else operasional += v;
     });
     (props.pemasukan || []).forEach((e) => { lain += Number(e.harga) || 0; });
-    const masuk = st.omzet + lain;
+    const masuk = st.omzet + lain + dp.berjalan + dp.hangus;
     const keluar = belanjaStok + operasional;
     return { belanjaStok, operasional, lain, masuk, keluar, selisih: masuk - keluar };
-  }, [props.pengeluaran, props.pemasukan, st.omzet]);
+  }, [props.pengeluaran, props.pemasukan, st.omzet, dp.berjalan, dp.hangus]);
 
   // ===== Laba & margin usaha =====
   // Penjualan terhitung = omzet POS tanpa barang jualan yang belum punya harga modal.
   // Isi game, servis & rental POS dihitung tanpa modal barang.
   const untung = useMemo(() => {
-    const terhitung = Math.max(0, st.omzet - laba.penjualanTanpaModal);
+    // DP hangus = pemasukan tanpa modal (barang tidak diserahkan)
+    const terhitung = Math.max(0, st.omzet - laba.penjualanTanpaModal) + dp.hangus;
     const kotor = terhitung - laba.hpp;
     const bersih = kotor - uang.operasional;
     return {
@@ -244,7 +276,7 @@ export default function AnalitikUsaha(props: FilterProps) {
       marginKotor: terhitung > 0 ? (kotor / terhitung) * 100 : 0,
       marginBersih: terhitung > 0 ? (bersih / terhitung) * 100 : 0,
     };
-  }, [st.omzet, laba.penjualanTanpaModal, laba.hpp, uang.operasional]);
+  }, [st.omzet, laba.penjualanTanpaModal, laba.hpp, uang.operasional, dp.hangus]);
   const warnaModal = isDark ? WARNA_MODAL_GELAP : WARNA_MODAL_TERANG;
   const growth = period.from > 0 && prevOmzet > 0 ? ((st.omzet - prevOmzet) / prevOmzet) * 100 : null;
 
@@ -360,6 +392,8 @@ export default function AnalitikUsaha(props: FilterProps) {
         <div className="mt-2 divide-y divide-zinc-100 dark:divide-white/5 text-[13px]">
           <BarisUang jenis="masuk" label="Penjualan POS" note={`${st.nota} nota`} value={st.posOmzet} />
           {st.manualOmzet > 0 && <BarisUang jenis="masuk" label="Rincian pembukuan" note={`${st.manualN} input admin`} value={st.manualOmzet} />}
+          {dp.berjalan > 0 && <BarisUang jenis="masuk" label="DP belum lunas" note={`${dp.berjalanN} nota · sisa ${rpShort(dp.sisa)}`} value={dp.berjalan} />}
+          {dp.hangus > 0 && <BarisUang jenis="masuk" label="DP hangus" note={`${dp.hangusN} nota batal pembeli`} value={dp.hangus} />}
           <BarisUang jenis="masuk" label="Pemasukan lain" note="modal dll." value={uang.lain} />
           <BarisUang jenis="keluar" label="Belanja stok" value={uang.belanjaStok} />
           <BarisUang jenis="keluar" label="Biaya operasional" value={uang.operasional} />
@@ -432,7 +466,7 @@ export default function AnalitikUsaha(props: FilterProps) {
 
           <div className="mt-3 divide-y divide-zinc-100 dark:divide-white/5 text-[13.5px]">
             <div className="flex justify-between gap-3 py-2">
-              <span className="text-zinc-600 dark:text-zinc-300">Penjualan{laba.penjualanTanpaModal > 0 ? " terhitung" : ""}</span>
+              <span className="text-zinc-600 dark:text-zinc-300">Penjualan{laba.penjualanTanpaModal > 0 ? " terhitung" : ""}{dp.hangus > 0 ? " + DP hangus" : ""}</span>
               <span className="font-bold tabular-nums text-zinc-900 dark:text-white">{rp(untung.terhitung)}</span>
             </div>
             <div className="flex justify-between gap-3 py-2">
@@ -641,7 +675,13 @@ export default function AnalitikUsaha(props: FilterProps) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className={`text-[13.5px] font-bold truncate ${s.batal ? "text-zinc-400 line-through" : "text-zinc-900 dark:text-white"}`}>{s.pembeli || "Pelanggan"}</span>
-                    {s.batal && <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">BATAL</span>}
+                    {s.batal && (
+                      <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
+                        {s.status === "BATAL_PEMBELI" ? "DP HANGUS" : s.status === "BATAL_URBAN" ? "DP KEMBALI" : "BATAL"}
+                      </span>
+                    )}
+                    {isDpTerbuka(s) && <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300">BELUM LUNAS</span>}
+                    {!s.batal && s.lunasTs && <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">DP · LUNAS</span>}
                     {!s.batal && infoNego(s).ada && <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300">NEGO</span>}
                   </div>
                   <div className="text-[11.5px] text-zinc-500 truncate">
@@ -670,14 +710,18 @@ export default function AnalitikUsaha(props: FilterProps) {
 // ============================================================
 const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; onClose: () => void }> = ({ sale, live, onClose }) => {
   useBodyScrollLock(!!sale);
-  const actions = useNotaActions(sale);
+  const actions = useNotaActions(live);
   const [busy, setBusy] = useState<"" | "batal" | "hapus">("");
+  const [batalDp, setBatalDp] = useState(false);
+  useEffect(() => { setBatalDp(false); }, [sale?.id]);
   if (!sale || !live) return null;
+  const notaDp = isDpTerbuka(live);
+  const batalPakaiDp = live.status === "BATAL_PEMBELI" || live.status === "BATAL_URBAN";
 
   const hapus = async () => {
     const ok = window.confirm(
       `Hapus permanen nota ${live.noNota}?\n\n` +
-        (live.batal ? "" : "• Stok barang yang terpotong akan dikembalikan.\n") +
+        (live.batal || notaDp ? "" : "• Stok barang yang terpotong akan dikembalikan.\n") +
         "• Riwayat stok nota ini ikut dihapus.\n• Tidak bisa dibatalkan."
     );
     if (!ok) return;
@@ -721,9 +765,12 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
         </div>
         <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-3">
           {actions.msg && <div className="text-[12.5px] font-semibold text-zinc-700 dark:text-zinc-200 bg-white dark:bg-[#1c1c1e] rounded-xl px-3 py-2">{actions.msg}</div>}
+          {notaDp && batalDp && (
+            <BatalDp sale={live} onKembali={() => setBatalDp(false)} onSelesai={() => { setBatalDp(false); actions.setMsg("Nota DP dibatalkan ✅"); }} />
+          )}
           {live.batal && (
             <div className="rounded-2xl bg-zinc-200/70 dark:bg-zinc-800 p-3 text-[12.5px] text-zinc-700 dark:text-zinc-300">
-              <b>Nota dibatalkan</b>{live.batalOleh ? ` oleh ${live.batalOleh.split("@")[0]}` : ""}{live.batalTs ? ` · ${new Date(live.batalTs).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}
+              <b>{live.status === "BATAL_PEMBELI" ? "Dibatalkan pembeli · DP hangus" : live.status === "BATAL_URBAN" ? "Dibatalkan URBAN · DP dikembalikan" : "Nota dibatalkan"}</b>{live.batalOleh ? ` oleh ${live.batalOleh.split("@")[0]}` : ""}{live.batalTs ? ` · ${new Date(live.batalTs).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}
               {live.batalAlasan ? <div className="mt-0.5">Alasan: {live.batalAlasan}</div> : null}
             </div>
           )}
@@ -745,16 +792,16 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
               Saat transaksi, stok tercatat kurang: {live.stokKurang!.map((k) => `${k.item} (terjual ${k.diminta}, tercatat ${k.tersedia})`).join(", ")}
             </div>
           )}
-          <div className={`rounded-[22px] bg-zinc-200/60 dark:bg-black/40 p-3 ${live.batal ? "opacity-60" : ""}`}>
+          <div className={`rounded-[22px] bg-zinc-200/60 dark:bg-black/40 p-3 ${live.batal && !batalPakaiDp ? "opacity-60" : ""}`}>
             <NotaPreview sale={live} />
           </div>
         </div>
         <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] bg-white dark:bg-[#1c1c1e] border-t border-zinc-200/70 dark:border-white/5 space-y-2">
-          {!live.batal && <NotaActionButtons sale={live} actions={actions} />}
+          {(!live.batal || batalPakaiDp) && <NotaActionButtons sale={live} actions={actions} />}
           <div className={`grid gap-2 ${live.batal ? "grid-cols-1" : "grid-cols-[1fr_auto]"}`}>
             {!live.batal && (
-              <button type="button" disabled={!!busy} onClick={batalkan} className="h-11 rounded-xl text-[13px] font-bold text-red-600 bg-red-50 dark:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-1.5">
-                {busy === "batal" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}Batalkan & kembalikan stok
+              <button type="button" disabled={!!busy || (notaDp && batalDp)} onClick={notaDp ? () => setBatalDp(true) : batalkan} className="h-11 rounded-xl text-[13px] font-bold text-red-600 bg-red-50 dark:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                {busy === "batal" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}{notaDp ? "Batalkan nota DP" : "Batalkan & kembalikan stok"}
               </button>
             )}
             <button type="button" disabled={!!busy} onClick={hapus} className="h-11 px-4 rounded-xl text-[13px] font-bold text-white bg-red-600 disabled:opacity-50 flex items-center justify-center gap-1.5">

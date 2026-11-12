@@ -5,7 +5,7 @@
  */
 import jsPDF from "jspdf";
 import logoBlackUrl from "../assets/urban-logo-black.png";
-import { infoNego, isBonus, negoSatuan } from "./posSales";
+import { infoNego, isBonus, negoSatuan, pernahDp, sisaBayar, totalDibayar } from "./posSales";
 import type { PosSale } from "./posSales";
 
 export const STORE = {
@@ -22,11 +22,57 @@ export const isNotaSewa = (s: Pick<PosSale, "jenisNota">) => s.jenisNota === "SE
 export const judulNota = (s: Pick<PosSale, "jenisNota">) => (isNotaSewa(s) ? "NOTA SEWA" : "NOTA PENJUALAN");
 export const labelPembeli = (s: Pick<PosSale, "jenisNota">) => (isNotaSewa(s) ? "Penyewa" : "Pembeli");
 export const belumDibayar = (s: Pick<PosSale, "statusBayar">) => s.statusBayar === "BELUM DIBAYAR";
-export const teksPembayaran = (s: Pick<PosSale, "metode" | "statusBayar">) =>
-  belumDibayar(s) ? "Belum dibayar" : s.metode === "TRANSFER" ? "Transfer / QRIS" : "Tunai";
-export const teksStatusBayar = (s: Pick<PosSale, "metode" | "statusBayar">) =>
-  belumDibayar(s) ? "BELUM DIBAYAR" : `LUNAS - ${s.metode === "TRANSFER" ? "TRANSFER / QRIS" : "TUNAI"}`;
-export const kotakSyarat = (s: Pick<PosSale, "syaratNota">) => s.syaratNota || { judul: GARANSI_JUDUL, isi: [GARANSI_TEKS] };
+/** Nota yang uangnya belum lengkap: sewa belum dibayar atau DP belum lunas (label merah). */
+export const belumLunas = (s: Pick<PosSale, "statusBayar" | "status">) => belumDibayar(s) || s.status === "DP";
+/** Status ditulis tegas dalam kotak: belum lunas (merah) atau nota DP yang sudah lunas / dibatalkan. */
+export const statusTegas = (s: PosSale) => belumLunas(s) || pernahDp(s);
+const labelMetode = (m: PosSale["metode"]) => (m === "TRANSFER" ? "Transfer / QRIS" : "Tunai");
+export const teksPembayaran = (s: PosSale) =>
+  belumDibayar(s)
+    ? "Belum dibayar"
+    : pernahDp(s)
+      ? s.status === "DP" || s.status === "BATAL_PEMBELI" || s.status === "BATAL_URBAN"
+        ? `DP - ${labelMetode(s.pembayaran?.[0]?.metode || s.metode)}`
+        : "DP + pelunasan"
+      : labelMetode(s.metode);
+export const teksStatusBayar = (s: PosSale) => {
+  if (belumDibayar(s)) return "BELUM DIBAYAR";
+  if (s.status === "DP") return "BELUM LUNAS";
+  if (s.status === "BATAL_PEMBELI") return "DIBATALKAN PEMBELI - DP HANGUS";
+  if (s.status === "BATAL_URBAN") return "DIBATALKAN URBAN - DP DIKEMBALIKAN";
+  if (pernahDp(s)) return "LUNAS";
+  return `LUNAS - ${s.metode === "TRANSFER" ? "TRANSFER / QRIS" : "TUNAI"}`;
+};
+const tglPendek = (ts: number) => new Date(ts).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+export const fmtJatuhTempo = (ymd?: string) => {
+  const [y, m, d] = String(ymd || "").split("-").map(Number);
+  return y && m && d ? new Date(y, m - 1, d).toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : "-";
+};
+/** Rincian pembayaran nota DP (di bawah TOTAL): DP, pelunasan, sisa, jatuh tempo. */
+export function barisPembayaran(s: PosSale): { l: string; r: string; bold?: boolean }[] {
+  if (!pernahDp(s)) return [];
+  const out: { l: string; r: string; bold?: boolean }[] = (s.pembayaran || []).map((p) => ({
+    l: `${p.jenis === "DP" ? "DP" : "Pelunasan"} ${tglPendek(p.ts)} (${p.metode === "TRANSFER" ? "Transfer" : "Tunai"})`,
+    r: rp(p.jumlah),
+  }));
+  if (s.status === "DP") {
+    out.push({ l: "Sisa pembayaran", r: rp(sisaBayar(s)), bold: true });
+    out.push({ l: "Jatuh tempo", r: fmtJatuhTempo(s.jatuhTempo) });
+  }
+  if (s.status === "BATAL_PEMBELI") out.push({ l: "DP hangus", r: rp(totalDibayar(s)), bold: true });
+  if (s.status === "BATAL_URBAN") out.push({ l: "DP dikembalikan", r: rp(totalDibayar(s)), bold: true });
+  return out;
+}
+export const KETENTUAN_DP = {
+  judul: "KETENTUAN DP",
+  isi: [
+    "Barang diserahkan setelah pelunasan. Simpan nota ini.",
+    "DP hangus bila dibatalkan oleh pembeli.",
+    "DP dikembalikan penuh bila dibatalkan oleh URBAN.",
+  ],
+};
+export const kotakSyarat = (s: Pick<PosSale, "syaratNota" | "status">) =>
+  s.syaratNota || (s.status === "DP" || s.status === "BATAL_PEMBELI" || s.status === "BATAL_URBAN" ? KETENTUAN_DP : { judul: GARANSI_JUDUL, isi: [GARANSI_TEKS] });
 export const teksPenutup = (s: Pick<PosSale, "jenisNota">) => (isNotaSewa(s) ? "Terima kasih telah menyewa!" : "Terima kasih telah berbelanja!");
 
 const rp = (n: number) => `Rp ${Math.round(n || 0).toLocaleString("id-ID")}`;
@@ -178,7 +224,26 @@ function drawNota(pdf: jsPDF, s: PosSale, logo: { url: string; ratio: number } |
   pdf.text(rp(s.total), W - M - 2.5, y + 4.8, { align: "right" });
   pdf.setTextColor(0, 0, 0);
   y += 12;
-  center(teksStatusBayar(s).replace(" - ", "  -  "), 7.5, "bold", 3.4);
+  const bayarRows = barisPembayaran(s);
+  if (bayarRows.length) {
+    bayarRows.forEach((b) => row(b.l, b.r, 7.5, b.bold ? "bold" : "normal"));
+    y += 1.5;
+  }
+  if (statusTegas(s)) {
+    // Label tegas "BELUM LUNAS / BELUM DIBAYAR / LUNAS" (nota DP) dalam kotak selebar teksnya
+    const t = toAscii(teksStatusBayar(s));
+    const fs = t.length > 16 ? 7.5 : 9;
+    y += 2;
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(fs);
+    const tw = Math.min(CW, pdf.getTextWidth(t) + 10);
+    pdf.setLineWidth(0.6);
+    pdf.roundedRect((W - tw) / 2, y - fs * 0.47, tw, fs * 0.73, 1.2, 1.2, "S");
+    center(t, fs, "bold", fs * 0.42);
+    y += 1.5;
+  } else {
+    center(teksStatusBayar(s).replace(" - ", "  -  "), 7.5, "bold", 3.4);
+  }
   y += 2.5;
 
   // Catatan nego kasir
@@ -342,8 +407,17 @@ export async function buildNotaEscPos(s: PosSale): Promise<Uint8Array> {
     line(lr(`Diskon promo (${s.diskonPersen}%)`, `-${rp(s.diskon)}`));
   }
   bold(true); size(0x01); line(lr("TOTAL", rp(s.total))); size(0x00); bold(false);
+  barisPembayaran(s).forEach((b) => { if (b.bold) bold(true); line(lr(b.l, b.r)); if (b.bold) bold(false); });
   align(1);
-  line(teksStatusBayar(s));
+  if (statusTegas(s)) {
+    rule("=");
+    bold(true);
+    const t = teksStatusBayar(s);
+    if (t.length * 2 <= COLS) { size(0x11); line(t); size(0x00); } else wrap(t).forEach(line);
+    bold(false);
+    rule("=");
+  }
+  else line(teksStatusBayar(s));
   if (ng.ada) wrap(`Catatan: ${ng.catatan}.`).forEach(line);
   rule("*");
   const syarat = kotakSyarat(s);

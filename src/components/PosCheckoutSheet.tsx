@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { X, CheckCircle2, Download, Printer, Share2, AlertTriangle, Package, Loader2, MessageCircle, PlusCircle, Link2Off, Handshake, Pencil, RotateCcw } from "lucide-react";
+import { X, CheckCircle2, Download, Printer, Share2, AlertTriangle, Package, Loader2, MessageCircle, PlusCircle, Link2Off, Handshake, Pencil, RotateCcw, Clock } from "lucide-react";
 import logoBlack from "../assets/urban-logo-black.png";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
-import { commitPosSale, infoNego, isBonus, Kondisi, negoSatuan, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, StokRef } from "../lib/posSales";
+import { commitPosSale, infoNego, isBonus, Kondisi, negoSatuan, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, sisaBayar, StokRef } from "../lib/posSales";
 import { UploadTransferProof } from "./TableEditor";
-import { belumDibayar, buildNotaPdf, fmtTanggalNota, isNotaSewa, judulNota, kotakSyarat, labelPembeli, notaFileName, preloadNotaAssets, printNotaThermal, STORE, teksPembayaran, teksPenutup, teksStatusBayar } from "../lib/posReceipt";
+import { barisPembayaran, belumDibayar, belumLunas, statusTegas, buildNotaPdf, fmtTanggalNota, isNotaSewa, judulNota, KETENTUAN_DP, kotakSyarat, labelPembeli, notaFileName, preloadNotaAssets, printNotaThermal, STORE, teksPembayaran, teksPenutup, teksStatusBayar } from "../lib/posReceipt";
 
 export type CheckoutLine = {
   id: string;
@@ -95,9 +95,20 @@ export const NotaPreview: React.FC<{ sale: PosSale }> = ({ sale: s }) => {
         <span className="text-[12px] font-black tracking-wider">TOTAL</span>
         <span className="text-[15px] font-black font-mono">{rp(s.total)}</span>
       </div>
-      <div className={`text-center text-[10.5px] font-bold mt-2 tracking-wide ${belumDibayar(s) ? "text-red-600" : ""}`}>
-        {teksStatusBayar(s).replace(" - ", " · ")}
-      </div>
+      {barisPembayaran(s).length > 0 && (
+        <div className="mt-2 space-y-0.5 text-[11px] font-mono">
+          {barisPembayaran(s).map((b) => <Row key={b.l} l={b.l} r={b.r} bold={b.bold} />)}
+        </div>
+      )}
+      {statusTegas(s) ? (
+        <div className={`mt-2.5 mx-auto w-fit max-w-full text-center rounded-md border-2 px-3 py-1 font-black ${belumLunas(s) ? "border-red-600 text-red-600 text-[13px] tracking-[0.14em]" : s.batal ? "border-zinc-700 text-zinc-700 text-[11px] tracking-wide" : "border-black text-black text-[13px] tracking-[0.14em]"}`}>
+          {teksStatusBayar(s).replace(" - ", " · ")}
+        </div>
+      ) : (
+        <div className="text-center text-[10.5px] font-bold mt-2 tracking-wide">
+          {teksStatusBayar(s).replace(" - ", " · ")}
+        </div>
+      )}
       {ng.ada && (
         <div className="mt-2.5 rounded-md border border-dashed border-zinc-500 px-2.5 py-1.5 text-center text-[10px] leading-snug text-zinc-700">
           <b>Catatan:</b> {ng.catatan}.
@@ -202,10 +213,15 @@ export function useNotaActions(sale: PosSale | null) {
       ...(infoNego(sale).ada ? [`_Catatan: ${infoNego(sale).catatan}._`] : []),
       belumDibayar(sale)
         ? `Total: *${rp(sale.total)}* — BELUM DIBAYAR`
-        : `Total: *${rp(sale.total)}* — LUNAS (${sale.metode === "TRANSFER" ? "Transfer/QRIS" : "Tunai"})`,
+        : sale.status === "DP" || sale.status === "BATAL_PEMBELI" || sale.status === "BATAL_URBAN" || sale.pembayaran?.length
+          ? `Total: *${rp(sale.total)}* — *${teksStatusBayar(sale)}*`
+          : `Total: *${rp(sale.total)}* — LUNAS (${sale.metode === "TRANSFER" ? "Transfer/QRIS" : "Tunai"})`,
+      ...barisPembayaran(sale).map((b) => (b.bold ? `${b.l}: *${b.r}*` : `${b.l}: ${b.r}`)),
       ``,
       ...(link ? [`📄 Nota PDF: ${link}`, ``] : []),
-      sewa ? `_Tunjukkan nota ini saat pengembalian unit._` : `_Simpan nota / invoice ini untuk keperluan klaim garansi._`,
+      ...(sale.status === "DP" || sale.status === "BATAL_PEMBELI" || sale.status === "BATAL_URBAN"
+        ? KETENTUAN_DP.isi.map((t) => `_${t}_`)
+        : [sewa ? `_Tunjukkan nota ini saat pengembalian unit._` : `_Simpan nota / invoice ini untuk keperluan klaim garansi._`]),
       `IG ${STORE.ig} · WA ${STORE.wa}`,
     ].join("\n");
     const waLink = (link: string) => `https://wa.me/${waIntl(sale.pembeliWa!)}?text=${encodeURIComponent(pesan(link))}`;
@@ -276,6 +292,8 @@ type Props = {
   data: Record<string, Record<string, StokItemValue>>;
   /** Dipanggil begitu transaksi tersimpan (kosongkan keranjang). */
   onCompleted: (sale: PosSale) => void;
+  /** Barang yang sedang dipesan lewat nota DP: "kategori||item" -> jumlah */
+  dipesan?: Map<string, number>;
   /** Hitung ulang diskon promo bila kasir mengubah harga (aturan promo yang sama dengan keranjang). */
   hitungDiskon?: (items: { price: number; quantity: number; platform?: string; category: string }[]) => {
     subtotal: number;
@@ -285,13 +303,22 @@ type Props = {
   };
 };
 
+const pad2 = (n: number) => String(n).padStart(2, "0");
+/** Tanggal (YYYY-MM-DD) n hari dari sekarang. */
+const tanggalNanti = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
+const JATUH_TEMPO_BAWAAN = 7;
+
 const ribuan = (s: string) => {
   const d = String(s || "").replace(/[^\d]/g, "").replace(/^0+(?=\d)/, "");
   return d ? Number(d).toLocaleString("id-ID") : "";
 };
 
 const PosCheckoutSheet: React.FC<Props> = ({
-  open, onClose, lines, subtotal, discountPercent, discountAmount, total, metode, setMetode, kasirNama, categories, data, onCompleted, hitungDiskon,
+  open, onClose, lines, subtotal, discountPercent, discountAmount, total, metode, setMetode, kasirNama, categories, data, onCompleted, hitungDiskon, dipesan,
 }) => {
   useBodyScrollLock(open);
   const [pembeli, setPembeli] = useState("");
@@ -305,6 +332,10 @@ const PosCheckoutSheet: React.FC<Props> = ({
   const [hargaNego, setHargaNego] = useState<Record<string, number>>({});
   const [editHarga, setEditHarga] = useState<string | null>(null);
   const [draftHarga, setDraftHarga] = useState("");
+  // Cara bayar: lunas sekarang, atau DP (stok baru berkurang saat pelunasan)
+  const [caraBayar, setCaraBayar] = useState<"LUNAS" | "DP">("LUNAS");
+  const [dpStr, setDpStr] = useState("");
+  const [jatuhTempo, setJatuhTempo] = useState(() => tanggalNanti(JATUH_TEMPO_BAWAAN));
   const actions = useNotaActions(sale);
 
   useEffect(() => { if (open) preloadNotaAssets(); }, [open]);
@@ -312,6 +343,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
   const reset = () => {
     setPembeli(""); setPembeliWa(""); setVariant({}); setBukti(""); setError(""); setSale(null); setSaving(""); actions.setMsg("");
     setHargaNego({}); setEditHarga(null); setDraftHarga("");
+    setCaraBayar("LUNAS"); setDpStr(""); setJatuhTempo(tanggalNanti(JATUH_TEMPO_BAWAAN));
   };
 
   // ---------- Nego harga oleh kasir ----------
@@ -387,12 +419,19 @@ const PosCheckoutSheet: React.FC<Props> = ({
   const belumPilih = resolved.filter((x) => x.pilih && !x.ref);
   const jumlahBarang = lines.reduce((s, l) => s + l.quantity, 0);
   const butuhBukti = metode === "TRANSFER" && !bukti;
+  const isDp = caraBayar === "DP";
+  const nominalDp = Math.round(Number(dpStr.replace(/[^\d]/g, "")) || 0);
+  const dpSalah = isDp && (!(nominalDp > 0) || nominalDp >= hitung.total);
+  const jatuhTempoSalah = isDp && (!/^\d{4}-\d{2}-\d{2}$/.test(jatuhTempo) || jatuhTempo < tanggalNanti(0));
+  const dipesanLain = (r: StokRef) => dipesan?.get(refKey(r)) || 0;
 
   const simpan = async (mode: "pdf" | "thermal" | "none") => {
     if (saving || !lines.length) return;
     if (belumPilih.length) { setError(`Pilih varian stok untuk "${belumPilih[0].line.name}".`); return; }
     if (butuhBukti) { setError("Upload foto bukti transfer dulu."); return; }
     if (editHarga) { setError("Selesaikan ubah harga dulu (ketuk OK)."); return; }
+    if (dpSalah) { setError(`Nominal DP harus lebih dari Rp 0 dan kurang dari total ${rp(hitung.total)}.`); return; }
+    if (jatuhTempoSalah) { setError("Pilih tanggal jatuh tempo pelunasan (hari ini atau sesudahnya)."); return; }
     setSaving(mode);
     setError("");
     const items: PosItem[] = resolved.map(({ line: l, ref }) => {
@@ -425,7 +464,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
         diskonPersen: hitung.discountPercent,
         diskon: hitung.discountAmount,
         total: hitung.total,
-      });
+      }, isDp ? { dp: { jumlah: nominalDp, jatuhTempo } } : {});
     } catch (e: any) {
       setError("Transaksi gagal disimpan: " + (e?.message || e) + ". Stok tidak berubah, coba lagi.");
       setSaving("");
@@ -480,6 +519,59 @@ const PosCheckoutSheet: React.FC<Props> = ({
                     <span className="line-through opacity-60 mr-1.5">{rp(hitung.subtotal)}</span>hemat promo {rp(hitung.discountAmount)} ({hitung.discountPercent}%)
                   </div>
                 )}
+                {isDp && nominalDp > 0 && !dpSalah && (
+                  <div className="mt-2.5 pt-2.5 border-t border-white/15 dark:border-black/10 grid grid-cols-2 gap-2 text-[12px]">
+                    <div><div className="opacity-60">Bayar sekarang (DP)</div><div className="text-[15px] font-black font-mono">{rp(nominalDp)}</div></div>
+                    <div className="text-right"><div className="opacity-60">Sisa saat pelunasan</div><div className="text-[15px] font-black font-mono">{rp(hitung.total - nominalDp)}</div></div>
+                  </div>
+                )}
+              </div>
+
+              {/* Cara bayar: lunas / DP */}
+              <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] p-3.5 space-y-2.5">
+                <div className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Cara bayar</div>
+                <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-zinc-100 dark:bg-zinc-800" role="tablist" aria-label="Cara bayar">
+                  {(["LUNAS", "DP"] as const).map((c) => (
+                    <button key={c} type="button" role="tab" aria-selected={caraBayar === c} onClick={() => { setCaraBayar(c); setError(""); }}
+                      className={`h-10 rounded-[10px] text-[13px] font-bold transition ${caraBayar === c ? "bg-white dark:bg-zinc-600 text-zinc-900 dark:text-white shadow" : "text-zinc-500"}`}>
+                      {c === "LUNAS" ? "Bayar Lunas" : "Bayar DP"}
+                    </button>
+                  ))}
+                </div>
+                {isDp && (
+                  <div className="space-y-2.5 pt-0.5">
+                    <div>
+                      <label htmlFor="nominal-dp" className="text-[12px] font-semibold text-zinc-500">Nominal DP</label>
+                      <div className={`mt-1 flex items-center h-12 px-3.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 ${dpStr && dpSalah ? "ring-2 ring-red-500/40" : ""}`}>
+                        <span className="text-[14px] font-bold text-zinc-400 mr-1.5">Rp</span>
+                        <input id="nominal-dp" inputMode="numeric" autoComplete="off" value={dpStr} onChange={(e) => { setDpStr(ribuan(e.target.value)); setError(""); }} placeholder="0"
+                          className="flex-1 min-w-0 bg-transparent text-[16px] font-bold tabular-nums text-zinc-900 dark:text-white focus:outline-none" />
+                      </div>
+                      <div className="mt-1.5 flex gap-1.5">
+                        {[30, 50].map((pct) => (
+                          <button key={pct} type="button" onClick={() => setDpStr(ribuan(String(Math.round((hitung.total * pct) / 100 / 1000) * 1000)))}
+                            className="h-8 px-3 rounded-lg text-[12px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 active:scale-95">{pct}%</button>
+                        ))}
+                        {dpStr && dpSalah && <span className="self-center text-[11.5px] font-semibold text-red-600">Harus kurang dari total</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <label htmlFor="jatuh-tempo" className="text-[12px] font-semibold text-zinc-500">Jatuh tempo pelunasan</label>
+                      <input id="jatuh-tempo" type="date" value={jatuhTempo} min={tanggalNanti(0)} onChange={(e) => { setJatuhTempo(e.target.value); setError(""); }}
+                        className={`mt-1 w-full h-12 px-3.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-[15px] font-semibold text-zinc-900 dark:text-white focus:outline-none ${jatuhTempoSalah ? "ring-2 ring-red-500/40" : ""}`} />
+                      <div className="mt-1.5 flex gap-1.5">
+                        {[7, 14].map((n) => (
+                          <button key={n} type="button" onClick={() => setJatuhTempo(tanggalNanti(n))}
+                            className={`h-8 px-3 rounded-lg text-[12px] font-bold active:scale-95 ${jatuhTempo === tanggalNanti(n) ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200"}`}>{n} hari</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2 rounded-xl bg-amber-50 dark:bg-amber-500/10 px-3 py-2.5 text-[12px] leading-snug text-amber-800 dark:text-amber-300">
+                      <Clock className="w-4 h-4 shrink-0 mt-px" />
+                      <span>Nota tercatat <b>BELUM LUNAS</b>. Stok belum berkurang — barang berstatus <b>dipesan</b> sampai pelunasan di Kasir POS › Belum Lunas.</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Pembeli */}
@@ -520,7 +612,9 @@ const PosCheckoutSheet: React.FC<Props> = ({
                   {resolved.map(({ line: l, ref, pilih }) => {
                     const sisa = ref ? sisaOf(ref) : null;
                     const need = ref ? needByKey.get(refKey(ref)) || 0 : 0;
-                    const sesudah = sisa === null ? null : sisa - need;
+                    const dip = ref ? dipesanLain(ref) : 0;
+                    // Stok yang benar-benar bebas = stok tercatat − barang yang sudah dipesan lewat DP
+                    const sesudah = sisa === null ? null : sisa - dip - need;
                     const kategoriItems = pilih ? categories.find((c) => c.kategori === pilih)?.items || [] : [];
                     const h = hargaAkhir(l);
                     const nego = negoBaris(l);
@@ -601,9 +695,13 @@ const PosCheckoutSheet: React.FC<Props> = ({
                           </div>
                         )}
                         {ref && sisa !== null && !!data?.[ref.kategori]?.[ref.item] && (
-                          <div className={`mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11.5px] font-bold ${sesudah! < 0 ? "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400" : sesudah === 0 ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"}`}>
-                            {sesudah! < 0 ? <AlertTriangle className="w-3.5 h-3.5" /> : <Package className="w-3.5 h-3.5" />}
-                            {sesudah! < 0 ? `Stok tercatat ${sisa}, butuh ${need} — cek stok fisik` : `Stok ${ref.item}: ${sisa} → ${sesudah}${sesudah === 0 ? " (habis)" : ""}`}
+                          <div className={`mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11.5px] font-bold ${sesudah! < 0 ? "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400" : sesudah === 0 || isDp ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"}`}>
+                            {sesudah! < 0 ? <AlertTriangle className="w-3.5 h-3.5" /> : isDp ? <Clock className="w-3.5 h-3.5" /> : <Package className="w-3.5 h-3.5" />}
+                            {sesudah! < 0
+                              ? `Stok ${sisa}${dip ? `, ${dip} sudah dipesan DP` : ""}, butuh ${need} — cek stok fisik`
+                              : isDp
+                                ? `Dipesan · stok ${ref.item} tetap ${sisa}${dip ? ` (${dip} dipesan lain)` : ""}`
+                                : `Stok ${ref.item}: ${sisa} → ${sisa - need}${dip ? ` · ${dip} dipesan DP` : ""}${sesudah === 0 ? " (habis)" : ""}`}
                           </div>
                         )}
                         {ref && sisa === null && (
@@ -627,20 +725,22 @@ const PosCheckoutSheet: React.FC<Props> = ({
               {error && <div className="text-[12.5px] font-semibold text-red-600 bg-red-50 dark:bg-red-500/10 rounded-xl px-3 py-2">{error}</div>}
               {butuhBukti && !error && <div className="text-[12.5px] font-semibold text-amber-700 dark:text-amber-400 text-center">Upload bukti transfer untuk melanjutkan</div>}
               <div className="grid grid-cols-2 gap-2">
-                <button type="button" disabled={!!saving || !lines.length || butuhBukti} onClick={() => simpan("thermal")}
+                <button type="button" disabled={!!saving || !lines.length || butuhBukti || dpSalah || jatuhTempoSalah} onClick={() => simpan("thermal")}
                   className="h-[52px] rounded-2xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[14px] font-black flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]">
                   {saving === "thermal" ? <Loader2 className="w-5 h-5 animate-spin" /> : <Printer className="w-5 h-5" />}Cetak Struk
                 </button>
-                <button type="button" disabled={!!saving || !lines.length || butuhBukti} onClick={() => simpan("pdf")}
+                <button type="button" disabled={!!saving || !lines.length || butuhBukti || dpSalah || jatuhTempoSalah} onClick={() => simpan("pdf")}
                   className="h-[52px] rounded-2xl bg-red-600 text-white text-[14px] font-black flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]">
                   {saving === "pdf" ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}Nota PDF
                 </button>
               </div>
-              <button type="button" disabled={!!saving || !lines.length || butuhBukti} onClick={() => simpan("none")}
+              <button type="button" disabled={!!saving || !lines.length || butuhBukti || dpSalah || jatuhTempoSalah} onClick={() => simpan("none")}
                 className="w-full h-9 text-[12.5px] font-bold text-zinc-500 disabled:opacity-50">
                 {saving === "none" ? "Menyimpan…" : "Simpan tanpa cetak"}
               </button>
-              <p className="text-[11px] text-center text-zinc-400 -mt-1">Transaksi tersimpan & stok barang terhubung otomatis berkurang.</p>
+              <p className="text-[11px] text-center text-zinc-400 -mt-1">
+                {isDp ? "Nota DP tersimpan BELUM LUNAS · stok berkurang saat pelunasan." : "Transaksi tersimpan & stok barang terhubung otomatis berkurang."}
+              </p>
             </div>
           </>
         ) : (
@@ -648,8 +748,10 @@ const PosCheckoutSheet: React.FC<Props> = ({
             <div className="px-4 pt-2 pb-3 flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0"><CheckCircle2 className="w-6 h-6" /></div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-[17px] font-black text-zinc-900 dark:text-white leading-tight">Transaksi tersimpan</h3>
-                <p className="text-[12px] text-zinc-500 font-mono">{sale.noNota} · {rp(sale.total)}</p>
+                <h3 className="text-[17px] font-black text-zinc-900 dark:text-white leading-tight">{sale.status === "DP" ? "Nota DP tersimpan" : "Transaksi tersimpan"}</h3>
+                <p className="text-[12px] text-zinc-500 font-mono truncate">
+                  {sale.status === "DP" ? `${sale.noNota} · DP ${rp(sale.dp || 0)} · sisa ${rp(sisaBayar(sale))}` : `${sale.noNota} · ${rp(sale.total)}`}
+                </p>
               </div>
               <button type="button" onClick={close} aria-label="Tutup" className="w-9 h-9 rounded-full bg-zinc-200/70 dark:bg-zinc-800 flex items-center justify-center"><X className="w-4 h-4" /></button>
             </div>
@@ -666,7 +768,14 @@ const PosCheckoutSheet: React.FC<Props> = ({
                 </div>
               )}
 
-              {sale.items.some((it) => it.stokRef) && (
+              {sale.status === "DP" && (
+                <div className="flex items-start gap-2 rounded-2xl bg-amber-50 dark:bg-amber-500/10 p-3 text-[12.5px] leading-snug text-amber-800 dark:text-amber-300">
+                  <Clock className="w-4 h-4 shrink-0 mt-px" />
+                  <span>Barang <b>dipesan</b> — stok berkurang saat pelunasan. Lunasi lewat <b>Kasir POS › Belum Lunas</b> paling lambat jatuh tempo.</span>
+                </div>
+              )}
+
+              {sale.status !== "DP" && sale.items.some((it) => it.stokRef) && (
                 <div className="rounded-2xl bg-white dark:bg-[#1c1c1e] p-3">
                   <div className="text-[11px] font-bold uppercase tracking-widest text-zinc-400 mb-1.5">Stok berkurang</div>
                   {Array.from(

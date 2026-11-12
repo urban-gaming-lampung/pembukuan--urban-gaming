@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { X, ShoppingCart, Plus, Minus, Trash2, PlusCircle, Sparkles, Pencil, Search, Receipt } from "lucide-react";
+import { X, ShoppingCart, Plus, Minus, Trash2, PlusCircle, Sparkles, Pencil, Search, Receipt, Clock, AlertTriangle } from "lucide-react";
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, setDoc, deleteDoc, deleteField } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage, listGameDb } from "../lib/firebase";
@@ -7,8 +7,9 @@ import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue } from "../hooks/useStokData";
 import PosCheckoutSheet from "./PosCheckoutSheet";
+import NotaDpSheet from "./NotaDpSheet";
 import { StokRefSelect } from "./StokRefSelect";
-import { hapusStokOtomatisBilaYatim, Kondisi, kondisiProduk, PILIH_SAAT_CHECKOUT, StokRef, stokBaruUntukProduk } from "../lib/posSales";
+import { dipesanDari, hapusStokOtomatisBilaYatim, hariKeJatuhTempo, Kondisi, kondisiProduk, PILIH_SAAT_CHECKOUT, StokRef, stokBaruUntukProduk, useNotaDp } from "../lib/posSales";
 import KondisiSwitch from "./KondisiSwitch";
 import { getMinStok, renameJualanItem, statusOf, useMinStok } from "../lib/stokJualan";
 
@@ -199,6 +200,19 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   const stokCats = Array.isArray(masterCategories?.jualan) ? masterCategories.jualan : [];
   const stokData = (stokState?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
 
+  // Nota DP (belum lunas): barangnya "dipesan" — stok belum berkurang
+  const { list: notaDp } = useNotaDp();
+  const dipesan = useMemo(() => dipesanDari(notaDp), [notaDp]);
+  const dpLewat = notaDp.filter((s) => (hariKeJatuhTempo(s.jatuhTempo) ?? 0) < 0).length;
+  const [openDp, setOpenDp] = useState(false);
+  const [toast, setToast] = useState("");
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 3800);
+    return () => clearTimeout(t);
+  }, [toast]);
+  useBodyScrollLock(openDp);
+
   // Payment states
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "TRANSFER">("CASH");
   const [showQrisModal, setShowQrisModal] = useState(false);
@@ -312,6 +326,17 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
   // Cart operations
   const addToCart = (product: Product) => {
+    // Peringatan bila stok bebas (stok − dipesan DP) tidak cukup
+    const r = product.stokRef;
+    if (r && r.item !== PILIH_SAAT_CHECKOUT) {
+      const v = stokData?.[r.kategori]?.[r.item];
+      const d = dipesan.get(`${r.kategori}||${r.item}`) || 0;
+      if (v && d > 0) {
+        const n = Math.max(0, Math.round(Number(v.jumlah) || 0));
+        const diKeranjang = (cart.find((c) => c.id === product.id)?.quantity || 0) + 1;
+        if (diKeranjang > n - d) setToast(`${r.item}: stok ${n}, ${d} sudah dipesan DP — cek barang sebelum dijual.`);
+      }
+    }
     setCart((prev) => {
       const idx = prev.findIndex((item) => item.id === product.id);
       if (idx >= 0) {
@@ -570,14 +595,20 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       if (!items.length) return null;
       if (!items.some((it) => stokData?.[r.kategori]?.[it])) return { label: "Stok ?", tone: "belum" };
       const n = items.reduce((s, it) => s + Math.max(0, Math.round(Number(stokData?.[r.kategori]?.[it]?.jumlah) || 0)), 0);
-      return { label: n > 0 ? `Stok ${n}` : "Habis", tone: n > 0 ? "aman" : "habis" };
+      const d = items.reduce((s, it) => s + (dipesan.get(`${r.kategori}||${it}`) || 0), 0);
+      const bebas = n - d;
+      return { label: n > 0 ? `Stok ${n}${d ? ` · ${d} dipesan` : ""}` : "Habis", tone: bebas > 0 ? "aman" : n > 0 ? "menipis" : "habis" };
     }
     const v = stokData?.[r.kategori]?.[r.item];
     const diMaster = stokCats.some((c) => c.kategori === r.kategori && c.items.includes(r.item));
     if (!v && !diMaster) return null;
     if (!v) return { label: "Stok ?", tone: "belum" };
     const n = Math.max(0, Math.round(Number(v?.jumlah) || 0));
-    return { label: n > 0 ? `Stok ${n}` : "Habis", tone: statusOf(n, getMinStok(minStokMap, r.kategori, r.item)) };
+    const d = dipesan.get(`${r.kategori}||${r.item}`) || 0;
+    return {
+      label: n > 0 ? `Stok ${n}${d ? ` · ${d} dipesan` : ""}` : d ? `Habis · ${d} dipesan` : "Habis",
+      tone: n === 0 ? "habis" : n - d <= 0 ? "menipis" : statusOf(n - d, getMinStok(minStokMap, r.kategori, r.item)),
+    };
   };
 
   // Filter products by category, sort alphabetically by name, search query, and filter by sub-category if in JUALAN
@@ -636,6 +667,18 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             </h2>
           </div>
           <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setOpenDp(true)}
+            aria-label={`Belum lunas, ${notaDp.length} nota DP`}
+            className="h-8 pl-2.5 pr-3 flex items-center gap-1.5 rounded-full bg-zinc-200/60 dark:bg-zinc-800 hover:bg-zinc-300/60 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-[12px] font-bold active:scale-95 transition-all"
+          >
+            <Clock size={14} />
+            Belum Lunas
+            {notaDp.length > 0 && (
+              <span className={`min-w-[18px] h-[18px] px-1 rounded-full text-white text-[10.5px] font-black flex items-center justify-center ${dpLewat ? "bg-red-600" : "bg-amber-500"}`}>{notaDp.length}</span>
+            )}
+          </button>
           <button 
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-full bg-zinc-200/60 dark:bg-zinc-800 hover:bg-zinc-300/60 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 active:scale-90 transition-all"
@@ -1754,12 +1797,23 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
         kasirNama={adminName}
         categories={stokCats}
         data={stokData}
+        dipesan={dipesan}
         onCompleted={() => {
           setCart([]);
           setOpenMobileCart(false);
         }}
         hitungDiskon={(items) => calculatePOSDiscount(items, promosConfig)}
       />
+
+      <NotaDpSheet open={openDp} onClose={() => setOpenDp(false)} list={notaDp} isOwner={isSuperAdminOrOwner} kasirNama={adminName} data={stokData} />
+
+      {/* Peringatan stok dipesan DP */}
+      {toast && (
+        <div role="status" className="fixed left-1/2 -translate-x-1/2 bottom-[max(96px,calc(env(safe-area-inset-bottom)+88px))] z-[240] w-[calc(100%-32px)] max-w-sm flex items-start gap-2 rounded-2xl bg-zinc-900/95 dark:bg-white/95 text-white dark:text-zinc-900 px-3.5 py-3 text-[12.5px] font-semibold leading-snug shadow-2xl backdrop-blur animate-in fade-in slide-in-from-bottom-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-px text-amber-400 dark:text-amber-600" />
+          <span>{toast}</span>
+        </div>
+      )}
     </div>
   );
 }

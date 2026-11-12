@@ -229,9 +229,15 @@ service cloud.firestore {
     // ==========================================
     match /pos_transaksi/{saleId} {
       allow read, create: if isUrbanStaff();
-      // Kasir hanya boleh menambahkan link PDF nota (untuk dikirim ke WhatsApp pembeli)
+      // Kasir hanya boleh: menambahkan link PDF nota (untuk WhatsApp pembeli), dan
+      // MELUNASI nota DP (status DP -> LUNAS + riwayat pembayaran). Batal / hapus: owner.
       allow update: if isSalaryAdmin()
-        || (isUrbanStaff() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notaUrl']));
+        || (isUrbanStaff() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notaUrl']))
+        || (isUrbanStaff()
+          && resource.data.get('status', '') == 'DP'
+          && request.resource.data.status == 'LUNAS'
+          && request.resource.data.get('batal', false) == false
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'pembayaran', 'lunasTs', 'lunasOleh', 'stokKurang', 'notaUrl']));
       allow delete: if isSalaryAdmin();
     }
 

@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs, onSnapshot, orderBy, query, runTransaction, where } from "firebase/firestore";
 import { db } from "./firebase";
 import type { PosItem, PosSale } from "./posSales";
+import { pernahDp } from "./posSales";
 
 /** Nota sebelum jam ini (dini hari) masih milik hari kerja sebelumnya — ruko bisa tutup lewat tengah malam. */
 export const JAM_GANTI_HARI = 3;
@@ -78,7 +79,8 @@ const namaItem = (it: PosItem) => {
  * Diskon promo hanya berlaku untuk isi game, jadi dipotong dari baris Isi Game.
  */
 export function barisJasaDariNota(s: PosSale): BarisNota[] {
-  if (!s || s.batal) return [];
+  // Nota DP (DP & pelunasan) uangnya langsung ke owner, tidak lewat kas harian
+  if (!s || s.batal || pernahDp(s)) return [];
   const grup = new Map<string, PosItem[]>();
   (s.items || []).forEach((it) => {
     const t = tipeJasaPos(it);
@@ -108,13 +110,31 @@ export function barisJasaDariNota(s: PosSale): BarisNota[] {
   return out;
 }
 
-/** Ringkas nota BARANG (setor langsung ke owner) — tidak masuk kas harian. */
-export type NotaBarang = { noNota: string; id: string; ts: number; pembeli: string; metode: PosSale["metode"]; total: number; jumlah: number };
-export function notaBarang(s: PosSale): NotaBarang | null {
-  if (!s || s.batal) return null;
+/** Uang yang disetor langsung ke owner (tidak masuk kas harian): nota BARANG, DP & pelunasan. */
+export type NotaBarang = { noNota: string; id: string; ts: number; pembeli: string; metode: PosSale["metode"]; total: number; jumlah: number; label?: "DP" | "Pelunasan" };
+export function notaBarang(s: PosSale, from = 0, to = Infinity): NotaBarang[] {
+  if (!s) return [];
+  if (pernahDp(s)) {
+    if (s.status === "BATAL_URBAN") return []; // DP dikembalikan ke pembeli
+    return (s.pembayaran || [])
+      .map((p, i) => ({ p, i }))
+      .filter(({ p }) => p.ts >= from && p.ts <= to)
+      .map(({ p, i }) => ({
+        noNota: s.noNota,
+        id: `${s.id || s.noNota}#${i}`,
+        ts: p.ts,
+        pembeli: String(s.pembeli || ""),
+        metode: p.metode,
+        total: Number(p.jumlah) || 0,
+        jumlah: (s.items || []).reduce((a, it) => a + (Number(it.qty) || 0), 0),
+        label: p.jenis === "DP" ? ("DP" as const) : ("Pelunasan" as const),
+      }));
+  }
+  if (s.batal || s.ts < from || s.ts > to) return [];
   const items = (s.items || []).filter((it) => !tipeJasaPos(it));
-  if (!items.length) return null;
-  return {
+  // Hanya barang berbayar (barang bonus Rp 0 tidak perlu disetor)
+  if (!items.length || !items.some((it) => (Number(it.subtotal) || 0) > 0)) return [];
+  return [{
     noNota: s.noNota,
     id: s.id || s.noNota,
     ts: s.ts,
@@ -122,21 +142,23 @@ export function notaBarang(s: PosSale): NotaBarang | null {
     metode: s.metode,
     total: items.reduce((a, it) => a + (Number(it.subtotal) || 0), 0),
     jumlah: items.reduce((a, it) => a + (Number(it.qty) || 0), 0),
-  };
+  }];
 }
 
 /** Nota POS satu hari kerja (realtime) -> baris jasa untuk rincian + pengingat nota barang. */
 export function useNotaHariKerja(tanggal: string): { baris: BarisNota[]; barang: NotaBarang[]; loading: boolean } {
   const [sales, setSales] = useState<PosSale[]>([]);
+  // Nota DP dari hari lain yang DILUNASI hari ini (pengingat setor pelunasan)
+  const [lunas, setLunas] = useState<PosSale[]>([]);
   const [loading, setLoading] = useState(true);
   const r = rentangHariKerja(tanggal);
   const from = r?.from ?? 0;
   const to = r?.to ?? 0;
   useEffect(() => {
-    if (!from) { setSales([]); setLoading(false); return; }
+    if (!from) { setSales([]); setLunas([]); setLoading(false); return; }
     setLoading(true);
     const q = query(collection(db, "pos_transaksi"), where("ts", ">=", from), where("ts", "<=", to), orderBy("ts", "asc"));
-    return onSnapshot(
+    const u1 = onSnapshot(
       q,
       (snap) => {
         setSales(snap.docs.map((d) => ({ id: d.id, ...(d.data() as PosSale) })).filter((s) => s.ts >= from && s.ts <= to).sort((a, b) => a.ts - b.ts));
@@ -144,9 +166,19 @@ export function useNotaHariKerja(tanggal: string): { baris: BarisNota[]; barang:
       },
       (e) => { console.warn("pos_transaksi (pembukuan):", e); setSales([]); setLoading(false); }
     );
+    const u2 = onSnapshot(
+      query(collection(db, "pos_transaksi"), where("lunasTs", ">=", from), where("lunasTs", "<=", to)),
+      (snap) => setLunas(snap.docs.map((d) => ({ id: d.id, ...(d.data() as PosSale) })).filter((s) => (s.lunasTs || 0) >= from && (s.lunasTs || 0) <= to)),
+      (e) => { console.warn("pos_transaksi (pelunasan):", e); setLunas([]); }
+    );
+    return () => { u1(); u2(); };
   }, [from, to]);
   const baris = useMemo(() => sales.flatMap(barisJasaDariNota), [sales]);
-  const barang = useMemo(() => sales.map(notaBarang).filter((x): x is NotaBarang => !!x), [sales]);
+  const barang = useMemo(() => {
+    const semua = new Map<string, PosSale>();
+    [...sales, ...lunas].forEach((s) => semua.set(s.id || s.noNota, s));
+    return Array.from(semua.values()).flatMap((s) => notaBarang(s, from, to)).sort((a, b) => a.ts - b.ts);
+  }, [sales, lunas, from, to]);
   return { baris, barang, loading };
 }
 
