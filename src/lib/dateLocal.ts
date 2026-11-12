@@ -17,6 +17,12 @@ export const JAM_GANTI_HARI = 6;
  */
 export const toLocalYmd = (d: Date = new Date()): string => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
+/** Nama hari Indonesia berhuruf depan besar: "Jumat". */
+export const namaHari = (d: Date) => {
+  const h = new Intl.DateTimeFormat("id-ID", { weekday: "long" }).format(d);
+  return h.charAt(0).toUpperCase() + h.slice(1);
+};
+
 /** "YYYY-MM-DD" -> Date lokal pukul 00:00 (null bila tidak valid). */
 export const dariYmd = (s: string): Date | null => {
   const [y, m, d] = String(s || "").split("-").map(Number);

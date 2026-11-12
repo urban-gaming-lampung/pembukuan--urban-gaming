@@ -23,7 +23,7 @@ import { bayarCash, bayarTransfer, catatLogPembukuan, periodRange, saringPeriode
 import { rupiah, toInt } from "../lib/format";
 import { PdfExporterHandle } from "../components/PdfExporter";
 import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr, isLogForDate } from "../lib/absenPeriod";
-import { jamDiniHari, menitHariKerja, toLocalYmd } from "../lib/dateLocal";
+import { jamDiniHari, menitHariKerja, namaHari, toLocalYmd } from "../lib/dateLocal";
 import { buildSewaTable, effectiveSewaPrices, effectiveJasaPrices, cleanPriceList } from "../lib/priceLists";
 
 type ImageQuality = "Tinggi" | "Hemat";
@@ -39,6 +39,15 @@ const getBusinessDate = () => {
     wib.setDate(wib.getDate() - 1); // Mundur 1 hari
   }
   return wib;
+};
+
+/**
+ * Tanggal form pembukuan otomatis: hari kerja sekarang; bila pembukuan hari kerja itu
+ * sudah disimpan (mis. ruko tutup lewat tengah malam), tanggal kalender sekarang.
+ */
+const tanggalFormOtomatis = (sudahDisimpan: (tanggal: string) => boolean): Date => {
+  const hariKerja = getBusinessDate();
+  return sudahDisimpan(toLocalYmd(hariKerja)) ? getWibDate() : hariKerja;
 };
 
 /** Dokumen history_pembukuan -> HistoryItem (total selalu angka). */
@@ -277,34 +286,33 @@ export default function useAppController() {
 
   const today = getBusinessDate();
   const [tanggal, setTanggal] = useState(toLocalYmd(today));
-  const [hari, setHari] = useState(() => {
-    const h = new Intl.DateTimeFormat("id-ID", { weekday: "long" }).format(today);
-    return h.charAt(0).toUpperCase() + h.slice(1);
-  });
+  const [hari, setHari] = useState(() => namaHari(today));
 
-  const systemDateRef = useRef(today.getDate());
-  const hasDataRef = useRef(false);
+  /** Tanggal terakhir yang dipilih OTOMATIS oleh sistem (tanggal pilihan manual admin tidak ditimpa). */
+  const tanggalSistemRef = useRef(toLocalYmd(today));
+  /** Form berisi input manual (absen, jam ruko, catatan, baris rincian) — bukan baris nota POS. */
+  const adaInputManualRef = useRef(false);
+  const editingRef = useRef<string | null>(null);
   const historyRef = useRef<any[]>([]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (hasDataRef.current) return;
-
-      const bizDate = getBusinessDate();
-      const bizDateStr = toLocalYmd(bizDate);
-
-      const bizAlreadySaved = historyRef.current.some(h => h.tanggal === bizDateStr);
-      const targetDate = bizAlreadySaved ? getWibDate() : bizDate;
-
-      if (targetDate.getDate() !== systemDateRef.current) {
-        systemDateRef.current = targetDate.getDate();
-        setTanggal(toLocalYmd(targetDate));
-        const h = new Intl.DateTimeFormat("id-ID", { weekday: "long" }).format(targetDate);
-        setHari(h.charAt(0).toUpperCase() + h.slice(1));
-      }
-    }, 10000);
-    return () => clearInterval(interval);
+  /**
+   * Pindah tanggal form otomatis bila hari kerja berganti atau pembukuan tanggal ini sudah
+   * disimpan (dari HP ini atau HP lain). Tidak berjalan selama ada input manual / mode edit.
+   */
+  const gantiTanggalOtomatis = useCallback(() => {
+    if (adaInputManualRef.current || editingRef.current) return;
+    const target = tanggalFormOtomatis((t) => historyRef.current.some((h) => h.tanggal === t));
+    const ymd = toLocalYmd(target);
+    if (ymd === tanggalSistemRef.current) return;
+    tanggalSistemRef.current = ymd;
+    setTanggal(ymd);
+    setHari(namaHari(target));
   }, []);
+
+  useEffect(() => {
+    const interval = setInterval(gantiTanggalOtomatis, 10000);
+    return () => clearInterval(interval);
+  }, [gantiTanggalOtomatis]);
 
   // ===== TAB STATE =====
   const [activeTab, setActiveTab] = useState<"USAHA RENTAL" | "UPDATE STOK" | "PAGE OWNER" | "MONITORING">("USAHA RENTAL");
@@ -397,6 +405,7 @@ export default function useAppController() {
     openPOSRef.current = openPOS;
   }, [openPOS]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  useEffect(() => { editingRef.current = editingId; }, [editingId]);
 
   const setShiftPegawai = useCallback((val: string) => {
     _setShiftPegawai(val);
@@ -1116,15 +1125,20 @@ export default function useAppController() {
      });
   }, [rowsSewa, ongkirConfig.pegawaiPersen]);
 
-  const hasData = useMemo(() => {
-    if (absenPagi || absenSiang || rukoBuka || rukoTutup || catatan) return true;
-    if (totalHarian > 0 || totalJajanan > 0 || totalJasaAks > 0 || totalSewa > 0) return true;
-    return false;
-  }, [absenPagi, absenSiang, rukoBuka, rukoTutup, catatan, totalHarian, totalJajanan, totalJasaAks, totalSewa]);
+  // Input manual di form ini. Baris nota POS TIDAK dihitung: baris itu mengikuti tanggal form,
+  // jadi tidak boleh menahan form di tanggal yang pembukuannya sudah disimpan.
+  const adaInputManual = useMemo(
+    () => !!(absenPagi || absenSiang || rukoBuka || rukoTutup || catatan) || totalHarian > 0 || totalJajanan > 0 || totalJasaAksManual > 0 || totalSewa > 0,
+    [absenPagi, absenSiang, rukoBuka, rukoTutup, catatan, totalHarian, totalJajanan, totalJasaAksManual, totalSewa]
+  );
+  /** Form punya isian / pemasukan (termasuk nota POS) — dipakai tombol Tambah Data. */
+  const hasData = adaInputManual || totalNotaJasa.total > 0;
 
   useEffect(() => {
-    hasDataRef.current = hasData;
-  }, [hasData]);
+    adaInputManualRef.current = adaInputManual;
+    // Form baru saja kosong (mis. disinkronkan sesudah HP lain menyimpan) -> cek tanggal form
+    if (!adaInputManual) gantiTanggalOtomatis();
+  }, [adaInputManual, gantiTanggalOtomatis]);
 
   const mandatoryFilled = useMemo(() => {
     if (shiftPegawai === "Libur") return !!(rukoBuka && rukoTutup);
@@ -1140,7 +1154,11 @@ export default function useAppController() {
     return Array.from(m.values()).sort((a, b) => b.tanggal.localeCompare(a.tanggal) || b.id.localeCompare(a.id));
   }, [histTerbaru, histFilter]);
 
-  useEffect(() => { historyRef.current = history; }, [history]);
+  // Riwayat berubah (mis. pembukuan tanggal form ini baru disimpan dari HP lain) -> cek tanggal form
+  useEffect(() => {
+    historyRef.current = history;
+    gantiTanggalOtomatis();
+  }, [history, gantiTanggalOtomatis]);
 
 
 
@@ -1592,7 +1610,7 @@ export default function useAppController() {
     setSavedSignature(currentFormSignature);
     isJustSavedOrLoaded.current = false; 
 
-    hasDataRef.current = false;
+    adaInputManualRef.current = false;
 
     allLogAbsensi.filter((l: any) => isLogForDate(l, tanggal) && l.status !== "deleted").forEach((l: any) => {
       if (l.id) {
@@ -1600,10 +1618,9 @@ export default function useAppController() {
       }
     });
     const realNow = getWibDate();
-    systemDateRef.current = realNow.getDate();
+    tanggalSistemRef.current = toLocalYmd(realNow);
     setTanggal(toLocalYmd(realNow));
-    const nextHari = new Intl.DateTimeFormat("id-ID", { weekday: "long" }).format(realNow);
-    setHari(nextHari.charAt(0).toUpperCase() + nextHari.slice(1));
+    setHari(namaHari(realNow));
 
     setDoc(doc(db, "data", "draft"), {}).catch(console.error);
     setDoc(doc(db, "data", "ruko_status"), { rukoBuka: "", rukoBukaDate: "", rukoTutup: "", rukoTutupDate: "", tanggal: "" }, { merge: false }).catch(console.error);

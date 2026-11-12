@@ -5,7 +5,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadString, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "../lib/firebase";
 import { getAbsenCycleInfo, normalizeBulanTahun } from "../lib/absenPeriod";
-import { toLocalYmd, menitHariKerja } from "../lib/dateLocal";
+import { dariYmd, menitHariKerja, namaHari, toLocalYmd } from "../lib/dateLocal";
 import { rupiah } from "../lib/format";
 
 // === KONSTANTA ABSENSI ===
@@ -54,11 +54,8 @@ const Icons = {
 };
 
 function getHariIndonesia(yyyyMmDd: string) {
-  if (!yyyyMmDd) return "";
-  const d = new Date(`${yyyyMmDd}T00:00:00`);
-  if (isNaN(d.getTime())) return "";
-  const hari = new Intl.DateTimeFormat("id-ID", { weekday: "long" }).format(d);
-  return hari.charAt(0).toUpperCase() + hari.slice(1);
+  const d = dariYmd(yyyyMmDd);
+  return d ? namaHari(d) : "";
 }
 
 const Input: React.FC<InputProps> = ({
