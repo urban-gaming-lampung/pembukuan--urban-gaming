@@ -9,6 +9,7 @@ import { buildSewaTable } from "../lib/priceLists";
 import { isUrbanUserDocId } from "../lib/urbanUsers";
 import NotaSewaSheet from "./NotaSewaSheet";
 import { barisSiapNota, BarisSewaNota } from "../lib/notaSewa";
+import { formatWa, kunciNama, rapikanWa, wajibWaPenyewa, waValid } from "../lib/pengingatSewa";
 
 type PriceItem = { label: string; price: number };
 
@@ -59,9 +60,11 @@ const RincianSewa: React.FC<{
   hargaItems?: PriceItem[];
   userEmail?: string | null;
   isMobileTable?: boolean;
-  /** Tanggal pembukuan (YYYY-MM-DD) — untuk jam kembali di nota sewa */
+  /** Tanggal pembukuan (YYYY-MM-DD) — untuk jam kembali di nota sewa & aturan wajib WA */
   tanggal?: string;
-}> = ({ rows, setRows, blank, hargaItems, userEmail, isMobileTable, tanggal = "" }) => {
+  /** Nama penyewa (huruf kecil) -> No. WA terakhir, untuk saran isi cepat */
+  waTerakhir?: Record<string, string>;
+}> = ({ rows, setRows, blank, hargaItems, userEmail, isMobileTable, tanggal = "", waTerakhir = {} }) => {
   const { table, jenisOptions, lamaOptions } = React.useMemo(
     () => buildSewaTable(hargaItems),
     [hargaItems]
@@ -125,7 +128,7 @@ const RincianSewa: React.FC<{
     <>
     <TableEditor<RowSewa>
       title="4. Rincian Pemasukan SEWA PS"
-      columns={["No.", "Jenis Sewa", "Lama Sewa", "Jam Sewa", "Nama Penyewa", "Apakah sudah dibayar?", "Harga (Rp)", "Apakah di antar?", "Siapa Yang antar?", "Cash", "Transfer"]}
+      columns={["No.", "Jenis Sewa", "Lama Sewa", "Jam Sewa", "Nama Penyewa", "No. WA Penyewa", "Apakah sudah dibayar?", "Harga (Rp)", "Apakah di antar?", "Siapa Yang antar?", "Cash", "Transfer"]}
       rows={rows}
       setRows={setRows}
       blank={blank}
@@ -364,6 +367,49 @@ const RincianSewa: React.FC<{
                 onKeyDown={onKeyNav}
                 placeholder="Nama Penyewa (Wajib)"
               />
+            </div>
+          );
+        }
+
+        if (keyName === "waPenyewa") {
+          if (isHanyaOngkir) {
+            return (
+              <div className="min-w-[150px]">
+                <input disabled readOnly value="-" className={`${inputBase} bg-zinc-100 dark:bg-black/40 text-zinc-400 cursor-not-allowed border-dashed text-center font-bold`} />
+              </div>
+            );
+          }
+          const v = String(value || "");
+          const wajib = wajibWaPenyewa(row, tanggal);
+          const aktif = !!(String((row as any).ket || "").trim() || (row as any).jenisPS);
+          const salah = aktif && (v ? !waValid(v) : wajib);
+          const saran = !v && (row as any).ket ? waTerakhir[kunciNama((row as any).ket)] : "";
+          return (
+            <div className="min-w-[150px]">
+              <input
+                data-fieldid={`table-sewa-${rowIndex}-wa`}
+                type="tel"
+                inputMode="tel"
+                autoComplete="off"
+                className={`${inputBase} font-mono tracking-wide ${salah ? "!border-red-500/50 bg-red-50/50 dark:bg-red-500/10 focus:!ring-red-500/30" : ""}`}
+                value={v}
+                onChange={(e) =>
+                  updateRow(rowIndex, { waPenyewa: e.target.value.replace(/[^\d+\s-]/g, ""), _addedBy: (row as any)._addedBy || userEmail } as any)
+                }
+                onBlur={() => { if (v && rapikanWa(v) !== v) updateRow(rowIndex, { waPenyewa: rapikanWa(v) } as any); }}
+                onKeyDown={onKeyNav}
+                placeholder={wajib ? "08xx (wajib)" : "08xx (opsional)"}
+              />
+              {saran && (
+                <button
+                  type="button"
+                  onClick={() => updateRow(rowIndex, { waPenyewa: saran, _addedBy: (row as any)._addedBy || userEmail } as any)}
+                  className="mt-1.5 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 text-[11px] font-bold active:scale-95 transition"
+                >
+                  Pakai {formatWa(saran)} · sewa terakhir
+                </button>
+              )}
+              {v && !waValid(v) && <div className="mt-1 text-[10.5px] font-semibold text-red-500">Format 08xx, 10–13 angka</div>}
             </div>
           );
         }

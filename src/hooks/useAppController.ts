@@ -17,6 +17,7 @@ import { checkCatalogBaselineAndLogUpdates, isVersionLower, SavedCatalogState, s
 import useStokData from "./useStokData";
 import { bukaHalamanStok } from "../lib/stokRental";
 import { isBarisNota, sinkronNotaKePembukuan, totalBaris, useNotaHariKerja } from "../lib/posPembukuan";
+import { CatatanPengingat, waBaris, wajibWaPenyewa, waValid } from "../lib/pengingatSewa";
 import { PdfExporterHandle } from "../components/PdfExporter";
 import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr, isLogForDate } from "../lib/absenPeriod";
 import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
@@ -813,6 +814,16 @@ export default function useAppController() {
               message = "Nama Penyewa wajib diisi pada baris Sewa PS!";
               targetId = "section-rincian";
               break;
+          case "wa_penyewa_empty":
+              title = "No. WA Penyewa Kosong";
+              message = "No. WA penyewa wajib diisi pada setiap baris Sewa PS — dipakai untuk mengingatkan pengembalian unit.";
+              targetId = "section-rincian";
+              break;
+          case "wa_penyewa_invalid":
+              title = "No. WA Penyewa Tidak Valid";
+              message = "Periksa No. WA penyewa: gunakan nomor HP 08xx / 628xx (10–13 angka).";
+              targetId = "section-rincian";
+              break;
           case "setoran_ket_empty":
               message = "Keterangan Setoran wajib diisi jika ada nominal!";
               targetId = "section-setoran";
@@ -986,7 +997,7 @@ export default function useAppController() {
   const blankHarian: RowHarian = { jenisPS: "", jamMasuk: "", jumlahJam: "", harga: "", bayar: "" };
   const blankJajanan: RowJajanan = { jenisJajanan: "", qtyJam: "", harga: "", bayar: "" };
   const blankJasaAks: RowJasaAks = { tipe: "", ket: "", harga: "", bayar: "" };
-  const blankSewa: RowSewa & { _customBase?: string | number } = { jenisPS: "", lamaSewa: "", jamMasukSewa: "", ket: "", isPaid: "", harga: "", isOngkir: "", _ongkir: "", _bayarOngkir: "", bayar: "", _customDurasi: "", _customBase: "", diantarOleh: "" };
+  const blankSewa: RowSewa & { _customBase?: string | number } = { jenisPS: "", lamaSewa: "", jamMasukSewa: "", ket: "", waPenyewa: "", isPaid: "", harga: "", isOngkir: "", _ongkir: "", _bayarOngkir: "", bayar: "", _customDurasi: "", _customBase: "", diantarOleh: "" };
 
   const genRowId = () =>
     (typeof crypto !== 'undefined' && crypto.randomUUID)
@@ -1502,6 +1513,32 @@ export default function useAppController() {
       }
   };
 
+  /** Catat "sudah diingatkan via WA" pada baris sewa (form aktif atau history). */
+  const handleCatatPengingat = async (item: { isLive?: boolean; sourceIdx?: number; historyId?: string; _rawRow?: any }) => {
+    const log: CatatanPengingat = { ts: Date.now(), oleh: user?.email || auth.currentUser?.email || "admin" };
+    const tambah = (r: any) => ({ ...r, _diingatkan: [...((r && r._diingatkan) || []), log].slice(-5) });
+    if (item.isLive && typeof item.sourceIdx === "number") {
+      setRowsSewa((prev) => prev.map((r, i) => (i === item.sourceIdx ? (tambah(r) as any) : r)));
+      return;
+    }
+    if (!item.historyId) return;
+    try {
+      const ref = doc(db, "history_pembukuan", item.historyId);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return;
+      const rows = Array.isArray(snap.data().rowsSewa) ? [...snap.data().rowsSewa] : [];
+      const raw = item._rawRow || {};
+      const idx = raw._rowId
+        ? rows.findIndex((r: any) => r._rowId === raw._rowId)
+        : rows.findIndex((r: any) => r.jenisPS === raw.jenisPS && r.jamMasukSewa === raw.jamMasukSewa && (r.ket || "") === (raw.ket || ""));
+      if (idx < 0) return;
+      rows[idx] = tambah(rows[idx]);
+      await updateDoc(ref, { rowsSewa: rows });
+    } catch (e) {
+      console.error("Gagal mencatat pengingat:", e);
+    }
+  };
+
   useEffect(() => {
     let newNotes = catatan || "";
     let modified = false;
@@ -1574,6 +1611,11 @@ export default function useAppController() {
       }
       if (!r.jamMasukSewa) return "jam_masuk_sewa_empty";
       if (!(r as any).ket) return "keterangan_empty_sewa";
+      // No. WA penyewa wajib untuk sewa unit (pengingat pengembalian)
+      if (wajibWaPenyewa(r, tanggal)) {
+        if (!waBaris(r)) return "wa_penyewa_empty";
+        if (!waValid(waBaris(r))) return "wa_penyewa_invalid";
+      }
       if (r.isOngkir !== "TIDAK" && !(r as any).diantarOleh) return "diantar_oleh_empty";
     }
 
@@ -2661,6 +2703,7 @@ export default function useAppController() {
     paymentVerifyPrompt,
     setPaymentVerifyPrompt,
     handleVerifyReturn,
+    handleCatatPengingat,
     validateTransactions,
     handleShareCheck,
     addPencatatan,

@@ -28,6 +28,8 @@ export interface RowSewa {
   lamaSewa: string;
   jamMasukSewa: string;
   ket: string;
+  /** No. WhatsApp penyewa (08xx) — untuk pengingat pengembalian unit & kirim nota sewa */
+  waPenyewa?: string;
   isPaid: "YA" | "TIDAK" | "";
   isOngkir: "YA" | "TIDAK" | "";
   _ongkir: number | string;

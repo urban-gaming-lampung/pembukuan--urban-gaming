@@ -3,6 +3,7 @@ import { Loader2, Receipt, X } from "lucide-react";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { NotaActionButtons, NotaPreview, useNotaActions } from "./PosCheckoutSheet";
 import { ambilNomorNotaSewa, BarisSewaNota, notaSewaDariBaris } from "../lib/notaSewa";
+import { rapikanWa, waBaris } from "../lib/pengingatSewa";
 
 const rp = (n: number) => `Rp ${Math.round(n || 0).toLocaleString("id-ID")}`;
 
@@ -30,8 +31,9 @@ const NotaSewaSheet: React.FC<{
   useEffect(() => {
     if (!row) return;
     setGalat("");
-    setWa(row._waPenyewa || "");
-    setWaFinal(row._waPenyewa || "");
+    // Satu sumber: kolom No. WA Penyewa di tabel sewa
+    setWa(waBaris(row));
+    setWaFinal(waBaris(row));
     if (row._noNota) return;
     let alive = true;
     setMembuat(true);
@@ -61,10 +63,11 @@ const NotaSewaSheet: React.FC<{
   if (!open) return null;
 
   const simpanWa = () => {
-    const v = wa.trim();
+    const v = rapikanWa(wa);
+    setWa(v);
     if (v === waFinal) return;
     setWaFinal(v);
-    onPatch({ _waPenyewa: v });
+    onPatch({ waPenyewa: v });
   };
 
   return (

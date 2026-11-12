@@ -20,6 +20,7 @@ export type BarisSewaNota = RowSewa & {
   _noNota?: string;
   _notaTs?: number;
   _waPenyewa?: string;
+  waPenyewa?: string;
   diantarOleh?: string;
 };
 

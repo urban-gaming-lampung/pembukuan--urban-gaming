@@ -54,6 +54,8 @@ type PageOwnerProps = {
   rowsSewa: RowSewa[];
   activeDate?: string;
   onVerifyActiveRental?: (idx: number) => void;
+  /** Catat pengingat WA penyewa (status unit) */
+  onPengingatSewa?: (item: any) => void;
   // Filter Props
   filterMode: string;
   setFilterMode: (m: string) => void;
@@ -90,6 +92,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   rowsSewa,
   activeDate,
   onVerifyActiveRental,
+  onPengingatSewa,
   filterMode, setFilterMode, filterMonth, setFilterMonth,
   rangeStart, setRangeStart, rangeEnd, setRangeEnd, filteredHistory,
   hargaItems,
@@ -911,7 +914,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
       )}
 
       {activeTabOwner === "MONITORING" && (
-        <UnitStatusWidget rowsSewa={rowsSewa} history={history} activeDate={activeDate} onVerifyActiveRental={onVerifyActiveRental} hargaItems={hargaItems} isVerifyingPayment={isVerifyingPayment} />
+        <UnitStatusWidget rowsSewa={rowsSewa} history={history} activeDate={activeDate} onVerifyActiveRental={onVerifyActiveRental} onPengingat={onPengingatSewa} hargaItems={hargaItems} isVerifyingPayment={isVerifyingPayment} />
       )}
 
       {activeTabOwner === "ANALITIK" && (
@@ -2299,7 +2302,7 @@ const MetricCard = ({ title, value, icon, isHighlight = false, subtitle = "", va
   );
 };
 
-const UnitStatusWidget = ({ rowsSewa, history, activeDate, onVerifyActiveRental, hargaItems, isVerifyingPayment }: { rowsSewa: RowSewa[], history?: HistoryItem[], activeDate?: string, onVerifyActiveRental?: (idx: number) => void, hargaItems?: any[], isVerifyingPayment?: boolean }) => {
+const UnitStatusWidget = ({ rowsSewa, history, activeDate, onVerifyActiveRental, onPengingat, hargaItems, isVerifyingPayment }: { rowsSewa: RowSewa[], history?: HistoryItem[], activeDate?: string, onVerifyActiveRental?: (idx: number) => void, onPengingat?: (item: any) => void, hargaItems?: any[], isVerifyingPayment?: boolean }) => {
   const [activeSlide, setActiveSlide] = useState<"status" | "device">("status");
 
   useEffect(() => {
@@ -2328,6 +2331,7 @@ const UnitStatusWidget = ({ rowsSewa, history, activeDate, onVerifyActiveRental,
               rowsSewa={rowsSewa} 
               activeDate={activeDate} 
               onVerifyActiveRental={onVerifyActiveRental} 
+              onPengingat={onPengingat}
               isOwner={true} 
               hargaItems={hargaItems}
               isVerifyingPayment={isVerifyingPayment}

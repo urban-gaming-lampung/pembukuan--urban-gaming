@@ -1,11 +1,17 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { AlertCircle, Clock, Monitor, Gamepad2, Smartphone, ShieldCheck, Settings2 } from "lucide-react";
+import { AlertCircle, Clock, Monitor, Gamepad2, Smartphone, ShieldCheck, Settings2, MessageCircle } from "lucide-react";
 import { doc, setDoc, onSnapshot } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
 import { HistoryItem, RowSewa } from "../lib/types";
 import Section from "./common/Section";
 import { buildSewaTable, getSewaPrice } from "../lib/priceLists";
 import { toLocalYmd, resolveMonthYear } from "../lib/dateLocal";
+import { batasKembali, formatWa, INGATKAN_SEBELUM_MENIT, labelPengingat, linkPengingat, pesanPengingat, tarifTelatPerJam, waBaris, waktuRelatif } from "../lib/pengingatSewa";
+
+const KUNCI_TUNDA = "urban:tunda-pengingat-sewa";
+const bacaTunda = (): Record<string, number> => {
+  try { return JSON.parse(localStorage.getItem(KUNCI_TUNDA) || "{}") || {}; } catch { return {}; }
+};
 
 // Baris "Hanya Ongkir" atau ITEM TAMBAHAN (lama sewa "-", mis. "Tambah Sewa Stik PS4") =
 // pemasukan tanpa unit yang keluar. Tidak boleh muncul sebagai BILING / unit jalan.
@@ -17,6 +23,8 @@ type WidgetMonitoringStatusProps = {
   rowsSewa: RowSewa[];
   activeDate?: string;
   onVerifyActiveRental?: (item: any) => void;
+  /** Catat bahwa penyewa sudah diingatkan via WA */
+  onPengingat?: (item: any) => void;
   isOwner?: boolean;
   hargaItems?: any[];
   isVerifyingPayment?: boolean;
@@ -27,6 +35,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
   rowsSewa,
   activeDate,
   onVerifyActiveRental,
+  onPengingat,
   isOwner = false,
   hargaItems,
   isVerifyingPayment = false,
@@ -269,6 +278,8 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
             _isActiveSession: (r as any)._isActiveSession,
             _sourceIdx: (r as any)._sourceIdx,
             diantarOleh: (r as any).diantarOleh || "",
+            waPenyewa: waBaris(r),
+            diingatkan: (r as any)._diingatkan || [],
             isOngkir: (r as any).isOngkir || "",
             isPaid: (r as any).isPaid || "",
             _nominalBelumBayar: nominalBelumBayar,
@@ -310,12 +321,34 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
   }, [activeRentals, currentUserEmail]);
 
   const [unverifiedAdminRentals, setUnverifiedAdminRentals] = useState<any[]>([]);
+  // "Belum kembali · sudah diingatkan": peringatan waktu habis ditunda 30 menit per unit
+  const [tunda, setTunda] = useState<Record<string, number>>(() => bacaTunda());
+  const tundaPeringatan = (uid: string) => {
+    const next = { ...tunda, [uid]: Date.now() + 30 * 60000 };
+    Object.keys(next).forEach((k) => { if (next[k] < Date.now()) delete next[k]; });
+    setTunda(next);
+    try { localStorage.setItem(KUNCI_TUNDA, JSON.stringify(next)); } catch { /* abaikan */ }
+  };
 
   useEffect(() => {
     if (!currentUserEmail) return;
-    const unverified = activeRentals.filter(r => r.isDone && !r.isVerified && r.addedBy === currentUserEmail);
+    const unverified = activeRentals.filter(r => r.isDone && !r.isVerified && r.addedBy === currentUserEmail && !((tunda[r.uid] || 0) > now));
     setUnverifiedAdminRentals(unverified);
-  }, [activeRentals, currentUserEmail]);
+  }, [activeRentals, currentUserEmail, tunda, now]);
+
+  // ===== Pengingat WhatsApp penyewa =====
+  const bisaIngatkan = (u: any) => !!(u && u.waPenyewa && u.endMs);
+  const waktunyaIngatkan = (u: any) => bisaIngatkan(u) && !u.isVerified && now >= u.endMs - INGATKAN_SEBELUM_MENIT * 60000;
+  const kirimPengingat = (u: any) => {
+    if (!bisaIngatkan(u)) return;
+    const pesan = pesanPengingat({ nama: u.namaPenyewa, jenis: u.jenis, endMs: u.endMs, now: Date.now(), noNota: u._rawRow?._noNota });
+    window.open(linkPengingat(u.waPenyewa, pesan), "_blank");
+    onPengingat?.(
+      u._isActiveSession && typeof u._sourceIdx === "number"
+        ? { isLive: true, sourceIdx: u._sourceIdx, _rawRow: u._rawRow }
+        : { isLive: false, historyId: u._historyId, _rawRow: u._rawRow }
+    );
+  };
 
   const handleVerifyPopupReturn = async (ru: any) => {
     if (onVerifyActiveRental) {
@@ -537,6 +570,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
                       <h4 className="text-center text-[13px] font-bold text-zinc-900 dark:text-white truncate" title={u.jenis}>{u.jenis}</h4>
                       <div className="flex flex-col gap-1 mt-2 items-center justify-center text-center">
                         <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 truncate w-full px-1">{u.namaPenyewa}</p>
+                        {u.waPenyewa && <p className="text-[9.5px] font-mono font-semibold text-zinc-500 dark:text-zinc-400 truncate w-full -mt-0.5">{formatWa(u.waPenyewa)}</p>}
 
                         <div className="bg-zinc-100 dark:bg-zinc-800/50 px-2 py-0.5 rounded flex items-center justify-center gap-1 mt-0.5">
                           <span className="text-[9px] font-bold text-zinc-500 dark:text-zinc-400">BY: {adminName}</span>
@@ -562,6 +596,16 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
                           </div>
                         )}
 
+                        {waktunyaIngatkan(u) && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); kirimPengingat(u); }}
+                            className="mt-1.5 w-full inline-flex items-center justify-center gap-1 h-7 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black active:scale-95 transition shadow-sm"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />Ingatkan
+                          </button>
+                        )}
+                        {u.diingatkan?.length > 0 && <p className="text-[9px] font-semibold text-emerald-600 dark:text-emerald-400 truncate w-full">{labelPengingat(u.diingatkan)}</p>}
                         {u.isDone && !u.isVerified ? (
                           <div className="text-[10px] font-black tracking-widest text-[#FFF] bg-amber-500 px-2 py-0.5 rounded animate-bounce mt-1.5 shadow-sm">WARNING</div>
                         ) : (
@@ -617,50 +661,75 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
         </div>
       </Section>
 
-      {selectedUnit && (
+      {selectedUnit && (() => {
+        // Data terbaru unit yang dibuka (mis. sesudah "Ingatkan" dicatat)
+        const sel: any = activeRentals.find((r) => r.uid === selectedUnit.uid) || selectedUnit;
+        const tarif = tarifTelatPerJam(sel.jenis);
+        return (
         <div className="fixed inset-0 z-[700] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSelectedUnit(null)}></div>
           <div className="bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-2xl rounded-[32px] p-6 max-w-sm w-full shadow-2xl shadow-black/20 ring-1 ring-black/5 dark:ring-white/10 relative z-10 animate-in zoom-in-95 duration-200">
             <div className="w-12 h-1.5 bg-zinc-300 dark:bg-zinc-700 rounded-full mx-auto mb-5"></div>
-            <h3 className="text-xl font-black text-center text-zinc-900 dark:text-white mb-2">{selectedUnit.jenis}</h3>
-            <p className="text-sm font-bold text-center text-blue-600 dark:text-blue-400 mb-1">{selectedUnit.namaPenyewa}</p>
-            <p className="text-[11px] font-bold text-center text-zinc-500 dark:text-zinc-400 tracking-wide">
-              ADMIN: {selectedUnit.addedBy ? selectedUnit.addedBy.split('@')[0].toUpperCase() : 'UNKNOWN'}
+            <h3 className="text-xl font-black text-center text-zinc-900 dark:text-white mb-2">{sel.jenis}</h3>
+            <p className="text-sm font-bold text-center text-blue-600 dark:text-blue-400 mb-1">{sel.namaPenyewa}</p>
+            <p className={`text-[12px] font-mono font-bold text-center mb-1 ${sel.waPenyewa ? "text-zinc-700 dark:text-zinc-200" : "text-red-500"}`}>
+              {sel.waPenyewa ? `WA ${formatWa(sel.waPenyewa)}` : "No. WA penyewa belum diisi"}
             </p>
-            {selectedUnit.diantarOleh && (
+            <p className="text-[11px] font-bold text-center text-zinc-500 dark:text-zinc-400 tracking-wide">
+              ADMIN: {sel.addedBy ? sel.addedBy.split('@')[0].toUpperCase() : 'UNKNOWN'}
+            </p>
+            {sel.diantarOleh && (
               <p className="text-[11px] font-bold text-center text-purple-600 dark:text-purple-400 tracking-wide mt-1 mb-5">
-                Diantar oleh: {selectedUnit.diantarOleh.split("@")[0]}
+                Diantar oleh: {sel.diantarOleh.split("@")[0]}
               </p>
             )}
-            {!selectedUnit.diantarOleh && (selectedUnit as any).isOngkir === "TIDAK" && (
+            {!sel.diantarOleh && (sel as any).isOngkir === "TIDAK" && (
               <p className="text-[12px] font-black text-center text-lime-700 dark:text-lime-400 tracking-wide mt-1 mb-5 bg-lime-100 dark:bg-lime-500/15 px-3 py-1 rounded-lg ring-1 ring-lime-300 dark:ring-lime-500/30">
                 Diambil sendiri
               </p>
             )}
-            {(selectedUnit as any).isPaid === "TIDAK" && (
+            {(sel as any).isPaid === "TIDAK" && (
                <p className="text-[12px] font-black text-center text-red-700 dark:text-red-400 tracking-wide mt-1 mb-5 bg-red-100 dark:bg-red-500/15 px-3 py-1 rounded-lg ring-1 ring-red-300 dark:ring-red-500/30">
-                 Belum dibayar {(selectedUnit as any)._nominalBelumBayar ? `(Rp ${(selectedUnit as any)._nominalBelumBayar / 1000}k)` : ''}
+                 Belum dibayar {(sel as any)._nominalBelumBayar ? `(Rp ${(sel as any)._nominalBelumBayar / 1000}k)` : ''}
                </p>
             )}
-            {(selectedUnit as any).isPaid === "YA" && (
+            {(sel as any).isPaid === "YA" && (
                <p className="text-[12px] font-black text-center text-emerald-700 dark:text-emerald-400 tracking-wide mt-1 mb-5 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-1 rounded-lg ring-1 ring-emerald-300 dark:ring-emerald-500/30">
                  Sudah dibayar
                </p>
             )}
-            {!selectedUnit.diantarOleh && (selectedUnit as any).isOngkir !== "TIDAK" && <div className="mb-6" />}
+            {!sel.diantarOleh && (sel as any).isOngkir !== "TIDAK" && <div className="mb-6" />}
 
-            <div className="bg-zinc-100/50 dark:bg-black/20 rounded-[20px] p-4 mb-6">
+            <div className="bg-zinc-100/50 dark:bg-black/20 rounded-[20px] p-4 mb-5">
               <p className="text-[13px] font-bold text-zinc-600 dark:text-zinc-300 text-center leading-relaxed">
-                {getHumanizedTime(selectedUnit.endMs)}
+                {getHumanizedTime(sel.endMs)}
               </p>
+              {sel.endMs && (
+                <p className="text-[11.5px] font-semibold text-zinc-500 dark:text-zinc-400 text-center leading-snug mt-1.5">
+                  Batas kembali {waktuRelatif(batasKembali(sel.endMs), now)}{tarif ? ` · telat Rp${tarif / 1000}rb/jam` : ""}
+                </p>
+              )}
             </div>
 
-            <button onClick={() => setSelectedUnit(null)} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl py-3.5 transition-all outline-none focus:ring-4 focus:ring-blue-500/20 active:scale-95 shadow-md shadow-blue-500/20">
+            {bisaIngatkan(sel) && !sel.isVerified && (
+              <button
+                type="button"
+                onClick={() => kirimPengingat(sel)}
+                className="w-full mb-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl py-3.5 transition-all outline-none focus:ring-4 focus:ring-emerald-500/20 active:scale-95 shadow-md shadow-emerald-500/20 flex items-center justify-center gap-2"
+              >
+                <MessageCircle className="w-[18px] h-[18px]" />Ingatkan via WA
+              </button>
+            )}
+            {sel.diingatkan?.length > 0 && (
+              <p className="text-[11.5px] font-semibold text-center text-emerald-600 dark:text-emerald-400 mb-2.5">{labelPengingat(sel.diingatkan)}</p>
+            )}
+            <button onClick={() => setSelectedUnit(null)} className={`w-full font-bold rounded-2xl py-3.5 transition-all outline-none active:scale-95 ${bisaIngatkan(sel) && !sel.isVerified ? "bg-zinc-200/80 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100" : "bg-blue-600 hover:bg-blue-700 text-white focus:ring-4 focus:ring-blue-500/20 shadow-md shadow-blue-500/20"}`}>
               Tutup
             </button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {unverifiedAdminRentals.length > 0 && !isVerifyingPayment && (
         <div className="fixed inset-0 z-[800] flex items-center justify-center p-6 font-sans">
@@ -691,6 +760,14 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
               >
                 YA, SUDAH HABIS & KEMBALI
               </button>
+              {bisaIngatkan(unverifiedAdminRentals[0]) && (
+                <button
+                  onClick={() => { const u = unverifiedAdminRentals[0]; kirimPengingat(u); tundaPeringatan(u.uid); }}
+                  className="w-full py-3.5 text-[14px] font-bold text-emerald-700 dark:text-emerald-400 border-t border-gray-200/50 dark:border-white/10 bg-white/30 dark:bg-black/10 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors flex items-center justify-center gap-2"
+                >
+                  <MessageCircle className="w-4 h-4" />BELUM KEMBALI · INGATKAN VIA WA
+                </button>
+              )}
             </div>
           </div>
         </div>

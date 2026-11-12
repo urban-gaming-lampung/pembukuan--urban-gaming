@@ -1,4 +1,4 @@
-import React, { useEffect, useState, Suspense, lazy } from "react";
+import React, { useEffect, useMemo, useState, Suspense, lazy } from "react";
 import Header from "./components/Header";
 import Input from "./components/Input";
 import RincianHarian from "./components/RincianHarian";
@@ -33,6 +33,7 @@ import { Package, AlertCircle, Bot } from "lucide-react";
 import { GAME_NAMES_ID } from "./games/constants";
 import useAppController from "./hooks/useAppController";
 import SubTabs from "./components/common/SubTabs";
+import { petaWaPenyewa } from "./lib/pengingatSewa";
 
 const ChallengeModal = lazy(() => import("./games/components/ChallengeModal"));
 
@@ -188,6 +189,7 @@ export default function App() {
     paymentVerifyPrompt,
     setPaymentVerifyPrompt,
     handleVerifyReturn,
+    handleCatatPengingat,
     validateTransactions,
     handleShareCheck,
     addPencatatan,
@@ -225,6 +227,8 @@ export default function App() {
     handlePaymentVerifyNo,
     handlePaymentVerifyYes
   } = useAppController();
+  // Saran isi cepat No. WA penyewa dari riwayat sewa (nama penyewa -> WA terakhir)
+  const waPenyewaTerakhir = useMemo(() => petaWaPenyewa(history), [history]);
 
   if (authLoading || (user && !userProfileLoaded && !isDeactivated)) {
     return (
@@ -352,6 +356,7 @@ export default function App() {
                 rowsSewa={rowsSewa}
                 activeDate={tanggal}
                 onVerifyActiveRental={handleVerifyReturn}
+                onPengingatSewa={handleCatatPengingat}
                 hargaItems={hargaSewa}
                 filterMode={filter}
                 setFilterMode={setFilter}
@@ -382,6 +387,7 @@ export default function App() {
                       rowsSewa={rowsSewa} 
                       activeDate={tanggal} 
                       onVerifyActiveRental={handleVerifyReturn} 
+                      onPengingat={handleCatatPengingat}
                       isOwner={isSuperAdminOrOwner} 
                       hargaItems={hargaSewa}
                       isVerifyingPayment={!!paymentVerifyPrompt}
@@ -454,7 +460,7 @@ export default function App() {
               {rincianVisibility.harian !== false && <RincianHarian rows={rowsHarian} setRows={setRowsHarian} blank={{ ...blankHarian }} hargaItems={hargaHarian} isMobileTable={isMobileTable} />}
               {rincianVisibility.jajanan !== false && <RincianJajanan rows={rowsJajanan} setRows={setRowsJajanan} blank={{ ...blankJajanan }} hargaItems={hargaJajanan} isMobileTable={isMobileTable} />}
               {rincianVisibility.jasaAks !== false && <RincianJasaAksesoris rows={rowsJasaAks} setRows={setRowsJasaAks} blank={{ ...blankJasaAks }} hargaItems={hargaJasaAks} isMobileTable={isMobileTable} barisNota={barisNotaJasa} notaBarang={notaBarangHari} tampilNominalBarang={isSuperAdminOrOwner} />}
-              {rincianVisibility.sewa !== false && <RincianSewa rows={rowsSewa} setRows={setRowsSewa} blank={newBlankSewa()} hargaItems={hargaSewa} userEmail={user?.email} isMobileTable={isMobileTable} tanggal={tanggal} />}
+              {rincianVisibility.sewa !== false && <RincianSewa rows={rowsSewa} setRows={setRowsSewa} blank={newBlankSewa()} hargaItems={hargaSewa} userEmail={user?.email} isMobileTable={isMobileTable} tanggal={tanggal} waTerakhir={waPenyewaTerakhir} />}
             </div>
             <div className="space-y-6">
               {rincianVisibility.pengeluaran !== false && <div id="section-pengeluaran">
