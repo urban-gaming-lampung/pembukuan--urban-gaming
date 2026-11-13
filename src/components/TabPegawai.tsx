@@ -1205,7 +1205,6 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   return (
     <div className="space-y-3">
       <SubTabs
-        size="sm"
         ariaLabel="Bagian dashboard pegawai"
         value={tabDash}
         onChange={setTabDash}

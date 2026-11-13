@@ -225,7 +225,7 @@ const SegmentedControl = <T extends string>({
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
-          className={`flex-1 py-1.5 px-3 text-[13px] font-medium rounded-[6px] transition-all duration-200 flex items-center justify-center gap-1.5 ${isActive
+          className={`flex-1 py-1.5 px-3 text-[12px] font-bold uppercase tracking-wide rounded-[6px] transition-all duration-200 flex items-center justify-center gap-1.5 ${isActive
             ? "bg-white dark:bg-zinc-600 text-zinc-900 dark:text-white shadow-sm scale-[1.02]"
             : "text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
             }`}

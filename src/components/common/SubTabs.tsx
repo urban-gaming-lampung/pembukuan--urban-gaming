@@ -11,7 +11,8 @@ export type SubTabOption<T extends string> = {
  * SATU-SATUNYA gaya segmented control (SSOT, Design System src/ui).
  * - size "md" (bawaan): tab sub-halaman, label HURUF BESAR — Input, Transaksi, Stok Jualan (Baru / Seken),
  *   Analitik, Pegawai, Update Stok.
- * - size "sm": pilihan kecil di dalam kartu (mis. urutkan Jumlah / Omzet), huruf biasa.
+ * - size "sm": pilihan kecil di dalam kartu (mis. urutkan Jumlah / Omzet).
+ * Semua label tab SELALU HURUF BESAR (aturan Design System) supaya selaras di semua halaman.
  */
 function SubTabs<T extends string>({
   value,
@@ -45,7 +46,7 @@ function SubTabs<T extends string>({
             role="tab"
             aria-selected={aktif}
             onClick={() => onChange(o.key)}
-            className={`${kecil ? "min-h-[28px] px-2.5 py-1 rounded-[8px] text-[13px] font-semibold" : "min-h-[40px] px-1.5 py-1.5 rounded-[10px] text-[12px] sm:text-[13px] font-bold uppercase tracking-wide"} leading-tight transition-all flex items-center justify-center gap-1.5 text-center ${
+            className={`${kecil ? "min-h-[30px] px-2.5 py-1 rounded-[8px] text-[11px] font-bold uppercase tracking-wide" : "min-h-[40px] px-1.5 py-1.5 rounded-[10px] text-[12px] sm:text-[13px] font-bold uppercase tracking-wide"} leading-tight transition-all flex items-center justify-center gap-1.5 text-center ${
               aktif
                 ? `bg-white dark:bg-[#3a3a3c] shadow-sm ${o.tone || "text-zinc-900 dark:text-white"}`
                 : `${o.tone ? `${o.tone} opacity-60` : "text-zinc-500 dark:text-zinc-400"} active:bg-white/50 dark:active:bg-white/5`

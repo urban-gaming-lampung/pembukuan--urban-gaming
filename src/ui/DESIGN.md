@@ -84,7 +84,8 @@ Huruf = font sistem (SF Pro di iPhone). Skala mengikuti iOS:
 | `text-caption2` | 11 / 13 | medium | Pill / badge |
 
 - Angka selalu `tabular-nums` (komponen sudah memakainya).
-- Huruf kapital hanya untuk: judul seksi (`SectionHeader`), eyebrow, label tab segmented, status pill.
+- Huruf kapital hanya untuk: judul seksi (`SectionHeader`), eyebrow, status pill, dan **semua label tab / segmented (`SubTabs`, ukuran md maupun sm) — wajib HURUF BESAR** supaya tab di semua halaman selaras.
+- Tab bertingkat (tab halaman → sub-tab → bagian) memakai `SubTabs` ukuran `md` yang sama; `sm` hanya untuk pilihan kecil di dalam kartu.
 - Tidak memakai `font-black` di komponen baru; cukup `semibold` / `bold`.
 - Input teks minimal 16px (mencegah zoom otomatis di iPhone).
 
@@ -133,7 +134,7 @@ Jarak (kelipatan 4px):
 **Umpan balik & kontrol**
 - `EmptyState`, `Notice` (info / warning / negative), `Footnote` (catatan kaki halaman).
 - `Button` (filled / tinted / gray / plain / destructive; lg 50px, md 44px, sm 32px).
-- `SearchField`, `Toggle` (saklar iOS), `SubTabs` (segmented: `size="md"` tab halaman huruf kapital, `size="sm"` pilihan kecil di kartu).
+- `SearchField`, `Toggle` (saklar iOS), `SubTabs` (segmented, label selalu HURUF BESAR: `size="md"` tab halaman & bagian, `size="sm"` pilihan kecil di kartu).
 
 **Grafik**
 - `useTemaGrafik()` → warna tick / grid / sumbu / kursor sesuai mode.

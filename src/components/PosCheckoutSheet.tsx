@@ -529,7 +529,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
                 <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-zinc-100 dark:bg-zinc-800" role="tablist" aria-label="Cara bayar">
                   {(["LUNAS", "DP"] as const).map((c) => (
                     <button key={c} type="button" role="tab" aria-selected={caraBayar === c} onClick={() => { setCaraBayar(c); setError(""); }}
-                      className={`h-10 rounded-[10px] text-[13px] font-bold transition ${caraBayar === c ? "bg-white dark:bg-zinc-600 text-zinc-900 dark:text-white shadow" : "text-zinc-500"}`}>
+                      className={`h-10 rounded-[10px] text-[12px] sm:text-[13px] font-bold uppercase tracking-wide transition ${caraBayar === c ? "bg-white dark:bg-zinc-600 text-zinc-900 dark:text-white shadow" : "text-zinc-500"}`}>
                       {c === "LUNAS" ? "Bayar Lunas" : "Bayar DP"}
                     </button>
                   ))}
