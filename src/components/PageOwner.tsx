@@ -1,15 +1,12 @@
 import React, { useMemo, useState, useEffect } from "react";
 import HistoryPembukuan from "./HistoryPembukuan";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
-import { AlertCircle, TrendingUp, TrendingDown, DollarSign, Activity, Clock, Gamepad2, Settings2, Sparkles, Brain, Target, BarChart3 } from "lucide-react";
+import { AlertCircle, Activity } from "lucide-react";
 import { doc, setDoc, onSnapshot, query, collection, updateDoc, orderBy } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { HistoryItem, RowSewa } from "../lib/types";
 import { rupiah, formatDateShort, toInt } from "../lib/format";
-import RekapPemasukan from "./RekapPemasukan";
-import Grafik from "./Grafik";
 import Section from "./common/Section";
-import FilterComp from "./Filter";
 import TabPegawai from "./TabPegawai";
 import WidgetMonitoringStatus from "./WidgetMonitoringStatus";
 import HalamanStok from "./HalamanStok";
@@ -18,22 +15,14 @@ import AnalitikUsaha from "./AnalitikUsaha";
 import InputStokJualan from "./InputStokJualan";
 import InputTransaksi from "./InputTransaksi";
 import AnalitikKeseluruhan from "./AnalitikKeseluruhan";
+import AnalitikRental, { type RekomendasiRental } from "./AnalitikRental";
 import SubTabs from "./common/SubTabs";
-import { bisnisOf, catatLogPembukuan, JenisTransaksi, pemasukanRental, pengeluaranAdminRental, ringkasPembukuan, saringPeriode, useTransaksiOwner } from "../lib/keuangan";
+import { bisnisOf, catatLogPembukuan, JenisTransaksi, pemasukanRental, pengeluaranAdminRental, periodRange, ringkasPembukuan, saringPeriode, useTransaksiOwner } from "../lib/keuangan";
 import { kasUsahaHarian } from "../lib/pemasukanUsaha";
 import { isPelunasanSewa, jenisUnit, ongkirBaris, tanpaUnitKeluar } from "../lib/sewa";
 import { sinkronNotaKePembukuan } from "../lib/posPembukuan";
 import WidgetMonitoringDevice from "./WidgetMonitoringDevice";
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  Tooltip,
-  Cell,
-  PieChart,
-  Pie
-} from "recharts";
+import { ResponsiveContainer, Tooltip, Cell, PieChart, Pie } from "recharts";
 import { toLocalYmd } from "../lib/dateLocal";
 import { useIsDark } from "../hooks/useIsDark";
 
@@ -303,8 +292,11 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     return { totalPemasukanBulanIni: income, totalPengeluaranBulanIni: adminExpense + ownerExpense, combinedExpensesBulanIni: combinedList };
   }, [filteredHistory, pengeluaranOwnerRental]);
 
-  const labaKotor = totalPemasukanBulanIni;
   const labaBersih = totalPemasukanBulanIni - totalPengeluaranBulanIni;
+  const keluarAdminRental = useMemo(() => combinedExpensesBulanIni.reduce((a, x) => a + (x.source === "admin" ? x.harga : 0), 0), [combinedExpensesBulanIni]);
+  const keluarOwnerRental = totalPengeluaranBulanIni - keluarAdminRental;
+  // Label periode filter untuk judul lembar rincian (bukan bulan kalender sekarang)
+  const labelPeriode = useMemo(() => periodRange(filterMode, filterMonth, rangeStart, rangeEnd).label, [filterMode, filterMonth, rangeStart, rangeEnd]);
 
   // Hitung Total Cash & Transfer RENTAL dari filteredHistory untuk section Ringkasan
   // (kas harian dikurangi Rincian Pemasukan Usaha, yang dihitung di Analitik › Usaha)
@@ -542,7 +534,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     
     const pct = Math.min(100, Math.round((totalUsedHours / maxCapacityHours) * 100));
 
-    return { totalUsedHours: Math.round(totalUsedHours), maxCapacityHours, percentage: pct, totalMachines };
+    return { totalUsedHours: Math.round(totalUsedHours), maxCapacityHours, percentage: pct, totalMachines, unitDihitung: safeMachines, hariDihitung: daysCount };
   }, [filteredHistory, masterUnit]);
 
   // --- 3. PEAK HOURS (JAM SIBUK) ---
@@ -585,15 +577,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   }, [filteredHistory]);
 
   // ===== AI BUSINESS INSIGHTS ENGINE =====
-  type InsightItem = {
-    id: string;
-    type: 'financial_health' | 'asset_optimization' | 'peak_strategy';
-    severity: 'critical' | 'warning' | 'success' | 'info';
-    title: string;
-    body: string;
-    metric?: string;
-    actionLabel?: string;
-  };
+  type InsightItem = RekomendasiRental & { actionLabel?: string };
 
   const aiInsights = useMemo((): InsightItem[] => {
     const insights: InsightItem[] = [];
@@ -616,9 +600,9 @@ const PageOwner: React.FC<PageOwnerProps> = ({
           id: 'fin_deficit',
           type: 'financial_health',
           severity: 'critical',
-          title: '⚠️ Pengeluaran Melebihi Pendapatan',
+          title: 'Pengeluaran melebihi pendapatan',
           body: `Defisit sebesar ${rupiah(deficitAmt)}. Kategori pengeluaran terbesar adalah "${topExpCat?.name || '-'}" (${topExpPct}% dari total biaya). Evaluasi apakah ada pos biaya di kategori ini yang bisa ditekan, terutama Gaji Pegawai atau Belanja Modal yang mungkin bisa dijadwalkan ulang.`,
-          metric: `-${rupiah(deficitAmt)}`,
+          metric: `\u2212${rupiah(deficitAmt)}`,
           actionLabel: 'Cek Breakdown Biaya'
         });
       } else if (expenseRatio > 0.7) {
@@ -628,9 +612,9 @@ const PageOwner: React.FC<PageOwnerProps> = ({
           id: 'fin_thin_margin',
           type: 'financial_health',
           severity: 'warning',
-          title: '📊 Margin Laba Tipis',
+          title: 'Margin laba tipis',
           body: `Margin laba bersih Anda hanya ${marginPct}%. Idealnya di atas 30% untuk bisnis rental. Perhatikan proporsi biaya operasional vs pendapatan kotor untuk menjaga kesehatan keuangan.`,
-          metric: `${marginPct}% margin`,
+          metric: `margin ${marginPct.replace('.', ',')}%`,
         });
       } else {
         const marginPct = ((1 - expenseRatio) * 100).toFixed(1);
@@ -638,9 +622,9 @@ const PageOwner: React.FC<PageOwnerProps> = ({
           id: 'fin_healthy',
           type: 'financial_health',
           severity: 'success',
-          title: '✅ Keuangan Sehat',
+          title: 'Keuangan sehat',
           body: `Margin laba bersih ${marginPct}% — dalam kondisi sangat baik. Laba bersih mencapai ${rupiah(profit)}. Pertahankan efisiensi biaya operasional ini.`,
-          metric: `${marginPct}% margin`,
+          metric: `margin ${marginPct.replace('.', ',')}%`,
         });
       }
     }
@@ -657,7 +641,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
           id: 'asset_very_low',
           type: 'asset_optimization',
           severity: 'critical',
-          title: '🔴 Utilisasi Unit Sangat Rendah',
+          title: 'Pemakaian unit sangat rendah',
           body: `Hanya ${occPct}% kapasitas terpakai dari ${totalMachines} unit.${leastUnit ? ` Unit "${leastUnit.unit}" paling sedikit transaksi (${leastUnit.count}x). Pertimbangkan promosi khusus atau paket bundling untuk menarik penyewa.` : ' Tingkatkan pemasaran dan promosi harga sewa agar unit lebih sering terisi.'}`,
           metric: `${occPct}%`,
           actionLabel: 'Lihat Unit Terlaris'
@@ -668,7 +652,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
           id: 'asset_below_target',
           type: 'asset_optimization',
           severity: 'warning',
-          title: '📉 Utilisasi di Bawah Target 80%',
+          title: 'Pemakaian unit di bawah target 80%',
           body: `Utilisasi saat ini ${occPct}%, masih di bawah benchmark 80%.${leastUnit ? ` Unit "${leastUnit.unit}" dengan pemasukan ${rupiah(leastUnit.revenue)} bisa ditingkatkan melalui promo jam sepi atau paket weekend.` : ' Fokus pada jam-jam yang belum terisi penuh.'}`,
           metric: `${occPct}%`,
         });
@@ -677,7 +661,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
           id: 'asset_excellent',
           type: 'asset_optimization',
           severity: 'success',
-          title: '🟢 Utilisasi Optimal',
+          title: 'Pemakaian unit optimal',
           body: `Tingkat utilisasi ${occPct}% — sangat baik! Dengan ${totalMachines} unit aktif, mesin Anda bekerja secara produktif. Pertimbangkan untuk menambah unit jika utilisasi konsisten di atas 85%.`,
           metric: `${occPct}%`,
         });
@@ -705,9 +689,9 @@ const PageOwner: React.FC<PageOwnerProps> = ({
           id: 'peak_concentrated',
           type: 'peak_strategy',
           severity: 'info',
-          title: `🕐 Konsentrasi Tinggi di Jam ${peakRange}`,
+          title: `Ramai terpusat di jam ${peakRange}`,
           body: `${peakConcentration}% dari seluruh transaksi terjadi di jam ${peakRange} dengan estimasi pendapatan ${rupiah(peakRevenue)}. Pastikan staf penuh di rentang jam tersebut.${offPeakHours.length > 0 ? ` Untuk jam sepi (${offPeakHours.map(h => h.hour).slice(0, 3).join(', ')}), pertimbangkan "Happy Hour" dengan diskon 10-20% untuk menarik pelanggan.` : ''}`,
-          metric: `${peakConcentration}% peak`,
+          metric: `${peakConcentration}% di jam puncak`,
           actionLabel: 'Lihat Jam Sibuk'
         });
       } else if (peakHours.length > 0) {
@@ -715,9 +699,9 @@ const PageOwner: React.FC<PageOwnerProps> = ({
           id: 'peak_balanced',
           type: 'peak_strategy',
           severity: 'success',
-          title: `✅ Distribusi Jam Kunjungan Merata`,
+          title: `Kunjungan merata sepanjang hari`,
           body: `Transaksi tersebar cukup merata sepanjang jam operasional. Jam puncak di ${peakRange} dengan ${peakTx} transaksi. Ini menandakan pelanggan datang sepanjang hari — strategi harga flat sudah tepat.`,
-          metric: `${peakTx} tx peak`,
+          metric: `${peakTx} transaksi puncak`,
         });
       }
     }
@@ -790,7 +774,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
       )}
 
       {activeTabOwner === "ANALITIK" && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           <SubTabs
             ariaLabel="Halaman analitik"
             value={analitikSubTab}
@@ -819,330 +803,25 @@ const PageOwner: React.FC<PageOwnerProps> = ({
             />
           ) : (
             <>
-          {/* 1. REKAP PEMASUKAN HARI INI */}
-          <RekapPemasukan
-            totalHarian={totalHarian}
-            totalJajanan={totalJajanan}
-            totalJasaAks={totalJasaAks}
-            totalSewa={totalSewa}
-            totalCash={totalCash}
-            totalTransfer={totalTransfer}
-            totalPengeluaran={totalPengeluaran}
-            pendapatanBersih={pendapatanBersih}
-          />
-
-          <FilterComp
+          <AnalitikRental
             mode={filterMode} setMode={setFilterMode} month={filterMonth} setMonth={setFilterMonth}
             rangeStart={rangeStart} setRangeStart={setRangeStart} rangeEnd={rangeEnd} setRangeEnd={setRangeEnd}
+            filteredHistory={filteredHistory}
+            masuk={totalPemasukanBulanIni}
+            keluar={totalPengeluaranBulanIni}
+            keluarAdmin={keluarAdminRental}
+            keluarOwner={keluarOwnerRental}
+            pemasukanKategori={incomeChartData}
+            pengeluaranKategori={expenseChartData}
+            tunai={totalCashFiltered}
+            transfer={totalTransferFiltered}
+            utilisasi={occupancyData}
+            unitLaris={topUnitsData}
+            jamRamai={peakHoursData}
+            rekomendasi={aiInsights}
+            onBukaPemasukan={(k) => { setSelectedIncomeCategory(k || null); setShowIncomeModal(true); }}
+            onBukaPengeluaran={(k) => { setSelectedCategory(k || null); setShowAnalitikModal(true); }}
           />
-
-          <Section title="Ringkasan Kinerja Periode Ini">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-4 mb-2">
-              <div onClick={(e) => { e.stopPropagation(); setShowIncomeModal(true); }} className="cursor-pointer transition-transform active:scale-[0.97] hover:scale-[1.01]">
-                <MetricCard
-                  title="Pendapatan Kotor"
-                  value={rupiah(labaKotor)}
-                  icon={<TrendingUp className="text-blue-500" />}
-                />
-              </div>
-              <div onClick={(e) => { e.stopPropagation(); setShowAnalitikModal(true); }} className="cursor-pointer transition-transform active:scale-[0.97] hover:scale-[1.01]">
-                <MetricCard
-                  title="Pengeluaran"
-                  value={rupiah(totalPengeluaranBulanIni)}
-                  icon={<TrendingDown className="text-red-500" />}
-                />
-              </div>
-              <div className="col-span-2 sm:col-span-1">
-                <MetricCard
-                  title="Laba Bersih"
-                  value={rupiah(labaBersih)}
-                  icon={<DollarSign className="text-white" />}
-                  variant={labaBersih >= 0 ? "profit" : "loss"}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-2.5 sm:gap-4 mt-3">
-              <MetricCard
-                title="Cash"
-                value={rupiah(totalCashFiltered)}
-                icon={<DollarSign className="text-green-500" />}
-                accentColor="green"
-                compact
-              />
-              <MetricCard
-                title="Transfer"
-                value={rupiah(totalTransferFiltered)}
-                icon={<Activity className="text-blue-500" />}
-                accentColor="blue"
-                compact
-              />
-              <MetricCard
-                title="Transaksi"
-                value={filteredHistory.length.toString()}
-                icon={<Activity className="text-purple-500" />}
-                subtitle="Hari"
-                compact
-              />
-            </div>
-          </Section>
-
-          {/* INSIGHT & UTILISASI RENTAL */}
-          <Section title="Insight Khusus Bisnis Rental">
-            {/* Occupancy and Top Units */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-               {/* Occupancy Rate */}
-               <div className="bg-white dark:bg-[#1C1C1E] p-5 rounded-[24px] border border-zinc-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-black/20 flex flex-col items-center justify-center relative overflow-hidden group hover:border-blue-500/30 transition-colors">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl origin-center group-hover:scale-150 transition-transform duration-500" />
-                  <h3 className="text-[13px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400 mb-2 flex items-center gap-1.5"><Activity className="w-4 h-4 text-blue-500" /> Tingkat Utilisasi Unit</h3>
-                  
-                  <div className="flex items-end gap-2 my-2 relative z-10">
-                    <span className="text-4xl sm:text-5xl font-black text-zinc-900 dark:text-white tabular-nums tracking-tighter">
-                      {occupancyData.percentage}<span className="text-2xl sm:text-3xl text-zinc-400">%</span>
-                    </span>
-                  </div>
-                  
-                  <div className="w-full max-w-[200px] h-2.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden mt-2 mb-3 relative z-10">
-                    <div className="h-full bg-blue-500 rounded-full transition-all duration-1000" style={{ width: `${occupancyData.percentage}%` }} />
-                  </div>
-                  
-                  <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 text-center leading-relaxed relative z-10">
-                    {filterMode === "Hari Ini" ? "Hari ini" : filterMode === "Bulan Ini" ? "Bulan ini" : filterMode === "7 Hari Terakhir" ? "7 hari terakhir" : filterMode === "Kustom" ? "Periode kustom ini" : "Bulan ini"} dirental <strong className="text-blue-500">{occupancyData.totalUsedHours}</strong> jam dari kapasitas puncak <strong className="text-zinc-900 dark:text-white">{occupancyData.maxCapacityHours}</strong> jam.
-                    <br/>
-                    <span className="text-[9px] text-zinc-400">(Estimasi berdasar {occupancyData.totalMachines} unit (PS3, PS4 & PS5) x 14 jam {(filterMode === "Hari Ini" || filterMode === "Semua Hari") ? "" : "x Hari Aktif"})</span>
-                  </p>
-               </div>
-
-               {/* Top Performing Units */}
-               <div className="bg-white dark:bg-[#1C1C1E] p-5 rounded-[24px] border border-zinc-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-black/20 flex flex-col hover:border-emerald-500/30 transition-colors">
-                  <h3 className="text-[13px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400 mb-4 flex items-center gap-1.5"><Gamepad2 className="w-4 h-4 text-emerald-500" /> Unit Paling Laris</h3>
-                  
-                  <div className="flex flex-col gap-3.5 mt-1 flex-1 justify-center">
-                    {topUnitsData.length > 0 ? topUnitsData.map((d, i) => {
-                       const maxRev = topUnitsData[0].revenue;
-                       const pct = Math.max(5, (d.revenue / maxRev) * 100);
-                       return (
-                         <div key={i} className="flex flex-col gap-1.5">
-                           <div className="flex justify-between items-end">
-                             <span className="text-[13px] font-bold text-zinc-900 dark:text-white">{d.unit}</span>
-                             <div className="flex items-center gap-2">
-                               <span className="text-[10px] text-zinc-400 font-bold bg-zinc-100 dark:bg-zinc-800/50 px-1.5 rounded">{d.count}x Sewa</span>
-                               <span className="text-[13px] font-black" style={{ color: d.fill }}>{rupiah(d.revenue)}</span>
-                             </div>
-                           </div>
-                           <div className="w-full h-2.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-                             <div className="h-full rounded-full transition-all duration-1000 shadow-sm" style={{ width: `${pct}%`, backgroundColor: d.fill }} />
-                           </div>
-                         </div>
-                       )
-                    }) : (
-                       <p className="text-[12px] text-zinc-400 text-center italic py-4">Belum ada data rental untuk periode ini</p>
-                    )}
-                  </div>
-               </div>
-            </div>
-
-            {/* Peak Hours & Maintenance Breakdown */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-               {/* Peak Hours Bar Chart */}
-               <div className="bg-white dark:bg-[#1C1C1E] p-5 xl:p-6 rounded-[24px] border border-zinc-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-black/20 min-h-[280px] flex flex-col hover:border-orange-500/30 transition-colors">
-                  <h3 className="text-[13px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400 mb-6 flex items-center justify-between">
-                     <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-orange-500" /> Analisis Jam Sibuk</span>
-                     <span className="text-[10px] bg-orange-100 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 px-2 py-0.5 rounded-lg font-bold">Heatmap Trend</span>
-                  </h3>
-                  <div className="flex-1 w-full h-[180px]">
-                    {peakHoursData.some(d => d.count > 0) ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={peakHoursData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                          <XAxis dataKey="hour" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#a1a1aa', fontWeight: 600 }} dy={10} />
-                          <Tooltip 
-                            cursor={{ fill: 'rgba(249,115,22,0.05)', radius: 8 }} 
-                            contentStyle={{ borderRadius: '16px', padding: '12px 16px', border: 'none', boxShadow: '0 10px 40px rgba(0,0,0,0.15)', background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)' }}
-                            labelStyle={{ fontWeight: '900', color: '#18181b', marginBottom: '6px' }}
-                            formatter={(value: number, name: string) => [
-                              <span style={{ fontWeight: '800', color: name === 'revenue' ? '#10b981' : '#f97316' }}>{name === 'revenue' ? rupiah(value) : `${value} transaksi`}</span>, 
-                              <span style={{ color: '#71717a', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{name === 'revenue' ? 'EST PENDAPATAN' : 'FREKUENSI KUNJUNGAN'}</span>
-                            ]} 
-                          />
-                          <Bar dataKey="count" radius={[6,6,0,0]} maxBarSize={40}>
-                            {peakHoursData.map((entry, index) => {
-                               const maxCount = Math.max(...peakHoursData.map(d=>d.count));
-                               const isPeak = entry.count >= maxCount * 0.8 && maxCount > 0;
-                               return <Cell key={`cell-${index}`} fill={isPeak ? '#f97316' : '#fdba74'} style={{ transition: 'all 0.3s' }} />;
-                            })}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center opacity-50">
-                        <Clock className="w-8 h-8 text-zinc-300 mb-2" />
-                        <span className="text-[12px] font-medium text-zinc-400">Tidak ada data di jam ini</span>
-                      </div>
-                    )}
-                  </div>
-               </div>
-
-               {/* Mini Maintenance Pie Chart */}
-               <div className="bg-white dark:bg-[#1C1C1E] p-5 xl:p-6 rounded-[24px] border border-zinc-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-black/20 flex flex-col hover:border-red-500/30 transition-colors">
-                  <h3 className="text-[13px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400 mb-4 flex items-center justify-between">
-                     <span className="flex items-center gap-1.5"><Settings2 className="w-4 h-4 text-red-500" /> Breakdown Biaya</span>
-                     <button onClick={() => setShowAnalitikModal(true)} className="text-[10px] bg-zinc-100 hover:bg-zinc-200 dark:bg-white/5 dark:hover:bg-white/10 text-zinc-600 dark:text-zinc-300 px-2.5 py-1 rounded-lg font-bold transition-colors">Lihat Detail</button>
-                  </h3>
-                  
-                  <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-6 flex-1 mt-2">
-                    <div className="w-[140px] h-[140px] shrink-0 relative group">
-                      {expenseChartData.length > 0 ? (
-                        <>
-                          <ResponsiveContainer width="100%" height="100%">
-                             <PieChart>
-                               <Pie data={expenseChartData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="value" stroke="none">
-                                 {expenseChartData.map((e, i) => <Cell key={`c-${i}`} fill={e.color} className="hover:opacity-80 transition-opacity outline-none" />)}
-                               </Pie>
-                             </PieChart>
-                          </ResponsiveContainer>
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                              <TrendingDown className="w-5 h-5 text-zinc-300 dark:text-zinc-600" />
-                          </div>
-                        </>
-                      ) : (
-                         <div className="w-full h-full rounded-full border-[3px] border-dashed border-zinc-200 dark:border-white/10 flex items-center justify-center">
-                           <span className="text-[10px] font-bold text-zinc-400">KOSONG</span>
-                         </div>
-                      )}
-                    </div>
-                    
-                    <div className="flex-1 w-full max-w-sm flex flex-col gap-2.5 overflow-y-auto max-h-[160px] pr-2 custom-scrollbar">
-                      {expenseChartData.map(e => {
-                         const pct = totalPengeluaranBulanIni > 0 ? ((e.value / totalPengeluaranBulanIni) * 100).toFixed(1) : "0";
-                         return (
-                           <div key={e.name} className="flex flex-col gap-1 bg-zinc-50 dark:bg-[#18181A] p-2.5 rounded-[12px] border border-zinc-100 dark:border-white/5">
-                             <div className="flex items-center justify-between gap-2">
-                               <div className="flex items-center gap-2 overflow-hidden">
-                                 <div className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm" style={{backgroundColor: e.color}} />
-                                 <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 truncate">{e.name}</span>
-                               </div>
-                               <span className="text-[12px] font-black text-zinc-900 dark:text-white shrink-0">{rupiah(e.value)}</span>
-                             </div>
-                             <div className="flex items-center justify-between px-4">
-                               <div className="flex-1 flex gap-px mr-3 h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
-                                 <div className="h-full bg-red-400 rounded-full" style={{ width: `${pct}%`, backgroundColor: e.color }} />
-                               </div>
-                               <span className="text-[9px] font-bold" style={{ color: e.color }}>{pct}%</span>
-                             </div>
-                           </div>
-                         );
-                      })}
-                      {expenseChartData.length === 0 && (
-                         <p className="text-[12px] font-medium text-zinc-400 italic text-center sm:text-left mt-4">Belum ada pengeluaran tersimpan sesuai rentang tanggal.</p>
-                      )}
-                    </div>
-                  </div>
-               </div>
-            </div>
-          </Section>
-
-          {/* 3. GRAFIK HARIAN */}
-          <Grafik history={filteredHistory} filterMode={filterMode} />
-
-          {/* AI BUSINESS INSIGHTS */}
-          {aiInsights.length > 0 && (
-            <Section title="AI Business Insights">
-              <div className="space-y-3">
-                {/* Header */}
-                <div className="flex items-center gap-3 mb-1">
-                  <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center shadow-lg shadow-violet-500/20">
-                    <Brain className="w-4.5 h-4.5 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-violet-500 dark:text-violet-400">Rekomendasi Otomatis</p>
-                    <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-tight">Berdasarkan data analitik periode filter aktif</p>
-                  </div>
-                </div>
-
-                {/* Insight Cards */}
-                {aiInsights.map((insight) => {
-                  const severityStyles: Record<string, { border: string; bg: string; iconBg: string; badge: string; badgeText: string }> = {
-                    critical: {
-                      border: 'border-red-200 dark:border-red-900/40',
-                      bg: 'bg-red-50/50 dark:bg-red-950/20',
-                      iconBg: 'from-red-500 to-rose-600',
-                      badge: 'bg-red-100 dark:bg-red-500/15',
-                      badgeText: 'text-red-600 dark:text-red-400',
-                    },
-                    warning: {
-                      border: 'border-amber-200 dark:border-amber-900/40',
-                      bg: 'bg-amber-50/50 dark:bg-amber-950/20',
-                      iconBg: 'from-amber-500 to-orange-500',
-                      badge: 'bg-amber-100 dark:bg-amber-500/15',
-                      badgeText: 'text-amber-600 dark:text-amber-400',
-                    },
-                    success: {
-                      border: 'border-emerald-200 dark:border-emerald-900/40',
-                      bg: 'bg-emerald-50/50 dark:bg-emerald-950/20',
-                      iconBg: 'from-emerald-500 to-teal-500',
-                      badge: 'bg-emerald-100 dark:bg-emerald-500/15',
-                      badgeText: 'text-emerald-600 dark:text-emerald-400',
-                    },
-                    info: {
-                      border: 'border-blue-200 dark:border-blue-900/40',
-                      bg: 'bg-blue-50/50 dark:bg-blue-950/20',
-                      iconBg: 'from-blue-500 to-cyan-500',
-                      badge: 'bg-blue-100 dark:bg-blue-500/15',
-                      badgeText: 'text-blue-600 dark:text-blue-400',
-                    },
-                  };
-                  const s = severityStyles[insight.severity] || severityStyles.info;
-
-                  const typeLabels: Record<string, { icon: React.ReactNode; label: string }> = {
-                    financial_health: { icon: <DollarSign className="w-3.5 h-3.5" />, label: 'Financial Health' },
-                    asset_optimization: { icon: <Target className="w-3.5 h-3.5" />, label: 'Asset Optimization' },
-                    peak_strategy: { icon: <BarChart3 className="w-3.5 h-3.5" />, label: 'Peak Strategy' },
-                  };
-                  const typeInfo = typeLabels[insight.type] || typeLabels.financial_health;
-
-                  return (
-                    <div
-                      key={insight.id}
-                      className={`relative overflow-hidden rounded-[20px] border ${s.border} ${s.bg} p-4 sm:p-5 transition-all duration-300 hover:shadow-lg group`}
-                    >
-                      {/* Glow effect */}
-                      <div className={`absolute -top-8 -right-8 w-28 h-28 bg-gradient-to-br ${s.iconBg} opacity-[0.07] rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700`} />
-
-                      <div className="relative z-10">
-                        {/* Top row: Category badge + Metric */}
-                        <div className="flex items-center justify-between mb-2.5">
-                          <div className={`flex items-center gap-1.5 ${s.badge} ${s.badgeText} px-2.5 py-1 rounded-lg`}>
-                            {typeInfo.icon}
-                            <span className="text-[10px] font-bold uppercase tracking-wider">{typeInfo.label}</span>
-                          </div>
-                          {insight.metric && (
-                            <span className={`text-[13px] font-black tabular-nums ${s.badgeText}`}>
-                              {insight.metric}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Title */}
-                        <h4 className="text-[14px] sm:text-[15px] font-bold text-zinc-900 dark:text-white leading-snug mb-1.5">
-                          {insight.title}
-                        </h4>
-
-                        {/* Body */}
-                        <p className="text-[12px] sm:text-[13px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
-                          {insight.body}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {/* Footer */}
-                <div className="flex items-center justify-center gap-2 pt-2">
-                  <Sparkles className="w-3 h-3 text-violet-400" />
-                  <span className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 tracking-wide">Insights dihasilkan otomatis dari data analitik Anda</span>
-                </div>
-              </div>
-            </Section>
-          )}
 
           {/* HISTORY PEMBUKUAN */}
           <HistoryPembukuan items={filteredHistory} isOwner={true} />
@@ -1501,7 +1180,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
             <div className="px-5 sm:px-6 py-4 flex justify-between items-center shrink-0">
               <div>
                 <h2 className="text-[17px] sm:text-[20px] font-bold tracking-tight text-zinc-900 dark:text-white">Rincian Pengeluaran</h2>
-                <p className="text-[12px] font-medium text-zinc-400 dark:text-zinc-500 mt-0.5">{new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })} · {combinedExpensesBulanIni.length} transaksi</p>
+                <p className="text-[12px] font-medium text-zinc-400 dark:text-zinc-500 mt-0.5">{labelPeriode} · {combinedExpensesBulanIni.length} transaksi</p>
               </div>
               <button
                 onClick={() => { setShowAnalitikModal(false); setSelectedCategory(null); }}
@@ -1698,7 +1377,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
             <div className="px-5 sm:px-6 py-4 flex justify-between items-center shrink-0">
               <div>
                 <h2 className="text-[17px] sm:text-[20px] font-bold tracking-tight text-zinc-900 dark:text-white">Rincian Pendapatan Kotor</h2>
-                <p className="text-[12px] font-medium text-zinc-400 dark:text-zinc-500 mt-0.5">{new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })} · {combinedIncomeBulanIni.length} transaksi</p>
+                <p className="text-[12px] font-medium text-zinc-400 dark:text-zinc-500 mt-0.5">{labelPeriode} · {combinedIncomeBulanIni.length} transaksi</p>
               </div>
               <button
                 onClick={() => { setShowIncomeModal(false); setSelectedIncomeCategory(null); }}
@@ -2086,73 +1765,6 @@ const PageOwner: React.FC<PageOwnerProps> = ({
         );
       })()}
 
-    </div>
-  );
-};
-
-const MetricCard = ({ title, value, icon, isHighlight = false, subtitle = "", variant, accentColor, compact = false }: { title: string, value: string, icon: React.ReactNode, isHighlight?: boolean, subtitle?: string, variant?: "profit" | "loss", accentColor?: "green" | "blue", compact?: boolean }) => {
-  // Determine styles based on variant
-  const isProfit = variant === "profit";
-  const isLoss = variant === "loss";
-  const hasVariant = isProfit || isLoss;
-
-  let containerClass = "bg-white dark:bg-[#1c1c1e] border border-zinc-200 dark:border-white/10";
-  let titleClass = "text-zinc-500 dark:text-zinc-400";
-  let valueClass = "text-zinc-900 dark:text-white";
-  let iconBgClass = "bg-zinc-50 dark:bg-white/5";
-
-  if (hasVariant) {
-    if (isProfit) {
-      containerClass = "bg-gradient-to-br from-emerald-500 to-green-600 dark:from-emerald-600 dark:to-green-700 shadow-lg shadow-emerald-500/25 ring-1 ring-emerald-400/30";
-      titleClass = "text-emerald-100/90";
-      valueClass = "text-white";
-      iconBgClass = "bg-white/15";
-    } else {
-      containerClass = "bg-gradient-to-br from-red-500 to-rose-600 dark:from-red-600 dark:to-rose-700 shadow-lg shadow-red-500/25 ring-1 ring-red-400/30";
-      titleClass = "text-red-100/90";
-      valueClass = "text-white";
-      iconBgClass = "bg-white/15";
-    }
-  } else if (isHighlight) {
-    containerClass = "bg-zinc-900 dark:bg-white text-white dark:text-black shadow-lg";
-    titleClass = "text-zinc-400 dark:text-zinc-500";
-    valueClass = "text-white dark:text-black";
-    iconBgClass = "bg-white/10 dark:bg-black/5";
-  } else if (accentColor === "green") {
-    containerClass = "bg-white dark:bg-[#1c1c1e] border border-emerald-200/60 dark:border-emerald-500/15";
-    valueClass = "text-emerald-600 dark:text-emerald-400";
-  } else if (accentColor === "blue") {
-    containerClass = "bg-white dark:bg-[#1c1c1e] border border-blue-200/60 dark:border-blue-500/15";
-    valueClass = "text-blue-600 dark:text-blue-400";
-  }
-
-  if (compact) {
-    return (
-      <div className={`p-3 sm:p-4 rounded-2xl flex flex-col gap-1.5 justify-center transition-all duration-300 ${containerClass}`}>
-        <div className="flex items-center justify-between">
-          <p className={`text-[9px] sm:text-[10px] font-bold tracking-widest uppercase ${titleClass}`}>{title}</p>
-          <div className={`p-1.5 rounded-lg ${iconBgClass}`}>{icon}</div>
-        </div>
-        <h4 className={`text-base sm:text-xl font-black tabular-nums tracking-tight ${valueClass}`}>
-          {value}
-          {subtitle && <span className="text-[9px] sm:text-xs ml-0.5 font-normal opacity-60">{subtitle}</span>}
-        </h4>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`p-3.5 sm:p-5 rounded-2xl flex flex-col gap-2 sm:gap-3 justify-center transition-all duration-300 ${containerClass}`}>
-      <div className="flex items-center justify-between">
-        <p className={`text-[10px] sm:text-xs font-bold tracking-widest uppercase ${titleClass}`}>{title}</p>
-        <div className={`p-1.5 sm:p-2 rounded-xl ${iconBgClass}`}>{icon}</div>
-      </div>
-      <div>
-        <h4 className={`text-lg sm:text-2xl font-black tabular-nums tracking-tight ${valueClass}`}>
-          {value}
-          {subtitle && <span className="text-[10px] sm:text-xs ml-1 font-normal opacity-60">{subtitle}</span>}
-        </h4>
-      </div>
     </div>
   );
 };

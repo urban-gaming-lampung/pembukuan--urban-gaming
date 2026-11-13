@@ -4,19 +4,15 @@ import useStokData from "../hooks/useStokData";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { hapusStokMasuk, KATEGORI_PENGELUARAN_STOK, StokMasuk, ubahStokMasuk } from "../lib/barangJualan";
 import { rupiah } from "../lib/format";
+import { Toggle } from "../ui/feedback";
 
 /** Angka saja dari input bebas ("01.500" -> "1500"). */
 export const digits = (s: string) => s.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
 /** "1500" -> "1.500" (kosong tetap kosong). */
 export const fmtDigits = (s: string) => (s ? Number(s).toLocaleString("id-ID") : "");
 
-/** Saklar ala iOS. */
-export const Toggle: React.FC<{ on: boolean; onChange: (v: boolean) => void; label: string }> = ({ on, onChange, label }) => (
-  <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)}
-    className={`relative w-[51px] h-[31px] rounded-full transition-colors shrink-0 ${on ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"}`}>
-    <span className={`absolute top-[2px] w-[27px] h-[27px] rounded-full bg-white shadow transition-all ${on ? "left-[22px]" : "left-[2px]"}`} />
-  </button>
-);
+/** Saklar ala iOS — satu komponen di Design System (src/ui). */
+export { Toggle };
 
 /**
  * Lembar ubah / hapus SATU catatan stok masuk — satu komponen untuk Atur Stok › Edit Barang

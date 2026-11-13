@@ -18,6 +18,16 @@ export const rpShort = (n: number) => {
   return String(Math.round(n));
 };
 
+/** Rupiah bertanda untuk hasil / selisih: "+Rp 1.000" · "−Rp 1.000" (tanda minus tipografi) · "Rp 0". */
+export const rupiahTanda = (n: number): string => {
+  const v = Math.round(Number(n) || 0);
+  return `${v > 0 ? "+" : v < 0 ? "\u2212" : ""}${rupiah(Math.abs(v))}`;
+};
+
+/** Persen ringkas: 7,5% · 42% · 0% (desimal hanya di bawah 10%). */
+export const persen = (n: number): string =>
+  `${Number.isFinite(n) ? (Math.abs(n) >= 10 || n === 0 ? n.toFixed(0) : n.toFixed(1).replace(".", ",")) : "0"}%`;
+
 /** Ribuan untuk laporan teks: 1.919.000 -> "1.919k" (0 -> ""). */
 export const formatK = (n: number) => (n ? `${new Intl.NumberFormat("id-ID", { maximumFractionDigits: 3 }).format(n / 1000)}k` : "");
 

@@ -205,7 +205,7 @@ export default function App() {
 
   if (authLoading || (user && !userProfileLoaded && !isDeactivated)) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${dark ? 'bg-[#1C1C1E]' : 'bg-zinc-100'}`}>
+      <div className={`min-h-screen flex items-center justify-center ${dark ? 'bg-[#1C1C1E]' : 'bg-canvas'}`}>
          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent flex items-center justify-center rounded-full animate-spin"></div>
       </div>
     );
@@ -228,7 +228,7 @@ export default function App() {
       
       <div 
          ref={rootRef} 
-         className={`relative min-h-screen ${dark ? '' : 'bg-zinc-100'}`}
+         className={`relative min-h-screen ${dark ? '' : 'bg-canvas'}`}
       >
         {/* Fixed background layer — Safari-compatible (no bg-fixed) */}
         {dark && (

@@ -8,8 +8,10 @@ export type SubTabOption<T extends string> = {
 };
 
 /**
- * SATU-SATUNYA gaya tab sub-halaman (SSOT): segmented control ala iOS, label HURUF BESAR.
- * Dipakai di Input, Transaksi, Stok Jualan (Baru / Seken), Analitik, Pegawai, Update Stok.
+ * SATU-SATUNYA gaya segmented control (SSOT, Design System src/ui).
+ * - size "md" (bawaan): tab sub-halaman, label HURUF BESAR — Input, Transaksi, Stok Jualan (Baru / Seken),
+ *   Analitik, Pegawai, Update Stok.
+ * - size "sm": pilihan kecil di dalam kartu (mis. urutkan Jumlah / Omzet), huruf biasa.
  */
 function SubTabs<T extends string>({
   value,
@@ -17,18 +19,21 @@ function SubTabs<T extends string>({
   options,
   className = "",
   ariaLabel,
+  size = "md",
 }: {
   value: T;
   onChange: (k: T) => void;
   options: SubTabOption<T>[];
   className?: string;
   ariaLabel?: string;
+  size?: "md" | "sm";
 }) {
+  const kecil = size === "sm";
   return (
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className={`grid gap-1 p-1 rounded-[14px] bg-zinc-200/60 dark:bg-white/10 ${className}`}
+      className={`grid ${kecil ? "gap-[3px] p-[3px] rounded-[11px]" : "gap-1 p-1 rounded-[14px]"} bg-zinc-200/60 dark:bg-white/10 ${className}`}
       style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
     >
       {options.map((o) => {
@@ -40,7 +45,7 @@ function SubTabs<T extends string>({
             role="tab"
             aria-selected={aktif}
             onClick={() => onChange(o.key)}
-            className={`min-h-[40px] px-1.5 py-1.5 rounded-[10px] text-[12px] sm:text-[13px] font-bold uppercase tracking-wide leading-tight transition-all flex items-center justify-center gap-1.5 text-center ${
+            className={`${kecil ? "min-h-[28px] px-2.5 py-1 rounded-[8px] text-[13px] font-semibold" : "min-h-[40px] px-1.5 py-1.5 rounded-[10px] text-[12px] sm:text-[13px] font-bold uppercase tracking-wide"} leading-tight transition-all flex items-center justify-center gap-1.5 text-center ${
               aktif
                 ? `bg-white dark:bg-[#3a3a3c] shadow-sm ${o.tone || "text-zinc-900 dark:text-white"}`
                 : `${o.tone ? `${o.tone} opacity-60` : "text-zinc-500 dark:text-zinc-400"} active:bg-white/50 dark:active:bg-white/5`

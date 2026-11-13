@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&family=Press+Start+2P&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Press+Start+2P&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -12,6 +12,23 @@
 :root {
   color-scheme: light dark;
 
+  /* ===== URBAN Design System — token warna (lihat src/ui/DESIGN.md) =====
+     Kanal RGB supaya bisa dipakai dengan opacity Tailwind (bg-surface/80).
+     Nilai rgba() = warna tembus pandang (tidak memakai modifier opacity). */
+  --ui-canvas: 242 242 247;      /* latar halaman  #F2F2F7 */
+  --ui-surface: 255 255 255;     /* kartu          #FFFFFF */
+  --ui-surface-2: 242 242 247;   /* kotak di dalam kartu #F2F2F7 */
+  --ui-fill: rgba(118, 118, 128, 0.12); /* track, segmented, tombol abu */
+  --ui-label: 0 0 0;             /* teks utama */
+  --ui-label-2: 108 108 112;     /* teks sekunder #6C6C70 (AA) */
+  --ui-label-3: 161 161 166;     /* teks tersier / placeholder #A1A1A6 */
+  --ui-sep: rgba(60, 60, 67, 0.14);     /* garis pemisah */
+  --ui-edge: rgba(0, 0, 0, 0.05);       /* tepi kartu */
+  --ui-positive: 4 120 87;       /* surplus / uang masuk  #047857 */
+  --ui-negative: 190 18 60;      /* minus / uang keluar   #BE123C */
+  --ui-warning: 180 83 9;        /* peringatan            #B45309 */
+  --ui-tint: 0 122 255;          /* aksi / tautan (iOS blue) #007AFF */
+
   /* ===== Income Colors (Light) ===== */
   --income-low: 0 84% 60%;      /* merah */
   --income-cukup: 45 93% 47%;   /* kuning */
@@ -22,6 +39,20 @@
 
 /* Dark mode */
 .dark {
+  --ui-canvas: 0 0 0;
+  --ui-surface: 28 28 30;        /* #1C1C1E */
+  --ui-surface-2: 44 44 46;      /* #2C2C2E */
+  --ui-fill: rgba(118, 118, 128, 0.24);
+  --ui-label: 255 255 255;
+  --ui-label-2: 174 174 178;     /* #AEAEB2 */
+  --ui-label-3: 99 99 102;       /* #636366 */
+  --ui-sep: rgba(84, 84, 88, 0.55);
+  --ui-edge: rgba(255, 255, 255, 0.07);
+  --ui-positive: 52 211 153;     /* #34D399 */
+  --ui-negative: 251 113 133;    /* #FB7185 */
+  --ui-warning: 251 191 36;      /* #FBBF24 */
+  --ui-tint: 10 132 255;         /* #0A84FF */
+
   --income-low: 0 84% 63%;
   --income-cukup: 45 93% 55%;
   --income-bagus: 210 95% 64%;

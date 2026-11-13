@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from "recharts";
 import {
-  Receipt, TrendingUp, TrendingDown, ShoppingBag, Package, Search, X, AlertTriangle, Users, Clock, Wallet, Ban, Loader2, BadgePercent, Store, Trash2, Coins, Image as ImageIcon, Handshake,
+  Receipt, TrendingUp, TrendingDown, X, AlertTriangle, Users, Clock, Ban, Loader2, BadgePercent, Store, Trash2, Coins, Image as ImageIcon, Handshake, ChevronRight,
 } from "lucide-react";
 import FilterComp from "./Filter";
-import { useIsDark } from "../hooks/useIsDark";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue } from "../hooks/useStokData";
@@ -17,9 +16,10 @@ import { modalPada, useModalProduk, useProdukJualan } from "../lib/barangJualan"
 import { Kondisi, kondisiProduk } from "../lib/posSales";
 import { isBelanjaStok, periodRange, TransaksiOwner } from "../lib/keuangan";
 import { tebakModalBaris, useBarisUsahaManual } from "../lib/pemasukanUsaha";
-import { pad, rpShort, rupiah } from "../lib/format";
+import { pad, persen, rpShort, rupiah } from "../lib/format";
 import { dariYmd, tanggalHariKerja, toLocalYmd } from "../lib/dateLocal";
-import { ArusTile, BarisUang, persen, rpTanda, StatusArus, Titik, WARNA_KELUAR, WARNA_MASUK } from "./common/ArusUang";
+import { Amount, BarRow, Button, Card, ChartTip, EmptyState, IconBadge, LineItem, LineList, MARK, Notice, Pill, SearchField, SectionHeader, SplitBar, StatTile, SubTabs, TileValue, sumbu, useTemaGrafik } from "../ui";
+import { HeroArus } from "./analitik/HeroArus";
 
 type FilterProps = {
   mode: string;
@@ -37,53 +37,14 @@ type FilterProps = {
 };
 
 const BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
-/** Warna netral untuk "modal barang" pada batang proporsi laba */
-const WARNA_MODAL_TERANG = "#a1a1aa";
-const WARNA_MODAL_GELAP = "#71717a";
 
 const catLabel = (it: PosItem) =>
   it.kategori === "JUALAN" ? it.subkategori || "Jualan lain" : it.kategori === "ISI GAME" ? "Isi Game" : it.kategori === "SERVIS" ? "Servis" : it.kategori === "RENTAL" ? "Rental (POS)" : it.kategori;
-const CAT_COLOR: Record<string, string> = {
-  "Unit PS": "bg-red-600", Stik: "bg-blue-600", Hardisk: "bg-violet-600", Aksesoris: "bg-amber-500", BD: "bg-cyan-600",
-  "Isi Game": "bg-emerald-600", Servis: "bg-zinc-700 dark:bg-zinc-300", "Rental (POS)": "bg-pink-600", Lainnya: "bg-zinc-400",
-};
-
-// ---------- UI kecil ----------
-const Card: React.FC<{ title: string; icon?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode }> = ({ title, icon, right, children }) => (
-  <section className="rounded-[22px] bg-white dark:bg-[#1c1c1e] border border-zinc-200/80 dark:border-white/10 p-4 shadow-sm">
-    <div className="flex items-center justify-between gap-2 mb-3">
-      <h3 className="flex items-center gap-2 text-[15px] font-black text-zinc-900 dark:text-white">{icon}{title}</h3>
-      {right}
-    </div>
-    {children}
-  </section>
-);
-const Tile: React.FC<{ label: string; value: string; sub?: string; icon: React.ReactNode }> = ({ label, value, sub, icon }) => (
-  <div className="rounded-2xl bg-white dark:bg-[#1c1c1e] border border-zinc-200 dark:border-white/10 p-3.5">
-    <div className="flex items-center justify-between gap-2">
-      <p className="text-[10px] font-bold tracking-widest uppercase text-zinc-500 dark:text-zinc-400">{label}</p>
-      <span className="p-1.5 rounded-lg bg-zinc-50 dark:bg-white/5">{icon}</span>
-    </div>
-    <div className="text-[18px] font-black tabular-nums tracking-tight text-zinc-900 dark:text-white mt-1.5 leading-none">{value}</div>
-    {sub && <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{sub}</div>}
-  </div>
-);
-const BarRow: React.FC<{ label: string; value: number; max: number; right: string; sub?: string; color?: string }> = ({ label, value, max, right, sub, color = "bg-red-600" }) => (
-  <div>
-    <div className="flex items-baseline justify-between gap-3 text-[13px]">
-      <span className="font-bold text-zinc-800 dark:text-zinc-100 min-w-0 truncate">{label}</span>
-      <span className="font-black font-mono tabular-nums text-zinc-900 dark:text-white shrink-0">{right}</span>
-    </div>
-    <div className="mt-1 h-2 rounded-full bg-zinc-100 dark:bg-white/5 overflow-hidden">
-      <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.max(2, (value / Math.max(1, max)) * 100)}%` }} />
-    </div>
-    {sub && <div className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">{sub}</div>}
-  </div>
-);
+/** "Rp 12.300" per Rp 100.000 penjualan. */
+const per100 = (v: number, basis: number) => rupiah(Math.round(((v / Math.max(1, basis)) * 100000) / 100) * 100);
 
 export default function AnalitikUsaha(props: FilterProps) {
   const { mode, month, rangeStart, rangeEnd } = props;
-  const isDark = useIsDark();
   // Hari kerja berganti -> periode "Bulan Ini" / "7 Hari" ikut bergeser
   const hariKerja = tanggalHariKerja();
   const period = useMemo(() => periodRange(mode, month, rangeStart, rangeEnd), [mode, month, rangeStart, rangeEnd, hariKerja]);
@@ -262,7 +223,6 @@ export default function AnalitikUsaha(props: FilterProps) {
       marginBersih: terhitung > 0 ? (bersih / terhitung) * 100 : 0,
     };
   }, [st.omzet, laba.penjualanTanpaModal, laba.hpp, uang.operasional, dp.hangus]);
-  const warnaModal = isDark ? WARNA_MODAL_GELAP : WARNA_MODAL_TERANG;
   const growth = period.from > 0 && prevOmzet > 0 ? ((st.omzet - prevOmzet) / prevOmzet) * 100 : null;
 
   // Grafik omzet: harian (<= 62 hari) atau bulanan — per hari kerja (sama dengan pembukuan)
@@ -337,208 +297,184 @@ export default function AnalitikUsaha(props: FilterProps) {
         );
   }, [inPeriod, cur, q]);
 
-  const tickColor = isDark ? "#a1a1aa" : "#71717a";
-  const gridColor = isDark ? "#27272a" : "#f0f0f0";
+  const tema = useTemaGrafik();
+  const totalKotor = st.omzet + st.diskon;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <FilterComp
         mode={props.mode} setMode={props.setMode} month={props.month} setMonth={props.setMonth}
         rangeStart={props.rangeStart} setRangeStart={props.setRangeStart} rangeEnd={props.rangeEnd} setRangeEnd={props.setRangeEnd}
       />
 
-      {error && (
-        <div className="rounded-2xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-3 text-[13px] text-red-700 dark:text-red-300">
-          Gagal memuat transaksi POS: {error}
-        </div>
-      )}
+      {error && <Notice tone="negative">Gagal memuat transaksi POS: {error}</Notice>}
 
-      {/* RINGKASAN UANG USAHA: masuk vs keluar */}
-      <section className="rounded-[24px] bg-white dark:bg-[#1c1c1e] border border-zinc-200/80 dark:border-white/10 p-5 shadow-sm">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400 min-w-0">
-            <Store className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">Usaha · {period.label}</span>
-          </div>
-          {!loading && (uang.masuk > 0 || uang.keluar > 0) && <StatusArus net={uang.selisih} />}
-        </div>
-        <div className="mt-3 text-[34px] sm:text-[42px] font-black tabular-nums tracking-tight leading-none text-zinc-900 dark:text-white">
-          {loading ? <Loader2 className="w-8 h-8 animate-spin text-zinc-400" /> : rpTanda(uang.selisih)}
-        </div>
-        <p className="mt-2 text-[13px] leading-snug text-zinc-500 dark:text-zinc-400">
-          Selisih uang yang <b className="text-zinc-800 dark:text-zinc-100">didapat</b> dan uang yang <b className="text-zinc-800 dark:text-zinc-100">dikeluarkan</b> usaha.
-        </p>
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <ArusTile jenis="masuk" value={uang.masuk} sub="uang didapat" />
-          <ArusTile jenis="keluar" value={uang.keluar} sub="uang dikeluarkan" />
-        </div>
-        <div className="mt-2 divide-y divide-zinc-100 dark:divide-white/5 text-[13px]">
-          <BarisUang jenis="masuk" label="Penjualan POS" note={`${st.nota} nota`} value={st.posOmzet} />
-          {st.manualOmzet > 0 && <BarisUang jenis="masuk" label="Rincian pembukuan" note={`${st.manualN} input admin`} value={st.manualOmzet} />}
-          {dp.berjalan > 0 && <BarisUang jenis="masuk" label="DP belum lunas" note={`${dp.berjalanN} nota · sisa ${rpShort(dp.sisa)}`} value={dp.berjalan} />}
-          {dp.hangus > 0 && <BarisUang jenis="masuk" label="DP hangus" note={`${dp.hangusN} nota batal pembeli`} value={dp.hangus} />}
-          <BarisUang jenis="masuk" label="Pemasukan lain" note="modal dll." value={uang.lain} />
-          <BarisUang jenis="keluar" label="Belanja stok" value={uang.belanjaStok} />
-          <BarisUang jenis="keluar" label="Biaya operasional" value={uang.operasional} />
-        </div>
+      {/* HASIL USAHA: uang masuk vs keluar */}
+      <HeroArus
+        eyebrow={`Usaha · ${period.label}`}
+        eyebrowIcon={<Store />}
+        net={uang.selisih}
+        masuk={uang.masuk}
+        keluar={uang.keluar}
+        loading={loading}
+        masukSub="uang didapat"
+        keluarSub="uang dikeluarkan"
+      >
+        <LineList className="mt-3 border-t border-sep">
+          <LineItem dot={MARK.masuk} label="Penjualan POS" note={`${st.nota} nota`} value={rupiah(st.posOmzet)} muted={st.posOmzet === 0} />
+          {st.manualOmzet > 0 && <LineItem dot={MARK.masuk} label="Rincian pembukuan" note={`${st.manualN} input admin`} value={rupiah(st.manualOmzet)} />}
+          {dp.berjalan > 0 && <LineItem dot={MARK.masuk} label="DP belum lunas" note={`${dp.berjalanN} nota · sisa ${rpShort(dp.sisa)}`} value={rupiah(dp.berjalan)} />}
+          {dp.hangus > 0 && <LineItem dot={MARK.masuk} label="DP hangus" note={`${dp.hangusN} nota batal`} value={rupiah(dp.hangus)} />}
+          <LineItem dot={MARK.masuk} label="Pemasukan lain" note="modal dll." value={rupiah(uang.lain)} muted={uang.lain === 0} />
+          <LineItem dot={MARK.keluar} label="Belanja stok" value={`${uang.belanjaStok > 0 ? "−" : ""}${rupiah(uang.belanjaStok)}`} muted={uang.belanjaStok === 0} />
+          <LineItem dot={MARK.keluar} label="Biaya operasional" value={`${uang.operasional > 0 ? "−" : ""}${rupiah(uang.operasional)}`} muted={uang.operasional === 0} />
+        </LineList>
         {growth !== null && !loading && (
-          <div className="mt-3 flex items-center gap-1.5 text-[12px] text-zinc-500 dark:text-zinc-400">
-            {growth >= 0 ? <TrendingUp className="w-3.5 h-3.5 shrink-0" /> : <TrendingDown className="w-3.5 h-3.5 shrink-0" />}
-            <span>
-              Penjualan {growth >= 0 ? "naik" : "turun"} <b className="text-zinc-800 dark:text-zinc-100">{persen(Math.abs(growth))}</b> dari periode sebelumnya ({rupiah(prevOmzet)})
+          <div className="mt-3 flex items-center gap-2 border-t border-sep pt-3 text-footnote text-label-2">
+            <Pill tone={growth >= 0 ? "positive" : "negative"} icon={growth >= 0 ? <TrendingUp /> : <TrendingDown />}>
+              {growth >= 0 ? "+" : "−"}{persen(Math.abs(growth))}
+            </Pill>
+            <span className="min-w-0">
+              Penjualan {growth >= 0 ? "naik" : "turun"} dari periode sebelumnya ({rupiah(prevOmzet)})
             </span>
           </div>
         )}
-      </section>
+      </HeroArus>
 
       {/* LABA & MARGIN */}
       {(adaData || uang.keluar > 0) && (
-        <section className="rounded-[22px] bg-white dark:bg-[#1c1c1e] border border-zinc-200/80 dark:border-white/10 p-4 shadow-sm">
-          <h3 className="flex items-center gap-2 text-[15px] font-black text-zinc-900 dark:text-white"><Coins className="w-4 h-4 text-zinc-500" />Laba & margin</h3>
-          <p className="text-[12px] text-zinc-500 dark:text-zinc-400 mt-0.5">Untung dari penjualan sesudah modal barang & biaya operasional.</p>
-
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {[
-              { l: "Laba kotor", v: untung.kotor, m: untung.marginKotor, s: "penjualan − modal" },
-              { l: "Laba bersih", v: untung.bersih, m: untung.marginBersih, s: "laba kotor − biaya" },
-            ].map((x) => (
-              <div key={x.l} className="rounded-2xl bg-zinc-50 dark:bg-white/5 px-3.5 py-3 min-w-0">
-                <div className="text-[11.5px] font-semibold text-zinc-500 dark:text-zinc-400">{x.l}</div>
-                <div className={`mt-1 font-black tabular-nums tracking-tight leading-tight text-zinc-900 dark:text-white ${rupiah(x.v).length > 13 ? "text-[14.5px]" : "text-[17px]"}`}>{x.v < 0 ? "−" : ""}{rupiah(Math.abs(x.v))}</div>
-                <div className="mt-1 flex items-center gap-1.5 text-[11.5px] text-zinc-500 dark:text-zinc-400">
-                  <span className="px-1.5 py-0.5 rounded-md bg-white dark:bg-white/10 font-black tabular-nums text-zinc-800 dark:text-zinc-100">{untung.terhitung > 0 ? persen(x.m) : "–"}</span>
-                  margin
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {untung.terhitung > 0 && (() => {
-            const basis = Math.max(untung.terhitung, laba.hpp + uang.operasional);
-            const seg = [
-              { k: "Modal barang", v: laba.hpp, c: warnaModal },
-              { k: "Biaya", v: uang.operasional, c: WARNA_KELUAR },
-              { k: "Laba bersih", v: Math.max(0, untung.bersih), c: WARNA_MASUK },
-            ];
-            const per100 = (v: number) => rupiah(Math.round(((v / untung.terhitung) * 100000) / 100) * 100);
-            return (
-              <div className="mt-3.5">
-                <div className="flex h-3 rounded-full overflow-hidden bg-zinc-100 dark:bg-white/10 gap-[2px]" role="img" aria-label="Proporsi penjualan: modal barang, biaya, laba bersih">
-                  {seg.filter((x) => x.v > 0).map((x) => (
-                    <div key={x.k} className="h-full first:rounded-l-full last:rounded-r-full" style={{ width: `${(x.v / basis) * 100}%`, background: x.c }} />
-                  ))}
-                </div>
-                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] font-semibold text-zinc-500 dark:text-zinc-400">
-                  {seg.map((x) => (
-                    <span key={x.k} className="inline-flex items-center gap-1.5">
-                      <Titik c={x.c} />
-                      {x.k} <b className="text-zinc-800 dark:text-zinc-100 tabular-nums">{persen((x.v / untung.terhitung) * 100)}</b>
+        <>
+          <SectionHeader title="Laba" />
+          <Card title="Laba & margin" subtitle="Sesudah modal barang & biaya operasional" icon={<Coins />} iconColor="green">
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { l: "Laba kotor", v: untung.kotor, m: untung.marginKotor, s: "penjualan − modal" },
+                { l: "Laba bersih", v: untung.bersih, m: untung.marginBersih, s: "laba kotor − biaya" },
+              ].map((x) => (
+                <StatTile
+                  key={x.l}
+                  label={x.l}
+                  value={<Amount value={x.v} tone="auto" size="headline" fitAt={13} />}
+                  sub={
+                    <span className="inline-flex items-center gap-1.5">
+                      <b className="font-semibold tabular-nums text-label">{untung.terhitung > 0 ? persen(x.m) : "–"}</b> margin
                     </span>
-                  ))}
-                </div>
-                <p className="mt-2 text-[12.5px] leading-snug text-zinc-600 dark:text-zinc-300">
+                  }
+                />
+              ))}
+            </div>
+
+            {untung.terhitung > 0 && (
+              <div className="mt-4">
+                <SplitBar
+                  ariaLabel="Proporsi penjualan: modal barang, biaya, laba bersih"
+                  total={Math.max(untung.terhitung, laba.hpp + uang.operasional)}
+                  segments={[
+                    { key: "modal", label: "Modal barang", value: laba.hpp, color: tema.modal, note: persen((laba.hpp / untung.terhitung) * 100) },
+                    { key: "biaya", label: "Biaya", value: uang.operasional, color: MARK.keluar, note: persen((uang.operasional / untung.terhitung) * 100) },
+                    { key: "laba", label: "Laba bersih", value: Math.max(0, untung.bersih), color: MARK.masuk, note: persen((Math.max(0, untung.bersih) / untung.terhitung) * 100) },
+                  ]}
+                />
+                <p className="mt-2.5 text-footnote text-label-2">
                   {untung.bersih >= 0 ? (
-                    <>Dari setiap <b className="text-zinc-900 dark:text-white">Rp 100.000</b> penjualan: {per100(laba.hpp)} modal barang, {per100(uang.operasional)} biaya, <b className="text-zinc-900 dark:text-white">{per100(untung.bersih)} untung</b>.</>
+                    <>
+                      Dari setiap <b className="font-semibold text-label">Rp 100.000</b> penjualan: {per100(laba.hpp, untung.terhitung)} modal barang, {per100(uang.operasional, untung.terhitung)} biaya,{" "}
+                      <b className="font-semibold text-positive">{per100(untung.bersih, untung.terhitung)} untung</b>.
+                    </>
                   ) : (
-                    <>Modal barang & biaya lebih besar dari penjualan — usaha <b className="text-zinc-900 dark:text-white">rugi {rupiah(-untung.bersih)}</b> di periode ini.</>
+                    <>
+                      Modal barang & biaya lebih besar dari penjualan — usaha <b className="font-semibold text-negative">rugi {rupiah(-untung.bersih)}</b> di periode ini.
+                    </>
                   )}
                 </p>
               </div>
-            );
-          })()}
+            )}
 
-          <div className="mt-3 divide-y divide-zinc-100 dark:divide-white/5 text-[13.5px]">
-            <div className="flex justify-between gap-3 py-2">
-              <span className="text-zinc-600 dark:text-zinc-300">Penjualan{laba.penjualanTanpaModal > 0 ? " terhitung" : ""}{dp.hangus > 0 ? " + DP hangus" : ""}</span>
-              <span className="font-bold tabular-nums text-zinc-900 dark:text-white">{rupiah(untung.terhitung)}</span>
-            </div>
-            <div className="flex justify-between gap-3 py-2">
-              <span className="text-zinc-600 dark:text-zinc-300">Modal barang terjual</span>
-              <span className="font-bold tabular-nums text-zinc-900 dark:text-white">− {rupiah(laba.hpp)}</span>
-            </div>
-            <div className="flex justify-between gap-3 py-2">
-              <span className="font-black text-zinc-900 dark:text-white">Laba kotor</span>
-              <span className="font-black tabular-nums text-zinc-900 dark:text-white">{rpTanda(untung.kotor).replace(/^\+/, "")}</span>
-            </div>
-            <div className="flex justify-between gap-3 py-2">
-              <span className="text-zinc-600 dark:text-zinc-300">Biaya operasional usaha</span>
-              <span className="font-bold tabular-nums text-zinc-900 dark:text-white">− {rupiah(uang.operasional)}</span>
-            </div>
-            <div className="flex justify-between gap-3 py-2">
-              <span className="font-black text-zinc-900 dark:text-white">Laba bersih</span>
-              <span className="font-black tabular-nums text-zinc-900 dark:text-white">{rpTanda(untung.bersih).replace(/^\+/, "")}</span>
-            </div>
-          </div>
+            <LineList className="mt-3 border-t border-sep">
+              <LineItem
+                label="Penjualan"
+                note={[laba.penjualanTanpaModal > 0 && "di luar barang tanpa harga modal", dp.hangus > 0 && "termasuk DP hangus"].filter(Boolean).join(" · ") || undefined}
+                value={rupiah(untung.terhitung)}
+              />
+              <LineItem label="Modal barang terjual" value={`−${rupiah(laba.hpp)}`} />
+              <LineItem label="Laba kotor" total value={<Amount value={untung.kotor} tone="auto" className="font-bold" />} />
+              <LineItem label="Biaya operasional usaha" value={`−${rupiah(uang.operasional)}`} />
+              <LineItem label="Laba bersih" total value={<Amount value={untung.bersih} tone="auto" className="font-bold" />} />
+            </LineList>
 
-          {laba.penjualan > 0 && (
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              {(["BARU", "SEKEN"] as const).map((k) => (
-                <div key={k} className="rounded-xl bg-zinc-50 dark:bg-white/5 px-3 py-2 min-w-0">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">{k === "BARU" ? "Barang baru" : "Barang seken"}</div>
-                  <div className="text-[14px] font-black tabular-nums text-zinc-900 dark:text-white mt-0.5">{rpShort(laba.perKondisi[k].penjualan)}</div>
-                  <div className="text-[11.5px] text-zinc-500 truncate">{laba.perKondisi[k].qty} terjual · laba <b className="text-zinc-800 dark:text-zinc-100">{rpShort(laba.perKondisi[k].laba)}</b></div>
-                </div>
-              ))}
-            </div>
-          )}
-          {laba.qtyTanpa > 0 && (
-            <p className="mt-2.5 flex items-start gap-1.5 text-[12px] text-amber-700 dark:text-amber-400">
-              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              {laba.qtyTanpa} barang terjual ({rupiah(laba.penjualanTanpaModal)}) belum punya harga modal / tidak dikenali, tidak ikut dihitung laba. Isi di Owner › Input › Atur Stok.
+            {laba.penjualan > 0 && (
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {(["BARU", "SEKEN"] as const).map((k) => (
+                  <StatTile
+                    key={k}
+                    label={k === "BARU" ? "Barang baru" : "Barang seken"}
+                    value={<TileValue>{rpShort(laba.perKondisi[k].penjualan)}</TileValue>}
+                    sub={<>{laba.perKondisi[k].qty} terjual · laba <b className="font-semibold text-label">{rpShort(laba.perKondisi[k].laba)}</b></>}
+                  />
+                ))}
+              </div>
+            )}
+            {laba.qtyTanpa > 0 && (
+              <Notice tone="warning" className="mt-3">
+                {laba.qtyTanpa} barang terjual ({rupiah(laba.penjualanTanpaModal)}) belum punya harga modal / tidak dikenali, tidak ikut dihitung laba. Isi di Owner › Input › Atur Stok.
+              </Notice>
+            )}
+            {laba.perkiraan > 0 && (
+              <p className="mt-2.5 text-caption text-label-2">
+                {laba.perkiraan} barang memakai perkiraan harga modal (modal diisi sesudah transaksi, atau barang dari pembukuan harian memakai harga modal sekarang).
+              </p>
+            )}
+            <p className="mt-2.5 text-caption leading-relaxed text-label-2">
+              Laba kotor = penjualan − modal barang yang terjual (isi game, HEN & servis dihitung tanpa modal barang). Laba bersih = laba kotor − biaya operasional usaha. Belanja stok adalah uang keluar, tetapi baru menjadi modal saat barangnya terjual.
             </p>
-          )}
-          {laba.perkiraan > 0 && <p className="mt-1.5 text-[12px] text-zinc-500">{laba.perkiraan} barang memakai perkiraan harga modal (modal diisi sesudah transaksi, atau barang dari pembukuan harian memakai harga modal sekarang).</p>}
-          <p className="mt-2.5 text-[11.5px] text-zinc-400 leading-snug">
-            Laba kotor = penjualan − modal barang yang terjual (isi game, HEN & servis dihitung tanpa modal barang). Laba bersih = laba kotor − biaya operasional usaha.
-            Belanja stok adalah uang keluar, tetapi baru menjadi modal saat barangnya terjual.
-          </p>
-        </section>
+          </Card>
+        </>
       )}
 
       {!loading && !adaData ? (
-        <div className="rounded-[22px] border border-dashed border-zinc-300 dark:border-zinc-700 p-6 text-center">
-          <Receipt className="w-8 h-8 mx-auto text-zinc-300 dark:text-zinc-600" />
-          <div className="mt-2 text-[15px] font-black text-zinc-800 dark:text-zinc-100">Belum ada penjualan di periode ini</div>
-          <p className="text-[12.5px] text-zinc-500 mt-1 max-w-sm mx-auto">
-            Penjualan tercatat otomatis dari nota POS (Selesaikan &amp; Cetak Nota) dan dari Rincian Pemasukan Usaha di pembukuan harian.
-          </p>
-        </div>
+        <EmptyState icon={<Receipt />} title="Belum ada penjualan di periode ini">
+          Penjualan tercatat otomatis dari nota POS (Selesaikan &amp; Cetak Nota) dan dari Rincian Pemasukan Usaha di pembukuan harian.
+        </EmptyState>
       ) : (
         <>
-          {/* KPI */}
-          <div className="grid grid-cols-2 gap-2.5">
-            <Tile label="Tunai" value={rpShort(st.cash)} sub={`${st.cashN} transaksi`} icon={<Wallet className="w-4 h-4 text-emerald-500" />} />
-            <Tile label="Transfer/QRIS" value={rpShort(st.transfer)} sub={`${st.transferN} transaksi`} icon={<Wallet className="w-4 h-4 text-blue-500" />} />
-            <Tile label="Diskon promo" value={rpShort(st.diskon)} sub={st.omzet + st.diskon > 0 ? `${persen((st.diskon / (st.omzet + st.diskon)) * 100)} dari harga normal` : undefined} icon={<BadgePercent className="w-4 h-4 text-amber-500" />} />
-            <Tile
-              label="Nego kasir"
-              value={`${st.nego < 0 ? "+" : ""}${rpShort(Math.abs(st.nego))}`}
-              sub={st.negoN ? `${st.negoN} nota harga diubah` : "tidak ada nego"}
-              icon={<Handshake className="w-4 h-4 text-violet-500" />}
-            />
-            <Tile label="Rata-rata transaksi" value={rpShort(st.avg)} sub={st.manualN ? `${st.nota} nota · ${st.manualN} pembukuan` : `${st.nota} nota · ${st.qty} barang`} icon={<Receipt className="w-4 h-4 text-zinc-500" />} />
-            <Tile label="Nota batal" value={String(batalCount)} sub="tidak dihitung" icon={<Ban className="w-4 h-4 text-zinc-400" />} />
-          </div>
+          <SectionHeader title="Penjualan" />
+          {/* Ringkasan penjualan */}
+          <Card title="Ringkasan" accessory={<span className="tabular-nums">{st.transaksi} transaksi</span>}>
+            <div className="grid grid-cols-2 gap-2">
+              <StatTile label="Tunai" dot={MARK.tunai} value={<TileValue>{rpShort(st.cash)}</TileValue>} sub={`${st.cashN} transaksi`} />
+              <StatTile label="Transfer / QRIS" dot={MARK.transfer} value={<TileValue>{rpShort(st.transfer)}</TileValue>} sub={`${st.transferN} transaksi`} />
+              <StatTile label="Diskon promo" icon={<BadgePercent />} value={<TileValue>{rpShort(st.diskon)}</TileValue>} sub={totalKotor > 0 ? `${persen((st.diskon / totalKotor) * 100)} dari harga normal` : "tidak ada"} />
+              <StatTile
+                label="Nego kasir"
+                icon={<Handshake />}
+                value={<TileValue>{`${st.nego < 0 ? "+" : ""}${rpShort(Math.abs(st.nego))}`}</TileValue>}
+                sub={st.negoN ? `${st.negoN} nota harga diubah` : "tidak ada nego"}
+              />
+              <StatTile label="Rata-rata" icon={<Receipt />} value={<TileValue>{rpShort(st.avg)}</TileValue>} sub={st.manualN ? `${st.nota} nota · ${st.manualN} pembukuan` : `${st.nota} nota · ${st.qty} barang`} />
+              <StatTile label="Nota batal" icon={<Ban />} value={<TileValue>{batalCount}</TileValue>} sub="tidak dihitung" />
+            </div>
+          </Card>
 
           {/* Grafik omzet */}
           <Card
             title={chart.mode === "hari" ? "Omzet per hari" : "Omzet per bulan"}
-            icon={<TrendingUp className="w-4 h-4 text-red-600" />}
-            right={bestDay && bestDay.omzet > 0 ? <span className="text-[11px] text-zinc-500 text-right">Tertinggi <b className="text-zinc-800 dark:text-zinc-100">{bestDay.full}</b></span> : null}
+            subtitle={bestDay && bestDay.omzet > 0 ? `Tertinggi ${bestDay.full} · ${rpShort(bestDay.omzet)}` : "Belum ada penjualan"}
           >
-            <div className="h-[200px] -ml-3">
+            <div className="-ml-2 h-[200px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chart.data} margin={{ top: 8, right: 4, left: 0, bottom: 0 }} barCategoryGap="22%">
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
-                  <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: tickColor }} interval="preserveStartEnd" minTickGap={6} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: tickColor }} tickFormatter={(v) => rpShort(Number(v))} width={44} />
+                <BarChart data={chart.data} margin={{ top: 8, right: 4, left: 0, bottom: 0 }} barCategoryGap="20%">
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={tema.grid} />
+                  <XAxis dataKey="label" {...sumbu(tema.tick)} interval="preserveStartEnd" minTickGap={6} />
+                  <YAxis {...sumbu(tema.tick)} tickFormatter={(v) => rpShort(Number(v))} width={44} />
                   <Tooltip
-                    cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
-                    contentStyle={{ borderRadius: 12, border: "none", background: isDark ? "#18181b" : "#fff", boxShadow: "0 8px 24px rgba(0,0,0,.15)", fontSize: 12 }}
-                    labelFormatter={(_, p) => (p && p[0] ? (p[0].payload as any).full : "")}
-                    formatter={(v: any, _n: any, p: any) => [`${rupiah(Number(v))} · ${p?.payload?.nota || 0} nota`, "Omzet"]}
+                    cursor={{ fill: tema.cursor }}
+                    content={({ active, payload }: any) =>
+                      active && payload?.length ? (
+                        <ChartTip title={payload[0].payload.full} rows={[{ color: MARK.masuk, label: "Omzet", value: rupiah(payload[0].payload.omzet) }, { label: "Transaksi", value: `${payload[0].payload.nota}` }]} />
+                      ) : null
+                    }
                   />
-                  <Bar dataKey="omzet" fill="#dc2626" radius={[6, 6, 0, 0]} maxBarSize={28} />
+                  <Bar dataKey="omzet" fill={MARK.masuk} radius={[4, 4, 0, 0]} maxBarSize={22} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -546,29 +482,27 @@ export default function AnalitikUsaha(props: FilterProps) {
 
           {/* Perlu restock */}
           {restock.length > 0 && (
-            <Card title="Laku & stok menipis" icon={<AlertTriangle className="w-4 h-4 text-amber-500" />} right={<span className="text-[11px] text-zinc-500">{restock.length} barang</span>}>
-              <div className="space-y-2">
-                {restock.slice(0, 8).map((r) => (
-                  <div key={kunciStok(r.ref)} className="flex items-center justify-between gap-3 rounded-xl bg-zinc-50 dark:bg-white/5 px-3 py-2">
+            <Card title="Laku & stok menipis" icon={<AlertTriangle />} iconColor="orange" accessory={`${restock.length} barang`} flush>
+              {restock.slice(0, 8).map((r) => (
+                <div key={kunciStok(r.ref)} className="group/row flex items-center gap-3 pl-4 pr-4">
+                  <div className="flex min-h-[52px] min-w-0 flex-1 items-center justify-between gap-3 border-b border-sep py-2 group-last/row:border-b-0">
                     <div className="min-w-0">
-                      <div className="text-[13px] font-bold text-zinc-900 dark:text-white truncate">{r.ref.item}</div>
-                      <div className="text-[11px] text-zinc-500 truncate">{r.ref.kategori} · terjual {r.terjual}</div>
+                      <div className="truncate text-subhead font-medium text-label">{r.ref.item}</div>
+                      <div className="truncate text-caption text-label-2">{r.ref.kategori} · terjual {r.terjual}</div>
                     </div>
-                    <span className={`shrink-0 px-2 py-1 rounded-lg text-[11.5px] font-black ${r.status === "habis" ? "bg-red-600 text-white" : "bg-amber-400 text-amber-950"}`}>
-                      {r.status === "habis" ? "Habis" : `Sisa ${r.sisa}`}
-                    </span>
+                    <Pill tone={r.status === "habis" ? "negative" : "warning"}>{r.status === "habis" ? "Habis" : `Sisa ${r.sisa}`}</Pill>
                   </div>
-                ))}
-              </div>
-              <p className="text-[11px] text-zinc-500 mt-2">Atur batas minimum & restock di menu Stok.</p>
+                </div>
+              ))}
+              <p className="px-4 pb-3.5 pt-1 text-caption text-label-2">Atur batas minimum & restock di menu Stok.</p>
             </Card>
           )}
 
           {/* Kategori */}
-          <Card title="Omzet per kategori" icon={<Package className="w-4 h-4 text-blue-600" />} right={<span className="text-[10.5px] text-zinc-400">sebelum diskon</span>}>
-            <div className="space-y-3">
+          <Card title="Omzet per kategori" accessory="sebelum diskon">
+            <div className="space-y-3.5">
               {cats.map((c) => (
-                <BarRow key={c.label} label={c.label} value={c.omzet} max={cats[0]?.omzet || 1} right={rpShort(c.omzet)} sub={`${c.qty} terjual · ${((c.omzet / Math.max(1, st.omzet + st.diskon)) * 100).toFixed(0)}%`} color={CAT_COLOR[c.label] || "bg-zinc-500"} />
+                <BarRow key={c.label} label={c.label} value={rpShort(c.omzet)} fraction={c.omzet / Math.max(1, cats[0]?.omzet || 1)} color={tema.tint} sub={`${c.qty} terjual · ${persen((c.omzet / Math.max(1, totalKotor)) * 100)}`} />
               ))}
             </div>
           </Card>
@@ -576,60 +510,61 @@ export default function AnalitikUsaha(props: FilterProps) {
           {/* Produk terlaris */}
           <Card
             title="Produk terlaris"
-            icon={<ShoppingBag className="w-4 h-4 text-red-600" />}
-            right={
-              <div className="flex p-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-[11px] font-bold">
-                {(["qty", "omzet"] as const).map((k) => (
-                  <button key={k} type="button" onClick={() => setProdukSort(k)} className={`px-2.5 py-1 rounded-md ${produkSort === k ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm" : "text-zinc-500"}`}>
-                    {k === "qty" ? "Jumlah" : "Omzet"}
-                  </button>
-                ))}
-              </div>
+            accessory={
+              <SubTabs
+                size="sm"
+                ariaLabel="Urutkan produk"
+                value={produkSort}
+                onChange={setProdukSort}
+                options={[{ key: "qty", label: "Jumlah" }, { key: "omzet", label: "Omzet" }]}
+              />
             }
           >
-            <ol className="space-y-3">
-              {produk.map((p, i) => (
-                <li key={p.nama} className="flex gap-3">
-                  <span className={`w-6 h-6 shrink-0 rounded-lg text-[11px] font-black flex items-center justify-center ${i < 3 ? "bg-red-600 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"}`}>{i + 1}</span>
-                  <div className="flex-1 min-w-0">
-                    <BarRow
-                      label={p.nama}
-                      value={produkSort === "qty" ? p.qty : p.omzet}
-                      max={produkSort === "qty" ? produk[0]?.qty || 1 : produk[0]?.omzet || 1}
-                      right={produkSort === "qty" ? `${p.qty}x` : rpShort(p.omzet)}
-                      sub={`${p.kategori} · ${produkSort === "qty" ? rupiah(p.omzet) : `${p.qty} terjual`}${laba.perProduk.has(p.nama) ? ` · laba ${rpShort(laba.perProduk.get(p.nama)!)}` : ""}`}
-                      color={i < 3 ? "bg-red-600" : "bg-zinc-400 dark:bg-zinc-600"}
-                    />
-                  </div>
-                </li>
+            <div className="space-y-3.5">
+              {produk.map((x, i) => (
+                <BarRow
+                  key={x.nama}
+                  rank={i + 1}
+                  label={x.nama}
+                  value={produkSort === "qty" ? `${x.qty}×` : rpShort(x.omzet)}
+                  fraction={produkSort === "qty" ? x.qty / Math.max(1, produk[0]?.qty || 1) : x.omzet / Math.max(1, produk[0]?.omzet || 1)}
+                  color={i < 3 ? tema.tint : tema.netral}
+                  sub={`${x.kategori} · ${produkSort === "qty" ? rupiah(x.omzet) : `${x.qty} terjual`}${laba.perProduk.has(x.nama) ? ` · laba ${rpShort(laba.perProduk.get(x.nama)!)}` : ""}`}
+                />
               ))}
-            </ol>
+            </div>
           </Card>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             {/* Kasir */}
-            <Card title="Per kasir" icon={<Users className="w-4 h-4 text-violet-600" />}>
-              <div className="space-y-3">
+            <Card title="Per kasir" icon={<Users />} iconColor="purple">
+              <div className="space-y-3.5">
                 {kasir.map((k) => (
-                  <BarRow key={k.nama} label={k.nama} value={k.omzet} max={kasir[0]?.omzet || 1} right={rpShort(k.omzet)} sub={`${k.nota} nota`} color="bg-violet-600" />
+                  <BarRow key={k.nama} label={k.nama} value={rpShort(k.omzet)} fraction={k.omzet / Math.max(1, kasir[0]?.omzet || 1)} color={tema.tint} sub={`${k.nota} nota`} />
                 ))}
               </div>
             </Card>
 
             {/* Jam ramai */}
-            <Card title="Jam ramai" icon={<Clock className="w-4 h-4 text-emerald-600" />} right={jamRamai ? <span className="text-[11px] text-zinc-500">puncak <b className="text-zinc-800 dark:text-zinc-100">{jamRamai.label}.00</b></span> : null}>
-              <div className="h-[140px] -ml-3">
+            <Card title="Jam ramai" icon={<Clock />} iconColor="orange" accessory={jamRamai ? <>Puncak <b className="font-semibold text-label">{jamRamai.label}.00</b></> : null}>
+              <div className="-ml-2 h-[150px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={jam} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barCategoryGap="18%">
-                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: tickColor }} interval={0} />
+                    <XAxis dataKey="label" {...sumbu(tema.tick)} interval={0} />
                     <YAxis hide allowDecimals={false} />
                     <Tooltip
-                      cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
-                      contentStyle={{ borderRadius: 12, border: "none", background: isDark ? "#18181b" : "#fff", boxShadow: "0 8px 24px rgba(0,0,0,.15)", fontSize: 12 }}
-                      labelFormatter={(l) => `Jam ${l}.00`}
-                      formatter={(v: any, _n: any, p: any) => [`${v} nota · ${rupiah(p?.payload?.omzet || 0)}`, "Transaksi"]}
+                      cursor={{ fill: tema.cursor }}
+                      content={({ active, payload }: any) =>
+                        active && payload?.length ? (
+                          <ChartTip title={`Jam ${payload[0].payload.label}.00`} rows={[{ color: tema.tint, label: "Nota", value: `${payload[0].payload.nota}` }, { label: "Omzet", value: rupiah(payload[0].payload.omzet || 0) }]} />
+                        ) : null
+                      }
                     />
-                    <Bar dataKey="nota" fill="#059669" radius={[5, 5, 0, 0]} />
+                    <Bar dataKey="nota" radius={[4, 4, 0, 0]} maxBarSize={22}>
+                      {jam.map((h, i) => (
+                        <Cell key={i} fill={tema.tint} fillOpacity={jamRamai && h.nota >= jamRamai.nota * 0.8 ? 1 : 0.35} />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -639,47 +574,49 @@ export default function AnalitikUsaha(props: FilterProps) {
       )}
 
       {/* Riwayat nota */}
-      <Card title="Riwayat nota" icon={<Receipt className="w-4 h-4 text-zinc-500" />} right={<span className="text-[11px] text-zinc-500">{riwayat.length} nota</span>}>
-        <div className="flex items-center gap-2 h-11 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 mb-3">
-          <Search className="w-4 h-4 text-zinc-400 shrink-0" />
-          <input value={cari} onChange={(e) => { setCari(e.target.value); setShowN(20); }} placeholder="Cari no. nota, pembeli, barang…"
-            className="flex-1 min-w-0 bg-transparent text-[14px] focus:outline-none text-zinc-900 dark:text-white" />
-          {cari && <button type="button" onClick={() => setCari("")} aria-label="Hapus"><X className="w-4 h-4 text-zinc-400" /></button>}
+      <SectionHeader title="Nota" />
+      <Card title="Riwayat nota" accessory={<span className="tabular-nums">{riwayat.length} nota</span>} flush>
+        <div className="px-4 pb-2">
+          <SearchField value={cari} onChange={(v) => { setCari(v); setShowN(20); }} placeholder="Cari no. nota, pembeli, barang…" />
         </div>
         {riwayat.length === 0 ? (
-          <div className="text-center text-[13px] text-zinc-500 py-6">{loading ? "Memuat…" : "Tidak ada nota."}</div>
+          <div className="px-4 pb-6 pt-4 text-center text-footnote text-label-2">{loading ? "Memuat…" : "Tidak ada nota."}</div>
         ) : (
-          <div className="divide-y divide-zinc-100 dark:divide-white/5 -mx-1">
+          <div>
             {riwayat.slice(0, showN).map((s) => (
-              <button key={s.id || s.noNota} type="button" onClick={() => setSelected(s)} className="w-full text-left px-1 py-2.5 flex items-center gap-3 active:bg-zinc-50 dark:active:bg-white/5 rounded-lg">
-                <div className={`w-10 h-10 rounded-xl shrink-0 flex items-center justify-center ${s.batal ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400" : s.metode === "TRANSFER" ? "bg-blue-50 dark:bg-blue-500/10 text-blue-600" : "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600"}`}>
-                  {s.batal ? <Ban className="w-5 h-5" /> : <Receipt className="w-5 h-5" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`text-[13.5px] font-bold truncate ${s.batal ? "text-zinc-400 line-through" : "text-zinc-900 dark:text-white"}`}>{s.pembeli || "Pelanggan"}</span>
-                    {s.batal && (
-                      <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">
-                        {s.status === "BATAL_PEMBELI" ? "DP HANGUS" : s.status === "BATAL_URBAN" ? "DP KEMBALI" : "BATAL"}
-                      </span>
-                    )}
-                    {isDpTerbuka(s) && <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300">BELUM LUNAS</span>}
-                    {!s.batal && s.lunasTs && <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">DP · LUNAS</span>}
-                    {!s.batal && infoNego(s).ada && <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300">NEGO</span>}
+              <button
+                key={s.id || s.noNota}
+                type="button"
+                onClick={() => setSelected(s)}
+                className="group/row flex w-full items-center gap-3 pl-4 pr-3 text-left transition-colors active:bg-fill"
+              >
+                <IconBadge color={s.batal ? "gray" : s.metode === "TRANSFER" ? "blue" : "teal"}>{s.batal ? <Ban /> : <Receipt />}</IconBadge>
+                <div className="flex min-h-[58px] min-w-0 flex-1 items-center gap-3 border-b border-sep py-2.5 group-last/row:border-b-0">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className={`truncate text-subhead font-semibold ${s.batal ? "text-label-3 line-through" : "text-label"}`}>{s.pembeli || "Pelanggan"}</span>
+                      {s.batal && <Pill>{s.status === "BATAL_PEMBELI" ? "DP hangus" : s.status === "BATAL_URBAN" ? "DP kembali" : "Batal"}</Pill>}
+                      {isDpTerbuka(s) && <Pill tone="warning">Belum lunas</Pill>}
+                      {!s.batal && s.lunasTs && <Pill tone="positive">DP · lunas</Pill>}
+                      {!s.batal && infoNego(s).ada && <Pill tone="tint">Nego</Pill>}
+                    </div>
+                    <div className="truncate text-caption text-label-2">
+                      {s.noNota} · {new Date(s.ts).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {(s.items || []).reduce((a, i) => a + i.qty, 0)} barang
+                    </div>
                   </div>
-                  <div className="text-[11.5px] text-zinc-500 truncate">
-                    {s.noNota} · {new Date(s.ts).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {(s.items || []).reduce((a, i) => a + i.qty, 0)} barang
-                  </div>
+                  <span className={`shrink-0 text-subhead font-semibold tabular-nums ${s.batal ? "text-label-3 line-through" : "text-label"}`}>{rpShort(s.total)}</span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-label-3" aria-hidden />
                 </div>
-                <div className={`text-[13.5px] font-black font-mono tabular-nums shrink-0 ${s.batal ? "text-zinc-400 line-through" : "text-zinc-900 dark:text-white"}`}>{rpShort(s.total)}</div>
               </button>
             ))}
           </div>
         )}
         {riwayat.length > showN && (
-          <button type="button" onClick={() => setShowN((n) => n + 30)} className="mt-2 w-full h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-[13px] font-bold text-zinc-700 dark:text-zinc-200">
-            Tampilkan lebih banyak ({riwayat.length - showN})
-          </button>
+          <div className="border-t border-sep p-3">
+            <Button variant="gray" block onClick={() => setShowN((n) => n + 30)}>
+              Tampilkan lebih banyak ({riwayat.length - showN})
+            </Button>
+          </div>
         )}
       </Card>
 

@@ -1,17 +1,15 @@
 import React, { useMemo } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from "recharts";
-import { Gamepad2, Store, Loader2, BarChart3, ArrowDownLeft, ArrowUpRight, Layers } from "lucide-react";
+import { Gamepad2, Store, BarChart3, Layers } from "lucide-react";
 import FilterComp from "./Filter";
-import { useIsDark } from "../hooks/useIsDark";
 import { dpHangus, gabungNota, isDpTerbuka, tanggalPenjualan, terjualDalam, totalDibayar, usePosSales, usePosSalesLunas } from "../lib/posSales";
 import { Bisnis, bisnisOf, isBelanjaStok, pemasukanRental, pengeluaranAdminRental, periodRange, TransaksiOwner } from "../lib/keuangan";
 import type { HistoryItem } from "../lib/types";
 import { barisUsahaManual } from "../lib/pemasukanUsaha";
-import { rpShort, rupiah } from "../lib/format";
+import { persen, rpShort, rupiah, rupiahTanda } from "../lib/format";
 import { dariYmd, tanggalHariKerja, toLocalYmd } from "../lib/dateLocal";
-import {
-  ArusTile, BarisUang, BatangUang, KartuAnalitik, LegendaArus, persen, rpTanda, StatusArus, Titik, WARNA_KELUAR, WARNA_MASUK,
-} from "./common/ArusUang";
+import { Amount, BarRow, Card, ChartTip, EmptyState, Footnote, Legend, LineItem, LineList, MARK, Notice, Pill, SectionHeader, sumbu, useTemaGrafik } from "../ui";
+import { HeroArus, KartuBisnis } from "./analitik/HeroArus";
 
 type Props = {
   mode: string;
@@ -40,69 +38,20 @@ const TipArus: React.FC<any> = ({ active, payload }) => {
   if (!active || !payload?.length) return null;
   const p = payload[0].payload as TitikGrafik;
   return (
-    <div className="rounded-xl bg-white dark:bg-zinc-900 shadow-[0_8px_24px_rgba(0,0,0,.15)] ring-1 ring-black/5 dark:ring-white/10 px-3 py-2 text-[12px] min-w-[170px]">
-      <div className="font-bold text-zinc-900 dark:text-white mb-1">{p.full}</div>
-      <div className="flex items-center justify-between gap-3 text-zinc-600 dark:text-zinc-300">
-        <span className="flex items-center gap-1.5"><Titik c={WARNA_MASUK} />Masuk</span>
-        <span className="font-bold tabular-nums text-zinc-900 dark:text-white">{rupiah(p.masuk)}</span>
-      </div>
-      <div className="flex items-center justify-between gap-3 text-zinc-600 dark:text-zinc-300">
-        <span className="flex items-center gap-1.5"><Titik c={WARNA_KELUAR} />Keluar</span>
-        <span className="font-bold tabular-nums text-zinc-900 dark:text-white">{rupiah(p.keluar)}</span>
-      </div>
-      <div className="flex items-center justify-between gap-3 border-t border-zinc-100 dark:border-white/10 mt-1 pt-1">
-        <span className="font-semibold text-zinc-600 dark:text-zinc-300">Selisih</span>
-        <span className="font-black tabular-nums text-zinc-900 dark:text-white">{rpTanda(p.net)}</span>
-      </div>
-    </div>
-  );
-};
-
-/** Kartu satu model usaha (Rental / Usaha). */
-const KartuBisnis: React.FC<{
-  judul: string;
-  sub: string;
-  icon: React.ReactNode;
-  masuk: number;
-  keluar: number;
-  rows: { jenis: "masuk" | "keluar"; label: string; note?: string; v: number }[];
-  loading?: boolean;
-}> = ({ judul, sub, icon, masuk, keluar, rows, loading }) => {
-  const net = masuk - keluar;
-  return (
-    <section className="rounded-[22px] bg-white dark:bg-[#1c1c1e] border border-zinc-200/80 dark:border-white/10 p-4 shadow-sm min-w-0">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-white/10 text-zinc-700 dark:text-zinc-200 flex items-center justify-center shrink-0">{icon}</span>
-          <div className="min-w-0">
-            <h3 className="text-[15px] font-black text-zinc-900 dark:text-white leading-tight">{judul}</h3>
-            <p className="text-[11.5px] text-zinc-500 dark:text-zinc-400 truncate">{sub}</p>
-          </div>
-        </div>
-        {!loading && <StatusArus net={net} size="sm" />}
-      </div>
-      <div className="mt-3 flex items-baseline gap-2 flex-wrap">
-        <span className="text-[24px] font-black tabular-nums tracking-tight leading-none text-zinc-900 dark:text-white">
-          {loading ? <Loader2 className="w-6 h-6 animate-spin text-zinc-400" /> : rpTanda(net)}
-        </span>
-        <span className="text-[11.5px] text-zinc-500 dark:text-zinc-400">selisih</span>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <ArusTile jenis="masuk" value={masuk} />
-        <ArusTile jenis="keluar" value={keluar} />
-      </div>
-      <div className="mt-2 divide-y divide-zinc-100 dark:divide-white/5 text-[13px]">
-        {rows.map((r) => (
-          <BarisUang key={r.label} jenis={r.jenis} label={r.label} note={r.note} value={r.v} />
-        ))}
-      </div>
-    </section>
+    <ChartTip
+      title={p.full}
+      rows={[
+        { color: MARK.masuk, label: "Masuk", value: rupiah(p.masuk) },
+        { color: MARK.keluar, label: "Keluar", value: rupiah(p.keluar) },
+      ]}
+      footer={{ label: "Selisih", value: rupiahTanda(p.net) }}
+    />
   );
 };
 
 export default function AnalitikKeseluruhan(props: Props) {
   const { mode, month, rangeStart, rangeEnd, filteredHistory, pengeluaran, pemasukan } = props;
-  const isDark = useIsDark();
+  const tema = useTemaGrafik();
   // Hari kerja berganti -> periode "Bulan Ini" / "7 Hari" ikut bergeser
   const hariKerja = tanggalHariKerja();
   const period = useMemo(() => periodRange(mode, month, rangeStart, rangeEnd), [mode, month, rangeStart, rangeEnd, hariKerja]);
@@ -245,73 +194,36 @@ export default function AnalitikKeseluruhan(props: Props) {
   const hariSurplus = grafik.data.filter((x) => x.net > 0).length;
   const hariMinus = grafik.data.filter((x) => x.net < 0).length;
   const kosong = !loading && d.masuk === 0 && d.keluar === 0;
-  const rasio = d.masuk > 0 ? (d.keluar / d.masuk) * 100 : 0;
-  const kalimat = loading
-    ? "Menghitung…"
-    : d.net > 0
-    ? `Uang masuk lebih besar ${rupiah(d.net)} dari uang keluar.`
-    : d.net < 0
-    ? `Uang keluar melebihi uang masuk sebesar ${rupiah(-d.net)}.`
-    : kosong
-    ? "Belum ada uang masuk atau keluar di periode ini."
-    : "Uang masuk sama dengan uang keluar.";
-
-  const tick = isDark ? "#a1a1aa" : "#71717a";
-  const grid = isDark ? "#27272a" : "#f0f0f0";
-  const axis = isDark ? "#52525b" : "#d4d4d8";
+  // Belanja stok = uang keluar yang berubah jadi barang dagangan (bukan biaya habis pakai)
+  const tanpaStok = d.net + d.u.stok;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <FilterComp
         mode={props.mode} setMode={props.setMode} month={props.month} setMonth={props.setMonth}
         rangeStart={props.rangeStart} setRangeStart={props.setRangeStart} rangeEnd={props.rangeEnd} setRangeEnd={props.setRangeEnd}
       />
 
-      {error && (
-        <div className="rounded-2xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-3 text-[13px] text-red-700 dark:text-red-300">
-          Gagal memuat transaksi POS: {error}
-        </div>
-      )}
+      {error && <Notice tone="negative">Gagal memuat transaksi POS: {error}</Notice>}
 
-      {/* HERO: hasil keseluruhan */}
-      <section className="rounded-[24px] bg-white dark:bg-[#1c1c1e] border border-zinc-200/80 dark:border-white/10 p-5 shadow-sm">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400 min-w-0">
-            <Layers className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">Hasil · {period.label}</span>
-          </div>
-          {!loading && !kosong && <StatusArus net={d.net} />}
-        </div>
-        <div className="mt-3 text-[34px] sm:text-[42px] font-black tabular-nums tracking-tight leading-none text-zinc-900 dark:text-white">
-          {loading ? <Loader2 className="w-8 h-8 animate-spin text-zinc-400" /> : rpTanda(d.net)}
-        </div>
-        <p className="mt-2 text-[13px] leading-snug text-zinc-500 dark:text-zinc-400">{kalimat}</p>
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <ArusTile jenis="masuk" value={d.masuk} />
-          <ArusTile jenis="keluar" value={d.keluar} />
-        </div>
-        {d.masuk > 0 && !loading && (
-          <div className="mt-3.5">
-            <div className="h-2 rounded-full bg-zinc-100 dark:bg-white/10 overflow-hidden">
-              <div className="h-full rounded-full" style={{ width: `${Math.min(100, Math.max(2, rasio))}%`, background: WARNA_KELUAR }} />
-            </div>
-            <p className="mt-1.5 text-[12px] text-zinc-500 dark:text-zinc-400">
-              {rasio <= 100 ? (
-                <>Uang keluar <b className="text-zinc-800 dark:text-zinc-100">{persen(rasio)}</b> dari uang masuk</>
-              ) : (
-                <>Uang keluar <b className="text-zinc-800 dark:text-zinc-100">{(rasio / 100).toFixed(1).replace(".", ",")}×</b> uang masuk</>
-              )}
-            </p>
-          </div>
+      {/* HASIL KESELURUHAN */}
+      <HeroArus eyebrow={`Hasil · ${period.label}`} eyebrowIcon={<Layers />} net={d.net} masuk={d.masuk} keluar={d.keluar} loading={loading} rasio>
+        {!loading && d.u.stok > 0 && (
+          <LineList className="mt-3 border-t border-sep">
+            <LineItem label="Belanja stok" note="jadi barang di toko" value={`−${rupiah(d.u.stok)}`} />
+            <LineItem label="Hasil tanpa belanja stok" total value={<Amount value={tanpaStok} signed tone="auto" size="subhead" className="font-bold" />} />
+          </LineList>
         )}
-      </section>
+      </HeroArus>
 
       {/* PER MODEL USAHA */}
+      <SectionHeader title="Per usaha" />
       <div className="grid gap-3 sm:grid-cols-2">
         <KartuBisnis
           judul="Rental"
           sub="Pembukuan harian & owner"
-          icon={<Gamepad2 className="w-[18px] h-[18px]" />}
+          icon={<Gamepad2 />}
+          iconColor="blue"
           masuk={d.rental.masuk}
           keluar={d.rental.keluar}
           rows={[
@@ -324,7 +236,8 @@ export default function AnalitikKeseluruhan(props: Props) {
         <KartuBisnis
           judul="Usaha"
           sub="POS, jasa & stok jualan"
-          icon={<Store className="w-[18px] h-[18px]" />}
+          icon={<Store />}
+          iconColor="orange"
           loading={loading}
           masuk={d.usaha.masuk}
           keluar={d.usaha.keluar}
@@ -340,77 +253,72 @@ export default function AnalitikKeseluruhan(props: Props) {
       </div>
 
       {kosong ? (
-        <div className="rounded-[22px] border border-dashed border-zinc-300 dark:border-zinc-700 p-6 text-center">
-          <BarChart3 className="w-8 h-8 mx-auto text-zinc-300 dark:text-zinc-600" />
-          <div className="mt-2 text-[15px] font-black text-zinc-800 dark:text-zinc-100">Belum ada transaksi di periode ini</div>
-          <p className="text-[12.5px] text-zinc-500 mt-1 max-w-sm mx-auto">
-            Pembukuan rental, nota POS, dan transaksi di Input › Transaksi otomatis terhitung di sini.
-          </p>
-        </div>
+        <EmptyState icon={<BarChart3 />} title="Belum ada transaksi di periode ini">
+          Pembukuan rental, nota POS, dan transaksi di Input › Transaksi otomatis terhitung di sini.
+        </EmptyState>
       ) : (
         <>
           {/* Grafik arus uang */}
-          <KartuAnalitik title={grafik.per === "hari" ? "Arus uang per hari" : "Arus uang per bulan"} icon={<BarChart3 className="w-4 h-4 text-zinc-500" />} right={<LegendaArus />}>
-            <div className="h-[220px] -ml-3">
+          <SectionHeader title="Arus uang" />
+          <Card
+            title={grafik.per === "hari" ? "Per hari" : "Per bulan"}
+            accessory={<Legend items={[{ color: MARK.masuk, label: "Masuk" }, { color: MARK.keluar, label: "Keluar" }]} />}
+          >
+            <div className="-ml-2 h-[220px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={grafik.data} stackOffset="sign" margin={{ top: 8, right: 4, left: 0, bottom: 0 }} barCategoryGap="20%">
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={grid} />
-                  <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: tick }} interval="preserveStartEnd" minTickGap={6} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: tick }} tickFormatter={(v) => rpShort(Math.abs(Number(v)))} width={44} />
-                  <ReferenceLine y={0} stroke={axis} />
-                  <Tooltip cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }} content={<TipArus />} />
-                  <Bar dataKey="masuk" stackId="arus" fill={WARNA_MASUK} radius={[4, 4, 0, 0]} maxBarSize={22} />
-                  <Bar dataKey="keluarNeg" stackId="arus" fill={WARNA_KELUAR} radius={[4, 4, 0, 0]} maxBarSize={22} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={tema.grid} />
+                  <XAxis dataKey="label" {...sumbu(tema.tick)} interval="preserveStartEnd" minTickGap={6} />
+                  <YAxis {...sumbu(tema.tick)} tickFormatter={(v) => rpShort(Math.abs(Number(v)))} width={44} />
+                  <ReferenceLine y={0} stroke={tema.axis} />
+                  <Tooltip cursor={{ fill: tema.cursor }} content={<TipArus />} />
+                  <Bar dataKey="masuk" stackId="arus" fill={MARK.masuk} radius={[4, 4, 0, 0]} maxBarSize={22} />
+                  <Bar dataKey="keluarNeg" stackId="arus" fill={MARK.keluar} radius={[0, 0, 4, 4]} maxBarSize={22} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="mt-2 grid grid-cols-2 gap-2 text-[12px]">
-              <div className="rounded-xl bg-zinc-50 dark:bg-white/5 px-3 py-2 flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
-                <ArrowUpRight className="w-4 h-4 text-zinc-400" />
-                <span><b className="text-zinc-900 dark:text-white tabular-nums">{hariSurplus}</b> {grafik.per} surplus</span>
-              </div>
-              <div className="rounded-xl bg-zinc-50 dark:bg-white/5 px-3 py-2 flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
-                <ArrowDownLeft className="w-4 h-4 text-zinc-400" />
-                <span><b className="text-zinc-900 dark:text-white tabular-nums">{hariMinus}</b> {grafik.per} minus</span>
-              </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Pill tone="positive">{hariSurplus} {grafik.per} surplus</Pill>
+              <Pill tone="negative">{hariMinus} {grafik.per} minus</Pill>
             </div>
-            <p className="text-[11px] text-zinc-400 mt-2">Batang di atas garis = uang masuk, di bawah garis = uang keluar.</p>
-          </KartuAnalitik>
+          </Card>
 
-          {/* Rincian */}
+          {/* Rincian sumber & tujuan uang */}
+          <SectionHeader title="Rincian" />
           <div className="grid gap-3 sm:grid-cols-2">
-            <KartuAnalitik title="Dari mana uang masuk" icon={<Titik c={WARNA_MASUK} className="w-2.5 h-2.5" />} right={<span className="text-[12px] font-bold tabular-nums text-zinc-500">{rpShort(d.masuk)}</span>}>
+            <Card title="Dari mana uang masuk" accessory={<span className="tabular-nums">{rupiah(d.masuk)}</span>}>
               {d.sumber.length === 0 ? (
-                <p className="text-[13px] text-zinc-500 py-2">Belum ada uang masuk.</p>
+                <p className="py-1 text-footnote text-label-2">Belum ada uang masuk.</p>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-3.5">
                   {d.sumber.slice(0, 8).map((x) => (
-                    <BatangUang key={x.sub + x.label} jenis="masuk" label={x.label} value={x.v} max={d.sumber[0].v} sub={`${x.sub} · ${persen((x.v / Math.max(1, d.masuk)) * 100)}`} />
+                    <BarRow key={x.sub + x.label} label={x.label} value={rupiah(x.v)} fraction={x.v / Math.max(1, d.sumber[0].v)} color={MARK.masuk} sub={`${x.sub} · ${persen((x.v / Math.max(1, d.masuk)) * 100)}`} />
                   ))}
                 </div>
               )}
-            </KartuAnalitik>
-            <KartuAnalitik title="Ke mana uang keluar" icon={<Titik c={WARNA_KELUAR} className="w-2.5 h-2.5" />} right={<span className="text-[12px] font-bold tabular-nums text-zinc-500">{rpShort(d.keluar)}</span>}>
+            </Card>
+            <Card title="Ke mana uang keluar" accessory={<span className="tabular-nums">{rupiah(d.keluar)}</span>}>
               {d.kategori.length === 0 ? (
-                <p className="text-[13px] text-zinc-500 py-2">Belum ada uang keluar.</p>
+                <p className="py-1 text-footnote text-label-2">Belum ada uang keluar.</p>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-3.5">
                   {d.kategori.slice(0, 8).map((x) => (
-                    <BatangUang key={x.sub + x.label} jenis="keluar" label={x.label} value={x.v} max={d.kategori[0].v} sub={`${x.sub} · ${persen((x.v / Math.max(1, d.keluar)) * 100)}`} />
+                    <BarRow key={x.sub + x.label} label={x.label} value={rupiah(x.v)} fraction={x.v / Math.max(1, d.kategori[0].v)} color={MARK.keluar} sub={`${x.sub} · ${persen((x.v / Math.max(1, d.keluar)) * 100)}`} />
                   ))}
                   {d.kategori.length > 8 && (
-                    <p className="text-[11.5px] text-zinc-500">
+                    <p className="text-caption text-label-2">
                       +{d.kategori.length - 8} kategori lain · {rupiah(d.kategori.slice(8).reduce((s, x) => s + x.v, 0))}
                     </p>
                   )}
                 </div>
               )}
-            </KartuAnalitik>
+            </Card>
           </div>
 
-          <p className="text-[11.5px] text-zinc-400 leading-snug px-1">
+          <Footnote className="pt-1">
             Rental = pembukuan harian + transaksi owner bertanda Rental. Usaha = nota POS (tanpa nota batal) + transaksi owner bertanda Usaha, termasuk belanja stok dari Input › Atur Stok.
-          </p>
+            {d.u.stok > 0 && " Belanja stok tercatat sebagai uang keluar saat dibeli, walau barangnya masih ada di toko."}
+          </Footnote>
         </>
       )}
     </div>

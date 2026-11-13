@@ -1,13 +1,50 @@
 import React from "react";
-import Section from "./common/Section";
-import { 
-  Filter as FilterIcon, 
-  CalendarDays, 
-  CalendarRange, 
-  ChevronDown,
-  LayoutGrid
-} from "lucide-react";
+import { CalendarDays, ChevronsUpDown } from "lucide-react";
+import { IconBadge, ListGroup } from "../ui";
 
+/** Pilihan periode (nilai tetap sama dengan data lama; label huruf biasa ala iOS). */
+const OPSI: { v: string; l: string }[] = [
+  { v: "Bulan Ini", l: "Bulan ini" },
+  { v: "7 Hari Terakhir", l: "7 hari terakhir" },
+  { v: "Semua Bulan", l: "Semua periode" },
+  { v: "Pilih Bulan", l: "Pilih bulan" },
+  { v: "Rentang", l: "Rentang tanggal" },
+];
+const BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+
+/** Baris daftar ala iOS dengan nilai di kanan; pemilih asli (native) menutupi seluruh baris. */
+const BarisPilih: React.FC<{ icon?: React.ReactNode; label: string; nilai: string; children: React.ReactNode }> = ({ icon, label, nilai, children }) => (
+  <label className="group/row relative flex w-full cursor-pointer items-center gap-3 pl-4 pr-3 transition-colors active:bg-fill">
+    {icon ?? <span className="w-7 shrink-0" aria-hidden />}
+    <span className="flex min-h-[48px] min-w-0 flex-1 items-center gap-2 border-b border-sep py-2.5 group-last/row:border-b-0">
+      <span className="flex-1 truncate text-callout text-label">{label}</span>
+      <span className="truncate text-callout text-label-2">{nilai}</span>
+      <ChevronsUpDown className="h-4 w-4 shrink-0 text-label-3" aria-hidden />
+    </span>
+    {children}
+  </label>
+);
+
+const BarisTanggal: React.FC<{ label: string; value: string; onChange: (v: string) => void }> = ({ label, value, onChange }) => (
+  <div className="group/row flex w-full items-center gap-3 pl-4 pr-3">
+    <span className="w-7 shrink-0" aria-hidden />
+    <span className="flex min-h-[48px] min-w-0 flex-1 items-center justify-between gap-3 border-b border-sep py-1.5 group-last/row:border-b-0">
+      <span className="text-callout text-label">{label}</span>
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={`${label} tanggal`}
+        className="!w-auto !min-h-0 h-9 min-w-[132px] rounded-control bg-fill px-3 text-center text-[16px] tabular-nums text-label outline-none focus:ring-2 focus:ring-tint/40"
+      />
+    </span>
+  </div>
+);
+
+/**
+ * FILTER PERIODE — satu komponen untuk Analitik & riwayat pembukuan.
+ * Tampil sebagai grup daftar ala Pengaturan iOS: Periode ▸ (Bulan / Dari–Sampai).
+ */
 const Filter: React.FC<{
   mode: string;
   setMode: (v: string) => void;
@@ -18,129 +55,38 @@ const Filter: React.FC<{
   rangeEnd: string;
   setRangeEnd: (v: string) => void;
 }> = ({ mode, setMode, month, setMonth, rangeStart, setRangeStart, rangeEnd, setRangeEnd }) => {
-  
-  // --- Styling Constants ---
-  const containerBase = "rounded-[24px] border border-zinc-200 bg-white p-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-950";
-  
-  const inputWrapperBase = `
-    group relative flex items-center gap-3 rounded-2xl 
-    bg-zinc-100/80 px-4 py-3 transition-all duration-200 
-    hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800
-    focus-within:bg-white dark:focus-within:bg-black
-    focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:shadow-md
-  `;
-
-  const labelClass = "text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-0.5";
-  const selectClass = "relative z-10 w-full appearance-none bg-transparent text-sm font-semibold text-zinc-900 outline-none dark:text-zinc-100 cursor-pointer focus:ring-0 border-none p-0";
-  const dateClass = "w-full bg-transparent text-sm font-semibold text-zinc-900 outline-none dark:text-zinc-100 min-h-[20px] font-mono p-0 border-none focus:ring-0";
-  const iconBase = "text-zinc-400 transition-colors group-hover:text-zinc-600 dark:text-zinc-500 dark:group-hover:text-zinc-300";
-  const optionClass = "bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100 py-2";
-
+  const labelMode = OPSI.find((o) => o.v === mode)?.l || mode;
+  const bulan = Math.min(12, Math.max(1, Number(month) || 1));
+  const pilih = "absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 text-[16px]";
   return (
-    <Section>
-      <div className={containerBase}>
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-12">
-          
-          {/* 1. MAIN FILTER MODE */}
-          <div className={`${mode === "Rentang" ? "md:col-span-4" : mode === "Pilih Bulan" ? "md:col-span-8" : "md:col-span-12"}`}>
-            <div className={inputWrapperBase}>
-              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white dark:bg-zinc-800 shadow-sm ${iconBase}`}>
-                <FilterIcon size={16} />
-              </div>
-              <div className="flex w-full flex-col justify-center">
-                <span className={labelClass}>Tampilkan Data</span>
-                <div className="relative grid grid-cols-1">
-                  {/* Select Layer */}
-                  <select 
-                    value={mode} 
-                    onChange={(e) => setMode(e.target.value)} 
-                    className={selectClass}
-                  >
-                    <option className={optionClass} value="Bulan Ini">Bulan Ini (Default)</option>
-                    <option className={optionClass} value="7 Hari Terakhir">7 Hari Terakhir</option>
-                    <option className={optionClass} value="Semua Bulan">Semua Periode</option>
-                    <option className={optionClass} value="Pilih Bulan">Pilih Bulan Tertentu</option>
-                    <option className={optionClass} value="Rentang">Rentang Tanggal</option>
-                  </select>
-                  {/* Icon Layer */}
-                  <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" size={14} />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 2. CONDITIONAL INPUTS */}
-          
-          {/* Mode: Pilih Bulan */}
-          {mode === "Pilih Bulan" && (
-            <div className="md:col-span-4 animate-in fade-in slide-in-from-left-2 duration-300">
-              <div className={inputWrapperBase}>
-                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white dark:bg-zinc-800 shadow-sm ${iconBase}`}>
-                  <LayoutGrid size={16} />
-                </div>
-                <div className="flex w-full flex-col justify-center">
-                  <span className={labelClass}>Bulan Ke-</span>
-                  <div className="relative grid grid-cols-1">
-                    <select
-                      value={month}
-                      onChange={(e) => setMonth(parseInt(e.target.value, 10))}
-                      className={selectClass}
-                    >
-                      {[...Array(12)].map((_, i) => (
-                        <option key={i + 1} value={i + 1} className={optionClass}>
-                           {new Date(0, i).toLocaleString('id-ID', { month: 'long' })} ({i + 1})
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" size={14} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Mode: Rentang Tanggal */}
-          {mode === "Rentang" && (
-            <>
-              <div className="md:col-span-4 animate-in fade-in slide-in-from-left-2 duration-300">
-                <div className={inputWrapperBase}>
-                   <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white dark:bg-zinc-800 shadow-sm ${iconBase}`}>
-                    <CalendarDays size={16} />
-                  </div>
-                  <div className="flex w-full flex-col justify-center">
-                    <span className={labelClass}>Dari Tanggal</span>
-                    <input
-                      type="date"
-                      value={rangeStart}
-                      onChange={(e) => setRangeStart(e.target.value)}
-                      className={dateClass}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="md:col-span-4 animate-in fade-in slide-in-from-left-2 duration-300 delay-75">
-                <div className={inputWrapperBase}>
-                   <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white dark:bg-zinc-800 shadow-sm ${iconBase}`}>
-                    <CalendarRange size={16} />
-                  </div>
-                  <div className="flex w-full flex-col justify-center">
-                    <span className={labelClass}>Sampai Tanggal</span>
-                    <input
-                      type="date"
-                      value={rangeEnd}
-                      onChange={(e) => setRangeEnd(e.target.value)}
-                      className={dateClass}
-                    />
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-
-        </div>
-      </div>
-    </Section>
+    <ListGroup>
+      <BarisPilih icon={<IconBadge color="red"><CalendarDays /></IconBadge>} label="Periode" nilai={labelMode}>
+        <select aria-label="Periode data" value={mode} onChange={(e) => setMode(e.target.value)} className={pilih}>
+          {OPSI.map((o) => (
+            <option key={o.v} value={o.v}>
+              {o.l}
+            </option>
+          ))}
+        </select>
+      </BarisPilih>
+      {mode === "Pilih Bulan" && (
+        <BarisPilih label="Bulan" nilai={BULAN[bulan - 1]}>
+          <select aria-label="Bulan" value={bulan} onChange={(e) => setMonth(parseInt(e.target.value, 10))} className={pilih}>
+            {BULAN.map((b, i) => (
+              <option key={b} value={i + 1}>
+                {b}
+              </option>
+            ))}
+          </select>
+        </BarisPilih>
+      )}
+      {mode === "Rentang" && (
+        <>
+          <BarisTanggal label="Dari" value={rangeStart} onChange={setRangeStart} />
+          <BarisTanggal label="Sampai" value={rangeEnd} onChange={setRangeEnd} />
+        </>
+      )}
+    </ListGroup>
   );
 };
 

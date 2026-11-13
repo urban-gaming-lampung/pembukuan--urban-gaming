@@ -5,15 +5,15 @@ type SectionProps = {
   children: React.ReactNode;
 };
 
+/**
+ * Kartu bagian halaman (lama) — kini memakai permukaan kartu Design System (src/ui) supaya
+ * semua halaman simetris: sudut 22px, latar surface, tepi tipis, padding 16px.
+ * Untuk kartu baru pakai `Card` dari "../../ui".
+ */
 const Section: React.FC<SectionProps> = ({ title, children }) => {
   return (
-    <section className="bg-white dark:bg-zinc-900 rounded-2xl shadow p-3 sm:p-4 md:p-6 border border-zinc-200 dark:border-zinc-800">
-      {title ? (
-        <h2 className="text-lg md:text-xl font-semibold mb-3 text-zinc-800 dark:text-zinc-100">
-          {title}
-        </h2>
-      ) : null}
-
+    <section className="rounded-card bg-surface p-4 shadow-card ring-1 ring-edge md:p-6">
+      {title ? <h2 className="mb-3 text-title3 text-label">{title}</h2> : null}
       {children}
     </section>
   );
