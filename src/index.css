@@ -10,7 +10,8 @@
 
 /* biar browser auto adapt light / dark */
 :root {
-  color-scheme: light dark;
+  /* Kontrol bawaan (dropdown, tanggal) ikut tema aplikasi, bukan tema HP/PC */
+  color-scheme: light;
 
   /* ===== URBAN Design System — token warna (lihat src/ui/DESIGN.md) =====
      Kanal RGB supaya bisa dipakai dengan opacity Tailwind (bg-surface/80).
@@ -39,6 +40,7 @@
 
 /* Dark mode */
 .dark {
+  color-scheme: dark;
   --ui-canvas: 0 0 0;
   --ui-surface: 28 28 30;        /* #1C1C1E */
   --ui-surface-2: 44 44 46;      /* #2C2C2E */

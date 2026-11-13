@@ -282,9 +282,9 @@ export default function AnalitikRental(p: Props) {
               </div>
             </Card>
 
-            <Card title="Jam ramai" icon={<Clock />} iconColor="orange" accessory={puncak && puncak.count > 0 ? <>Puncak <b className="font-semibold text-label">{puncak.hour.replace(":00", ".00")}</b></> : undefined}>
+            <Card className="flex flex-col" title="Jam ramai" icon={<Clock />} iconColor="orange" accessory={puncak && puncak.count > 0 ? <>Puncak <b className="font-semibold text-label">{puncak.hour.replace(":00", ".00")}</b></> : undefined}>
               {maxJam > 0 ? (
-                <div className="-ml-2 h-[170px]">
+                <div className="-ml-2 min-h-[170px] flex-1">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={p.jamRamai} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barCategoryGap="18%">
                       <XAxis dataKey="hour" {...sumbu(tema.tick)} tickFormatter={(v) => String(v).slice(0, 2)} interval={0} />
@@ -306,7 +306,7 @@ export default function AnalitikRental(p: Props) {
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <p className="py-6 text-center text-footnote text-label-2">Belum ada jam masuk tercatat.</p>
+                <p className="flex flex-1 items-center justify-center py-6 text-center text-footnote text-label-2">Belum ada jam masuk tercatat.</p>
               )}
               <p className="mt-2 text-caption text-label-2">Dari jam masuk pemasukan harian & sewa. Batang tegas = jam tersibuk.</p>
             </Card>

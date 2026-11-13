@@ -63,7 +63,7 @@ const Filter: React.FC<{
       <BarisPilih icon={<IconBadge color="red"><CalendarDays /></IconBadge>} label="Periode" nilai={labelMode}>
         <select aria-label="Periode data" value={mode} onChange={(e) => setMode(e.target.value)} className={pilih}>
           {OPSI.map((o) => (
-            <option key={o.v} value={o.v}>
+            <option key={o.v} value={o.v} className="bg-surface text-label">
               {o.l}
             </option>
           ))}
@@ -73,7 +73,7 @@ const Filter: React.FC<{
         <BarisPilih label="Bulan" nilai={BULAN[bulan - 1]}>
           <select aria-label="Bulan" value={bulan} onChange={(e) => setMonth(parseInt(e.target.value, 10))} className={pilih}>
             {BULAN.map((b, i) => (
-              <option key={b} value={i + 1}>
+              <option key={b} value={i + 1} className="bg-surface text-label">
                 {b}
               </option>
             ))}

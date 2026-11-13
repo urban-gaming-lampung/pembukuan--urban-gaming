@@ -546,8 +546,8 @@ export default function AnalitikUsaha(props: FilterProps) {
             </Card>
 
             {/* Jam ramai */}
-            <Card title="Jam ramai" icon={<Clock />} iconColor="orange" accessory={jamRamai ? <>Puncak <b className="font-semibold text-label">{jamRamai.label}.00</b></> : null}>
-              <div className="-ml-2 h-[150px]">
+            <Card className="flex flex-col" title="Jam ramai" icon={<Clock />} iconColor="orange" accessory={jamRamai ? <>Puncak <b className="font-semibold text-label">{jamRamai.label}.00</b></> : null}>
+              <div className="-ml-2 min-h-[150px] flex-1">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={jam} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barCategoryGap="18%">
                     <XAxis dataKey="label" {...sumbu(tema.tick)} interval={0} />
