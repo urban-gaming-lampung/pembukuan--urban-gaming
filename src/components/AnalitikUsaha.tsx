@@ -8,7 +8,7 @@ import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue } from "../hooks/useStokData";
 import { getMinStok, kunciStok, statusOf, useMinStok } from "../lib/stokJualan";
-import { cancelPosSale, deletePosSale, gabungNota, infoNego, isDpTerbuka, PosItem, PosSale, ringkasanDp, StokRef, tanggalPenjualan, terjualDalam, usePosSales, usePosSalesLunas, waktuPenjualan } from "../lib/posSales";
+import { bayarNota, cancelPosSale, deletePosSale, gabungNota, nilaiTukarNota, infoNego, isDpTerbuka, PosItem, PosSale, ringkasanDp, StokRef, tanggalPenjualan, terjualDalam, usePosSales, usePosSalesLunas, waktuPenjualan } from "../lib/posSales";
 import { BatalDp } from "./NotaDpSheet";
 import { fmtTanggalNota } from "../lib/posReceipt";
 import { NotaActionButtons, NotaPreview, useNotaActions } from "./PosCheckoutSheet";
@@ -83,7 +83,7 @@ export default function AnalitikUsaha(props: FilterProps) {
   const adaData = cur.length > 0 || manualCur.length > 0 || dp.berjalan > 0 || dp.hangus > 0;
 
   const st = useMemo(() => {
-    let omzet = 0, qty = 0, diskon = 0, cash = 0, transfer = 0, cashN = 0, transferN = 0, nego = 0, negoN = 0, posOmzet = 0, manualOmzet = 0;
+    let omzet = 0, qty = 0, diskon = 0, cash = 0, transfer = 0, cashN = 0, transferN = 0, nego = 0, negoN = 0, posOmzet = 0, manualOmzet = 0, tukar = 0, tukarN = 0;
     const byDay = new Map<string, { omzet: number; nota: number }>();
     const byCat = new Map<string, { omzet: number; qty: number }>();
     const byProduct = new Map<string, { nama: string; kategori: string; qty: number; omzet: number }>();
@@ -100,7 +100,10 @@ export default function AnalitikUsaha(props: FilterProps) {
       if (s.pembayaran?.length) {
         s.pembayaran.forEach((p) => { if (p.metode === "TRANSFER") transfer += Number(p.jumlah) || 0; else cash += Number(p.jumlah) || 0; });
         if (s.pembayaran[s.pembayaran.length - 1].metode === "TRANSFER") transferN++; else cashN++;
-      } else if (s.metode === "TRANSFER") { transfer += s.total; transferN++; } else { cash += s.total; cashN++; }
+      } else if (s.metode === "TRANSFER") { transfer += bayarNota(s); transferN++; } else { cash += bayarNota(s); cashN++; }
+      // Tukar tambah: nilai barang masuk memotong uang yang diterima (dicatat sebagai belanja stok)
+      const tt = nilaiTukarNota(s);
+      if (tt > 0) { tukar += tt; tukarN++; }
       const tJual = waktuPenjualan(s);
       const day = tanggalPenjualan(s);
       const d = byDay.get(day) || { omzet: 0, nota: 0 };
@@ -137,7 +140,7 @@ export default function AnalitikUsaha(props: FilterProps) {
     });
     const transaksi = cur.length + manualCur.length;
     return {
-      omzet, qty, diskon, nego, negoN, cash, transfer, cashN, transferN, posOmzet, manualOmzet,
+      omzet, qty, diskon, nego, negoN, cash, transfer, cashN, transferN, posOmzet, manualOmzet, tukar, tukarN,
       nota: cur.length, manualN: manualCur.length, transaksi, avg: transaksi ? omzet / transaksi : 0,
       byDay, byCat, byProduct, byKasir, byHour, soldStok,
     };
@@ -203,9 +206,11 @@ export default function AnalitikUsaha(props: FilterProps) {
     });
     (props.pemasukan || []).forEach((e) => { lain += Number(e.harga) || 0; });
     const masuk = st.omzet + lain + dp.berjalan + dp.hangus;
-    const keluar = belanjaStok + operasional;
-    return { belanjaStok, operasional, lain, masuk, keluar, selisih: masuk - keluar };
-  }, [props.pengeluaran, props.pemasukan, st.omzet, dp.berjalan, dp.hangus]);
+    // Barang tukar tambah = belanja stok yang dibayar dengan potongan nota
+    const tukar = st.tukar;
+    const keluar = belanjaStok + tukar + operasional;
+    return { belanjaStok, tukar, operasional, lain, masuk, keluar, selisih: masuk - keluar };
+  }, [props.pengeluaran, props.pemasukan, st.omzet, st.tukar, dp.berjalan, dp.hangus]);
 
   // ===== Laba & margin usaha =====
   // Penjualan terhitung = omzet POS tanpa barang jualan yang belum punya harga modal.
@@ -327,6 +332,7 @@ export default function AnalitikUsaha(props: FilterProps) {
           {dp.hangus > 0 && <LineItem dot={MARK.masuk} label="DP hangus" note={`${dp.hangusN} nota batal`} value={rupiah(dp.hangus)} />}
           <LineItem dot={MARK.masuk} label="Pemasukan lain" note="modal dll." value={rupiah(uang.lain)} muted={uang.lain === 0} />
           <LineItem dot={MARK.keluar} label="Belanja stok" value={`${uang.belanjaStok > 0 ? "−" : ""}${rupiah(uang.belanjaStok)}`} muted={uang.belanjaStok === 0} />
+          {uang.tukar > 0 && <LineItem dot={MARK.keluar} label="Barang tukar tambah" note={`${st.tukarN} nota · potongan harga`} value={`−${rupiah(uang.tukar)}`} />}
           <LineItem dot={MARK.keluar} label="Biaya operasional" value={`${uang.operasional > 0 ? "−" : ""}${rupiah(uang.operasional)}`} muted={uang.operasional === 0} />
         </LineList>
         {growth !== null && !loading && (

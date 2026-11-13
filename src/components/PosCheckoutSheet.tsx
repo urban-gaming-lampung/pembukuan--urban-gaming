@@ -1,15 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { X, CheckCircle2, Download, Printer, Share2, AlertTriangle, Package, Loader2, MessageCircle, PlusCircle, Link2Off, Handshake, Pencil, RotateCcw, Clock } from "lucide-react";
+import { X, CheckCircle2, Download, Printer, Share2, AlertTriangle, Package, Loader2, MessageCircle, PlusCircle, Link2Off, Handshake, Pencil, RotateCcw, Clock, ArrowLeftRight } from "lucide-react";
 import logoBlack from "../assets/urban-logo-black.png";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
-import { commitPosSale, infoNego, isBonus, Kondisi, negoSatuan, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, sisaBayar, StokRef } from "../lib/posSales";
+import { adaTukarTambah, bayarNota, commitPosSale, infoNego, nilaiTukarNota, isBonus, Kondisi, negoSatuan, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, sisaBayar, StokRef } from "../lib/posSales";
 import { UploadTransferProof } from "./TableEditor";
-import { barisPembayaran, belumDibayar, belumLunas, statusTegas, buildNotaPdf, fmtTanggalNota, isNotaSewa, judulNota, KETENTUAN_DP, kotakSyarat, labelPembeli, notaFileName, preloadNotaAssets, printNotaThermal, STORE, teksPembayaran, teksPenutup, teksStatusBayar } from "../lib/posReceipt";
+import { barangTukarTambah, barisPembayaran, belumDibayar, belumLunas, statusTegas, buildNotaPdf, fmtTanggalNota, isNotaSewa, judulNota, KETENTUAN_DP, kotakSyarat, labelPembeli, notaFileName, preloadNotaAssets, printNotaThermal, STORE, teksPembayaran, teksPenutup, teksStatusBayar } from "../lib/posReceipt";
 import { rupiah } from "../lib/format";
 import { toLocalYmd } from "../lib/dateLocal";
 import { kunciStok } from "../lib/stokJualan";
 import { linkWa, rapikanWa } from "../lib/wa";
+import { DraftTukar, KartuTukarTambah, TukarTambahSheet } from "./TukarTambahSheet";
+import { labelBayarTukar } from "../lib/posReceipt";
 
 export type CheckoutLine = {
   id: string;
@@ -72,6 +74,24 @@ export const NotaPreview: React.FC<{ sale: PosSale }> = ({ sale: s }) => {
         ))}
       </div>
       <div className="border-t border-dashed border-zinc-400 my-2.5" />
+      {barangTukarTambah(s).length > 0 && (
+        <>
+          <div className="text-[10px] font-black tracking-[0.08em] mb-1.5">BARANG TUKAR TAMBAH (MASUK)</div>
+          <div className="space-y-2">
+            {barangTukarTambah(s).map((t, i) => (
+              <div key={i} className="text-[11px]">
+                <div className="font-bold leading-snug">{t.nama}</div>
+                {t.sn && <div className="text-[9.5px] text-zinc-500 font-mono">SN {t.sn}</div>}
+                <div className="flex justify-between text-zinc-700 font-mono">
+                  <span>{t.qty} x {rupiah(t.nilai)}</span>
+                  <span className="text-black">-{rupiah(t.subtotal)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-dashed border-zinc-400 my-2.5" />
+        </>
+      )}
       {(ng.ada || s.diskon > 0) && (
         <div className="space-y-0.5 text-[11px] mb-2 font-mono">
           {ng.ada && (
@@ -206,13 +226,18 @@ export function useNotaActions(sale: PosSale | null) {
       ``,
       `No. Nota: *${sale.noNota}*`,
       ...sale.items.map((it) => `• ${it.nama} (${it.qty}x) ${isBonus(it) ? "BONUS" : rupiah(it.subtotal)}`),
+      ...(barangTukarTambah(sale).length
+        ? [`Tukar tambah (barang masuk):`, ...barangTukarTambah(sale).map((t) => `• ${t.nama}${t.sn ? ` · SN ${t.sn}` : ""} −${rupiah(t.subtotal)}`)]
+        : []),
       ...(sale.infoNota || []).map((x) => `${x.l}: ${x.r}`),
       ...(infoNego(sale).ada ? [`_Catatan: ${infoNego(sale).catatan}._`] : []),
       belumDibayar(sale)
         ? `Total: *${rupiah(sale.total)}* — BELUM DIBAYAR`
         : sale.status === "DP" || sale.status === "BATAL_PEMBELI" || sale.status === "BATAL_URBAN" || sale.pembayaran?.length
           ? `Total: *${rupiah(sale.total)}* — *${teksStatusBayar(sale)}*`
-          : `Total: *${rupiah(sale.total)}* — LUNAS (${sale.metode === "TRANSFER" ? "Transfer/QRIS" : "Tunai"})`,
+          : adaTukarTambah(sale)
+            ? `Total: *${rupiah(sale.total)}* — *${teksStatusBayar(sale)}*`
+            : `Total: *${rupiah(sale.total)}* — LUNAS (${sale.metode === "TRANSFER" ? "Transfer/QRIS" : "Tunai"})`,
       ...barisPembayaran(sale).map((b) => (b.bold ? `${b.l}: *${b.r}*` : `${b.l}: ${b.r}`)),
       ``,
       ...(link ? [`📄 Nota PDF: ${link}`, ``] : []),
@@ -332,6 +357,9 @@ const PosCheckoutSheet: React.FC<Props> = ({
   const [caraBayar, setCaraBayar] = useState<"LUNAS" | "DP">("LUNAS");
   const [dpStr, setDpStr] = useState("");
   const [jatuhTempo, setJatuhTempo] = useState(() => tanggalNanti(JATUH_TEMPO_BAWAAN));
+  // Tukar tambah: barang pembeli yang masuk sebagai potongan (null = lembar tertutup, "" = barang baru)
+  const [tukar, setTukar] = useState<DraftTukar[]>([]);
+  const [ubahTukar, setUbahTukar] = useState<string | null>(null);
   const actions = useNotaActions(sale);
 
   useEffect(() => { if (open) preloadNotaAssets(); }, [open]);
@@ -340,6 +368,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
     setPembeli(""); setPembeliWa(""); setVariant({}); setBukti(""); setError(""); setSale(null); setSaving(""); actions.setMsg("");
     setHargaNego({}); setEditHarga(null); setDraftHarga("");
     setCaraBayar("LUNAS"); setDpStr(""); setJatuhTempo(tanggalNanti(JATUH_TEMPO_BAWAAN));
+    setTukar([]); setUbahTukar(null);
   };
 
   // ---------- Nego harga oleh kasir ----------
@@ -414,8 +443,14 @@ const PosCheckoutSheet: React.FC<Props> = ({
   };
   const belumPilih = resolved.filter((x) => x.pilih && !x.ref);
   const jumlahBarang = lines.reduce((s, l) => s + l.quantity, 0);
-  const butuhBukti = metode === "TRANSFER" && !bukti;
   const isDp = caraBayar === "DP";
+  // Tukar tambah hanya untuk nota lunas yang menjual barang
+  const bisaTukar = !isDp && lines.some((l) => l.category === "JUALAN");
+  const adaTukar = bisaTukar && tukar.length > 0;
+  const nilaiTukar = adaTukar ? tukar.reduce((a, t) => a + t.nilai * t.qty, 0) : 0;
+  const bayar = hitung.total - nilaiTukar; // negatif = URBAN membayar ke pembeli
+  const tanpaUang = adaTukar && bayar === 0;
+  const butuhBukti = metode === "TRANSFER" && !bukti && !tanpaUang;
   const nominalDp = Math.round(Number(dpStr.replace(/[^\d]/g, "")) || 0);
   const dpSalah = isDp && (!(nominalDp > 0) || nominalDp >= hitung.total);
   const jatuhTempoSalah = isDp && (!/^\d{4}-\d{2}-\d{2}$/.test(jatuhTempo) || jatuhTempo < tanggalNanti(0));
@@ -452,15 +487,15 @@ const PosCheckoutSheet: React.FC<Props> = ({
         kasirNama,
         pembeli: pembeli.trim() || "Pelanggan",
         pembeliWa: rapikanWa(pembeliWa) || undefined,
-        metode,
-        buktiTransfer: metode === "TRANSFER" ? bukti : undefined,
+        metode: tanpaUang ? "CASH" : metode,
+        buktiTransfer: metode === "TRANSFER" && !tanpaUang ? bukti : undefined,
         items,
         subtotal: hitung.subtotal,
         ...(adaNego ? { nego: totalNego, negoOleh: kasirNama } : {}),
         diskonPersen: hitung.discountPercent,
         diskon: hitung.discountAmount,
         total: hitung.total,
-      }, isDp ? { dp: { jumlah: nominalDp, jatuhTempo } } : {});
+      }, isDp ? { dp: { jumlah: nominalDp, jatuhTempo } } : adaTukar ? { tukarTambah: tukar.map(({ key, ...t }) => t) } : {});
     } catch (e: any) {
       setError("Transaksi gagal disimpan: " + (e?.message || e) + ". Stok tidak berubah, coba lagi.");
       setSaving("");
@@ -501,8 +536,13 @@ const PosCheckoutSheet: React.FC<Props> = ({
             <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-3">
               {/* Total */}
               <div className="rounded-[20px] bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-4 py-3.5">
-                <div className="text-[11px] font-bold uppercase tracking-widest opacity-60">Total bayar</div>
-                <div className="text-[30px] font-black font-mono tracking-tight leading-none mt-1">{rupiah(hitung.total)}</div>
+                <div className="text-[11px] font-bold uppercase tracking-widest opacity-60">{adaTukar ? labelBayarTukar(bayar) : "Total bayar"}</div>
+                <div className="text-[30px] font-black font-mono tracking-tight leading-none mt-1">{rupiah(adaTukar ? Math.abs(bayar) : hitung.total)}</div>
+                {adaTukar && (
+                  <div className="text-[12px] mt-1.5 opacity-80">
+                    Total barang {rupiah(hitung.total)} · tukar tambah −{rupiah(nilaiTukar)}
+                  </div>
+                )}
                 {adaNego && (
                   <div className="text-[12px] mt-1.5 opacity-80 flex items-center gap-1.5 flex-wrap">
                     <Handshake className="w-3.5 h-3.5 shrink-0" />
@@ -528,12 +568,13 @@ const PosCheckoutSheet: React.FC<Props> = ({
                 <div className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Cara bayar</div>
                 <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-zinc-100 dark:bg-zinc-800" role="tablist" aria-label="Cara bayar">
                   {(["LUNAS", "DP"] as const).map((c) => (
-                    <button key={c} type="button" role="tab" aria-selected={caraBayar === c} onClick={() => { setCaraBayar(c); setError(""); }}
-                      className={`h-10 rounded-[10px] text-[12px] sm:text-[13px] font-bold uppercase tracking-wide transition ${caraBayar === c ? "bg-white dark:bg-zinc-600 text-zinc-900 dark:text-white shadow" : "text-zinc-500"}`}>
+                    <button key={c} type="button" role="tab" aria-selected={caraBayar === c} disabled={c === "DP" && tukar.length > 0} onClick={() => { setCaraBayar(c); setError(""); }}
+                      className={`h-10 rounded-[10px] text-[12px] sm:text-[13px] font-bold uppercase tracking-wide transition disabled:opacity-40 ${caraBayar === c ? "bg-white dark:bg-zinc-600 text-zinc-900 dark:text-white shadow" : "text-zinc-500"}`}>
                       {c === "LUNAS" ? "Bayar Lunas" : "Bayar DP"}
                     </button>
                   ))}
                 </div>
+                {tukar.length > 0 && !isDp && <p className="text-[11.5px] text-zinc-500 -mt-0.5">Nota tukar tambah harus lunas — DP belum bisa dipakai.</p>}
                 {isDp && (
                   <div className="space-y-2.5 pt-0.5">
                     <div>
@@ -570,6 +611,9 @@ const PosCheckoutSheet: React.FC<Props> = ({
                 )}
               </div>
 
+              {/* Tukar tambah: barang pembeli masuk sebagai potongan */}
+              {bisaTukar && <KartuTukarTambah daftar={tukar} onTambah={() => setUbahTukar("")} onUbah={(k) => setUbahTukar(k)} />}
+
               {/* Pembeli */}
               <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] p-3.5 space-y-2.5">
                 <div className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Pembeli</div>
@@ -577,6 +621,10 @@ const PosCheckoutSheet: React.FC<Props> = ({
                   className="w-full h-12 px-3.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-[15px] font-semibold text-zinc-900 dark:text-white placeholder:text-zinc-400 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-zinc-900/20 dark:focus:ring-white/20" />
                 <input value={pembeliWa} onChange={(e) => setPembeliWa(e.target.value)} inputMode="tel" placeholder="No. WhatsApp (opsional, untuk garansi)" autoComplete="off"
                   className="w-full h-12 px-3.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-[15px] font-semibold text-zinc-900 dark:text-white placeholder:text-zinc-400 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-zinc-900/20 dark:focus:ring-white/20" />
+                {tanpaUang ? (
+                  <p className="text-[12px] text-zinc-500 px-0.5">Nilai tukar tambah sama dengan harga barang — tidak ada uang yang dibayar.</p>
+                ) : (<>
+                {adaTukar && bayar < 0 && <div className="text-[12px] font-semibold text-zinc-500 px-0.5">URBAN membayar ke pembeli lewat</div>}
                 <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-zinc-100 dark:bg-zinc-800">
                   {(["CASH", "TRANSFER"] as const).map((m) => (
                     <button key={m} type="button" onClick={() => setMetode(m)}
@@ -588,7 +636,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
                 {metode === "TRANSFER" && (
                   <div className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 ${bukti ? "bg-blue-50 dark:bg-blue-500/10" : "bg-amber-50 dark:bg-amber-500/10 ring-1 ring-amber-300/60 dark:ring-amber-500/30"}`}>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[14px] font-bold text-zinc-900 dark:text-white">Bukti transfer</div>
+                      <div className="text-[14px] font-bold text-zinc-900 dark:text-white">{adaTukar && bayar < 0 ? "Bukti transfer ke pembeli" : "Bukti transfer"}</div>
                       <div className={`text-[12px] ${bukti ? "text-blue-700 dark:text-blue-300" : "text-amber-700 dark:text-amber-400"}`}>
                         {bukti ? "Terupload ✓ · ketuk foto untuk lihat" : "Wajib · foto / screenshot bukti transfer"}
                       </div>
@@ -596,6 +644,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
                     <UploadTransferProof value={bukti} onChange={setBukti} />
                   </div>
                 )}
+                </>)}
               </div>
 
               {/* Barang & stok */}
@@ -735,7 +784,11 @@ const PosCheckoutSheet: React.FC<Props> = ({
                 {saving === "none" ? "Menyimpan…" : "Simpan tanpa cetak"}
               </button>
               <p className="text-[11px] text-center text-zinc-400 -mt-1">
-                {isDp ? "Nota DP tersimpan BELUM LUNAS · stok berkurang saat pelunasan." : "Transaksi tersimpan & stok barang terhubung otomatis berkurang."}
+                {isDp
+                  ? "Nota DP tersimpan BELUM LUNAS · stok berkurang saat pelunasan."
+                  : adaTukar
+                    ? "Stok barang dijual berkurang · barang tukar tambah menunggu konfirmasi stok."
+                    : "Transaksi tersimpan & stok barang terhubung otomatis berkurang."}
               </p>
             </div>
           </>
@@ -746,7 +799,11 @@ const PosCheckoutSheet: React.FC<Props> = ({
               <div className="flex-1 min-w-0">
                 <h3 className="text-[17px] font-black text-zinc-900 dark:text-white leading-tight">{sale.status === "DP" ? "Nota DP tersimpan" : "Transaksi tersimpan"}</h3>
                 <p className="text-[12px] text-zinc-500 font-mono truncate">
-                  {sale.status === "DP" ? `${sale.noNota} · DP ${rupiah(sale.dp || 0)} · sisa ${rupiah(sisaBayar(sale))}` : `${sale.noNota} · ${rupiah(sale.total)}`}
+                  {sale.status === "DP"
+                    ? `${sale.noNota} · DP ${rupiah(sale.dp || 0)} · sisa ${rupiah(sisaBayar(sale))}`
+                    : adaTukarTambah(sale)
+                      ? `${sale.noNota} · ${bayarNota(sale) < 0 ? "ke pembeli " : ""}${rupiah(Math.abs(bayarNota(sale)))}`
+                      : `${sale.noNota} · ${rupiah(sale.total)}`}
                 </p>
               </div>
               <button type="button" onClick={close} aria-label="Tutup" className="w-9 h-9 rounded-full bg-zinc-200/70 dark:bg-zinc-800 flex items-center justify-center"><X className="w-4 h-4" /></button>
@@ -768,6 +825,15 @@ const PosCheckoutSheet: React.FC<Props> = ({
                 <div className="flex items-start gap-2 rounded-2xl bg-amber-50 dark:bg-amber-500/10 p-3 text-[12.5px] leading-snug text-amber-800 dark:text-amber-300">
                   <Clock className="w-4 h-4 shrink-0 mt-px" />
                   <span>Barang <b>dipesan</b> — stok berkurang saat pelunasan. Lunasi lewat <b>Kasir POS › Belum Lunas</b> paling lambat jatuh tempo.</span>
+                </div>
+              )}
+
+              {adaTukarTambah(sale) && (
+                <div className="flex items-start gap-2 rounded-2xl bg-white dark:bg-[#1c1c1e] p-3 text-[12.5px] leading-snug text-zinc-700 dark:text-zinc-300">
+                  <ArrowLeftRight className="w-4 h-4 shrink-0 mt-px text-blue-600" />
+                  <span>
+                    {sale.tukarTambah?.length || 0} barang tukar tambah ({rupiah(nilaiTukarNota(sale))}) menunggu <b>Konfirmasi stok</b> oleh owner / super admin.
+                  </span>
                 </div>
               )}
 
@@ -811,6 +877,23 @@ const PosCheckoutSheet: React.FC<Props> = ({
           </>
         )}
       </div>
+      {ubahTukar !== null && !sale && (() => {
+        const awal = tukar.find((t) => t.key === ubahTukar) || null;
+        return (
+          <TukarTambahSheet
+            totalNota={hitung.total}
+            nilaiLain={tukar.filter((t) => t.key !== ubahTukar).reduce((a, t) => a + t.nilai * t.qty, 0)}
+            awal={awal}
+            onClose={() => setUbahTukar(null)}
+            onHapus={awal ? () => { setTukar((l) => l.filter((t) => t.key !== awal.key)); setUbahTukar(null); } : undefined}
+            onSimpan={(d) => {
+              setTukar((l) => (l.some((t) => t.key === d.key) ? l.map((t) => (t.key === d.key ? d : t)) : [...l, d]));
+              setUbahTukar(null);
+              setError("");
+            }}
+          />
+        );
+      })()}
     </div>
   );
 };

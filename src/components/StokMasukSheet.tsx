@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { AlertTriangle, Loader2, Minus, Plus } from "lucide-react";
 import useStokData from "../hooks/useStokData";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
-import { hapusStokMasuk, KATEGORI_PENGELUARAN_STOK, StokMasuk, ubahStokMasuk } from "../lib/barangJualan";
+import { dariTukarTambah, hapusStokMasuk, KATEGORI_PENGELUARAN_STOK, StokMasuk, ubahStokMasuk } from "../lib/barangJualan";
 import { rupiah } from "../lib/format";
 import { Toggle } from "../ui/feedback";
 
@@ -38,6 +38,8 @@ const StokMasukSheet: React.FC<{
   const [busy, setBusy] = useState<"" | "simpan" | "hapus">("");
   const [err, setErr] = useState("");
   const namaUntukPengeluaran = produkNama || rec.produkNama;
+  // Barang tukar tambah: jumlah, stok & nilainya mengikuti nota POS (hanya-baca di sini)
+  const dariTukar = dariTukarTambah(rec);
   const modalN = Number(modal || 0);
   const selisih = qty - rec.qty;
   const berubah = qty !== rec.qty || modalN !== rec.modalSatuan || tanggal !== rec.tanggal || catat !== rec.catatPengeluaran;
@@ -70,10 +72,33 @@ const StokMasukSheet: React.FC<{
         <div className="px-4 pt-1 pb-2 flex items-center justify-between">
           <button type="button" onClick={onClose} disabled={!!busy} className="text-[16px] text-blue-600 dark:text-blue-400 disabled:opacity-40 min-w-[56px] text-left">Batal</button>
           <h3 className="text-[16px] font-semibold text-zinc-900 dark:text-white">Stok Masuk</h3>
-          <button type="button" onClick={simpan} disabled={!!busy || !berubah} className="text-[16px] font-semibold text-blue-600 dark:text-blue-400 disabled:opacity-40 min-w-[56px] text-right">
-            {busy === "simpan" ? <Loader2 className="w-5 h-5 animate-spin ml-auto" /> : "Simpan"}
-          </button>
+          {dariTukar ? <span className="min-w-[56px]" /> : (
+            <button type="button" onClick={simpan} disabled={!!busy || !berubah} className="text-[16px] font-semibold text-blue-600 dark:text-blue-400 disabled:opacity-40 min-w-[56px] text-right">
+              {busy === "simpan" ? <Loader2 className="w-5 h-5 animate-spin ml-auto" /> : "Simpan"}
+            </button>
+          )}
         </div>
+        {dariTukar ? (
+          <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-4">
+            <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] px-4 py-1 divide-y divide-zinc-100 dark:divide-white/5">
+              {[
+                { l: "Barang stok", r: `${rec.kategori} › ${rec.item}` },
+                { l: "Jumlah", r: `+${rec.qty}` },
+                { l: "Modal / barang", r: rupiah(rec.modalSatuan || 0) },
+                { l: "Tanggal nota", r: rec.tanggal },
+                { l: "Nota", r: rec.noNota || "-" },
+              ].map((x) => (
+                <div key={x.l} className="flex items-center justify-between gap-3 py-2.5 text-[15px]">
+                  <span className="text-zinc-500 shrink-0">{x.l}</span>
+                  <span className="text-zinc-900 dark:text-white font-medium tabular-nums text-right truncate">{x.r}</span>
+                </div>
+              ))}
+            </div>
+            <p className="px-1 text-[12.5px] text-zinc-500 leading-snug">
+              Barang dari <b className="font-semibold text-zinc-700 dark:text-zinc-200">tukar tambah</b>. Nilainya sudah tercatat di nota sebagai belanja stok, jadi tidak ada pengeluaran terpisah. Jumlahnya mengikuti nota — membatalkan nota menarik barang ini dari stok.
+            </p>
+          </div>
+        ) : (<>
         <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 space-y-4">
           <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
@@ -138,6 +163,7 @@ const StokMasukSheet: React.FC<{
             {busy === "hapus" && <Loader2 className="w-4 h-4 animate-spin" />}Hapus stok masuk
           </button>
         </div>
+        </>)}
       </div>
     </div>
   );

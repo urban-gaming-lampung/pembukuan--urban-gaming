@@ -100,7 +100,34 @@ export type PosSale = {
   /** Waktu pelunasan — penjualan nota DP dihitung pada waktu ini */
   lunasTs?: number;
   lunasOleh?: string;
+
+  // ---------- TUKAR TAMBAH (barang pembeli masuk ke toko) ----------
+  /**
+   * Barang milik pembeli yang ditukar-tambahkan. Nilainya memotong uang yang dibayar,
+   * barangnya masuk antrean "Konfirmasi stok" (koleksi tukar_tambah) sampai dikonfirmasi owner.
+   * `total` tetap = harga barang yang dijual (omzet); uang yang berpindah = bayarNota().
+   */
+  tukarTambah?: TukarTambahNota[];
+  /** Σ nilai barang tukar tambah (dicatat sebagai belanja stok pada tanggal nota). */
+  nilaiTukar?: number;
 };
+
+/** Satu barang tukar tambah di nota (detail lengkap + foto ada di koleksi tukar_tambah/{id}). */
+export type TukarTambahNota = { id: string; nama: string; qty: number; nilai: number; sn: string };
+/** Input kasir untuk satu barang tukar tambah (sebelum nota disimpan). */
+export type TukarTambahInput = { nama: string; qty: number; nilai: number; sn: string; fotoSn: string; fotoBarang: string; catatan?: string };
+
+// ============================================================
+// TUKAR TAMBAH — SSOT angka nota
+// ============================================================
+/** Nilai barang tukar tambah di nota (0 bila tidak ada). */
+export const nilaiTukarNota = (s: Pick<PosSale, "nilaiTukar">) => Math.max(0, Math.round(Number(s.nilaiTukar) || 0));
+export const adaTukarTambah = (s: Pick<PosSale, "nilaiTukar" | "tukarTambah">) => nilaiTukarNota(s) > 0 || !!s.tukarTambah?.length;
+/**
+ * Uang yang benar-benar berpindah untuk nota lunas: total barang − nilai tukar tambah.
+ * Positif = dibayar pembeli; negatif = URBAN membayar ke pembeli.
+ */
+export const bayarNota = (s: Pick<PosSale, "total" | "nilaiTukar">) => (Number(s.total) || 0) - nilaiTukarNota(s);
 
 export type StatusNota = "DP" | "LUNAS" | "BATAL_PEMBELI" | "BATAL_URBAN";
 export type PembayaranNota = {
@@ -457,7 +484,7 @@ export const stokRefLabel = (r?: StokRef | null) =>
 export async function commitPosSale(
   input: Omit<PosSale, "noNota" | "ts" | "tanggal" | "kasir" | "stokKurang">,
   /** Bayar DP: stok belum berkurang sampai pelunasan. */
-  opsi: { dp?: { jumlah: number; jatuhTempo: string } } = {}
+  opsi: { dp?: { jumlah: number; jatuhTempo: string }; tukarTambah?: TukarTambahInput[] } = {}
 ): Promise<PosSale> {
   const kasir = auth.currentUser?.email || "admin";
   const now = Date.now();
@@ -472,7 +499,29 @@ export async function commitPosSale(
   for (const it of input.items) {
     if (it.stokRef?.item === PILIH_SAAT_CHECKOUT) throw new Error(`Pilih varian stok untuk "${it.nama}" dulu.`);
   }
-  if (input.metode === "TRANSFER" && !input.buktiTransfer) throw new Error("Bukti transfer wajib diupload.");
+  // Tukar tambah: barang pembeli masuk antrean konfirmasi stok (dibuat dalam transaksi yang sama)
+  const tt = (opsi.tukarTambah || []).map((x) => ({
+    ...x,
+    nama: namaJualan(x.nama),
+    qty: Math.max(1, Math.round(Number(x.qty) || 1)),
+    nilai: Math.round(Number(x.nilai) || 0),
+    sn: String(x.sn || "").trim(),
+    catatan: String(x.catatan || "").trim(),
+  }));
+  if (tt.length) {
+    if (opsi.dp) throw new Error("Tukar tambah belum bisa digabung dengan DP.");
+    if (!input.items.some((it) => it.kategori === "JUALAN")) throw new Error("Tukar tambah hanya untuk nota yang menjual barang.");
+    for (const x of tt) {
+      if (!x.nama) throw new Error("Nama barang tukar tambah wajib diisi.");
+      if (!(x.nilai > 0)) throw new Error(`Nilai tukar tambah "${x.nama}" harus lebih dari Rp 0.`);
+      if (!x.sn) throw new Error(`Nomor seri (SN) "${x.nama}" wajib diisi.`);
+      if (!x.fotoSn || !x.fotoBarang) throw new Error(`Foto SN & foto barang "${x.nama}" wajib diupload.`);
+    }
+  }
+  const nilaiTukar = tt.reduce((a, x) => a + x.nilai * x.qty, 0);
+  const bayar = input.total - nilaiTukar;
+  if (input.metode === "TRANSFER" && bayar !== 0 && !input.buktiTransfer) throw new Error("Bukti transfer wajib diupload.");
+  const ttRefs = tt.map(() => doc(collection(db, "tukar_tambah")));
   const dp = opsi.dp ? Math.round(Number(opsi.dp.jumlah) || 0) : null;
   if (opsi.dp) {
     if (!(dp! > 0) || dp! >= input.total) throw new Error("Nominal DP harus lebih dari 0 dan kurang dari total.");
@@ -498,9 +547,20 @@ export async function commitPosSale(
           status: "DP", dp, jatuhTempo: opsi.dp!.jatuhTempo,
           pembayaran: [{ jenis: "DP", jumlah: dp, metode: input.metode, ...(input.buktiTransfer ? { buktiTransfer: input.buktiTransfer } : {}), ts: now, oleh: kasir, olehNama: input.kasirNama }],
         }
-      : { ...input, noNota, ts: now, tanggal, kasir, stokKurang };
+      : {
+          ...input, noNota, ts: now, tanggal, kasir, stokKurang,
+          ...(tt.length ? { tukarTambah: tt.map((x, i) => ({ id: ttRefs[i].id, nama: x.nama, qty: x.qty, nilai: x.nilai, sn: x.sn })), nilaiTukar } : {}),
+        };
     const stokSesudah = sisaSesudah(w.logs as any[]);
     tx.set(counterRef, { day: dayKey, seq }, { merge: true });
+    tt.forEach((x, i) =>
+      tx.set(ttRefs[i], {
+        status: "MENUNGGU",
+        noNota, saleId: saleRef.id, ts: now, tanggal, kasir, kasirNama: input.kasirNama || "",
+        pembeli: input.pembeli || "", ...(input.pembeliWa ? { pembeliWa: input.pembeliWa } : {}),
+        nama: x.nama, qty: x.qty, nilai: x.nilai, sn: x.sn, fotoSn: x.fotoSn, fotoBarang: x.fotoBarang, catatan: x.catatan,
+      })
+    );
     // Firestore menolak nilai undefined -> bersihkan dulu (data polos, aman di-JSON)
     tx.set(saleRef, { ...JSON.parse(JSON.stringify(sale)), waktu: serverTimestamp() });
     return { ...sale, id: saleRef.id, stokSesudah };
@@ -521,6 +581,29 @@ function restoreChanges(sale: PosSale): StokChange[] {
   return changes;
 }
 
+/** Baca dokumen tukar tambah milik nota (di dalam transaksi). */
+async function bacaTukarTambahNota(tx: any, sale: PosSale) {
+  const ids = (sale.tukarTambah || []).map((t) => t.id).filter(Boolean);
+  const snaps = await Promise.all(ids.map((id) => tx.get(doc(db, "tukar_tambah", id))));
+  return snaps.filter((x: any) => x.exists()).map((x: any) => ({ ref: x.ref, data: x.data() as any }));
+}
+
+/**
+ * Perubahan stok untuk menarik barang tukar tambah yang SUDAH dikonfirmasi masuk stok.
+ * Bila barangnya sudah terjual lagi (stok kurang), nota tidak boleh dibatalkan / dihapus.
+ */
+function tarikTukarTambah(tt: { data: any }[], jualan: Record<string, Record<string, StokItemValue>>): StokChange[] {
+  const out: StokChange[] = [];
+  tt.forEach(({ data: t }) => {
+    if (t.status !== "DIKONFIRMASI" || !t.stokRef) return;
+    const ada = Math.max(0, Math.round(Number(jualan?.[t.stokRef.kategori]?.[t.stokRef.item]?.jumlah) || 0));
+    const qty = Math.max(1, Math.round(Number(t.qty) || 1));
+    if (ada < qty) throw new Error(`Barang tukar tambah "${t.nama}" sudah tidak ada di stok (mungkin sudah terjual lagi). Nota tidak bisa dibatalkan.`);
+    out.push({ kategori: t.stokRef.kategori, item: t.stokRef.item, delta: -qty });
+  });
+  return out;
+}
+
 /**
  * Hapus nota permanen (owner / super admin, untuk data uji / salah input).
  * Bila nota belum dibatalkan, stok yang terpotong dikembalikan. Riwayat stok milik
@@ -537,12 +620,20 @@ export async function deletePosSale(sale: PosSale): Promise<void> {
     const [sSnap, stSnap] = await Promise.all([tx.get(saleRef), tx.get(stokDoc)]);
     if (!sSnap.exists()) throw new Error("Nota sudah tidak ada.");
     const cur = sSnap.data() as PosSale;
+    const tt = await bacaTukarTambahNota(tx, cur);
+    const jualan = (stSnap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
     // Nota DP yang belum lunas tidak pernah memotong stok
-    if (!cur.batal && cur.status !== "DP") {
-      const jualan = (stSnap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
-      const w = prepareStokWrites(jualan, restoreChanges(cur), "koreksi", "", oleh, now);
+    const changes = !cur.batal && cur.status !== "DP" ? restoreChanges(cur) : [];
+    // Barang tukar tambah yang sudah masuk stok ikut ditarik
+    if (!cur.batal) changes.push(...tarikTukarTambah(tt, jualan));
+    if (changes.length) {
+      const w = prepareStokWrites(jualan, changes, "koreksi", "", oleh, now);
       if (Object.keys(w.patch).length) tx.set(stokDoc, { jualan: w.patch }, { merge: true }); // tanpa log: riwayatnya ikut dihapus
     }
+    tt.forEach((t) => {
+      if (t.data.stokMasukId) tx.delete(doc(db, "stok_masuk", t.data.stokMasukId));
+      tx.delete(t.ref);
+    });
     logs.docs.forEach((d) => tx.delete(d.ref));
     tx.delete(saleRef);
   });
@@ -565,10 +656,16 @@ export async function cancelPosSale(sale: PosSale, alasan = ""): Promise<void> {
     const cur = sSnap.data() as PosSale;
     if (cur.batal) throw new Error("Nota ini sudah dibatalkan.");
     if (cur.status === "DP") throw new Error("Nota DP dibatalkan lewat pilihan Dibatalkan pembeli / Dibatalkan URBAN.");
+    const tt = await bacaTukarTambahNota(tx, cur);
     const jualan = (stSnap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
-    const changes = restoreChanges(cur);
+    // Barang terjual kembali ke stok; barang tukar tambah yang sudah masuk stok ditarik keluar
+    const changes = [...restoreChanges(cur), ...tarikTukarTambah(tt, jualan)];
     const w = prepareStokWrites(jualan, changes, "koreksi", `Batal nota ${cur.noNota}${alasan.trim() ? ` · ${alasan.trim()}` : ""}`, oleh, now);
     writeStokInTx(tx, w, { noNota: cur.noNota });
+    tt.forEach((t) => {
+      if (t.data.stokMasukId) tx.delete(doc(db, "stok_masuk", t.data.stokMasukId));
+      tx.update(t.ref, { status: "BATAL", batalTs: now, batalOleh: oleh });
+    });
     tx.update(saleRef, { batal: true, batalOleh: oleh, batalTs: now, batalAlasan: alasan.trim() || null });
   });
   sinkronNotaDiam(sale.ts);

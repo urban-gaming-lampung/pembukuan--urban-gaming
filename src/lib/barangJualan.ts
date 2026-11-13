@@ -80,8 +80,8 @@ export function modalPada(info: ModalInfo | undefined, ts: number): { modal: num
   return pick ? { modal: pick.modal, perkiraan: false } : { modal: r[0].modal, perkiraan: true };
 }
 
-/** Kompres foto (maks 1000 px, JPEG) lalu unggah ke folder products/. */
-export async function uploadFotoProduk(file: File): Promise<string> {
+/** Kompres foto (sisi terpanjang maks `maksPx`, JPEG) — dipakai foto produk & tukar tambah. */
+export async function kompresFoto(file: File, maksPx = 1000): Promise<Blob> {
   if (!file.type.startsWith("image/")) throw new Error("File harus berupa gambar.");
   const dataUrl = await new Promise<string>((res, rej) => {
     const r = new FileReader();
@@ -95,7 +95,7 @@ export async function uploadFotoProduk(file: File): Promise<string> {
     i.onerror = () => rej(new Error("Foto tidak bisa dibuka."));
     i.src = dataUrl;
   });
-  const scale = Math.min(1, 1000 / Math.max(img.width, img.height));
+  const scale = Math.min(1, maksPx / Math.max(img.width, img.height));
   const c = document.createElement("canvas");
   c.width = Math.round(img.width * scale);
   c.height = Math.round(img.height * scale);
@@ -103,7 +103,12 @@ export async function uploadFotoProduk(file: File): Promise<string> {
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, c.width, c.height);
   ctx.drawImage(img, 0, 0, c.width, c.height);
-  const blob = await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("Kompres foto gagal."))), "image/jpeg", 0.82));
+  return new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("Kompres foto gagal."))), "image/jpeg", 0.82));
+}
+
+/** Kompres foto (maks 1000 px, JPEG) lalu unggah ke folder products/. */
+export async function uploadFotoProduk(file: File): Promise<string> {
+  const blob = await kompresFoto(file, 1000);
   const safe = file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9]+/g, "_").slice(0, 40) || "foto";
   const r = storageRef(storage, `products/${Date.now()}_${safe}.jpg`);
   await uploadBytes(r, blob, { contentType: "image/jpeg" });
@@ -253,7 +258,13 @@ export type StokMasuk = {
   ts: number;
   oleh: string;
   updatedAt?: number;
+  /** Barang dari tukar tambah: nilainya sudah tercatat di nota POS (bukan pengeluaran). */
+  sumber?: "TUKAR_TAMBAH";
+  noNota?: string;
+  tukarTambahId?: string;
 };
+/** Catatan stok masuk dari tukar tambah — dikelola lewat notanya, bukan diedit manual. */
+export const dariTukarTambah = (r: Pick<StokMasuk, "sumber">) => r.sumber === "TUKAR_TAMBAH";
 export type StokMasukData = { qty: number; modalSatuan: number; tanggal: string; catatPengeluaran: boolean };
 
 const tglLabel = (ymd: string) => {
@@ -440,7 +451,7 @@ export async function kurangiStokMasukSalahInput(ref: StokRef, kurang: number, n
   const n = Math.round(kurang);
   if (!(n > 0)) throw new Error("Jumlah yang dikurangi harus lebih dari 0.");
   const snap = await getDocs(query(collection(db, "stok_masuk"), where("kategori", "==", ref.kategori)));
-  const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StokMasuk, "id">) })).filter((r) => r.item === ref.item);
+  const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StokMasuk, "id">) })).filter((r) => r.item === ref.item && !dariTukarTambah(r)); // barang tukar tambah dikelola lewat notanya
   const rencana = rencanaKurangiStokMasuk(list, n);
   const oleh = auth.currentUser?.email || "owner";
   const now = Date.now();

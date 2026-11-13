@@ -49,7 +49,8 @@ function barisTerkunciDariNota(baris: BarisNota[]): BarisTerkunci[] {
 const PengingatBarang: React.FC<{ nota: NotaBarang[]; tampilNominal?: boolean }> = ({ nota, tampilNominal }) => {
   if (!nota.length) return null;
   const total = nota.reduce((a, n) => a + n.total, 0);
-  const adaDp = nota.some((n) => n.label);
+  const adaDp = nota.some((n) => n.label === "DP" || n.label === "Pelunasan");
+  const adaKePembeli = nota.some((n) => n.total < 0);
   return (
     <div className="rounded-[20px] bg-amber-50 dark:bg-amber-500/[0.08] ring-1 ring-amber-200/70 dark:ring-amber-500/20 px-4 py-3">
       <div className="flex items-start gap-2.5">
@@ -61,7 +62,9 @@ const PengingatBarang: React.FC<{ nota: NotaBarang[]; tampilNominal?: boolean }>
             {nota.length} nota barang{adaDp ? " & DP" : ""} hari ini
             {tampilNominal && <span className="whitespace-nowrap"> · {rupiah(total)}</span>}
           </p>
-          <p className="text-[12px] text-amber-800/80 dark:text-amber-300/80 leading-snug">Setor langsung ke owner — tidak masuk kas harian.</p>
+          <p className="text-[12px] text-amber-800/80 dark:text-amber-300/80 leading-snug">
+            Setor langsung ke owner — tidak masuk kas harian.{adaKePembeli ? " Nominal minus = tukar tambah yang dibayar URBAN ke pembeli." : ""}
+          </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {nota.map((n) => (
               <span key={n.id} className="px-2 py-0.5 rounded-md bg-white/80 dark:bg-white/10 text-[11px] font-mono font-semibold text-amber-900 dark:text-amber-200">

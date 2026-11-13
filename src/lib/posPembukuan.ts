@@ -16,7 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs, onSnapshot, orderBy, query, runTransaction, where } from "firebase/firestore";
 import { db } from "./firebase";
 import type { PosItem, PosSale } from "./posSales";
-import { pernahDp } from "./posSales";
+import { nilaiTukarNota, pernahDp } from "./posSales";
 import { rentangHariKerja, tanggalHariKerja } from "./dateLocal";
 import { toInt } from "./format";
 import { totalBaris } from "./keuangan";
@@ -87,7 +87,11 @@ export function barisJasaDariNota(s: PosSale): BarisNota[] {
 }
 
 /** Uang yang disetor langsung ke owner (tidak masuk kas harian): nota BARANG, DP & pelunasan. */
-export type NotaBarang = { noNota: string; id: string; ts: number; pembeli: string; metode: PosSale["metode"]; total: number; jumlah: number; label?: "DP" | "Pelunasan" };
+/**
+ * Uang barang yang disetor ke owner. `total` bisa NEGATIF pada nota tukar tambah yang nilai
+ * barang masuknya lebih besar (URBAN membayar ke pembeli).
+ */
+export type NotaBarang = { noNota: string; id: string; ts: number; pembeli: string; metode: PosSale["metode"]; total: number; jumlah: number; label?: "DP" | "Pelunasan" | "Tukar tambah" };
 export function notaBarang(s: PosSale, from = 0, to = Infinity): NotaBarang[] {
   if (!s) return [];
   if (pernahDp(s)) {
@@ -110,16 +114,19 @@ export function notaBarang(s: PosSale, from = 0, to = Infinity): NotaBarang[] {
   }
   if (s.batal || s.ts < from || s.ts > to) return [];
   const items = (s.items || []).filter((it) => !tipeJasaPos(it));
-  // Hanya barang berbayar (barang bonus Rp 0 tidak perlu disetor)
-  if (!items.length || !items.some((it) => (Number(it.subtotal) || 0) > 0)) return [];
+  const tukar = nilaiTukarNota(s);
+  // Hanya barang berbayar (barang bonus Rp 0 tidak perlu disetor) — kecuali ada tukar tambah
+  if (!tukar && (!items.length || !items.some((it) => (Number(it.subtotal) || 0) > 0))) return [];
   return [{
     noNota: s.noNota,
     id: s.id || s.noNota,
     ts: s.ts,
     pembeli: String(s.pembeli || ""),
     metode: s.metode,
-    total: items.reduce((a, it) => a + (Number(it.subtotal) || 0), 0),
+    // Nilai barang tukar tambah memotong uang barang (jasa tetap utuh di kas harian)
+    total: items.reduce((a, it) => a + (Number(it.subtotal) || 0), 0) - tukar,
     jumlah: items.reduce((a, it) => a + (Number(it.qty) || 0), 0),
+    ...(tukar ? { label: "Tukar tambah" as const } : {}),
   }];
 }
 

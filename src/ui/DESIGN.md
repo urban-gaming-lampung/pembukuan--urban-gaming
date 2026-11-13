@@ -162,6 +162,7 @@ Jarak (kelipatan 4px):
 
 ### Lembar (sheet) & dialog
 - Sheet bawah: latar `bg-[#f2f2f7] dark:bg-black`, gagang 36×5px, header *Batal — Judul — Simpan* (`text-tint`), isi kartu `rounded-[20px] bg-surface`. Contoh: `StokMasukSheet`.
+- Sheet input / aksi (baru): latar `bg-canvas`, judul `text-title3` + subjudul `text-footnote text-label-2`, tombol tutup bulat `bg-fill`, isi kartu `rounded-card bg-surface`, aksi utama `Button size="lg" block` di kaki `bg-surface border-t border-sep`. Foto wajib = tile 4:3 `rounded-tile bg-fill` bergaris putus + ikon kamera `text-tint`. Contoh: `TukarTambahSheet`, `KonfirmasiTukarSheet`.
 - Dialog konfirmasi: kartu 320px kaca (`backdrop-blur-xl`), dua tombol bawah berpemisah. Contoh: `KonfirmasiAkun`.
 
 ---
@@ -215,4 +216,5 @@ Jarak (kelipatan 4px):
 | `Section` (kartu lama: Rincian Usaha Rental, History, Monitoring, Pegawai) | ✅ permukaan kartu UDS; isi bertahap |
 | Lembar rincian pendapatan / pengeluaran (Analitik Rental) | ⏳ gaya lama, migrasi berikutnya |
 | Dashboard Pegawai (Ringkasan · Absensi · Gaji · Akun) | ✅ memakai UDS; editor isi gaji bertahap |
+| Tukar tambah (lembar barang masuk di checkout POS, Konfirmasi stok) | ✅ memakai UDS |
 | Monitoring, Input, Stok, Pengaturan | ⏳ migrasi bertahap ke komponen UDS |

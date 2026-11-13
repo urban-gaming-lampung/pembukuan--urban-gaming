@@ -5,7 +5,7 @@
  */
 import jsPDF from "jspdf";
 import logoBlackUrl from "../assets/urban-logo-black.png";
-import { infoNego, isBonus, negoSatuan, pernahDp, sisaBayar, totalDibayar } from "./posSales";
+import { adaTukarTambah, bayarNota, infoNego, isBonus, negoSatuan, nilaiTukarNota, pernahDp, sisaBayar, totalDibayar } from "./posSales";
 import type { PosSale } from "./posSales";
 import { rupiah } from "./format";
 
@@ -35,15 +35,23 @@ export const teksPembayaran = (s: PosSale) =>
       ? s.status === "DP" || s.status === "BATAL_PEMBELI" || s.status === "BATAL_URBAN"
         ? `DP - ${labelMetode(s.pembayaran?.[0]?.metode || s.metode)}`
         : "DP + pelunasan"
-      : labelMetode(s.metode);
+      : adaTukarTambah(s)
+        ? bayarNota(s) === 0 ? "Tukar tambah" : `Tukar tambah + ${labelMetode(s.metode).toLowerCase()}`
+        : labelMetode(s.metode);
 export const teksStatusBayar = (s: PosSale) => {
   if (belumDibayar(s)) return "BELUM DIBAYAR";
   if (s.status === "DP") return "BELUM LUNAS";
   if (s.status === "BATAL_PEMBELI") return "DIBATALKAN PEMBELI - DP HANGUS";
   if (s.status === "BATAL_URBAN") return "DIBATALKAN URBAN - DP DIKEMBALIKAN";
   if (pernahDp(s)) return "LUNAS";
+  if (adaTukarTambah(s) && bayarNota(s) === 0) return "LUNAS - TUKAR TAMBAH";
   return `LUNAS - ${s.metode === "TRANSFER" ? "TRANSFER / QRIS" : "TUNAI"}`;
 };
+/** Barang tukar tambah (milik pembeli, masuk ke URBAN) untuk ditampilkan di nota. */
+export const barangTukarTambah = (s: PosSale) =>
+  (s.tukarTambah || []).map((t) => ({ nama: t.nama, sn: t.sn, qty: Number(t.qty) || 1, nilai: Number(t.nilai) || 0, subtotal: (Number(t.qty) || 1) * (Number(t.nilai) || 0) }));
+/** Label uang yang berpindah pada nota tukar tambah (positif = dibayar pembeli). */
+export const labelBayarTukar = (bayar: number) => (bayar < 0 ? "Dibayar ke pembeli" : "Dibayar pembeli");
 const tglPendek = (ts: number) => new Date(ts).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
 export const fmtJatuhTempo = (ymd?: string) => {
   const [y, m, d] = String(ymd || "").split("-").map(Number);
@@ -51,7 +59,15 @@ export const fmtJatuhTempo = (ymd?: string) => {
 };
 /** Rincian pembayaran nota DP (di bawah TOTAL): DP, pelunasan, sisa, jatuh tempo. */
 export function barisPembayaran(s: PosSale): { l: string; r: string; bold?: boolean }[] {
-  if (!pernahDp(s)) return [];
+  if (!pernahDp(s)) {
+    // Tukar tambah: TOTAL = harga barang; nilai barang masuk memotong uang yang dibayar
+    if (!adaTukarTambah(s)) return [];
+    const b = bayarNota(s);
+    return [
+      { l: "Potongan tukar tambah", r: `-${rupiah(nilaiTukarNota(s))}` },
+      { l: labelBayarTukar(b), r: rupiah(Math.abs(b)), bold: true },
+    ];
+  }
   const out: { l: string; r: string; bold?: boolean }[] = (s.pembayaran || []).map((p) => ({
     l: `${p.jenis === "DP" ? "DP" : "Pelunasan"} ${tglPendek(p.ts)} (${p.metode === "TRANSFER" ? "Transfer" : "Tunai"})`,
     r: rupiah(p.jumlah),
@@ -202,6 +218,29 @@ function drawNota(pdf: jsPDF, s: PosSale, logo: { url: string; ratio: number } |
     y += 1.4;
   });
   dashed(4);
+
+  // Barang tukar tambah (masuk ke URBAN)
+  const tt = barangTukarTambah(s);
+  if (tt.length) {
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(7.5);
+    pdf.text("BARANG TUKAR TAMBAH (MASUK)", M, y);
+    y += 3.8;
+    tt.forEach((t) => {
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8);
+      (pdf.splitTextToSize(toAscii(t.nama), CW) as string[]).forEach((line) => { pdf.text(line, M, y); y += 3.4; });
+      if (t.sn) {
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(6.8);
+        pdf.text(toAscii(`SN ${t.sn}`), M, y);
+        y += 3;
+      }
+      row(`${t.qty} x ${rupiah(t.nilai)}`, `-${rupiah(t.subtotal)}`, 7.5);
+      y += 1.4;
+    });
+    dashed(4);
+  }
 
   // Total
   const ng = infoNego(s);
@@ -397,6 +436,16 @@ export async function buildNotaEscPos(s: PosSale): Promise<Uint8Array> {
     if (n) wrap(`  Normal ${rupiah(it.hargaNormal!)}, nego ${n > 0 ? "-" : "+"}${rupiah(Math.abs(n))}/pcs`).forEach(line);
   });
   rule();
+  const tt = barangTukarTambah(s);
+  if (tt.length) {
+    bold(true); line("BARANG TUKAR TAMBAH (MASUK)"); bold(false);
+    tt.forEach((t) => {
+      bold(true); wrap(t.nama).forEach(line); bold(false);
+      if (t.sn) wrap(`  SN ${t.sn}`).forEach(line);
+      line(lr(`  ${t.qty} x ${rupiah(t.nilai)}`, `-${rupiah(t.subtotal)}`));
+    });
+    rule();
+  }
   const ng = infoNego(s);
   if (ng.ada) {
     line(lr("Harga normal", rupiah(ng.hargaNormal)));

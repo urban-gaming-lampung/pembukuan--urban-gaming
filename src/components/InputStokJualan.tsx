@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Plus, Minus, X, ChevronRight, Camera, Package, Sparkles, Trash2, Loader2, AlertTriangle, Link2Off, History } from "lucide-react";
+import { Search, Plus, Minus, X, ChevronRight, Camera, Package, Sparkles, Trash2, Loader2, AlertTriangle, Link2Off, History, ArrowLeftRight } from "lucide-react";
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
@@ -14,6 +14,8 @@ import {
 import StokMasukSheet, { digits, fmtDigits, Toggle } from "./StokMasukSheet";
 import { refAda, StokRefSelect } from "./StokRefSelect";
 import { rupiah } from "../lib/format";
+import { TukarTambah, useTukarTambah } from "../lib/tukarTambah";
+import { DaftarKonfirmasiTukar, KonfirmasiTukarSheet } from "./KonfirmasiTukarSheet";
 
 const SUBS: { key: SubKategoriJualan; label: string }[] = [
   { key: "Unit PS", label: "Unit PS" },
@@ -63,7 +65,7 @@ const Thumb: React.FC<{ url?: string; size?: number }> = ({ url, size = 44 }) =>
   </div>
 );
 
-type Filter = "semua" | SubKategoriJualan | "tanpaModal" | "yatim";
+type Filter = "semua" | SubKategoriJualan | "tanpaModal" | "konfirmasi" | "yatim";
 type EditorInit = { produk: ProdukJualan | null; nama?: string; stokRef?: StokRef | null; sub?: SubKategoriJualan; kondisi?: Kondisi };
 
 export default function InputStokJualan() {
@@ -84,6 +86,9 @@ export default function InputStokJualan() {
   const [filter, setFilter] = useState<Filter>("semua");
   const [cari, setCari] = useState("");
   const [editor, setEditor] = useState<EditorInit | null>(null);
+  // Barang tukar tambah dari POS yang menunggu konfirmasi stok
+  const { list: menunggu, loading: loadingTukar } = useTukarTambah("MENUNGGU");
+  const [konfirmasi, setKonfirmasi] = useState<TukarTambah | null>(null);
   const [toast, setToast] = useState("");
   const toastTimer = useRef<number | null>(null);
   const showToast = (m: string) => {
@@ -155,7 +160,7 @@ export default function InputStokJualan() {
   const list = useMemo(() => {
     let l = products;
     if (filter === "tanpaModal") l = tanpaModal;
-    else if (filter !== "semua" && filter !== "yatim") l = products.filter((p) => subOf(p) === filter);
+    else if (filter !== "semua" && filter !== "yatim" && filter !== "konfirmasi") l = products.filter((p) => subOf(p) === filter);
     if (q) l = l.filter((p) => p.name.toLowerCase().includes(q));
     return [...l].sort((a, b) => a.name.localeCompare(b.name, "id"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -170,6 +175,7 @@ export default function InputStokJualan() {
     { key: "semua", label: "Semua", n: products.length },
     ...SUBS.map((s) => ({ key: s.key as Filter, label: s.label, n: products.filter((p) => subOf(p) === s.key).length })).filter((c) => c.n > 0 || filter === c.key),
     { key: "tanpaModal", label: "Tanpa modal", n: tanpaModal.length, warn: tanpaModal.length > 0 },
+    { key: "konfirmasi", label: "Konfirmasi stok", n: menunggu.length, warn: menunggu.length > 0 },
     { key: "yatim", label: "Stok tanpa produk", n: yatim.length, warn: yatim.length > 0 },
   ];
 
@@ -210,6 +216,17 @@ export default function InputStokJualan() {
         </div>
       )}
 
+      {menunggu.length > 0 && filter !== "konfirmasi" && (
+        <button type="button" onClick={() => setFilter("konfirmasi")}
+          className="w-full rounded-[18px] bg-blue-50 dark:bg-blue-500/10 px-4 py-3 flex items-center gap-3 text-left active:opacity-70">
+          <ArrowLeftRight className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+          <p className="flex-1 text-[13px] leading-snug text-blue-900 dark:text-blue-100">
+            <b className="font-semibold">{menunggu.length} barang tukar tambah</b> menunggu konfirmasi stok
+          </p>
+          <ChevronRight className="w-4 h-4 text-blue-700/60 dark:text-blue-300/60 shrink-0" />
+        </button>
+      )}
+
       {/* Cari + tambah */}
       <div className="flex items-center gap-2">
         <div className="flex-1 min-w-0 flex items-center gap-2 h-11 px-3.5 rounded-[14px] bg-zinc-200/60 dark:bg-white/10">
@@ -236,6 +253,12 @@ export default function InputStokJualan() {
 
       {!loaded ? (
         <div className="py-16 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-zinc-400" /></div>
+      ) : filter === "konfirmasi" ? (
+        <DaftarKonfirmasiTukar
+          list={menunggu.filter((t) => !q || `${t.nama} ${t.sn} ${t.noNota}`.toLowerCase().includes(q))}
+          loading={loadingTukar}
+          onPilih={setKonfirmasi}
+        />
       ) : filter === "yatim" ? (
         <section>
           <p className="px-1 pb-2 text-[12.5px] text-zinc-500 leading-snug">Barang ini ada di stok tapi belum dijual di POS. Jadikan produk supaya punya harga & muncul di kasir, atau hapus bila sudah tidak dipakai.</p>
@@ -315,6 +338,18 @@ export default function InputStokJualan() {
           minMap={minMap}
           onClose={() => setEditor(null)}
           onDone={(m) => { setEditor(null); showToast(m); }}
+        />
+      )}
+
+      {konfirmasi && (
+        <KonfirmasiTukarSheet
+          tt={konfirmasi}
+          products={semuaProduk}
+          modalMap={modalMap}
+          cats={cats}
+          data={data}
+          onClose={() => setKonfirmasi(null)}
+          onDone={(m) => { setKonfirmasi(null); showToast(m); }}
         />
       )}
 
@@ -735,6 +770,7 @@ const BarangJualanSheet: React.FC<{
                         <div className="text-[12px] text-zinc-500 truncate">
                           {r.modalSatuan > 0 ? `${rupiah(r.modalSatuan)}/pcs · total ${rupiah(r.modalSatuan * r.qty)}` : "Tanpa harga modal"}
                           {r.catatPengeluaran ? " · masuk pengeluaran" : ""}
+                          {r.sumber === "TUKAR_TAMBAH" ? ` · tukar tambah ${r.noNota || ""}` : ""}
                         </div>
                         {r.produkId !== p.id && (
                           <div className="text-[11.5px] text-amber-600 dark:text-amber-400 truncate">

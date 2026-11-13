@@ -14,6 +14,7 @@ Aplikasi pembukuan rental PS & usaha jualan URBAN Gaming (Vite + React + TypeScr
 - Tanggal & hari kerja (ganti hari pukul 06.00): `src/lib/dateLocal.ts`.
 - Uang rental / usaha, periode filter: `src/lib/keuangan.ts`. Target harian: `src/lib/laporan.ts`.
 - Stok & penjualan POS: `src/lib/stokJualan.ts`, `src/lib/posSales.ts`, `src/lib/barangJualan.ts`.
+- Tukar tambah: `src/lib/tukarTambah.ts`. Uang yang berpindah di nota = `bayarNota(s)` (= `total` − `nilaiTukar`, bisa minus = URBAN bayar ke pembeli); `total` tetap omzet; nilai tukar dihitung sebagai belanja stok pada tanggal nota (bukan `owner_expenses`).
 
 ## Alur rilis
 Setiap perubahan kode: `npx tsc --noEmit -p .` → `npm run build` (menaikkan `src/version.json`) → commit → push ke `main`.

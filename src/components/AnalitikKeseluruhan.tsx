@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from "recharts";
 import { Gamepad2, Store, BarChart3, Layers } from "lucide-react";
 import FilterComp from "./Filter";
-import { dpHangus, gabungNota, isDpTerbuka, tanggalPenjualan, terjualDalam, totalDibayar, usePosSales, usePosSalesLunas } from "../lib/posSales";
+import { dpHangus, gabungNota, isDpTerbuka, nilaiTukarNota, tanggalPenjualan, terjualDalam, totalDibayar, usePosSales, usePosSalesLunas } from "../lib/posSales";
 import { Bisnis, bisnisOf, isBelanjaStok, pemasukanRental, pengeluaranAdminRental, periodRange, TransaksiOwner } from "../lib/keuangan";
 import type { HistoryItem } from "../lib/types";
 import { barisUsahaManual } from "../lib/pemasukanUsaha";
@@ -109,6 +109,13 @@ export default function AnalitikKeseluruhan(props: Props) {
       u.pos += s.total;
       u.nota++;
       tambah(tanggalPenjualan(s), "um", s.total);
+      // Tukar tambah: barang pembeli dibayar dengan potongan nota = belanja stok di hari nota
+      const tt = nilaiTukarNota(s);
+      if (tt > 0) {
+        u.stok += tt;
+        tambah(tanggalPenjualan(s), "uk", tt);
+        keluarKe("USAHA|Barang tukar tambah", "Barang tukar tambah", LABEL_BISNIS.USAHA, tt);
+      }
     });
     if (u.pos) masukKe("USAHA|pos", "Penjualan POS", `Usaha · ${u.nota} nota`, u.pos);
     // DP yang sudah diterima: masih berjalan (belum lunas) atau hangus (pembeli batal)

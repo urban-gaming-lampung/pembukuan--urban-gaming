@@ -253,6 +253,14 @@ service cloud.firestore {
       allow read, write: if isSalaryAdmin();
     }
 
+    // Barang TUKAR TAMBAH dari nota POS: dibuat kasir (status MENUNGGU) bersama notanya,
+    // dikonfirmasi masuk stok / dibatalkan hanya oleh owner / super admin
+    match /tukar_tambah/{ttId} {
+      allow read: if isUrbanStaff();
+      allow create: if isUrbanStaff() && request.resource.data.status == 'MENUNGGU';
+      allow update, delete: if isSalaryAdmin();
+    }
+
     // ==========================================
     // Aturan Share Screenshots (ProsperoEden) — tidak diubah
     // ==========================================
