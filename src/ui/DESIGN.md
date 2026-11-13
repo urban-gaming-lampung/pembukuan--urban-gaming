@@ -213,4 +213,5 @@ Jarak (kelipatan 4px):
 | Filter periode, SubTabs, Toggle | ✅ komponen UDS |
 | `Section` (kartu lama: Rincian Usaha Rental, History, Monitoring, Pegawai) | ✅ permukaan kartu UDS; isi bertahap |
 | Lembar rincian pendapatan / pengeluaran (Analitik Rental) | ⏳ gaya lama, migrasi berikutnya |
-| Monitoring, Input, Stok, Pegawai, Pengaturan | ⏳ migrasi bertahap ke komponen UDS |
+| Dashboard Pegawai (Ringkasan · Absensi · Gaji · Akun) | ✅ memakai UDS; editor isi gaji bertahap |
+| Monitoring, Input, Stok, Pengaturan | ⏳ migrasi bertahap ke komponen UDS |
