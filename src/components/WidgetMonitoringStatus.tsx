@@ -3,7 +3,7 @@ import { Clock, Monitor, Gamepad2, Smartphone, ShieldCheck, Settings2, MessageCi
 import { doc, setDoc, onSnapshot } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
 import { HistoryItem, RowSewa } from "../lib/types";
-import Section from "./common/Section";
+import { Button, Card, Eyebrow, Pill } from "../ui";
 import { buildSewaTable } from "../lib/priceLists";
 import { formatK } from "../lib/format";
 import { formatWa } from "../lib/wa";
@@ -172,324 +172,309 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
     return `Unit diperkirakan kembali ${waktuRelatif(endMs, now)}.`;
   };
 
+  const masterItems = [
+    { key: "ps3", label: "PS3", Icon: Gamepad2, total: masterUnit.ps3, temp: tempPs3, setTemp: setTempPs3, ready: readyPS3, rented: rentedPS3, readyTitle: "PS3 ready" },
+    { key: "ps4", label: "PS4", Icon: Gamepad2, total: masterUnit.ps4, temp: tempPs4, setTemp: setTempPs4, ready: readyPS4, rented: rentedPS4, readyTitle: "PS4 ready" },
+    { key: "ps5", label: "PS5", Icon: Gamepad2, total: masterUnit.ps5, temp: tempPs5, setTemp: setTempPs5, ready: readyPS5, rented: rentedPS5, readyTitle: "PS5 ready" },
+    { key: "portabel", label: "PTB", Icon: Smartphone, total: masterUnit.portabel, temp: tempPortabel, setTemp: setTempPortabel, ready: readyPortabel, rented: rentedPortabel, readyTitle: "Portabel ready" },
+    { key: "tv", label: "TV", Icon: Monitor, total: masterUnit.tv, temp: tempTv, setTemp: setTempTv, ready: readyTV, rented: rentedTV, readyTitle: "TV ready" },
+  ];
+
   return (
     <>
-      <Section title="Monitoring Status Unit">
-        <div className="bg-white dark:bg-[#111111] border border-zinc-200 dark:border-white/10 rounded-2xl md:rounded-[32px] p-4 sm:p-6 lg:p-8 flex flex-col gap-8 w-full overflow-hidden relative shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-black/20">
-
-          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 dark:bg-blue-500/5 blur-3xl rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 dark:bg-purple-500/5 blur-3xl rounded-full translate-y-1/2 -translate-x-1/2 pointer-events-none" />
-
-          <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 z-10 w-full">
-            <div className="lg:w-5/12 flex flex-col gap-4">
-              <div className="bg-zinc-50 dark:bg-[#1C1C1E] p-5 rounded-[24px] border border-zinc-200 dark:border-white/5 shadow-inner">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-bold tracking-widest uppercase text-zinc-900 dark:text-white flex items-center gap-2">
-                    <Settings2 className="w-4 h-4 text-blue-500" /> Master Inventaris
-                  </h3>
-                  {isOwner && (
-                    <button
-                      onClick={() => {
-                        if (isEditingMaster) handleSaveMaster();
-                        else setIsEditingMaster(true);
-                      }}
-                      className="text-xs px-3 py-1.5 rounded-lg bg-white dark:bg-black text-blue-600 dark:text-blue-400 font-bold border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors"
-                    >
-                      {isEditingMaster ? "Simpan" : "Edit"}
-                    </button>
-                  )}
+      <Card title="Monitoring status unit" icon={<Monitor />} iconColor="indigo">
+        <div className="flex flex-col gap-6 lg:flex-row lg:gap-6">
+          {/* Kolom kiri: Master inventaris & ringkasan Ready/Jalan */}
+          <div className="flex flex-col gap-4 lg:w-5/12">
+            <div className="rounded-tile bg-surface-2 p-4 ring-1 ring-edge">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Settings2 className="h-4 w-4 text-tint" />
+                  <Eyebrow>Master inventaris</Eyebrow>
                 </div>
-
-                <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
-                  <div className="flex flex-col gap-1.5 min-w-0">
-                    <label className="text-[9px] sm:text-[11px] font-bold text-zinc-500 uppercase tracking-wider text-center truncate">PS3</label>
-                    {isEditingMaster && isOwner ? (
-                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={tempPs3} onChange={e => setTempPs3(e.target.value)} className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-bold text-sm sm:text-base text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    ) : (
-                      <div className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-black text-sm sm:text-base shadow-sm flex items-center justify-center gap-1">
-                        <Gamepad2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-500 shrink-0" /> {masterUnit.ps3}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1.5 min-w-0">
-                    <label className="text-[9px] sm:text-[11px] font-bold text-zinc-500 uppercase tracking-wider text-center truncate">PS4</label>
-                    {isEditingMaster && isOwner ? (
-                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={tempPs4} onChange={e => setTempPs4(e.target.value)} className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-bold text-sm sm:text-base text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    ) : (
-                      <div className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-black text-sm sm:text-base shadow-sm flex items-center justify-center gap-1">
-                        <Gamepad2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-500 shrink-0" /> {masterUnit.ps4}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1.5 min-w-0">
-                    <label className="text-[9px] sm:text-[11px] font-bold text-zinc-500 uppercase tracking-wider text-center truncate">PS5</label>
-                    {isEditingMaster && isOwner ? (
-                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={tempPs5} onChange={e => setTempPs5(e.target.value)} className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-bold text-sm sm:text-base text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    ) : (
-                      <div className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-black text-sm sm:text-base shadow-sm flex items-center justify-center gap-1">
-                        <Gamepad2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-purple-500 shrink-0" /> {masterUnit.ps5}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1.5 min-w-0">
-                    <label className="text-[9px] sm:text-[11px] font-bold text-zinc-500 uppercase tracking-wider text-center truncate">PTB</label>
-                    {isEditingMaster && isOwner ? (
-                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={tempPortabel} onChange={e => setTempPortabel(e.target.value)} className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-bold text-sm sm:text-base text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    ) : (
-                      <div className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-black text-sm sm:text-base shadow-sm flex items-center justify-center gap-1">
-                        <Smartphone className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 shrink-0" /> {masterUnit.portabel}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1.5 min-w-0">
-                    <label className="text-[9px] sm:text-[11px] font-bold text-zinc-500 uppercase tracking-wider text-center truncate">TV</label>
-                    {isEditingMaster && isOwner ? (
-                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={tempTv} onChange={e => setTempTv(e.target.value)} className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-bold text-sm sm:text-base text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    ) : (
-                      <div className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-1 py-2 text-zinc-900 dark:text-white font-mono font-black text-sm sm:text-base shadow-sm flex items-center justify-center gap-1">
-                        <Monitor className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-cyan-500 shrink-0" /> {masterUnit.tv}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                {isOwner && (
+                  <Button
+                    variant={isEditingMaster ? "filled" : "tinted"}
+                    size="sm"
+                    onClick={() => {
+                      if (isEditingMaster) handleSaveMaster();
+                      else setIsEditingMaster(true);
+                    }}
+                    className="min-h-[44px] sm:min-h-[32px]"
+                  >
+                    {isEditingMaster ? "Simpan" : "Edit"}
+                  </Button>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 min-[480px]:grid-cols-5 gap-2 mt-1 w-full">
-                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-emerald-600 dark:text-emerald-400 uppercase text-center leading-tight">PS3 Ready</span>
-                  <span className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400">{readyPS3}</span>
-                </div>
-                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-emerald-600 dark:text-emerald-400 uppercase text-center leading-tight">PS4 Ready</span>
-                  <span className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400">{readyPS4}</span>
-                </div>
-                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-emerald-600 dark:text-emerald-400 uppercase text-center leading-tight">PS5 Ready</span>
-                  <span className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400">{readyPS5}</span>
-                </div>
-                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-emerald-600 dark:text-emerald-400 uppercase text-center leading-tight">PTB Ready</span>
-                  <span className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400">{readyPortabel}</span>
-                </div>
-                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-emerald-600 dark:text-emerald-400 uppercase text-center leading-tight">TV Ready</span>
-                  <span className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400">{readyTV}</span>
-                </div>
-
-                <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-red-600 dark:text-red-400 uppercase text-center leading-tight whitespace-nowrap">PS3 Jalan</span>
-                  <span className="text-lg sm:text-xl font-black text-red-600 dark:text-red-400">{rentedPS3}</span>
-                </div>
-                <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-red-600 dark:text-red-400 uppercase text-center leading-tight whitespace-nowrap">PS4 Jalan</span>
-                  <span className="text-lg sm:text-xl font-black text-red-600 dark:text-red-400">{rentedPS4}</span>
-                </div>
-                <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-red-600 dark:text-red-400 uppercase text-center leading-tight whitespace-nowrap">PS5 Jalan</span>
-                  <span className="text-lg sm:text-xl font-black text-red-600 dark:text-red-400">{rentedPS5}</span>
-                </div>
-                <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-red-600 dark:text-red-400 uppercase text-center leading-tight whitespace-nowrap">PTB Jalan</span>
-                  <span className="text-lg sm:text-xl font-black text-red-600 dark:text-red-400">{rentedPortabel}</span>
-                </div>
-                <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 p-2 sm:p-2.5 rounded-[16px] flex flex-col justify-center items-center gap-1">
-                  <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-red-600 dark:text-red-400 uppercase text-center leading-tight whitespace-nowrap">TV Jalan</span>
-                  <span className="text-lg sm:text-xl font-black text-red-600 dark:text-red-400">{rentedTV}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="lg:w-7/12 bg-zinc-50 dark:bg-[#1C1C1E] p-5 rounded-[24px] border border-zinc-200 dark:border-white/5 shadow-inner w-full">
-              <div className="flex items-center justify-between mb-4 w-full">
-                <h3 className="text-sm font-bold tracking-widest uppercase text-zinc-900 dark:text-white flex items-center gap-2">
-                  <Monitor className="w-4 h-4 text-purple-500" /> Status Unit
-                </h3>
-                <div className="flex flex-wrap gap-3 items-center" style={{ width: 'auto' }}>
-                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></div><span className="text-xs font-bold text-zinc-600 dark:text-zinc-400">Jalan</span></div>
-                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div><span className="text-xs font-bold text-zinc-600 dark:text-zinc-400">Ready</span></div>
-                </div>
-              </div>
-
-              <div
-                className="grid grid-cols-[repeat(auto-fill,minmax(124px,1fr))] gap-3 overflow-y-auto overflow-x-hidden pr-2 custom-scrollbar w-full items-start max-h-[600px]"
-              >
-                {activeRentals.map(u => {
-                  const adminName = u.addedBy ? u.addedBy.split('@')[0].toUpperCase() : 'ADMIN';
+              <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+                {masterItems.map((it) => {
+                  const ItemIcon = it.Icon;
                   return (
-                    <div
-                      key={u.uid}
-                      onClick={() => setSelectedUnit(u)}
-                      className={`relative bg-white dark:bg-black border rounded-[18px] p-3 shadow-md overflow-hidden flex flex-col min-w-0 max-w-full group cursor-pointer hover:-translate-y-1 hover:shadow-lg transition-all duration-300 ${u.isDone && !u.isVerified ? "border-amber-400 dark:border-amber-500/50 hover:shadow-amber-500/20" : "border-red-200 dark:border-red-500/30 hover:shadow-red-500/20"}`}
-                    >
-                      <div className="absolute top-0 left-0 w-full h-1 bg-zinc-100 dark:bg-zinc-800">
-                        <div className={`h-full transition-all duration-1000 ease-linear ${u.isDone && !u.isVerified ? "bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)]" : "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]"}`} style={{ width: `${u.progress}%` }} />
-                      </div>
-                      <div className="flex items-start justify-between mt-1 mb-2">
-                        <span className={`px-2 py-0.5 text-[10px] font-black rounded text-center w-full max-w-[80%] mx-auto block mb-1 uppercase tracking-wider truncate ${u.isDone && !u.isVerified ? "bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400" : "bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400"}`}>
-                          BILING {u.id}
-                        </span>
-                      </div>
-                      <h4 className="text-center text-[13px] font-bold text-zinc-900 dark:text-white truncate" title={u.jenis}>{u.jenis}</h4>
-                      <div className="flex flex-col gap-1 mt-2 items-center justify-center text-center">
-                        <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 truncate w-full px-1">{u.namaPenyewa}</p>
-                        {u.waPenyewa && <p className="text-[9.5px] font-mono font-semibold text-zinc-500 dark:text-zinc-400 truncate w-full -mt-0.5">{formatWa(u.waPenyewa)}</p>}
-
-                        <div className="bg-zinc-100 dark:bg-zinc-800/50 px-2 py-0.5 rounded flex items-center justify-center gap-1 mt-0.5">
-                          <span className="text-[9px] font-bold text-zinc-500 dark:text-zinc-400">BY: {adminName}</span>
+                    <div key={it.key} className="flex min-w-0 flex-col gap-1.5">
+                      <label
+                        htmlFor={`master-unit-${it.key}`}
+                        className="truncate text-center text-caption2 font-semibold uppercase tracking-wide text-label-3"
+                      >
+                        {it.label}
+                      </label>
+                      {isEditingMaster && isOwner ? (
+                        <input
+                          id={`master-unit-${it.key}`}
+                          type="number"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          min="0"
+                          value={it.temp}
+                          onChange={(e) => it.setTemp(e.target.value)}
+                          className="w-full min-h-[44px] rounded-control bg-surface px-1 py-2 text-center font-mono text-[16px] font-semibold tabular-nums text-label ring-1 ring-edge focus:outline-none focus:ring-2 focus:ring-tint"
+                        />
+                      ) : (
+                        <div className="flex min-h-[44px] w-full items-center justify-center gap-1 rounded-control bg-surface px-1 py-2 font-mono text-callout font-bold tabular-nums text-label ring-1 ring-edge">
+                          <ItemIcon className="h-3.5 w-3.5 shrink-0 text-label-3" />
+                          {it.total}
                         </div>
-                        {u.diantarOleh && (
-                          <div className="bg-purple-100 dark:bg-purple-500/10 px-2 py-0.5 rounded flex items-center justify-center gap-1 mt-0.5">
-                            <span className="text-[9px] font-bold text-purple-600 dark:text-purple-400">Diantar oleh : {u.diantarOleh.split("@")[0]}</span>
-                          </div>
-                        )}
-                        {!u.diantarOleh && u.isOngkir === "TIDAK" && (
-                          <div className="bg-lime-100 dark:bg-lime-500/15 px-2 py-0.5 rounded flex items-center justify-center gap-1 mt-0.5 ring-1 ring-lime-300 dark:ring-lime-500/30">
-                            <span className="text-[9px] font-black text-lime-700 dark:text-lime-400">Diambil sendiri</span>
-                          </div>
-                        )}
-                        {u.isPaid === "TIDAK" && (
-                          <div className="bg-red-100 dark:bg-red-500/15 px-2 py-0.5 rounded flex items-center justify-center gap-1 mt-0.5 ring-1 ring-red-300 dark:ring-red-500/30">
-                            <span className="text-[9px] font-black text-red-700 dark:text-red-400">Belum dibayar {u._nominalBelumBayar ? `(Rp ${formatK(u._nominalBelumBayar)})` : ""}</span>
-                          </div>
-                        )}
-                        {u.isPaid === "YA" && (
-                          <div className="bg-emerald-100 dark:bg-emerald-500/15 px-2 py-0.5 rounded flex items-center justify-center gap-1 mt-0.5 ring-1 ring-emerald-300 dark:ring-emerald-500/30">
-                            <span className="text-[9px] font-black text-emerald-700 dark:text-emerald-400">Sudah dibayar</span>
-                          </div>
-                        )}
-
-                        {waktunyaIngatkan(u) && (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); kirimPengingat(u); }}
-                            className="mt-1.5 w-full inline-flex items-center justify-center gap-1 h-7 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black active:scale-95 transition shadow-sm"
-                          >
-                            <MessageCircle className="w-3.5 h-3.5" />Ingatkan
-                          </button>
-                        )}
-                        {u.diingatkan?.length > 0 && <p className="text-[9px] font-semibold text-emerald-600 dark:text-emerald-400 truncate w-full">{labelPengingat(u.diingatkan)}</p>}
-                        {u.isDone && !u.isVerified ? (
-                          <div className="text-[10px] font-black tracking-widest text-[#FFF] bg-amber-500 px-2 py-0.5 rounded animate-bounce mt-1.5 shadow-sm">WARNING</div>
-                        ) : (
-                          <div className="mt-1">
-                            <div className="flex items-center gap-1 text-zinc-500 dark:text-zinc-400 justify-center">
-                              <span className="text-[10px] font-bold font-mono tracking-tight">{u.start}</span>
-                            </div>
-                            <div className="flex items-center gap-1 text-red-500 justify-center">
-                              <Clock className="w-3 h-3 text-red-500" />
-                              <span className="text-[11px] font-black font-mono tracking-tight">{u.end}</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      )}
                     </div>
                   );
                 })}
+              </div>
+            </div>
 
-                {Array.from({ length: readyPS3 }).map((_, i) => (
-                  <div key={`ready3-${i}`} className="bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-[18px] p-3 shadow-sm flex flex-col justify-center items-center min-w-0 max-w-full opacity-80 hover:opacity-100 transition-opacity min-h-[110px]">
-                    <ShieldCheck className="w-8 h-8 text-emerald-400 dark:text-emerald-500 mb-2" />
-                    <h4 className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest text-center">PS3 READY</h4>
-                  </div>
-                ))}
-                {Array.from({ length: readyPS4 }).map((_, i) => (
-                  <div key={`ready4-${i}`} className="bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-[18px] p-3 shadow-sm flex flex-col justify-center items-center min-w-0 max-w-full opacity-80 hover:opacity-100 transition-opacity min-h-[110px]">
-                    <ShieldCheck className="w-8 h-8 text-emerald-400 dark:text-emerald-500 mb-2" />
-                    <h4 className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest text-center">PS4 READY</h4>
-                  </div>
-                ))}
-                {Array.from({ length: readyPS5 }).map((_, i) => (
-                  <div key={`ready5-${i}`} className="bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-[18px] p-3 shadow-sm flex flex-col justify-center items-center min-w-0 max-w-full opacity-80 hover:opacity-100 transition-opacity min-h-[110px]">
-                    <ShieldCheck className="w-8 h-8 text-emerald-400 dark:text-emerald-500 mb-2" />
-                    <h4 className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest text-center">PS5 READY</h4>
-                  </div>
-                ))}
-                {Array.from({ length: readyPortabel }).map((_, i) => (
-                  <div key={`readyptb-${i}`} className="bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-[18px] p-3 shadow-sm flex flex-col justify-center items-center min-w-0 max-w-full opacity-80 hover:opacity-100 transition-opacity min-h-[110px]">
-                    <Smartphone className="w-8 h-8 text-emerald-400 dark:text-emerald-500 mb-2" />
-                    <h4 className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest text-center">PORTABEL READY</h4>
-                  </div>
-                ))}
-                {Array.from({ length: readyTV }).map((_, i) => (
-                  <div key={`readytv-${i}`} className="bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 rounded-[18px] p-3 shadow-sm flex flex-col justify-center items-center min-w-0 max-w-full opacity-80 hover:opacity-100 transition-opacity min-h-[110px]">
-                    <Monitor className="w-8 h-8 text-emerald-400 dark:text-emerald-500 mb-2" />
-                    <h4 className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest text-center">TV READY</h4>
-                  </div>
-                ))}
+            <div className="grid w-full grid-cols-2 gap-2 min-[480px]:grid-cols-5">
+              {masterItems.map((it) => (
+                <div
+                  key={`ready-stat-${it.key}`}
+                  className="flex flex-col items-center justify-center gap-0.5 rounded-tile bg-positive/10 px-2 py-2.5 text-center"
+                >
+                  <span className="text-caption2 font-semibold leading-tight text-positive">{it.label} Ready</span>
+                  <span className="text-title3 font-bold tabular-nums text-positive">{it.ready}</span>
+                </div>
+              ))}
+              {masterItems.map((it) => (
+                <div
+                  key={`rented-stat-${it.key}`}
+                  className="flex flex-col items-center justify-center gap-0.5 rounded-tile bg-negative/10 px-2 py-2.5 text-center"
+                >
+                  <span className="whitespace-nowrap text-caption2 font-semibold leading-tight text-negative">{it.label} Jalan</span>
+                  <span className="text-title3 font-bold tabular-nums text-negative">{it.rented}</span>
+                </div>
+              ))}
+            </div>
+          </div>
 
+          {/* Kolom kanan: Status unit aktif & ready */}
+          <div className="w-full rounded-tile bg-surface-2 p-4 ring-1 ring-edge lg:w-7/12">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Monitor className="h-4 w-4 text-tint" />
+                <Eyebrow>Status unit</Eyebrow>
+              </div>
+              <div className="flex items-center gap-3 text-caption font-medium text-label-2">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-negative animate-pulse" />
+                  Jalan
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-positive" />
+                  Ready
+                </span>
+              </div>
+            </div>
+
+            <div className="grid max-h-[600px] w-full grid-cols-[repeat(auto-fill,minmax(132px,1fr))] items-start gap-3 overflow-x-hidden overflow-y-auto pr-1 custom-scrollbar">
+              {activeRentals.map((u) => {
+                const adminName = u.addedBy ? u.addedBy.split("@")[0].toUpperCase() : "ADMIN";
+                const isWarning = u.isDone && !u.isVerified;
+                return (
+                  <div
+                    key={u.uid}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedUnit(u)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedUnit(u);
+                      }
+                    }}
+                    className={`relative flex min-w-0 max-w-full cursor-pointer flex-col overflow-hidden rounded-tile bg-surface p-3 pt-3.5 text-center shadow-card ring-1 transition-all hover:-translate-y-0.5 active:scale-[0.98] ${
+                      isWarning ? "ring-warning/60" : "ring-edge"
+                    }`}
+                  >
+                    <div className="absolute top-0 left-0 h-1 w-full bg-fill">
+                      <div
+                        className={`h-full transition-all duration-1000 ease-linear ${isWarning ? "bg-warning" : "bg-negative"}`}
+                        style={{ width: `${u.progress}%` }}
+                      />
+                    </div>
+
+                    <div className="flex justify-center">
+                      <Pill tone={isWarning ? "warning" : "negative"}>Biling {u.id}</Pill>
+                    </div>
+
+                    <h4 className="mt-1.5 truncate text-subhead font-semibold text-label" title={u.jenis}>
+                      {u.jenis}
+                    </h4>
+
+                    <div className="mt-1.5 flex flex-col items-center gap-1 text-center">
+                      <p className="w-full truncate px-1 text-caption font-semibold text-tint">{u.namaPenyewa}</p>
+                      {u.waPenyewa && (
+                        <p className="w-full truncate font-mono text-caption2 text-label-3">{formatWa(u.waPenyewa)}</p>
+                      )}
+
+                      <span className="inline-block rounded-md bg-fill px-1.5 py-0.5 text-caption2 font-medium text-label-2">
+                        By: {adminName}
+                      </span>
+
+                      {u.diantarOleh && (
+                        <Pill tone="tint">Diantar: {u.diantarOleh.split("@")[0]}</Pill>
+                      )}
+                      {!u.diantarOleh && u.isOngkir === "TIDAK" && (
+                        <Pill tone="positive">Diambil sendiri</Pill>
+                      )}
+                      {u.isPaid === "TIDAK" && (
+                        <div className="flex flex-col items-center gap-0.5">
+                          <Pill tone="negative">Belum dibayar</Pill>
+                          {u._nominalBelumBayar ? (
+                            <span className="text-caption2 font-semibold tabular-nums text-negative">
+                              Rp {formatK(u._nominalBelumBayar)}
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
+                      {u.isPaid === "YA" && (
+                        <Pill tone="positive">Sudah dibayar</Pill>
+                      )}
+
+                      {waktunyaIngatkan(u) && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            kirimPengingat(u);
+                          }}
+                          className="mt-1 inline-flex min-h-[36px] w-full items-center justify-center gap-1 rounded-control bg-positive px-2 text-caption font-semibold text-white transition-opacity active:opacity-80"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5 shrink-0" />
+                          Ingatkan
+                        </button>
+                      )}
+
+                      {u.diingatkan?.length > 0 && (
+                        <p className="w-full truncate text-caption2 font-medium text-positive">
+                          {labelPengingat(u.diingatkan)}
+                        </p>
+                      )}
+
+                      {isWarning ? (
+                        <div className="mt-1">
+                          <Pill tone="warning">Perlu konfirmasi</Pill>
+                        </div>
+                      ) : (
+                        <div className="mt-1 flex flex-col items-center font-mono tabular-nums">
+                          <span className="text-caption2 font-medium text-label-3">{u.start}</span>
+                          <span className="inline-flex items-center gap-1 text-caption font-bold text-negative">
+                            <Clock className="h-3 w-3 shrink-0" />
+                            {u.end}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {masterItems.flatMap((it) => {
+                const ReadyIcon = it.key === "portabel" ? Smartphone : it.key === "tv" ? Monitor : ShieldCheck;
+                return Array.from({ length: it.ready }).map((_, i) => (
+                  <div
+                    key={`ready-${it.key}-${i}`}
+                    className="flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-tile bg-positive/10 p-3 text-center ring-1 ring-positive/20"
+                  >
+                    <ReadyIcon className="h-7 w-7 text-positive" />
+                    <span className="text-caption font-semibold text-positive">{it.readyTitle}</span>
+                  </div>
+                ));
+              })}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {selectedUnit && (() => {
+        const sel: KartuUnit = activeRentals.find((r) => r.uid === selectedUnit.uid) || selectedUnit;
+        const tarif = tarifTelatPerJam(sel.jenis);
+        const adaReminder = bisaIngatkan(sel) && !sel.isVerified;
+        return (
+          <div className="fixed inset-0 z-[700] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+            <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={() => setSelectedUnit(null)} />
+            <div className="relative z-10 w-full max-w-sm rounded-card bg-surface/95 p-5 shadow-float ring-1 ring-edge backdrop-blur-xl animate-in zoom-in-95 duration-200 sm:p-6">
+              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-fill" />
+
+              <h3 className="text-center text-title3 font-bold text-label">{sel.jenis}</h3>
+              <p className="mt-1 text-center text-subhead font-semibold text-tint">{sel.namaPenyewa}</p>
+              <p className={`mt-1 text-center font-mono text-footnote font-medium ${sel.waPenyewa ? "text-label-2" : "text-negative"}`}>
+                {sel.waPenyewa ? `WA ${formatWa(sel.waPenyewa)}` : "No. WA penyewa belum diisi"}
+              </p>
+              <p className="mt-1 text-center text-caption font-medium text-label-3">
+                Admin: {sel.addedBy ? sel.addedBy.split("@")[0].toUpperCase() : "UNKNOWN"}
+              </p>
+
+              <div className="mt-3 mb-4 flex flex-wrap items-center justify-center gap-1.5">
+                {sel.diantarOleh && (
+                  <Pill tone="tint">Diantar oleh: {sel.diantarOleh.split("@")[0]}</Pill>
+                )}
+                {!sel.diantarOleh && sel.isOngkir === "TIDAK" && (
+                  <Pill tone="positive">Diambil sendiri</Pill>
+                )}
+                {sel.isPaid === "TIDAK" && (
+                  <Pill tone="negative">
+                    Belum dibayar {sel._nominalBelumBayar ? `(Rp ${formatK(sel._nominalBelumBayar)})` : ""}
+                  </Pill>
+                )}
+                {sel.isPaid === "YA" && (
+                  <Pill tone="positive">Sudah dibayar</Pill>
+                )}
+              </div>
+
+              <div className="mb-5 rounded-tile bg-surface-2 p-4 text-center ring-1 ring-edge">
+                <p className="text-callout font-medium leading-relaxed text-label">
+                  {teksPerkiraanKembali(sel.endMs)}
+                </p>
+                {sel.endMs && (
+                  <p className="mt-1.5 text-footnote text-label-2">
+                    Batas kembali {waktuRelatif(batasKembali(sel.endMs), now)}{tarif ? ` · telat Rp${formatK(tarif).replace("k", "rb")}/jam` : ""}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2.5">
+                {adaReminder && (
+                  <Button
+                    variant="filled"
+                    size="lg"
+                    block
+                    icon={<MessageCircle />}
+                    onClick={() => kirimPengingat(sel)}
+                  >
+                    Ingatkan via WA
+                  </Button>
+                )}
+                {sel.diingatkan?.length > 0 && (
+                  <p className="text-center text-footnote font-medium text-positive">{labelPengingat(sel.diingatkan)}</p>
+                )}
+                <Button
+                  variant={adaReminder ? "gray" : "filled"}
+                  size="lg"
+                  block
+                  onClick={() => setSelectedUnit(null)}
+                >
+                  Tutup
+                </Button>
               </div>
             </div>
           </div>
-        </div>
-      </Section>
-
-      {selectedUnit && (() => {
-        // Data terbaru unit yang dibuka (mis. sesudah "Ingatkan" dicatat)
-        const sel: KartuUnit = activeRentals.find((r) => r.uid === selectedUnit.uid) || selectedUnit;
-        const tarif = tarifTelatPerJam(sel.jenis);
-        return (
-        <div className="fixed inset-0 z-[700] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSelectedUnit(null)}></div>
-          <div className="bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-2xl rounded-[32px] p-6 max-w-sm w-full shadow-2xl shadow-black/20 ring-1 ring-black/5 dark:ring-white/10 relative z-10 animate-in zoom-in-95 duration-200">
-            <div className="w-12 h-1.5 bg-zinc-300 dark:bg-zinc-700 rounded-full mx-auto mb-5"></div>
-            <h3 className="text-xl font-black text-center text-zinc-900 dark:text-white mb-2">{sel.jenis}</h3>
-            <p className="text-sm font-bold text-center text-blue-600 dark:text-blue-400 mb-1">{sel.namaPenyewa}</p>
-            <p className={`text-[12px] font-mono font-bold text-center mb-1 ${sel.waPenyewa ? "text-zinc-700 dark:text-zinc-200" : "text-red-500"}`}>
-              {sel.waPenyewa ? `WA ${formatWa(sel.waPenyewa)}` : "No. WA penyewa belum diisi"}
-            </p>
-            <p className="text-[11px] font-bold text-center text-zinc-500 dark:text-zinc-400 tracking-wide">
-              ADMIN: {sel.addedBy ? sel.addedBy.split('@')[0].toUpperCase() : 'UNKNOWN'}
-            </p>
-            {sel.diantarOleh && (
-              <p className="text-[11px] font-bold text-center text-purple-600 dark:text-purple-400 tracking-wide mt-1 mb-5">
-                Diantar oleh: {sel.diantarOleh.split("@")[0]}
-              </p>
-            )}
-            {!sel.diantarOleh && sel.isOngkir === "TIDAK" && (
-              <p className="text-[12px] font-black text-center text-lime-700 dark:text-lime-400 tracking-wide mt-1 mb-5 bg-lime-100 dark:bg-lime-500/15 px-3 py-1 rounded-lg ring-1 ring-lime-300 dark:ring-lime-500/30">
-                Diambil sendiri
-              </p>
-            )}
-            {sel.isPaid === "TIDAK" && (
-               <p className="text-[12px] font-black text-center text-red-700 dark:text-red-400 tracking-wide mt-1 mb-5 bg-red-100 dark:bg-red-500/15 px-3 py-1 rounded-lg ring-1 ring-red-300 dark:ring-red-500/30">
-                 Belum dibayar {sel._nominalBelumBayar ? `(Rp ${formatK(sel._nominalBelumBayar)})` : ""}
-               </p>
-            )}
-            {sel.isPaid === "YA" && (
-               <p className="text-[12px] font-black text-center text-emerald-700 dark:text-emerald-400 tracking-wide mt-1 mb-5 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-1 rounded-lg ring-1 ring-emerald-300 dark:ring-emerald-500/30">
-                 Sudah dibayar
-               </p>
-            )}
-            {!sel.diantarOleh && sel.isOngkir !== "TIDAK" && <div className="mb-6" />}
-
-            <div className="bg-zinc-100/50 dark:bg-black/20 rounded-[20px] p-4 mb-5">
-              <p className="text-[13px] font-bold text-zinc-600 dark:text-zinc-300 text-center leading-relaxed">
-                {teksPerkiraanKembali(sel.endMs)}
-              </p>
-              {sel.endMs && (
-                <p className="text-[11.5px] font-semibold text-zinc-500 dark:text-zinc-400 text-center leading-snug mt-1.5">
-                  Batas kembali {waktuRelatif(batasKembali(sel.endMs), now)}{tarif ? ` · telat Rp${formatK(tarif).replace("k", "rb")}/jam` : ""}
-                </p>
-              )}
-            </div>
-
-            {bisaIngatkan(sel) && !sel.isVerified && (
-              <button
-                type="button"
-                onClick={() => kirimPengingat(sel)}
-                className="w-full mb-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl py-3.5 transition-all outline-none focus:ring-4 focus:ring-emerald-500/20 active:scale-95 shadow-md shadow-emerald-500/20 flex items-center justify-center gap-2"
-              >
-                <MessageCircle className="w-[18px] h-[18px]" />Ingatkan via WA
-              </button>
-            )}
-            {sel.diingatkan?.length > 0 && (
-              <p className="text-[11.5px] font-semibold text-center text-emerald-600 dark:text-emerald-400 mb-2.5">{labelPengingat(sel.diingatkan)}</p>
-            )}
-            <button onClick={() => setSelectedUnit(null)} className={`w-full font-bold rounded-2xl py-3.5 transition-all outline-none active:scale-95 ${bisaIngatkan(sel) && !sel.isVerified ? "bg-zinc-200/80 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-100" : "bg-blue-600 hover:bg-blue-700 text-white focus:ring-4 focus:ring-blue-500/20 shadow-md shadow-blue-500/20"}`}>
-              Tutup
-            </button>
-          </div>
-        </div>
         );
       })()}
 

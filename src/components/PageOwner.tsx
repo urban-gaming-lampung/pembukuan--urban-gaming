@@ -1,12 +1,12 @@
 import React, { useMemo, useState, useEffect } from "react";
 import HistoryPembukuan from "./HistoryPembukuan";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
-import { AlertCircle, Activity } from "lucide-react";
+import { AlertCircle, Activity, ChevronRight, ClipboardEdit, Terminal, X } from "lucide-react";
 import { doc, setDoc, onSnapshot, query, collection, updateDoc, orderBy } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { HistoryItem, RowSewa } from "../lib/types";
 import { rupiah, formatDateShort, toInt } from "../lib/format";
-import Section from "./common/Section";
+import { Amount, Button, Card, ChartTip, EmptyState, Eyebrow, Pill, SubTabs } from "../ui";
 import TabPegawai from "./TabPegawai";
 import WidgetMonitoringStatus from "./WidgetMonitoringStatus";
 import HalamanStok from "./HalamanStok";
@@ -16,7 +16,6 @@ import InputStokJualan from "./InputStokJualan";
 import InputTransaksi from "./InputTransaksi";
 import AnalitikKeseluruhan from "./AnalitikKeseluruhan";
 import AnalitikRental, { type RekomendasiRental } from "./AnalitikRental";
-import SubTabs from "./common/SubTabs";
 import { bisnisOf, catatLogPembukuan, JenisTransaksi, pemasukanRental, pengeluaranAdminRental, periodRange, ringkasPembukuan, saringPeriode, useTransaksiOwner } from "../lib/keuangan";
 import { kasUsahaHarian } from "../lib/pemasukanUsaha";
 import { isPelunasanSewa, jenisUnit, ongkirBaris, tanpaUnitKeluar } from "../lib/sewa";
@@ -24,7 +23,6 @@ import { sinkronNotaKePembukuan } from "../lib/posPembukuan";
 import WidgetMonitoringDevice from "./WidgetMonitoringDevice";
 import { ResponsiveContainer, Tooltip, Cell, PieChart, Pie } from "recharts";
 import { toLocalYmd } from "../lib/dateLocal";
-import { useIsDark } from "../hooks/useIsDark";
 
 type PageOwnerProps = {
   totalHarian: number;
@@ -709,45 +707,302 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     return insights;
   }, [totalPemasukanBulanIni, totalPengeluaranBulanIni, labaBersih, expenseChartData, occupancyData, topUnitsData, peakHoursData]);
 
-  // Color logic for stok (merah jika <= 5)
-  const isDark = useIsDark();
+  const renderRincianSheet = ({
+    open,
+    onClose,
+    title,
+    allLabel,
+    emptyLabel,
+    isExpense,
+    totalAmount,
+    chartData,
+    items,
+    selectedCat,
+    setSelectedCat,
+    selectedCatItems,
+    getColor,
+  }: {
+    open: boolean;
+    onClose: () => void;
+    title: string;
+    allLabel: string;
+    emptyLabel: string;
+    isExpense: boolean;
+    totalAmount: number;
+    chartData: { name: string; value: number; color: string }[];
+    items: any[];
+    selectedCat: string | null;
+    setSelectedCat: React.Dispatch<React.SetStateAction<string | null>>;
+    selectedCatItems: any[];
+    getColor: (cat: string) => string;
+  }) => {
+    if (!open) return null;
+    return (
+      <div className="fixed inset-0 z-[600] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+        <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-card bg-surface/95 shadow-float ring-1 ring-edge backdrop-blur-xl animate-in slide-in-from-bottom-4 duration-300 sm:max-h-[85vh] sm:w-[95%] sm:max-w-[960px] sm:rounded-card sm:zoom-in-95">
+          {/* Drag Handle (mobile) */}
+          <div className="flex justify-center pt-2.5 pb-1 sm:hidden">
+            <div className="h-1 w-9 rounded-full bg-fill" />
+          </div>
+
+          {/* Header */}
+          <div className="flex shrink-0 items-center justify-between border-b border-sep px-5 py-4 sm:px-6">
+            <div>
+              <h2 className="text-title3 font-bold tracking-tight text-label">{title}</h2>
+              <p className="mt-0.5 text-footnote text-label-2">{labelPeriode} · {items.length} transaksi</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Tutup rincian"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-fill text-label-2 transition-opacity active:opacity-75"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+            {/* Chart + Categories */}
+            <div className="px-5 pt-5 pb-3 sm:px-6">
+              <div className="flex flex-col items-start gap-6 md:flex-row">
+                {/* Donut Chart */}
+                <div className="flex w-full shrink-0 flex-col items-center md:w-[250px]">
+                  <div className="relative mx-auto h-[230px] w-[230px]">
+                    {chartData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={chartData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={62}
+                            outerRadius={92}
+                            paddingAngle={3}
+                            dataKey="value"
+                            stroke="none"
+                            style={{ cursor: "pointer", outline: "none" }}
+                            onClick={(_: any, idx: number) => {
+                              const cat = chartData[idx]?.name;
+                              setSelectedCat((prev) => (prev === cat ? null : cat));
+                            }}
+                          >
+                            {chartData.map((e, i) => (
+                              <Cell
+                                key={`c-${i}`}
+                                fill={e.color}
+                                opacity={selectedCat ? (selectedCat === e.name ? 1 : 0.25) : 1}
+                                style={{ transition: "opacity 0.3s ease", cursor: "pointer" }}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            content={({ active, payload }: any) =>
+                              active && payload?.length ? (
+                                <ChartTip
+                                  title={payload[0].name}
+                                  rows={[{
+                                    color: payload[0].payload?.color,
+                                    label: "Nominal",
+                                    value: rupiah(Number(payload[0].value || 0)),
+                                  }]}
+                                />
+                              ) : null
+                            }
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-footnote text-label-3">
+                        Belum ada data
+                      </div>
+                    )}
+                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                      <div className="flex flex-col items-center rounded-tile bg-surface/90 px-3 py-1.5 ring-1 ring-edge backdrop-blur-md">
+                        <Eyebrow>Total</Eyebrow>
+                        <span className={`text-subhead font-bold tabular-nums ${isExpense ? "text-negative" : "text-positive"}`}>
+                          {rupiah(totalAmount)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-caption text-label-3">Ketuk segmen untuk filter</p>
+                </div>
+
+                {/* Category Cards */}
+                <div className="w-full flex-1">
+                  <div className={`grid grid-cols-2 gap-2 ${isExpense ? "sm:grid-cols-3 lg:grid-cols-4" : "sm:grid-cols-4"}`}>
+                    {chartData.map((cat) => {
+                      const isActive = selectedCat === cat.name;
+                      const pct = totalAmount > 0 ? ((cat.value / totalAmount) * 100).toFixed(1) : "0";
+                      const count = items.filter((x) => x.kategori === cat.name).length;
+                      return (
+                        <button
+                          type="button"
+                          key={cat.name}
+                          onClick={() => setSelectedCat((prev) => (prev === cat.name ? null : cat.name))}
+                          className={`relative overflow-hidden rounded-tile p-3 text-left transition-all active:scale-[0.97] ${
+                            isActive
+                              ? "bg-tint/10 ring-2 ring-tint"
+                              : "bg-surface-2 ring-1 ring-edge hover:bg-fill/40"
+                          }`}
+                        >
+                          <div className="mb-1.5 flex items-center gap-1.5">
+                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: cat.color }} />
+                            <span className="truncate text-caption font-medium text-label-2">{cat.name}</span>
+                          </div>
+                          <div className="flex items-end justify-between gap-2">
+                            <span className="text-subhead font-bold tabular-nums text-label">{rupiah(cat.value)}</span>
+                            <div className="flex flex-col items-end text-caption2 tabular-nums">
+                              <span className="font-semibold text-label-2">{pct}%</span>
+                              <span className="text-label-3">{count}x</span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section Divider */}
+            <div className="mx-5 my-3 flex items-center gap-3 sm:mx-6">
+              <div className="h-px flex-1 bg-sep" />
+              <Eyebrow>{selectedCat || allLabel}</Eyebrow>
+              <div className="h-px flex-1 bg-sep" />
+            </div>
+
+            {/* Detail / Full List */}
+            <div className="px-5 pb-6 sm:px-6">
+              {selectedCat ? (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        className="flex h-8 w-8 items-center justify-center rounded-tile ring-1 ring-edge"
+                        style={{ backgroundColor: `${getColor(selectedCat)}18` }}
+                      >
+                        <span className="h-3 w-3 rounded-full" style={{ backgroundColor: getColor(selectedCat) }} />
+                      </span>
+                      <div>
+                        <h4 className="text-callout font-bold leading-tight text-label">{selectedCat}</h4>
+                        <p className="text-caption text-label-3">{selectedCatItems.length} transaksi</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className={`text-headline font-bold tabular-nums ${isExpense ? "text-negative" : "text-positive"}`}>
+                        {rupiah(selectedCatItems.reduce((s, x) => s + x.harga, 0))}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCat(null)}
+                        className="mt-0.5 block w-full text-right text-caption font-semibold text-tint transition-opacity active:opacity-75"
+                      >
+                        ← Semua
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex max-h-[280px] flex-col gap-1.5 overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: "touch" }}>
+                    {selectedCatItems.map((o, idx) => (
+                      <div key={idx} className="flex items-center justify-between gap-3 rounded-tile bg-surface-2 px-3.5 py-2.5 ring-1 ring-edge">
+                        <div className="flex min-w-0 flex-1 flex-col">
+                          <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
+                            <span className="font-mono text-caption text-label-3">{formatDateShort(o.tanggal)}</span>
+                            {isExpense ? (
+                              <Pill tone={o.source === "owner" ? "tint" : undefined}>
+                                {o.source === "owner" ? "Owner" : "Admin"}
+                              </Pill>
+                            ) : (
+                              <>
+                                <span className="text-caption capitalize text-label-3">{o.hari}</span>
+                                {o.bayar && (
+                                  <Pill tone={o.bayar.toLowerCase().includes("cash") ? "positive" : "tint"}>
+                                    {o.bayar}
+                                  </Pill>
+                                )}
+                              </>
+                            )}
+                          </div>
+                          <span className="truncate text-subhead font-medium text-label">{o.nama}</span>
+                        </div>
+                        <span className={`shrink-0 text-subhead font-semibold tabular-nums ${isExpense ? "text-negative" : "text-positive"}`}>
+                          {isExpense ? "-" : "+"}{rupiah(o.harga)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex max-h-[320px] flex-col gap-1.5 overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: "touch" }}>
+                  {items.length === 0 && (
+                    <p className="py-8 text-center text-subhead text-label-3">{emptyLabel}</p>
+                  )}
+                  {items.map((o, idx) => {
+                    const catColor = getColor(o.kategori);
+                    return (
+                      <button
+                        type="button"
+                        key={idx}
+                        onClick={() => setSelectedCat(o.kategori)}
+                        className="flex w-full items-center justify-between gap-3 rounded-tile bg-surface-2 px-3.5 py-2.5 text-left ring-1 ring-edge transition-colors hover:bg-fill/40"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                          <div className="h-8 w-1 shrink-0 rounded-full" style={{ backgroundColor: catColor }} />
+                          <div className="flex min-w-0 flex-1 flex-col">
+                            <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
+                              <span className="font-mono text-caption text-label-3">{formatDateShort(o.tanggal)}</span>
+                              {isExpense ? (
+                                <Pill tone={o.source === "owner" ? "tint" : undefined}>
+                                  {o.source === "owner" ? "Owner" : "Admin"}
+                                </Pill>
+                              ) : (
+                                <span className="text-caption capitalize text-label-3">{o.hari}</span>
+                              )}
+                            </div>
+                            <span className="truncate text-subhead font-medium text-label">{o.nama}</span>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: catColor }} />
+                              <span className="text-caption text-label-2">{o.kategori}</span>
+                              {!isExpense && o.bayar && (
+                                <span className={`text-caption font-semibold ${o.bayar.toLowerCase().includes("cash") ? "text-positive" : "text-tint"}`}>
+                                  · {o.bayar}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <span className={`shrink-0 text-subhead font-semibold tabular-nums ${isExpense ? "text-negative" : "text-positive"}`}>
+                          {isExpense ? "-" : "+"}{rupiah(o.harga)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div className="space-y-3 sm:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out fill-mode-both">
-
-      {/* TABS SWICHTER OWNER */}
-      <div className="flex w-full mb-6 bg-zinc-200/50 dark:bg-[#1C1C1E] p-1 rounded-[14px] ring-1 ring-zinc-300/50 dark:ring-white/5 backdrop-blur-sm relative gap-1">
-        <button
-          onClick={() => setActiveTabOwner("MONITORING")}
-          className={`flex-1 py-2.5 text-[13px] sm:text-sm font-bold tracking-wide rounded-[10px] transition-all duration-300 flex justify-center items-center shrink-0 min-w-[110px] ${activeTabOwner === "MONITORING" ? "bg-white dark:bg-[#2C2C2E] text-rose-500 dark:text-rose-400 shadow-sm ring-1 ring-black/5 dark:ring-white/10" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/5"}`}
-        >
-          MONITORING
-        </button>
-        <button
-          onClick={() => setActiveTabOwner("INPUT PENGELUARAN")}
-          className={`flex-1 py-2.5 text-[13px] sm:text-sm font-bold tracking-wide rounded-[10px] transition-all duration-300 flex justify-center items-center ${activeTabOwner === "INPUT PENGELUARAN" ? "bg-white dark:bg-[#2C2C2E] text-purple-600 dark:text-purple-400 shadow-sm ring-1 ring-black/5 dark:ring-white/10" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"}`}
-        >
-          INPUT
-        </button>
-        <button
-          onClick={() => setActiveTabOwner("ANALITIK")}
-          className={`flex-1 py-2.5 text-[13px] sm:text-sm font-bold tracking-wide rounded-[10px] transition-all duration-300 flex justify-center items-center ${activeTabOwner === "ANALITIK" ? "bg-white dark:bg-[#2C2C2E] text-emerald-600 dark:text-emerald-400 shadow-sm ring-1 ring-black/5 dark:ring-white/10" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"}`}
-        >
-          ANALITIK
-        </button>
-        <button
-          onClick={() => setActiveTabOwner("PEGAWAI")}
-          className={`flex-1 py-2.5 text-[13px] sm:text-sm font-bold tracking-wide rounded-[10px] transition-all duration-300 flex justify-center items-center ${activeTabOwner === "PEGAWAI" ? "bg-white dark:bg-[#2C2C2E] text-pink-600 dark:text-pink-400 shadow-sm ring-1 ring-black/5 dark:ring-white/10" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"}`}
-        >
-          PEGAWAI
-        </button>
-        <button
-          onClick={() => setActiveTabOwner("STOK")}
-          className={`flex-1 py-2.5 text-[13px] sm:text-sm font-bold tracking-wide rounded-[10px] transition-all duration-300 flex justify-center items-center ${activeTabOwner === "STOK" ? "bg-white dark:bg-[#2C2C2E] text-orange-600 dark:text-orange-400 shadow-sm ring-1 ring-black/5 dark:ring-white/10" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"}`}
-        >
-          STOK
-        </button>
-      </div>
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out fill-mode-both">
+      {/* Menu utama pemilik — SubTabs (SSOT) */}
+      <SubTabs
+        ariaLabel="Menu utama pemilik"
+        value={activeTabOwner}
+        onChange={setActiveTabOwner}
+        options={[
+          { key: "MONITORING", label: "Monitoring" },
+          { key: "INPUT PENGELUARAN", label: "Input" },
+          { key: "ANALITIK", label: "Analitik" },
+          { key: "PEGAWAI", label: "Pegawai" },
+          { key: "STOK", label: "Stok" },
+        ]}
+      />
 
       {activeTabOwner === "INPUT PENGELUARAN" && (
         <div className="space-y-4">
@@ -803,35 +1058,35 @@ const PageOwner: React.FC<PageOwnerProps> = ({
             />
           ) : (
             <>
-          <AnalitikRental
-            mode={filterMode} setMode={setFilterMode} month={filterMonth} setMonth={setFilterMonth}
-            rangeStart={rangeStart} setRangeStart={setRangeStart} rangeEnd={rangeEnd} setRangeEnd={setRangeEnd}
-            filteredHistory={filteredHistory}
-            masuk={totalPemasukanBulanIni}
-            keluar={totalPengeluaranBulanIni}
-            keluarAdmin={keluarAdminRental}
-            keluarOwner={keluarOwnerRental}
-            pemasukanKategori={incomeChartData}
-            pengeluaranKategori={expenseChartData}
-            tunai={totalCashFiltered}
-            transfer={totalTransferFiltered}
-            utilisasi={occupancyData}
-            unitLaris={topUnitsData}
-            jamRamai={peakHoursData}
-            rekomendasi={aiInsights}
-            onBukaPemasukan={(k) => { setSelectedIncomeCategory(k || null); setShowIncomeModal(true); }}
-            onBukaPengeluaran={(k) => { setSelectedCategory(k || null); setShowAnalitikModal(true); }}
-          />
+              <AnalitikRental
+                mode={filterMode} setMode={setFilterMode} month={filterMonth} setMonth={setFilterMonth}
+                rangeStart={rangeStart} setRangeStart={setRangeStart} rangeEnd={rangeEnd} setRangeEnd={setRangeEnd}
+                filteredHistory={filteredHistory}
+                masuk={totalPemasukanBulanIni}
+                keluar={totalPengeluaranBulanIni}
+                keluarAdmin={keluarAdminRental}
+                keluarOwner={keluarOwnerRental}
+                pemasukanKategori={incomeChartData}
+                pengeluaranKategori={expenseChartData}
+                tunai={totalCashFiltered}
+                transfer={totalTransferFiltered}
+                utilisasi={occupancyData}
+                unitLaris={topUnitsData}
+                jamRamai={peakHoursData}
+                rekomendasi={aiInsights}
+                onBukaPemasukan={(k) => { setSelectedIncomeCategory(k || null); setShowIncomeModal(true); }}
+                onBukaPengeluaran={(k) => { setSelectedCategory(k || null); setShowAnalitikModal(true); }}
+              />
 
-          {/* HISTORY PEMBUKUAN */}
-          <HistoryPembukuan items={filteredHistory} isOwner={true} />
+              {/* HISTORY PEMBUKUAN */}
+              <HistoryPembukuan items={filteredHistory} isOwner={true} />
             </>
           )}
         </div>
       )}
 
       {activeTabOwner === "PEGAWAI" && (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           <SubTabs
             ariaLabel="Halaman pegawai"
             value={pegawaiSubTab}
@@ -848,305 +1103,264 @@ const PageOwner: React.FC<PageOwnerProps> = ({
               <TabPegawai history={history} isOwner={true} />
             </div>
           ) : pegawaiSubTab === "LOGGING" ? (
-            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-4">
-              <div className="bg-white dark:bg-black text-zinc-800 dark:text-zinc-300 font-mono text-[13px] border border-zinc-200 dark:border-white/5 rounded-3xl p-5 shadow-2xl relative overflow-hidden ring-1 ring-black/5 dark:ring-white/10">
-                 {/* Console Header Bar */}
-                 <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-900 pb-3 mb-4 select-none">
-                    <div className="flex items-center gap-2">
-                       <div className="w-2.5 h-2.5 rounded-full bg-[#FF5F56]" />
-                       <div className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E]" />
-                       <div className="w-2.5 h-2.5 rounded-full bg-[#27C93F]" />
-                       <span className="ml-2 text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-wider text-[10px]">System Audit Terminal v1.0</span>
-                    </div>
-                    <div className="text-emerald-600 dark:text-emerald-500 text-[10px] font-bold flex items-center gap-1.5">
-                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                       STATUS: ONLINE
-                    </div>
-                 </div>
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <Card title="Log aktivitas pegawai" icon={<Terminal />} iconColor="gray">
+                {/* Filter Controls */}
+                <div className="mb-4 grid grid-cols-1 gap-3 border-b border-sep pb-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-caption font-semibold uppercase tracking-wide text-label-3">Filter operator</label>
+                    <select
+                      value={filterEmail}
+                      onChange={(e) => setFilterEmail(e.target.value)}
+                      className="min-h-[44px] w-full rounded-control bg-surface-2 px-3 py-2 text-[16px] sm:text-callout font-medium text-label ring-1 ring-edge outline-none focus:ring-2 focus:ring-tint"
+                    >
+                      <option value="Semua">Semua operator (Admin/Owner)</option>
+                      {adminEmails.map(email => (
+                        <option key={email} value={email}>{email}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-caption font-semibold uppercase tracking-wide text-label-3">Filter aksi</label>
+                    <select
+                      value={filterAction}
+                      onChange={(e) => setFilterAction(e.target.value)}
+                      className="min-h-[44px] w-full rounded-control bg-surface-2 px-3 py-2 text-[16px] sm:text-callout font-medium text-label ring-1 ring-edge outline-none focus:ring-2 focus:ring-tint"
+                    >
+                      <option value="Semua">Semua aktivitas</option>
+                      <option value="CREATE">CREATE / Tambah</option>
+                      <option value="UPDATE">UPDATE / Edit</option>
+                      <option value="DELETE">DELETE / Hapus</option>
+                    </select>
+                  </div>
+                </div>
 
-                 {/* Filter Controls (Console Style) */}
-                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5 border-b border-zinc-200 dark:border-zinc-900/60 pb-4">
-                    <div className="flex flex-col gap-1.5">
-                       <label className="text-[9px] text-zinc-400 dark:text-zinc-500 uppercase font-black tracking-widest">&gt; Filter Operator</label>
-                       <select 
-                         value={filterEmail} 
-                         onChange={(e) => setFilterEmail(e.target.value)}
-                         className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-zinc-800 dark:text-zinc-300 outline-none focus:border-emerald-500 transition-colors text-xs font-mono"
-                       >
-                          <option value="Semua" className="bg-white dark:bg-[#1C1C1E] text-zinc-800 dark:text-zinc-300">Semua Operator (Admin/Owner)</option>
-                          {adminEmails.map(email => (
-                             <option key={email} value={email} className="bg-white dark:bg-[#1C1C1E] text-zinc-800 dark:text-zinc-300">{email}</option>
-                          ))}
-                       </select>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                       <label className="text-[9px] text-zinc-400 dark:text-zinc-500 uppercase font-black tracking-widest">&gt; Filter Action</label>
-                       <select 
-                         value={filterAction} 
-                         onChange={(e) => setFilterAction(e.target.value)}
-                         className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-zinc-800 dark:text-zinc-300 outline-none focus:border-emerald-500 transition-colors text-xs font-mono"
-                       >
-                          <option value="Semua" className="bg-white dark:bg-[#1C1C1E] text-zinc-800 dark:text-zinc-300">Semua Aktivitas</option>
-                          <option value="CREATE" className="bg-white dark:bg-[#1C1C1E] text-zinc-800 dark:text-zinc-300">CREATE / TAMBAH</option>
-                          <option value="UPDATE" className="bg-white dark:bg-[#1C1C1E] text-zinc-800 dark:text-zinc-300">UPDATE / EDIT</option>
-                          <option value="DELETE" className="bg-white dark:bg-[#1C1C1E] text-zinc-800 dark:text-zinc-300">DELETE / HAPUS</option>
-                       </select>
-                    </div>
-                 </div>
+                {/* Log Output */}
+                {loadingLogs ? (
+                  <div className="py-10 text-center text-subhead text-label-2">
+                    Memuat log aktivitas…
+                  </div>
+                ) : groupedLogs.length === 0 ? (
+                  <EmptyState icon={<Terminal />} title="Belum ada log aktivitas">
+                    Tidak ada aktivitas yang cocok dengan filter yang dipilih.
+                  </EmptyState>
+                ) : (
+                  <div className="space-y-3">
+                    {groupedLogs.map(monthGroup => {
+                      const isMonthExpanded = expandedMonths.includes(monthGroup.key);
+                      return (
+                        <div key={monthGroup.key} className="overflow-hidden rounded-tile bg-surface-2 ring-1 ring-edge">
+                          <button
+                            type="button"
+                            onClick={() => toggleMonth(monthGroup.key)}
+                            aria-expanded={isMonthExpanded}
+                            className="flex min-h-[44px] w-full items-center justify-between gap-2 px-4 py-3 text-left transition-colors hover:bg-fill/40"
+                          >
+                            <div className="flex items-center gap-2">
+                              <ChevronRight className={`h-4 w-4 text-label-3 transition-transform duration-200 ${isMonthExpanded ? "rotate-90" : ""}`} />
+                              <span className="text-subhead font-semibold text-label">{monthGroup.key}</span>
+                            </div>
+                            <Pill>{monthGroup.weeks.length} minggu</Pill>
+                          </button>
 
-                 {/* Main Console Output */}
-                 {loadingLogs ? (
-                    <div className="py-12 text-center text-zinc-450 dark:text-zinc-500 italic space-y-1.5">
-                       <div className="animate-pulse">&gt; Initializing secure database connection ...</div>
-                       <div className="animate-pulse" style={{ animationDelay: '200ms' }}>&gt; Fetching live stream activity logs ...</div>
-                    </div>
-                 ) : groupedLogs.length === 0 ? (
-                    <div className="py-12 text-center text-zinc-450 dark:text-zinc-500 italic">
-                       &gt; Connection established. No activity logs found matching the selected filters.
-                    </div>
-                 ) : (
-                    <div className="space-y-4">
-                       {groupedLogs.map(monthGroup => {
-                          const isMonthExpanded = expandedMonths.includes(monthGroup.key);
-                          return (
-                             <div key={monthGroup.key} className="border border-zinc-200 dark:border-zinc-900/60 rounded-2xl overflow-hidden bg-zinc-100/50 dark:bg-zinc-900/10">
-                                <div 
-                                  onClick={() => toggleMonth(monthGroup.key)}
-                                  className="flex items-center justify-between p-3.5 bg-zinc-50 dark:bg-zinc-900/30 hover:bg-zinc-100 dark:hover:bg-zinc-900/60 cursor-pointer transition-colors border-b border-zinc-200 dark:border-zinc-900/40 select-none"
-                                >
-                                   <div className="flex items-center gap-2">
-                                      <span className="text-zinc-455 dark:text-zinc-600 transition-transform duration-200 inline-block font-bold" style={{ transform: isMonthExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
-                                      <span className="text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider">{monthGroup.key}</span>
-                                   </div>
-                                   <span className="text-[9px] text-zinc-400 dark:text-zinc-600 uppercase font-black tracking-widest">Month Group</span>
-                                </div>
+                          {isMonthExpanded && (
+                            <div className="space-y-2.5 border-t border-sep bg-surface/60 p-3">
+                              {monthGroup.weeks.map(weekGroup => {
+                                const isWeekExpanded = expandedWeeks.includes(weekGroup.key);
+                                return (
+                                  <div key={weekGroup.key} className="overflow-hidden rounded-control bg-surface ring-1 ring-edge">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleWeek(weekGroup.key)}
+                                      aria-expanded={isWeekExpanded}
+                                      className="flex min-h-[44px] w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left transition-colors hover:bg-fill/40"
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <ChevronRight className={`h-3.5 w-3.5 text-label-3 transition-transform duration-200 ${isWeekExpanded ? "rotate-90" : ""}`} />
+                                        <span className="text-footnote font-semibold text-tint">{weekGroup.weekLabel}</span>
+                                      </div>
+                                      <Pill>{weekGroup.days.length} hari</Pill>
+                                    </button>
 
-                                {isMonthExpanded && (
-                                   <div className="p-3 bg-black/[0.03] dark:bg-black/10 space-y-3">
-                                      {monthGroup.weeks.map(weekGroup => {
-                                         const isWeekExpanded = expandedWeeks.includes(weekGroup.key);
-                                         return (
-                                            <div key={weekGroup.key} className="border border-zinc-200 dark:border-zinc-900/40 rounded-xl overflow-hidden ml-3 bg-zinc-100/40 dark:bg-zinc-900/5">
-                                               <div 
-                                                 onClick={() => toggleWeek(weekGroup.key)}
-                                                 className="flex items-center justify-between p-3 bg-zinc-100/50 dark:bg-zinc-900/20 hover:bg-zinc-200/55 dark:hover:bg-zinc-900/40 cursor-pointer transition-colors border-b border-zinc-200 dark:border-zinc-900/30 select-none"
-                                               >
-                                                  <div className="flex items-center gap-2">
-                                                     <span className="text-zinc-400 dark:text-zinc-600 transition-transform duration-200 inline-block font-bold" style={{ transform: isWeekExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
-                                                     <span className="text-sky-600 dark:text-sky-400 font-bold">{weekGroup.weekLabel}</span>
-                                                  </div>
-                                                  <span className="text-[9px] text-zinc-400 dark:text-zinc-600 uppercase font-black tracking-widest">Week Group</span>
-                                               </div>
+                                    {isWeekExpanded && (
+                                      <div className="space-y-2 border-t border-sep bg-surface-2 p-2.5">
+                                        {weekGroup.days.map(dayGroup => {
+                                          const isDayExpanded = expandedDays.includes(dayGroup.key);
+                                          return (
+                                            <div key={dayGroup.key} className="overflow-hidden rounded-control bg-surface ring-1 ring-edge">
+                                              <button
+                                                type="button"
+                                                onClick={() => toggleDay(dayGroup.key)}
+                                                aria-expanded={isDayExpanded}
+                                                className="flex min-h-[44px] w-full items-center justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-fill/40"
+                                              >
+                                                <div className="flex items-center gap-2">
+                                                  <ChevronRight className={`h-3.5 w-3.5 text-label-3 transition-transform duration-200 ${isDayExpanded ? "rotate-90" : ""}`} />
+                                                  <span className="text-footnote font-semibold text-label">{dayGroup.dayLabel}</span>
+                                                </div>
+                                                <Pill>{dayGroup.logs.length} log</Pill>
+                                              </button>
 
-                                               {isWeekExpanded && (
-                                                  <div className="p-2 bg-black/[0.02] dark:bg-black/5 space-y-2">
-                                                     {weekGroup.days.map(dayGroup => {
-                                                        const isDayExpanded = expandedDays.includes(dayGroup.key);
-                                                        return (
-                                                           <div key={dayGroup.key} className="border border-zinc-200 dark:border-zinc-900/30 rounded-lg overflow-hidden ml-3">
-                                                              <div 
-                                                                onClick={() => toggleDay(dayGroup.key)}
-                                                                className="flex items-center justify-between p-2.5 bg-zinc-100/60 dark:bg-zinc-900/10 hover:bg-zinc-200/50 dark:hover:bg-zinc-900/30 cursor-pointer transition-colors border-b border-zinc-200 dark:border-zinc-900/20 select-none"
-                                                              >
-                                                                 <div className="flex items-center gap-2">
-                                                                    <span className="text-zinc-400 dark:text-zinc-600 transition-transform duration-200 inline-block font-bold" style={{ transform: isDayExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
-                                                                    <span className="text-zinc-800 dark:text-zinc-300 font-bold">{dayGroup.dayLabel}</span>
-                                                                 </div>
-                                                                 <span className="text-[9px] text-zinc-500 dark:text-zinc-600 font-bold uppercase tracking-wider">({dayGroup.logs.length} logs)</span>
-                                                              </div>
+                                              {isDayExpanded && (
+                                                <div className="space-y-2 border-t border-sep bg-surface-2 p-2.5">
+                                                  {dayGroup.logs.map(log => {
+                                                    const isDetailsExpanded = expandedLogDetails.includes(log.id);
+                                                    const actionTone = log.action === "UPDATE" ? "warning" : log.action === "DELETE" ? "negative" : "positive";
+                                                    const actionLabel = log.action === "UPDATE" ? "Edit" : log.action === "DELETE" ? "Hapus" : "Tambah";
 
-                                                              {isDayExpanded && (
-                                                                 <div className="p-2 space-y-2 bg-black/[0.03] dark:bg-black/10">
-                                                                    {dayGroup.logs.map(log => {
-                                                                       const isDetailsExpanded = expandedLogDetails.includes(log.id);
-                                                                       
-                                                                       let actionColor = "text-emerald-600 dark:text-emerald-400";
-                                                                       let actionBg = "bg-emerald-500/10 border-emerald-500/20";
-                                                                       let actionLabel = "TAMBAH";
-                                                                       if (log.action === "UPDATE") {
-                                                                         actionColor = "text-amber-600 dark:text-amber-400";
-                                                                         actionBg = "bg-amber-500/10 border-amber-500/20";
-                                                                         actionLabel = " EDIT ";
-                                                                       } else if (log.action === "DELETE") {
-                                                                         actionColor = "text-red-600 dark:text-red-400";
-                                                                         actionBg = "bg-red-500/10 border-red-500/20";
-                                                                         actionLabel = "HAPUS ";
-                                                                       }
+                                                    return (
+                                                      <div key={log.id} className="rounded-control bg-surface p-3 ring-1 ring-edge">
+                                                        <div className="flex flex-col justify-between gap-2.5 sm:flex-row sm:items-center">
+                                                          <div className="flex flex-wrap items-center gap-2 text-footnote">
+                                                            <span className="font-mono text-caption text-label-3">{formatLogTime(log.timestamp)}</span>
+                                                            <Pill tone={actionTone}>{actionLabel}</Pill>
+                                                            <span className="font-semibold text-tint">{log.email}</span>
+                                                            <span className="text-label-2">mengubah pembukuan</span>
+                                                            <span className="font-medium text-label">{log.targetDay}, {log.targetDate}</span>
+                                                          </div>
+                                                          <Button
+                                                            type="button"
+                                                            variant="gray"
+                                                            size="sm"
+                                                            onClick={() => toggleLogDetails(log.id)}
+                                                            className="self-start sm:self-auto"
+                                                          >
+                                                            {isDetailsExpanded ? "Tutup detail" : "Lihat detail"}
+                                                          </Button>
+                                                        </div>
 
-                                                                       return (
-                                                                          <div key={log.id} className="p-3 border border-zinc-200 dark:border-zinc-900/60 rounded-lg bg-zinc-50 dark:bg-black/20 hover:bg-zinc-100 dark:hover:bg-zinc-900/5 transition-colors">
-                                                                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                                                                                <div className="flex items-center flex-wrap gap-2 text-xs">
-                                                                                   <span className="text-zinc-400 dark:text-zinc-500 font-bold">[{formatLogTime(log.timestamp)}]</span>
-                                                                                   <span className={`px-1.5 py-0.5 rounded border text-[9px] font-black tracking-wider ${actionColor} ${actionBg}`}>{actionLabel}</span>
-                                                                                   <span className="text-sky-600 dark:text-sky-400/90 font-bold">{log.email}</span>
-                                                                                   <span className="text-zinc-550 dark:text-zinc-400 font-medium">melakukan CRUD:</span>
-                                                                                   <span className="text-zinc-700 dark:text-zinc-350 underline underline-offset-2 decoration-zinc-300 dark:decoration-zinc-700 decoration-dashed">{log.targetDay}, {log.targetDate}</span>
-                                                                                </div>
-                                                                                <button 
-                                                                                  onClick={() => toggleLogDetails(log.id)}
-                                                                                  className="text-[9px] bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-850 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white px-2.5 py-1 rounded-md font-bold transition-all active:scale-95 uppercase tracking-wider"
-                                                                                >
-                                                                                   {isDetailsExpanded ? "Hide Detail" : "Show Detail"}
-                                                                                </button>
-                                                                             </div>
-
-                                                                             {isDetailsExpanded && (
-                                                                                <div className="mt-3 border-t border-dashed border-zinc-200 dark:border-zinc-900/80 pt-3 text-[11px] text-zinc-500 dark:text-zinc-400 space-y-1 max-w-sm animate-in fade-in slide-in-from-top-1 duration-200">
-                                                                                   <div className="text-zinc-400 dark:text-zinc-650 font-black">+------------------------------------------+</div>
-                                                                                   <div className="flex justify-between px-2">
-                                                                                      <span>| TOTAL PENDAPATAN</span>
-                                                                                      <span className="text-zinc-800 dark:text-zinc-300 font-bold">: {rupiah(log.details?.totalIncome || 0)}</span>
-                                                                                   </div>
-                                                                                   <div className="flex justify-between px-2">
-                                                                                      <span>| CASH</span>
-                                                                                      <span className="text-zinc-800 dark:text-zinc-300 font-bold">: {rupiah(log.details?.totalCash || 0)}</span>
-                                                                                   </div>
-                                                                                   <div className="flex justify-between px-2">
-                                                                                      <span>| TRANSFER</span>
-                                                                                      <span className="text-zinc-800 dark:text-zinc-300 font-bold">: {rupiah(log.details?.totalTransfer || 0)}</span>
-                                                                                   </div>
-                                                                                   <div className="flex justify-between px-2">
-                                                                                      <span>| PENGELUARAN</span>
-                                                                                      <span className="text-zinc-800 dark:text-zinc-300 font-bold">: {rupiah(log.details?.totalPengeluaran || 0)}</span>
-                                                                                   </div>
-                                                                                   <div className="text-zinc-400 dark:text-zinc-650 font-black">+------------------------------------------+</div>
-                                                                                </div>
-                                                                             )}
-                                                                          </div>
-                                                                       );
-                                                                    })}
-                                                                 </div>
-                                                              )}
-                                                           </div>
-                                                        );
-                                                     })}
-                                                  </div>
-                                               )}
+                                                        {isDetailsExpanded && (
+                                                          <div className="mt-3 max-w-sm space-y-1.5 rounded-control bg-surface-2 p-3 text-footnote ring-1 ring-edge animate-in fade-in slide-in-from-top-1 duration-200">
+                                                            <div className="flex items-center justify-between gap-4">
+                                                              <span className="text-label-2">Total pendapatan</span>
+                                                              <Amount value={log.details?.totalIncome || 0} className="font-semibold text-label" />
+                                                            </div>
+                                                            <div className="flex items-center justify-between gap-4">
+                                                              <span className="text-label-2">Cash</span>
+                                                              <Amount value={log.details?.totalCash || 0} className="font-semibold text-label" />
+                                                            </div>
+                                                            <div className="flex items-center justify-between gap-4">
+                                                              <span className="text-label-2">Transfer</span>
+                                                              <Amount value={log.details?.totalTransfer || 0} className="font-semibold text-label" />
+                                                            </div>
+                                                            <div className="flex items-center justify-between gap-4 border-t border-sep pt-1.5">
+                                                              <span className="text-label-2">Pengeluaran</span>
+                                                              <Amount value={log.details?.totalPengeluaran || 0} className="font-semibold text-negative" />
+                                                            </div>
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    );
+                                                  })}
+                                                </div>
+                                              )}
                                             </div>
-                                         );
-                                      })}
-                                   </div>
-                                )}
-                             </div>
-                          );
-                       })}
-                    </div>
-                 )}
-              </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
             </div>
           ) : (
-            <div className="animate-in fade-in duration-200 space-y-6">
-              <Section title="Permintaan Edit Pembukuan Karyawan">
+            <div className="space-y-6 animate-in fade-in duration-200">
+              <Card title="Permintaan edit pembukuan karyawan" icon={<ClipboardEdit />} iconColor="orange">
                 {loadingRequests ? (
-                  <div className="flex justify-center items-center py-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500"></div>
+                  <div className="flex items-center justify-center py-10">
+                    <div className="h-7 w-7 animate-spin rounded-full border-2 border-sep border-t-tint" />
                   </div>
                 ) : editRequests.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center p-8 bg-white dark:bg-[#1C1C1E] border border-zinc-200/50 dark:border-white/5 rounded-2xl text-center">
-                    <AlertCircle className="w-10 h-10 text-zinc-400 dark:text-zinc-600 mb-2" />
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400 font-bold">Tidak ada request edit dari pegawai.</p>
-                  </div>
+                  <EmptyState icon={<AlertCircle />} title="Tidak ada permintaan edit">
+                    Belum ada request edit pembukuan dari pegawai.
+                  </EmptyState>
                 ) : (
                   <div className="grid gap-4">
                     {editRequests.map((req) => {
                       const isPending = req.status === "pending";
                       const isApproved = req.status === "approved";
-                      const isRejected = req.status === "rejected";
-
                       const orig = ringkasPembukuan(req.originalData);
                       const prop = ringkasPembukuan(req.proposedData);
+                      const summaryMetrics = [
+                        { label: "Pendapatan kotor", o: orig.income, p: prop.income },
+                        { label: "Total cash", o: orig.cash, p: prop.cash },
+                        { label: "Total transfer", o: orig.transfer, p: prop.transfer },
+                        { label: "Pengeluaran", o: orig.expense, p: prop.expense },
+                      ];
 
                       return (
-                        <div key={req.id} className="p-5 bg-white dark:bg-[#1C1C1E] border border-zinc-200/50 dark:border-white/5 rounded-2xl shadow-sm hover:shadow-md transition-all">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-zinc-100 dark:border-zinc-800/80">
+                        <div key={req.id} className="space-y-3 rounded-tile bg-surface-2 p-4 ring-1 ring-edge">
+                          <div className="flex flex-col justify-between gap-2.5 border-b border-sep pb-3 sm:flex-row sm:items-center">
                             <div>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-sm font-black text-zinc-900 dark:text-white">{req.requestedBy}</span>
-                                {isPending && (
-                                  <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-full">
-                                    Pending
-                                  </span>
-                                )}
-                                {isApproved && (
-                                  <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-full">
-                                    Approved
-                                  </span>
-                                )}
-                                {isRejected && (
-                                  <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-full">
-                                    Rejected
-                                  </span>
-                                )}
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-subhead font-bold text-label">{req.requestedBy}</span>
+                                <Pill tone={isPending ? "warning" : isApproved ? "positive" : "negative"}>
+                                  {isPending ? "Menunggu" : isApproved ? "Disetujui" : "Ditolak"}
+                                </Pill>
                               </div>
-                              <p className="text-[10px] text-zinc-400 dark:text-zinc-555 mt-1 font-medium">
+                              <p className="mt-1 text-caption text-label-3">
                                 Dikirim: {new Date(req.requestedAt).toLocaleString("id-ID")}
                               </p>
                             </div>
                             <div className="text-left sm:text-right">
-                              <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-0.5">Target Pembukuan</span>
-                              <span className="text-sm font-black text-rose-500 dark:text-rose-400">{req.hari}, {req.tanggal}</span>
+                              <Eyebrow>Target pembukuan</Eyebrow>
+                              <span className="mt-0.5 block text-subhead font-semibold text-label">{req.hari}, {req.tanggal}</span>
                             </div>
                           </div>
 
                           {/* Quick Comparison Card */}
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 py-4">
-                            <div className="space-y-1">
-                              <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-555 uppercase tracking-wider">Pendapatan Kotor</span>
-                              <div className="flex flex-col text-xs font-bold">
-                                <span className="text-zinc-400 dark:text-zinc-650 line-through">{rupiah(orig.income)}</span>
-                                <span className={`text-xs sm:text-sm font-black ${prop.income !== orig.income ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-700 dark:text-zinc-300"}`}>{rupiah(prop.income)}</span>
+                          <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+                            {summaryMetrics.map((m) => (
+                              <div key={m.label} className="space-y-1 rounded-control bg-surface p-3 ring-1 ring-edge">
+                                <Eyebrow>{m.label}</Eyebrow>
+                                <span className="block text-caption tabular-nums text-label-3 line-through">{rupiah(m.o)}</span>
+                                <span className={`block text-subhead font-bold tabular-nums ${m.p !== m.o ? "text-tint" : "text-label"}`}>
+                                  {rupiah(m.p)}
+                                </span>
                               </div>
-                            </div>
-
-                            <div className="space-y-1">
-                              <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-555 uppercase tracking-wider">Total Cash</span>
-                              <div className="flex flex-col text-xs font-bold">
-                                <span className="text-zinc-400 dark:text-zinc-650 line-through">{rupiah(orig.cash)}</span>
-                                <span className={`text-xs sm:text-sm font-black ${prop.cash !== orig.cash ? "text-amber-600 dark:text-amber-400" : "text-zinc-700 dark:text-zinc-300"}`}>{rupiah(prop.cash)}</span>
-                              </div>
-                            </div>
-
-                            <div className="space-y-1">
-                              <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-555 uppercase tracking-wider">Total Transfer</span>
-                              <div className="flex flex-col text-xs font-bold">
-                                <span className="text-zinc-400 dark:text-zinc-650 line-through">{rupiah(orig.transfer)}</span>
-                                <span className={`text-xs sm:text-sm font-black ${prop.transfer !== orig.transfer ? "text-sky-600 dark:text-sky-400" : "text-zinc-700 dark:text-zinc-300"}`}>{rupiah(prop.transfer)}</span>
-                              </div>
-                            </div>
-
-                            <div className="space-y-1">
-                              <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-555 uppercase tracking-wider">Pengeluaran</span>
-                              <div className="flex flex-col text-xs font-bold">
-                                <span className="text-zinc-400 dark:text-zinc-650 line-through">{rupiah(orig.expense)}</span>
-                                <span className={`text-xs sm:text-sm font-black ${prop.expense !== orig.expense ? "text-rose-600 dark:text-rose-400" : "text-zinc-700 dark:text-zinc-300"}`}>{rupiah(prop.expense)}</span>
-                              </div>
-                            </div>
+                            ))}
                           </div>
 
-                          <div className="flex items-center justify-between gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/80">
-                            <button
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-sep pt-3">
+                            <Button
+                              type="button"
+                              variant="gray"
+                              size="sm"
+                              icon={<Activity />}
                               onClick={() => setSelectedRequest(req)}
-                              className="text-xs font-bold text-zinc-500 hover:text-zinc-850 dark:text-zinc-400 dark:hover:text-white px-3 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 transition-colors flex items-center gap-1.5 active:scale-95"
+                              className="min-h-[44px] sm:min-h-[36px]"
                             >
-                              <Activity className="w-3.5 h-3.5" />
-                              Bandingkan Detail
-                            </button>
+                              Bandingkan detail
+                            </Button>
 
                             {isPending && (
                               <div className="flex items-center gap-2">
-                                <button
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  size="sm"
                                   onClick={() => handleRejectRequest(req)}
-                                  className="px-4 py-2 text-xs font-black text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 rounded-xl transition-all active:scale-95"
+                                  className="min-h-[44px] sm:min-h-[36px]"
                                 >
                                   Tolak
-                                </button>
-                                <button
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="filled"
+                                  size="sm"
                                   onClick={() => handleApproveRequest(req)}
-                                  className="px-4 py-2 text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 rounded-xl transition-all active:scale-95"
+                                  className="min-h-[44px] sm:min-h-[36px]"
                                 >
                                   ACC
-                                </button>
+                                </Button>
                               </div>
                             )}
                           </div>
@@ -1155,7 +1369,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                     })}
                   </div>
                 )}
-              </Section>
+              </Card>
             </div>
           )}
         </div>
@@ -1163,474 +1377,100 @@ const PageOwner: React.FC<PageOwnerProps> = ({
 
       {activeTabOwner === "STOK" && <HalamanStok isOwner tampilJajanan={tampilJajanan !== false} />}
 
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* MODAL: RINCIAN PENGELUARAN (Apple HIG Design) */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {showAnalitikModal && (
-        <div className="fixed inset-0 z-[600] flex items-end sm:items-center justify-center">
-          <div className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-xl" onClick={() => { setShowAnalitikModal(false); setSelectedCategory(null); }} />
-          <div className="relative w-full sm:w-[95%] sm:max-w-[960px] max-h-[92vh] sm:max-h-[85vh] bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-2xl sm:rounded-2xl rounded-t-[20px] overflow-hidden flex flex-col shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.6)] ring-1 ring-black/5 dark:ring-white/10 animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-300 z-10">
+      {/* MODAL: RINCIAN PENGELUARAN (UDS Sheet) */}
+      {renderRincianSheet({
+        open: showAnalitikModal,
+        onClose: () => { setShowAnalitikModal(false); setSelectedCategory(null); },
+        title: "Rincian pengeluaran",
+        allLabel: "Semua transaksi",
+        emptyLabel: "Tidak ada pengeluaran pada periode ini.",
+        isExpense: true,
+        totalAmount: totalPengeluaranBulanIni,
+        chartData: expenseChartData,
+        items: combinedExpensesBulanIni,
+        selectedCat: selectedCategory,
+        setSelectedCat: setSelectedCategory,
+        selectedCatItems: selectedCategoryItems,
+        getColor: getCategoryColor,
+      })}
 
-            {/* SF-Style Drag Handle (mobile) */}
-            <div className="sm:hidden flex justify-center pt-2 pb-1">
-              <div className="w-9 h-[5px] rounded-full bg-zinc-300 dark:bg-zinc-600" />
-            </div>
+      {/* MODAL: RINCIAN PENDAPATAN KOTOR (UDS Sheet) */}
+      {renderRincianSheet({
+        open: showIncomeModal,
+        onClose: () => { setShowIncomeModal(false); setSelectedIncomeCategory(null); },
+        title: "Rincian pendapatan kotor",
+        allLabel: "Semua pendapatan",
+        emptyLabel: "Tidak ada pendapatan pada periode ini.",
+        isExpense: false,
+        totalAmount: totalPemasukanBulanIni,
+        chartData: incomeChartData,
+        items: combinedIncomeBulanIni,
+        selectedCat: selectedIncomeCategory,
+        setSelectedCat: setSelectedIncomeCategory,
+        selectedCatItems: selectedIncomeCategoryItems,
+        getColor: getIncomeColor,
+      })}
 
-            {/* Header */}
-            <div className="px-5 sm:px-6 py-4 flex justify-between items-center shrink-0">
-              <div>
-                <h2 className="text-[17px] sm:text-[20px] font-bold tracking-tight text-zinc-900 dark:text-white">Rincian Pengeluaran</h2>
-                <p className="text-[12px] font-medium text-zinc-400 dark:text-zinc-500 mt-0.5">{labelPeriode} · {combinedExpensesBulanIni.length} transaksi</p>
-              </div>
-              <button
-                onClick={() => { setShowAnalitikModal(false); setSelectedCategory(null); }}
-                className="w-[30px] h-[30px] flex items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-[13px] font-bold"
-              >✕</button>
-            </div>
-
-            {/* Thin separator */}
-            <div className="h-px bg-zinc-200/60 dark:bg-white/5 mx-5 sm:mx-6" />
-
-            {/* Scrollable Content */}
-            <div className="overflow-y-auto flex-1" style={{ WebkitOverflowScrolling: 'touch' }}>
-
-              {/* Chart + Categories */}
-              <div className="px-5 sm:px-6 pt-5 pb-3">
-                <div className="flex flex-col md:flex-row gap-6 items-start">
-
-                  {/* Donut Chart */}
-                  <div className="w-full md:w-[260px] shrink-0 flex flex-col items-center">
-                    <div className="h-[240px] w-[240px] relative mx-auto">
-                      {expenseChartData.length > 0 ? (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={expenseChartData}
-                              cx="50%" cy="50%"
-                              innerRadius={65} outerRadius={95}
-                              paddingAngle={3} dataKey="value" stroke="none"
-                              style={{ cursor: 'pointer', outline: 'none' }}
-                              onClick={(_: any, idx: number) => {
-                                const cat = expenseChartData[idx]?.name;
-                                setSelectedCategory(prev => prev === cat ? null : cat);
-                              }}
-                            >
-                              {expenseChartData.map((e, i) => (
-                                <Cell key={`c-${i}`} fill={e.color}
-                                  opacity={selectedCategory ? (selectedCategory === e.name ? 1 : 0.25) : 1}
-                                  style={{ transition: 'opacity 0.4s cubic-bezier(.4,0,.2,1)', cursor: 'pointer' }}
-                                />
-                              ))}
-                            </Pie>
-                            <Tooltip formatter={(val: number) => rupiah(val)} contentStyle={{ borderRadius: '14px', background: isDark ? 'rgba(28,28,30,0.96)' : 'rgba(255,255,255,0.96)', border: 'none', boxShadow: '0 4px 24px rgba(0,0,0,0.12)', backdropFilter: 'blur(20px)', fontSize: 12, fontWeight: 600, padding: '8px 14px', color: isDark ? '#fff' : '#000' }} itemStyle={{ color: isDark ? '#d4d4d8' : '#3f3f46' }} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-[13px] font-medium text-zinc-400">Belum ada data</div>
-                      )}
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none flex-col">
-                        <div className="flex flex-col items-center px-3 py-1.5 rounded-xl bg-white/80 dark:bg-black/60 backdrop-blur-md">
-                          <span className="text-[9px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest leading-none mb-0.5">Total</span>
-                          <span className="text-[13px] font-bold text-red-500 dark:text-red-400 tabular-nums">{rupiah(totalPengeluaranBulanIni)}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-2">Ketuk segmen untuk filter</p>
-                  </div>
-
-                  {/* Category Cards */}
-                  <div className="flex-1 w-full">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                      {expenseChartData.map((cat) => {
-                        const isActive = selectedCategory === cat.name;
-                        const pct = totalPengeluaranBulanIni > 0 ? ((cat.value / totalPengeluaranBulanIni) * 100).toFixed(1) : "0";
-                        const count = combinedExpensesBulanIni.filter(x => x.kategori === cat.name).length;
-                        return (
-                          <button
-                            key={cat.name}
-                            onClick={() => setSelectedCategory(prev => prev === cat.name ? null : cat.name)}
-                            className={`relative overflow-hidden p-3 rounded-[14px] text-left transition-all duration-300 active:scale-[0.96] ${
-                              isActive ? "shadow-md" : "hover:shadow-sm"
-                            }`}
-                            style={{
-                              backgroundColor: isActive ? (isDark ? `${cat.color}18` : `${cat.color}10`) : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.025)'),
-                              border: `1px solid ${isActive ? cat.color : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)')}`,
-                              boxShadow: isActive ? `0 0 0 1.5px ${cat.color}, 0 4px 16px ${cat.color}20` : undefined,
-                            }}
-                          >
-                            <div className="absolute top-0 left-0 right-0 h-[2.5px]" style={{ backgroundColor: cat.color, opacity: isActive ? 1 : 0.5 }} />
-                            <div className="flex items-center gap-1.5 mb-1.5 mt-0.5">
-                              <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
-                              <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 truncate">{cat.name}</span>
-                            </div>
-                            <div className="flex items-end justify-between">
-                              <span className="text-[13px] font-bold text-zinc-900 dark:text-white tabular-nums">{rupiah(cat.value)}</span>
-                              <div className="flex flex-col items-end">
-                                <span className="text-[9px] font-bold tabular-nums" style={{ color: cat.color }}>{pct}%</span>
-                                <span className="text-[9px] text-zinc-400 font-medium">{count}x</span>
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section Divider */}
-              <div className="mx-5 sm:mx-6 flex items-center gap-3 my-3">
-                <div className="h-px flex-1 bg-zinc-200/50 dark:bg-white/5" />
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
-                  {selectedCategory || "Semua Transaksi"}
-                </span>
-                <div className="h-px flex-1 bg-zinc-200/50 dark:bg-white/5" />
-              </div>
-
-              {/* Detail / Full List */}
-              <div className="px-5 sm:px-6 pb-6">
-                {selectedCategory ? (
-                  <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${getCategoryColor(selectedCategory)}15` }}>
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getCategoryColor(selectedCategory) }} />
-                        </div>
-                        <div>
-                          <h4 className="text-[15px] font-bold text-zinc-900 dark:text-white leading-tight">{selectedCategory}</h4>
-                          <p className="text-[11px] text-zinc-400">{selectedCategoryItems.length} transaksi</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-[17px] font-bold tabular-nums" style={{ color: getCategoryColor(selectedCategory) }}>
-                          {rupiah(selectedCategoryItems.reduce((s, x) => s + x.harga, 0))}
-                        </span>
-                        <button onClick={() => setSelectedCategory(null)} className="block text-[11px] font-semibold text-blue-500 hover:text-blue-400 transition-colors mt-0.5">← Semua</button>
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-1.5 max-h-[280px] overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: 'touch' }}>
-                      {selectedCategoryItems.map((o, idx) => (
-                        <div key={idx} className="flex justify-between items-center py-2.5 px-3 rounded-xl transition-colors" style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' }}>
-                          <div className="flex flex-col flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 mb-0.5">
-                              <span className="text-[10px] font-mono font-semibold text-zinc-400">{formatDateShort(o.tanggal)}</span>
-                              <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${o.source === "owner" ? "bg-purple-500/10 text-purple-500" : "bg-blue-500/10 text-blue-500"}`}>{o.source === "owner" ? "OWNER" : "ADMIN"}</span>
-                            </div>
-                            <span className="text-[13px] font-semibold text-zinc-800 dark:text-zinc-100 truncate">{o.nama}</span>
-                          </div>
-                          <span className="text-[13px] font-bold shrink-0 tabular-nums ml-3" style={{ color: getCategoryColor(selectedCategory) }}>-{rupiah(o.harga)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-1.5 max-h-[320px] overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: 'touch' }}>
-                    {combinedExpensesBulanIni.length === 0 && <p className="text-zinc-400 text-[13px] py-8 text-center font-medium">Tidak ada pengeluaran bulan ini.</p>}
-                    {combinedExpensesBulanIni.map((o, idx) => {
-                      const catColor = getCategoryColor(o.kategori);
-                      return (
-                        <div key={idx}
-                          className="flex justify-between items-center py-2.5 px-3 rounded-xl cursor-pointer transition-colors"
-                          style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' }}
-                          onClick={() => setSelectedCategory(o.kategori)}
-                        >
-                          <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                            <div className="w-[3px] h-8 rounded-full shrink-0" style={{ backgroundColor: catColor }} />
-                            <div className="flex flex-col flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 mb-0.5">
-                                <span className="text-[10px] font-mono font-semibold text-zinc-400">{formatDateShort(o.tanggal)}</span>
-                                <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${o.source === "owner" ? "bg-purple-500/10 text-purple-500" : "bg-blue-500/10 text-blue-500"}`}>{o.source === "owner" ? "OWNER" : "ADMIN"}</span>
-                              </div>
-                              <span className="text-[13px] font-semibold text-zinc-800 dark:text-zinc-100 truncate">{o.nama}</span>
-                              <div className="flex items-center gap-1 mt-0.5">
-                                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: catColor }} />
-                                <span className="text-[10px] font-medium" style={{ color: catColor }}>{o.kategori}</span>
-                              </div>
-                            </div>
-                          </div>
-                          <span className="text-[13px] font-bold text-red-500 shrink-0 tabular-nums ml-3">-{rupiah(o.harga)}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {/* MODAL: RINCIAN PENDAPATAN (Apple HIG Design) */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      {showIncomeModal && (
-        <div className="fixed inset-0 z-[600] flex items-end sm:items-center justify-center">
-          <div className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-xl" onClick={() => { setShowIncomeModal(false); setSelectedIncomeCategory(null); }} />
-          <div className="relative w-full sm:w-[95%] sm:max-w-[960px] max-h-[92vh] sm:max-h-[85vh] bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-2xl sm:rounded-2xl rounded-t-[20px] overflow-hidden flex flex-col shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.6)] ring-1 ring-black/5 dark:ring-white/10 animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-300 z-10">
-
-            {/* Drag Handle */}
-            <div className="sm:hidden flex justify-center pt-2 pb-1">
-              <div className="w-9 h-[5px] rounded-full bg-zinc-300 dark:bg-zinc-600" />
-            </div>
-
-            {/* Header */}
-            <div className="px-5 sm:px-6 py-4 flex justify-between items-center shrink-0">
-              <div>
-                <h2 className="text-[17px] sm:text-[20px] font-bold tracking-tight text-zinc-900 dark:text-white">Rincian Pendapatan Kotor</h2>
-                <p className="text-[12px] font-medium text-zinc-400 dark:text-zinc-500 mt-0.5">{labelPeriode} · {combinedIncomeBulanIni.length} transaksi</p>
-              </div>
-              <button
-                onClick={() => { setShowIncomeModal(false); setSelectedIncomeCategory(null); }}
-                className="w-[30px] h-[30px] flex items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-[13px] font-bold"
-              >✕</button>
-            </div>
-
-            <div className="h-px bg-zinc-200/60 dark:bg-white/5 mx-5 sm:mx-6" />
-
-            {/* Content */}
-            <div className="overflow-y-auto flex-1" style={{ WebkitOverflowScrolling: 'touch' }}>
-
-              {/* Chart + Categories */}
-              <div className="px-5 sm:px-6 pt-5 pb-3">
-                <div className="flex flex-col md:flex-row gap-6 items-start">
-
-                  {/* Donut */}
-                  <div className="w-full md:w-[260px] shrink-0 flex flex-col items-center">
-                    <div className="h-[240px] w-[240px] relative mx-auto">
-                      {incomeChartData.length > 0 ? (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={incomeChartData}
-                              cx="50%" cy="50%"
-                              innerRadius={65} outerRadius={95}
-                              paddingAngle={3} dataKey="value" stroke="none"
-                              style={{ cursor: 'pointer', outline: 'none' }}
-                              onClick={(_: any, idx: number) => {
-                                const cat = incomeChartData[idx]?.name;
-                                setSelectedIncomeCategory(prev => prev === cat ? null : cat);
-                              }}
-                            >
-                              {incomeChartData.map((e, i) => (
-                                <Cell key={`ic-${i}`} fill={e.color}
-                                  opacity={selectedIncomeCategory ? (selectedIncomeCategory === e.name ? 1 : 0.25) : 1}
-                                  style={{ transition: 'opacity 0.4s cubic-bezier(.4,0,.2,1)', cursor: 'pointer' }}
-                                />
-                              ))}
-                            </Pie>
-                            <Tooltip formatter={(val: number) => rupiah(val)} contentStyle={{ borderRadius: '14px', background: isDark ? 'rgba(28,28,30,0.96)' : 'rgba(255,255,255,0.96)', border: 'none', boxShadow: '0 4px 24px rgba(0,0,0,0.12)', backdropFilter: 'blur(20px)', fontSize: 12, fontWeight: 600, padding: '8px 14px', color: isDark ? '#fff' : '#000' }} itemStyle={{ color: isDark ? '#d4d4d8' : '#3f3f46' }} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-[13px] font-medium text-zinc-400">Belum ada data</div>
-                      )}
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none flex-col">
-                        <div className="flex flex-col items-center px-3 py-1.5 rounded-xl bg-white/80 dark:bg-black/60 backdrop-blur-md">
-                          <span className="text-[9px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest leading-none mb-0.5">Total</span>
-                          <span className="text-[13px] font-bold text-emerald-500 dark:text-emerald-400 tabular-nums">{rupiah(totalPemasukanBulanIni)}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-2">Ketuk segmen untuk filter</p>
-                  </div>
-
-                  {/* Category Cards */}
-                  <div className="flex-1 w-full">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {incomeChartData.map((cat) => {
-                        const isActive = selectedIncomeCategory === cat.name;
-                        const pct = totalPemasukanBulanIni > 0 ? ((cat.value / totalPemasukanBulanIni) * 100).toFixed(1) : "0";
-                        const count = combinedIncomeBulanIni.filter(x => x.kategori === cat.name).length;
-                        return (
-                          <button
-                            key={cat.name}
-                            onClick={() => setSelectedIncomeCategory(prev => prev === cat.name ? null : cat.name)}
-                            className={`relative overflow-hidden p-3 rounded-[14px] text-left transition-all duration-300 active:scale-[0.96] ${
-                              isActive ? "shadow-md" : "hover:shadow-sm"
-                            }`}
-                            style={{
-                              backgroundColor: isActive ? (isDark ? `${cat.color}18` : `${cat.color}10`) : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.025)'),
-                              border: `1px solid ${isActive ? cat.color : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)')}`,
-                              boxShadow: isActive ? `0 0 0 1.5px ${cat.color}, 0 4px 16px ${cat.color}20` : undefined,
-                            }}
-                          >
-                            <div className="absolute top-0 left-0 right-0 h-[2.5px]" style={{ backgroundColor: cat.color, opacity: isActive ? 1 : 0.5 }} />
-                            <div className="flex items-center gap-1.5 mb-1.5 mt-0.5">
-                              <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
-                              <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 truncate">{cat.name}</span>
-                            </div>
-                            <div className="flex items-end justify-between">
-                              <span className="text-[13px] font-bold text-zinc-900 dark:text-white tabular-nums">{rupiah(cat.value)}</span>
-                              <div className="flex flex-col items-end">
-                                <span className="text-[9px] font-bold tabular-nums" style={{ color: cat.color }}>{pct}%</span>
-                                <span className="text-[9px] text-zinc-400 font-medium">{count}x</span>
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div className="mx-5 sm:mx-6 flex items-center gap-3 my-3">
-                <div className="h-px flex-1 bg-zinc-200/50 dark:bg-white/5" />
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
-                  {selectedIncomeCategory || "Semua Pendapatan"}
-                </span>
-                <div className="h-px flex-1 bg-zinc-200/50 dark:bg-white/5" />
-              </div>
-
-              {/* List */}
-              <div className="px-5 sm:px-6 pb-6">
-                {selectedIncomeCategory ? (
-                  <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${getIncomeColor(selectedIncomeCategory)}15` }}>
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getIncomeColor(selectedIncomeCategory) }} />
-                        </div>
-                        <div>
-                          <h4 className="text-[15px] font-bold text-zinc-900 dark:text-white leading-tight">{selectedIncomeCategory}</h4>
-                          <p className="text-[11px] text-zinc-400">{selectedIncomeCategoryItems.length} transaksi</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-[17px] font-bold tabular-nums" style={{ color: getIncomeColor(selectedIncomeCategory) }}>
-                          {rupiah(selectedIncomeCategoryItems.reduce((s, x) => s + x.harga, 0))}
-                        </span>
-                        <button onClick={() => setSelectedIncomeCategory(null)} className="block text-[11px] font-semibold text-blue-500 hover:text-blue-400 transition-colors mt-0.5">← Semua</button>
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-1.5 max-h-[280px] overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: 'touch' }}>
-                      {selectedIncomeCategoryItems.map((o, idx) => (
-                        <div key={idx} className="flex justify-between items-center py-2.5 px-3 rounded-xl transition-colors" style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' }}>
-                          <div className="flex flex-col flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 mb-0.5">
-                              <span className="text-[10px] font-mono font-semibold text-zinc-400">{formatDateShort(o.tanggal)}</span>
-                              <span className="text-[10px] font-medium text-zinc-400 capitalize">{o.hari}</span>
-                            </div>
-                            <span className="text-[13px] font-semibold text-zinc-800 dark:text-zinc-100 truncate">{o.nama}</span>
-                            {o.bayar && <span className={`text-[10px] font-bold mt-0.5 ${o.bayar.toLowerCase().includes('cash') ? 'text-green-500' : 'text-blue-500'}`}>{o.bayar}</span>}
-                          </div>
-                          <span className="text-[13px] font-bold shrink-0 tabular-nums ml-3" style={{ color: getIncomeColor(selectedIncomeCategory) }}>+{rupiah(o.harga)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-1.5 max-h-[320px] overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: 'touch' }}>
-                    {combinedIncomeBulanIni.length === 0 && <p className="text-zinc-400 text-[13px] py-8 text-center font-medium">Tidak ada pendapatan bulan ini.</p>}
-                    {combinedIncomeBulanIni.map((o, idx) => {
-                      const catColor = getIncomeColor(o.kategori);
-                      return (
-                        <div key={idx}
-                          className="flex justify-between items-center py-2.5 px-3 rounded-xl cursor-pointer transition-colors"
-                          style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)' }}
-                          onClick={() => setSelectedIncomeCategory(o.kategori)}
-                        >
-                          <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                            <div className="w-[3px] h-8 rounded-full shrink-0" style={{ backgroundColor: catColor }} />
-                            <div className="flex flex-col flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 mb-0.5">
-                                <span className="text-[10px] font-mono font-semibold text-zinc-400">{formatDateShort(o.tanggal)}</span>
-                                <span className="text-[10px] font-medium text-zinc-400 capitalize">{o.hari}</span>
-                              </div>
-                              <span className="text-[13px] font-semibold text-zinc-800 dark:text-zinc-100 truncate">{o.nama}</span>
-                              <div className="flex items-center gap-1 mt-0.5">
-                                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: catColor }} />
-                                <span className="text-[10px] font-medium" style={{ color: catColor }}>{o.kategori}</span>
-                                {o.bayar && <span className={`text-[9px] font-bold ml-2 ${o.bayar.toLowerCase().includes('cash') ? 'text-green-500' : 'text-blue-500'}`}>· {o.bayar}</span>}
-                              </div>
-                            </div>
-                          </div>
-                          <span className="text-[13px] font-bold text-emerald-500 shrink-0 tabular-nums ml-3">+{rupiah(o.harga)}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════ */}
       {/* MODAL: BANDINGKAN DETAIL REQUEST EDIT */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
       {selectedRequest && (() => {
         const req = selectedRequest;
         const isPending = req.status === "pending";
+        const infoFields = [
+          { label: "Absen pagi", o: req.originalData?.absenPagi, p: req.proposedData?.absenPagi },
+          { label: "Absen siang", o: req.originalData?.absenSiang, p: req.proposedData?.absenSiang },
+          { label: "Ruko buka", o: req.originalData?.rukoBuka, p: req.proposedData?.rukoBuka },
+          { label: "Ruko tutup", o: req.originalData?.rukoTutup, p: req.proposedData?.rukoTutup },
+          { label: "Shift", o: req.originalData?.shiftPegawai, p: req.proposedData?.shiftPegawai },
+        ];
         return (
-          <div className="fixed inset-0 z-[600] flex items-end sm:items-center justify-center">
-            <div className="absolute inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-xl" onClick={() => setSelectedRequest(null)} />
-            <div className="relative w-full sm:w-[95%] sm:max-w-[850px] max-h-[92vh] sm:max-h-[85vh] bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-2xl sm:rounded-2xl rounded-t-[20px] overflow-hidden flex flex-col shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.6)] ring-1 ring-black/5 dark:ring-white/10 animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-300 z-10">
-              
+          <div className="fixed inset-0 z-[600] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
+            <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={() => setSelectedRequest(null)} />
+            <div className="relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-card bg-surface/95 shadow-float ring-1 ring-edge backdrop-blur-xl animate-in slide-in-from-bottom-4 duration-300 sm:max-h-[85vh] sm:w-[95%] sm:max-w-[850px] sm:rounded-card sm:zoom-in-95">
               {/* Drag Handle */}
-              <div className="sm:hidden flex justify-center pt-2 pb-1">
-                <div className="w-9 h-[5px] rounded-full bg-zinc-300 dark:bg-zinc-600" />
+              <div className="flex justify-center pt-2.5 pb-1 sm:hidden">
+                <div className="h-1 w-9 rounded-full bg-fill" />
               </div>
 
               {/* Header */}
-              <div className="px-5 sm:px-6 py-4 flex justify-between items-center shrink-0">
+              <div className="flex shrink-0 items-center justify-between border-b border-sep px-5 py-4 sm:px-6">
                 <div>
-                  <h2 className="text-[17px] sm:text-[20px] font-bold tracking-tight text-zinc-900 dark:text-white">Detail Perbandingan Edit</h2>
-                  <p className="text-[12px] font-medium text-zinc-400 dark:text-zinc-500 mt-0.5">
-                    Pengirim: <span className="font-bold">{req.requestedBy}</span> · Target: <span className="font-bold text-rose-500">{req.hari}, {req.tanggal}</span>
+                  <h2 className="text-title3 font-bold tracking-tight text-label">Detail perbandingan edit</h2>
+                  <p className="mt-0.5 text-footnote text-label-2">
+                    Pengirim: <span className="font-semibold text-label">{req.requestedBy}</span> · Target: <span className="font-semibold text-tint">{req.hari}, {req.tanggal}</span>
                   </p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setSelectedRequest(null)}
-                  className="w-[30px] h-[30px] flex items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-[13px] font-bold"
-                >✕</button>
+                  aria-label="Tutup perbandingan"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-fill text-label-2 transition-opacity active:opacity-75"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
 
-              <div className="h-px bg-zinc-200/60 dark:bg-white/5 mx-5 sm:mx-6" />
-
               {/* Scrollable Content */}
-              <div className="overflow-y-auto flex-1 p-5 sm:p-6 space-y-6" style={{ WebkitOverflowScrolling: 'touch' }}>
-                
+              <div className="flex-1 space-y-5 overflow-y-auto p-5 sm:p-6" style={{ WebkitOverflowScrolling: "touch" }}>
                 {/* General Info Comparison */}
-                <div className="bg-zinc-50 dark:bg-black/20 border border-zinc-250/40 dark:border-white/5 p-4 rounded-xl space-y-3">
-                  <h3 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Informasi Umum</h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Absen Pagi</span>
-                      <span className="text-[12px] font-bold text-red-500 line-through truncate">{req.originalData?.absenPagi || "-"}</span>
-                      <span className="text-[12px] font-black text-emerald-600 dark:text-emerald-400 truncate">{req.proposedData?.absenPagi || "-"}</span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Absen Siang</span>
-                      <span className="text-[12px] font-bold text-red-500 line-through truncate">{req.originalData?.absenSiang || "-"}</span>
-                      <span className="text-[12px] font-black text-emerald-600 dark:text-emerald-400 truncate">{req.proposedData?.absenSiang || "-"}</span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Ruko Buka</span>
-                      <span className="text-[12px] font-bold text-red-500 line-through truncate">{req.originalData?.rukoBuka || "-"}</span>
-                      <span className="text-[12px] font-black text-emerald-600 dark:text-emerald-400 truncate">{req.proposedData?.rukoBuka || "-"}</span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Ruko Tutup</span>
-                      <span className="text-[12px] font-bold text-red-500 line-through truncate">{req.originalData?.rukoTutup || "-"}</span>
-                      <span className="text-[12px] font-black text-emerald-600 dark:text-emerald-400 truncate">{req.proposedData?.rukoTutup || "-"}</span>
-                    </div>
-                    <div className="col-span-2 sm:col-span-1 flex flex-col">
-                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Shift</span>
-                      <span className="text-[12px] font-bold text-red-500 line-through truncate">{req.originalData?.shiftPegawai || "-"}</span>
-                      <span className="text-[12px] font-black text-emerald-600 dark:text-emerald-400 truncate">{req.proposedData?.shiftPegawai || "-"}</span>
-                    </div>
+                <div className="space-y-3 rounded-tile bg-surface-2 p-4 ring-1 ring-edge">
+                  <Eyebrow>Informasi umum</Eyebrow>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                    {infoFields.map((f, i) => (
+                      <div key={f.label} className={`flex flex-col ${i === 4 ? "col-span-2 sm:col-span-1" : ""}`}>
+                        <span className="text-caption text-label-3">{f.label}</span>
+                        <span className="truncate text-footnote text-negative line-through">{f.o || "-"}</span>
+                        <span className="truncate text-footnote font-semibold text-positive">{f.p || "-"}</span>
+                      </div>
+                    ))}
                   </div>
-                  <div className="border-t border-zinc-200 dark:border-zinc-800 pt-2">
-                    <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Catatan</span>
-                    <p className="text-[11px] text-red-500 line-through">{req.originalData?.catatan || "-"}</p>
-                    <p className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">{req.proposedData?.catatan || "-"}</p>
+                  <div className="border-t border-sep pt-2.5">
+                    <span className="text-caption text-label-3">Catatan</span>
+                    <p className="text-footnote text-negative line-through">{req.originalData?.catatan || "-"}</p>
+                    <p className="text-footnote font-medium text-positive">{req.proposedData?.catatan || "-"}</p>
                   </div>
                 </div>
 
-                {/* Categories Tabbed Comparison */}
+                {/* Categories Comparison */}
                 <div className="space-y-4">
                   {(["harian", "jajanan", "jasaAks", "sewa", "setoran", "pengeluaran"] as const).map((cat) => {
                     let title = "";
@@ -1639,22 +1479,22 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                     let renderRow = (_row: any) => "";
 
                     if (cat === "harian") {
-                      title = "Transaksi Harian (PS Main)";
+                      title = "Transaksi harian (PS Main)";
                       originalRows = req.originalData?.rowsHarian || [];
                       proposedRows = req.proposedData?.rowsHarian || [];
                       renderRow = (row) => `${row.jenisPS} · ${row.jumlahJam} jam · ${rupiah(row.harga)} · ${row.bayar || "Cash"}`;
                     } else if (cat === "jajanan") {
-                      title = "Penjualan Jajanan";
+                      title = "Penjualan jajanan";
                       originalRows = req.originalData?.rowsJajanan || [];
                       proposedRows = req.proposedData?.rowsJajanan || [];
                       renderRow = (row) => `${row.jenisJajanan} · ${row.qtyJam} qty · ${rupiah(row.harga)} · ${row.bayar || "Cash"}`;
                     } else if (cat === "jasaAks") {
-                      title = "Pemasukan Usaha";
+                      title = "Pemasukan usaha";
                       originalRows = req.originalData?.rowsJasaAks || [];
                       proposedRows = req.proposedData?.rowsJasaAks || [];
                       renderRow = (row) => `${row.tipe} (${row.ket}) · ${rupiah(row.harga)} · ${row.bayar || "Cash"}`;
                     } else if (cat === "sewa") {
-                      title = "Rental Sewa PS Luar";
+                      title = "Rental sewa PS luar";
                       originalRows = req.originalData?.rowsSewa || [];
                       proposedRows = req.proposedData?.rowsSewa || [];
                       renderRow = (row) => `${row.jenisPS} · ${row.lamaSewa} · ${rupiah(row.harga)} · ${row.bayar || "Cash"}${row.isOngkir === "YA" ? ` (+ Ongkir ${rupiah(row._ongkir)})` : ""}`;
@@ -1675,29 +1515,23 @@ const PageOwner: React.FC<PageOwnerProps> = ({
 
                     return (
                       <div key={cat} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-xs font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">{title}</h4>
-                          {isIdentical ? (
-                            <span className="text-[9px] font-bold text-zinc-400 dark:text-zinc-550 uppercase tracking-wide bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-2 py-0.5 rounded-full">
-                              Tidak Ada Perubahan
-                            </span>
-                          ) : (
-                            <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
-                              Ada Perubahan
-                            </span>
-                          )}
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="text-subhead font-semibold text-label">{title}</h4>
+                          <Pill tone={isIdentical ? undefined : "warning"}>
+                            {isIdentical ? "Tidak ada perubahan" : "Ada perubahan"}
+                          </Pill>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                           {/* Original Column */}
-                          <div className={`p-3 border rounded-xl ${isIdentical ? 'bg-zinc-50/50 dark:bg-zinc-900/10 border-zinc-150 dark:border-zinc-800' : 'bg-red-500/5 border-red-500/15 dark:border-red-500/10'}`}>
-                            <span className="text-[9px] font-bold text-red-500/80 uppercase tracking-wider block mb-2">Original</span>
+                          <div className={`rounded-tile p-3 ring-1 ${isIdentical ? "bg-surface-2 ring-edge" : "bg-negative/5 ring-negative/25"}`}>
+                            <Eyebrow>Original</Eyebrow>
                             {originalRows.length === 0 ? (
-                              <p className="text-[11px] text-zinc-400 italic">Tidak ada transaksi</p>
+                              <p className="mt-1.5 text-footnote italic text-label-3">Tidak ada transaksi</p>
                             ) : (
-                              <div className="space-y-1">
+                              <div className="mt-1.5 divide-y divide-sep">
                                 {originalRows.map((row, rIdx) => (
-                                  <div key={rIdx} className="text-[11px] text-zinc-500 dark:text-zinc-400 line-through py-0.5 border-b border-zinc-100 dark:border-white/5 last:border-0 truncate">
+                                  <div key={rIdx} className="truncate py-1 text-footnote text-label-2 line-through">
                                     {rIdx + 1}. {renderRow(row)}
                                   </div>
                                 ))}
@@ -1706,14 +1540,14 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                           </div>
 
                           {/* Proposed Column */}
-                          <div className={`p-3 border rounded-xl ${isIdentical ? 'bg-zinc-50/50 dark:bg-zinc-900/10 border-zinc-150 dark:border-zinc-800' : 'bg-emerald-500/5 border-emerald-500/15 dark:border-emerald-500/10'}`}>
-                            <span className="text-[9px] font-bold text-emerald-500/85 uppercase tracking-wider block mb-2">Proposed</span>
+                          <div className={`rounded-tile p-3 ring-1 ${isIdentical ? "bg-surface-2 ring-edge" : "bg-positive/5 ring-positive/25"}`}>
+                            <Eyebrow>Usulan edit</Eyebrow>
                             {proposedRows.length === 0 ? (
-                              <p className="text-[11px] text-zinc-400 italic">Tidak ada transaksi</p>
+                              <p className="mt-1.5 text-footnote italic text-label-3">Tidak ada transaksi</p>
                             ) : (
-                              <div className="space-y-1">
+                              <div className="mt-1.5 divide-y divide-sep">
                                 {proposedRows.map((row, rIdx) => (
-                                  <div key={rIdx} className="text-[11px] text-zinc-800 dark:text-zinc-200 font-medium py-0.5 border-b border-zinc-100 dark:border-white/5 last:border-0 truncate">
+                                  <div key={rIdx} className="truncate py-1 text-footnote font-medium text-label">
                                     {rIdx + 1}. {renderRow(row)}
                                   </div>
                                 ))}
@@ -1729,42 +1563,31 @@ const PageOwner: React.FC<PageOwnerProps> = ({
 
               {/* Footer Actions */}
               {isPending ? (
-                <div className="px-5 sm:px-6 py-4 bg-zinc-50 dark:bg-zinc-900/40 border-t border-zinc-150 dark:border-zinc-850 flex justify-end gap-3 shrink-0">
-                  <button
-                    onClick={() => handleRejectRequest(req)}
-                    className="px-5 py-2.5 text-xs font-black text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 hover:bg-red-500/25 rounded-xl transition-all active:scale-95"
-                  >
-                    Tolak Request
-                  </button>
-                  <button
-                    onClick={() => handleApproveRequest(req)}
-                    className="px-5 py-2.5 text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/25 rounded-xl transition-all active:scale-95"
-                  >
+                <div className="flex shrink-0 justify-end gap-2.5 border-t border-sep bg-surface-2 px-5 py-4 sm:px-6">
+                  <Button type="button" variant="destructive" size="md" onClick={() => handleRejectRequest(req)}>
+                    Tolak request
+                  </Button>
+                  <Button type="button" variant="filled" size="md" onClick={() => handleApproveRequest(req)}>
                     Setujui (ACC)
-                  </button>
+                  </Button>
                 </div>
               ) : (
-                <div className="px-5 sm:px-6 py-4 bg-zinc-50 dark:bg-zinc-900/40 border-t border-zinc-150 dark:border-zinc-850 flex justify-between items-center shrink-0">
-                  <div className="text-xs">
-                    Status:{" "}
-                    <span className={`font-black uppercase tracking-wider ${req.status === "approved" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-                      {req.status}
-                    </span>
+                <div className="flex shrink-0 items-center justify-between border-t border-sep bg-surface-2 px-5 py-4 sm:px-6">
+                  <div className="flex items-center gap-2 text-footnote text-label-2">
+                    <span>Status:</span>
+                    <Pill tone={req.status === "approved" ? "positive" : "negative"}>
+                      {req.status === "approved" ? "Disetujui" : "Ditolak"}
+                    </Pill>
                   </div>
-                  <button
-                    onClick={() => setSelectedRequest(null)}
-                    className="px-5 py-2.5 text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-white bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded-xl transition-all active:scale-95"
-                  >
+                  <Button type="button" variant="gray" size="md" onClick={() => setSelectedRequest(null)}>
                     Tutup
-                  </button>
+                  </Button>
                 </div>
               )}
-
             </div>
           </div>
         );
       })()}
-
     </div>
   );
 };

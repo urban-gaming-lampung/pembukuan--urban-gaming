@@ -10,7 +10,7 @@ import { doc, setDoc, onSnapshot, deleteDoc, updateDoc } from "firebase/firestor
 import { db, auth } from "../lib/firebase";
 import html2canvas from "html2canvas";
 import { Html5Qrcode } from "html5-qrcode";
-import Section from "./common/Section";
+import { Button, Card, EmptyState, Eyebrow, IconBadge, Pill } from "../ui";
 import jsPDF from "jspdf";
 
 import useStokData, { RegisteredDevice, DeviceType } from "../hooks/useStokData";
@@ -781,17 +781,12 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
   return (
     <>
-      <Section title="Monitoring Kondisi Unit (Kondisi Alat)">
-        <div className="bg-white dark:bg-[#111111] border border-zinc-200 dark:border-white/10 rounded-2xl md:rounded-[32px] p-4 sm:p-6 lg:p-8 flex flex-col gap-6 w-full overflow-hidden relative shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-black/20">
-          
-          {/* Glassmorphic Background Blur */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 dark:bg-emerald-500/5 blur-3xl rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-teal-500/10 dark:bg-teal-500/5 blur-3xl rounded-full translate-y-1/2 -translate-x-1/2 pointer-events-none" />
-
+      <Card title="Monitoring kondisi alat" icon={<QrCode />} iconColor="teal">
+        <div className="flex flex-col gap-5">
           {/* Sub halaman owner — gaya SubTabs (SSOT) */}
           {isOwner && (
             <SubTabs
-              className="relative z-10 w-full"
+              className="w-full"
               ariaLabel="Halaman device"
               value={activeSubTab}
               onChange={(k) => { setActiveSubTab(k); if (k === "generator") setEditingStickerId(null); }}
@@ -805,34 +800,36 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
           {/* Tab 1: Kondisi Device (Visible to Admin & Owner) */}
           {(!isOwner || activeSubTab === "kondisi") && (
-            <div className="flex flex-col gap-6 z-10 w-full animate-in fade-in duration-300">
-              
+            <div className="flex w-full flex-col gap-5 animate-in fade-in duration-300">
               {/* Camera Scanner Trigger Card */}
-              <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-zinc-50 dark:bg-white/5 p-5 sm:p-6 rounded-[24px] border border-zinc-200 dark:border-white/5 shadow-inner">
-                <div className="flex items-center gap-4 text-left">
-                  <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
-                    <QrCode className="w-6 h-6 animate-pulse" />
-                  </div>
+              <div className="flex flex-col items-start justify-between gap-4 rounded-tile bg-surface-2 p-4 ring-1 ring-edge md:flex-row md:items-center sm:p-5">
+                <div className="flex items-start gap-3.5 text-left sm:items-center">
+                  <IconBadge color="teal" size="md">
+                    <QrCode />
+                  </IconBadge>
                   <div>
-                    <h4 className="text-sm font-black text-zinc-855 dark:text-zinc-100 flex items-center gap-1.5">
-                      Scan QR Code Device
-                    </h4>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-md">
-                      Gunakan kamera HP/laptop Anda untuk memindai kode QR stiker pada unit secara instan, atau upload file foto QR Code.
+                    <h4 className="text-subhead font-semibold text-label">Scan QR code device</h4>
+                    <p className="mt-0.5 max-w-md text-footnote text-label-2">
+                      Gunakan kamera HP/laptop untuk memindai kode QR stiker unit secara instan, atau unggah foto QR code.
                     </p>
                   </div>
                 </div>
-                
-                <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto shrink-0">
-                  <button
-                    onClick={startScanning}
-                    className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-500/15 active:scale-95"
-                  >
-                    <Camera className="w-4 h-4" /> Buka Kamera Scan
-                  </button>
 
-                  <label className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-3 bg-white dark:bg-zinc-800 hover:bg-zinc-55 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-zinc-700 dark:text-zinc-300 transition-all cursor-pointer">
-                    <Upload className="w-4 h-4" /> Upload Foto QR
+                <div className="flex w-full shrink-0 flex-col gap-2 sm:flex-row md:w-auto">
+                  <Button
+                    type="button"
+                    variant="filled"
+                    size="md"
+                    icon={<Camera />}
+                    onClick={startScanning}
+                    className="min-h-[44px]"
+                  >
+                    Buka kamera scan
+                  </Button>
+
+                  <label className="inline-flex min-h-[44px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-control bg-fill px-4 text-subhead font-medium text-label ring-1 ring-edge transition-opacity active:opacity-75 sm:flex-initial">
+                    <Upload className="h-4 w-4 text-label-2" />
+                    Unggah foto QR
                     <input
                       type="file"
                       accept="image/*"
@@ -844,46 +841,48 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
               </div>
 
               {/* Master Inventaris Card (Visible to both Owner and Admin) */}
-              <div className="bg-zinc-50 dark:bg-[#1C1C1E] p-5 rounded-[24px] border border-zinc-200 dark:border-white/5 shadow-inner w-full">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-bold tracking-widest uppercase text-zinc-900 dark:text-white flex items-center gap-2">
-                    <Save className="w-4 h-4 text-emerald-500" /> Master Inventaris Device
-                  </h3>
+              <div className="w-full rounded-tile bg-surface-2 p-4 ring-1 ring-edge sm:p-5">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Save className="h-4 w-4 text-tint" />
+                    <Eyebrow>Master inventaris device</Eyebrow>
+                  </div>
                   {isOwner && (
-                    <button
+                    <Button
+                      type="button"
+                      variant={isEditingMaster ? "filled" : "tinted"}
+                      size="sm"
                       onClick={() => {
                         if (isEditingMaster) handleSaveMaster();
                         else setIsEditingMaster(true);
                       }}
-                      className="text-xs px-3 py-1.5 rounded-lg bg-white dark:bg-black text-emerald-600 dark:text-emerald-405 font-bold border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-all shadow-sm"
+                      className="min-h-[44px] sm:min-h-[32px]"
                     >
                       {isEditingMaster ? "Simpan" : "Edit"}
-                    </button>
+                    </Button>
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
                   {(Object.keys(DEVICE_LABELS) as DeviceType[]).map((type) => {
-                    let inputIcon = <Gamepad2 className="w-4 h-4 text-emerald-500" />;
-                    if (type.startsWith("stik")) inputIcon = <Gamepad2 className="w-4 h-4 text-blue-500" />;
-                    if (type === "tv") inputIcon = <Monitor className="w-4 h-4 text-purple-500" />;
-                    if (type === "playbox") inputIcon = <Smartphone className="w-4 h-4 text-amber-500" />;
-
+                    const InputIcon = type === "tv" ? Monitor : type === "playbox" ? Smartphone : Gamepad2;
                     return (
-                      <div key={type} className="flex flex-col gap-1.5 bg-white dark:bg-black border border-zinc-200/80 dark:border-zinc-800 rounded-2xl p-3 items-center justify-center shadow-sm">
-                        <div className="flex items-center gap-1 text-[9px] font-black text-zinc-400 uppercase tracking-wider text-center truncate w-full justify-center">
-                          {inputIcon} <span className="truncate">{DEVICE_LABELS[type]}</span>
+                      <div key={type} className="flex flex-col items-center justify-center gap-1.5 rounded-tile bg-surface p-3 ring-1 ring-edge">
+                        <div className="flex w-full items-center justify-center gap-1 truncate text-center text-caption2 font-semibold uppercase tracking-wide text-label-3">
+                          <InputIcon className="h-3.5 w-3.5 shrink-0 text-label-3" />
+                          <span className="truncate">{DEVICE_LABELS[type]}</span>
                         </div>
                         {isEditingMaster && isOwner ? (
                           <input
                             type="number"
+                            inputMode="numeric"
                             min="0"
                             value={tempCapacities[type]}
                             onChange={(e) => setTempCapacities({ ...tempCapacities, [type]: e.target.value })}
-                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2 py-1 text-zinc-900 dark:text-white font-mono font-bold text-sm text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            className="w-full min-h-[44px] rounded-control bg-surface-2 px-2 py-1 text-center font-mono text-[16px] font-semibold tabular-nums text-label ring-1 ring-edge focus:outline-none focus:ring-2 focus:ring-tint"
                           />
                         ) : (
-                          <div className="w-full text-zinc-900 dark:text-white font-mono font-black text-base text-center py-0.5 select-none">
+                          <div className="w-full select-none py-1 text-center font-mono text-callout font-bold tabular-nums text-label">
                             {masterCapacities[type]}
                           </div>
                         )}
@@ -894,83 +893,80 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
               </div>
 
               {/* Status Grid Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {(Object.keys(DEVICE_LABELS) as DeviceType[]).map((type) => {
                   const stats = getDeviceStats(type);
                   const registeredForType = devices.filter(d => d.type === type);
-                  
-                  // Show badges strictly according to master capacity
                   const displayLimit = stats.total;
-
-                  let devIcon = <Gamepad2 className="w-5 h-5 text-emerald-555" />;
-                  if (type.startsWith("stik")) devIcon = <Gamepad2 className="w-5 h-5 text-blue-500" />;
-                  if (type === "tv") devIcon = <Monitor className="w-5 h-5 text-purple-500" />;
-                  if (type === "playbox") devIcon = <Smartphone className="w-5 h-5 text-amber-500" />;
+                  const DevIcon = type === "tv" ? Monitor : type === "playbox" ? Smartphone : Gamepad2;
 
                   return (
                     <div
                       key={type}
-                      className="bg-zinc-50 dark:bg-white/5 rounded-3xl p-5 border border-zinc-200/80 dark:border-white/5 flex flex-col justify-between shadow-sm min-h-[170px] transition-all hover:shadow-md"
+                      className="flex min-h-[170px] flex-col justify-between rounded-tile bg-surface-2 p-4 ring-1 ring-edge"
                     >
                       <div>
                         {/* Header */}
-                        <div className="flex items-center justify-between mb-4 border-b border-zinc-200/50 dark:border-white/5 pb-3">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2.5 rounded-2xl bg-white dark:bg-black border border-zinc-200 dark:border-white/5 shadow-sm">
-                              {devIcon}
+                        <div className="mb-3 flex items-center justify-between gap-2 border-b border-sep pb-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-tile bg-surface text-tint ring-1 ring-edge">
+                              <DevIcon className="h-5 w-5" />
                             </div>
                             <div className="text-left">
-                              <h3 className="text-xs font-black tracking-wider text-zinc-900 dark:text-white uppercase">
-                                {DEVICE_LABELS[type]}
-                              </h3>
-                              <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">
+                              <h3 className="text-subhead font-semibold text-label">{DEVICE_LABELS[type]}</h3>
+                              <p className="text-caption text-label-3 tabular-nums">
                                 Kapasitas: {stats.total} unit
                               </p>
                             </div>
                           </div>
-                          
+
                           {/* Mini Stats Pill */}
-                          <div className="flex items-center gap-1.5 bg-white dark:bg-black px-2.5 py-1 rounded-full border border-zinc-200/50 dark:border-white/5 shadow-inner">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 tracking-tight">{stats.baik}</span>
-                            <span className="text-[10px] font-medium text-zinc-400">|</span>
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                            <span className="text-[10px] font-black text-red-600 dark:text-red-400 tracking-tight">{stats.rusak}</span>
+                          <div className="inline-flex shrink-0 items-center gap-2 rounded-full bg-surface px-2.5 py-1 text-caption font-semibold tabular-nums ring-1 ring-edge">
+                            <span className="inline-flex items-center gap-1 text-positive">
+                              <span className="h-1.5 w-1.5 rounded-full bg-positive" />
+                              {stats.baik}
+                            </span>
+                            <span className="text-label-3">|</span>
+                            <span className="inline-flex items-center gap-1 text-negative">
+                              <span className="h-1.5 w-1.5 rounded-full bg-negative" />
+                              {stats.rusak}
+                            </span>
                           </div>
                         </div>
 
                         {/* Badges Grid */}
                         {displayLimit > 0 ? (
-                          <div className="flex flex-wrap gap-2 pt-2 justify-start">
+                          <div className="flex flex-wrap justify-start gap-2 pt-1">
                             {Array.from({ length: displayLimit }).map((_, index) => {
                               const badgeNum = index + 1;
                               const deviceId = `${type}_${String(badgeNum).padStart(2, "0")}`;
                               const registered = registeredForType.find(d => d.number === badgeNum);
-                              
-                              let badgeStyle = "bg-zinc-100/60 dark:bg-zinc-900/40 border-zinc-200/80 dark:border-zinc-800 text-zinc-400 dark:text-zinc-500 hover:bg-zinc-200/60 dark:hover:bg-zinc-800/60 border-dashed"; // Unregistered
+
+                              let badgeStyle = "border border-dashed border-sep bg-surface text-label-3 hover:bg-fill";
                               let labelSuffix = "";
 
                               if (registered) {
                                 if (registered.status === "rusak") {
-                                  badgeStyle = "bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20 shadow-sm animate-pulse";
+                                  badgeStyle = "bg-negative/10 text-negative ring-1 ring-negative/30 hover:bg-negative/20";
                                 } else {
-                                  badgeStyle = "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 shadow-sm";
+                                  badgeStyle = "bg-positive/10 text-positive ring-1 ring-positive/30 hover:bg-positive/20";
                                 }
                                 if (registered.stikType) {
-                                  labelSuffix = ` ${registered.stikType}`;
+                                  labelSuffix = registered.stikType;
                                 }
                               }
 
                               return (
                                 <button
+                                  type="button"
                                   key={deviceId}
                                   onClick={() => handleScannedId(deviceId)}
-                                  className={`relative border px-3 py-2 rounded-xl text-xs font-mono font-black transition-all hover:scale-105 active:scale-95 ${badgeStyle}`}
-                                  title={registered?.status === "rusak" ? `RUSAK: ${registered.keterangan}` : `Kondisi Baik`}
+                                  className={`relative min-h-[40px] min-w-[44px] rounded-control px-2.5 py-1.5 font-mono text-footnote font-semibold tabular-nums transition-transform active:scale-95 ${badgeStyle}`}
+                                  title={registered?.status === "rusak" ? `Rusak: ${registered.keterangan}` : "Kondisi normal"}
                                 >
                                   {String(badgeNum).padStart(2, "0")}
                                   {labelSuffix && (
-                                    <span className="text-[8px] font-bold opacity-80 block -mt-0.5 leading-none">
+                                    <span className="block text-[9px] font-semibold leading-none opacity-80">
                                       {labelSuffix}
                                     </span>
                                   )}
@@ -979,7 +975,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                             })}
                           </div>
                         ) : (
-                          <div className="text-center py-6 text-zinc-400 dark:text-zinc-500 text-xs border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-white dark:bg-black/20">
+                          <div className="rounded-tile border border-dashed border-sep bg-surface py-6 text-center text-footnote text-label-3">
                             Belum ada unit terdaftar.
                           </div>
                         )}
@@ -993,32 +989,30 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
           {/* Tab 2: Sticker Generator (Owner Only) */}
           {isOwner && activeSubTab === "generator" && (
-            <div className="flex flex-col lg:flex-row gap-8 z-10 w-full animate-in fade-in duration-300">
-              
+            <div className="flex w-full flex-col gap-6 lg:flex-row animate-in fade-in duration-300">
               {/* Generator Configuration Panel */}
-              <div className="lg:w-1/2 flex flex-col gap-6">
-                <form onSubmit={handleSaveSticker} className="flex flex-col gap-4 bg-zinc-50 dark:bg-white/5 p-6 rounded-3xl border border-zinc-200 dark:border-white/5">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-sm font-black tracking-widest uppercase text-zinc-900 dark:text-white flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-emerald-500" /> Desain Sticker Unit
-                    </h3>
+              <div className="flex flex-col gap-5 lg:w-1/2">
+                <form onSubmit={handleSaveSticker} className="flex flex-col gap-4 rounded-tile bg-surface-2 p-4 ring-1 ring-edge sm:p-5">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-tint" />
+                      <Eyebrow>Desain stiker unit</Eyebrow>
+                    </div>
                     {editingStickerId && (
-                      <span className="text-[10px] bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-bold px-2 py-0.5 rounded-md">
-                        Mode Edit: {editingStickerId}
-                      </span>
+                      <Pill tone="tint">Mode edit: {editingStickerId}</Pill>
                     )}
                   </div>
 
                   {/* Device Type */}
                   <div className="flex flex-col gap-1.5 text-left">
-                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Tipe Device</label>
+                    <label className="text-caption font-semibold uppercase tracking-wide text-label-3">Tipe device</label>
                     <select
                       value={genType}
                       onChange={(e) => {
                         setGenType(e.target.value as DeviceType);
                         setEditingStickerId(null);
                       }}
-                      className="bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-4 py-3 text-zinc-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
+                      className="min-h-[44px] cursor-pointer rounded-control bg-surface px-3.5 py-2 text-[16px] sm:text-callout font-medium text-label ring-1 ring-edge focus:outline-none focus:ring-2 focus:ring-tint"
                     >
                       {(Object.keys(DEVICE_LABELS) as DeviceType[]).map(type => (
                         <option key={type} value={type}>{DEVICE_LABELS[type]}</option>
@@ -1026,12 +1020,13 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                     </select>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-3">
                     {/* Number */}
                     <div className="flex flex-col gap-1.5 text-left">
-                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Nomor Unit</label>
+                      <label className="text-caption font-semibold uppercase tracking-wide text-label-3">Nomor unit</label>
                       <input
                         type="number"
+                        inputMode="numeric"
                         min="1"
                         value={genNumber}
                         onChange={(e) => {
@@ -1044,20 +1039,20 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                           }
                           setEditingStickerId(null);
                         }}
-                        className="bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-4 py-2 text-zinc-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
+                        className="min-h-[44px] rounded-control bg-surface px-3.5 py-2 font-mono text-[16px] sm:text-callout font-semibold tabular-nums text-label ring-1 ring-edge focus:outline-none focus:ring-2 focus:ring-tint"
                       />
                     </div>
 
                     {genType.startsWith("stik") && (
                       <div className="flex flex-col gap-1.5 text-left">
-                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Kategori Stik</label>
+                        <label className="text-caption font-semibold uppercase tracking-wide text-label-3">Kategori stik</label>
                         <select
                           value={genStikType}
                           onChange={(e) => {
                             setGenStikType(e.target.value as "OP" | "OM");
                             setEditingStickerId(null);
                           }}
-                          className="bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-4 py-2 text-zinc-900 dark:text-white text-xs font-bold focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
+                          className="min-h-[44px] cursor-pointer rounded-control bg-surface px-3.5 py-2 text-[16px] sm:text-callout font-medium text-label ring-1 ring-edge focus:outline-none focus:ring-2 focus:ring-tint"
                         >
                           <option value="OM">Original Mesin (OM)</option>
                           <option value="OP">Original Pabrik (OP)</option>
@@ -1067,8 +1062,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                   </div>
 
                   {/* Preset Colors */}
-                  <div className="flex flex-col gap-2 mt-2 text-left">
-                    <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Preset Warna Premium</label>
+                  <div className="mt-1 flex flex-col gap-2 text-left">
+                    <label className="text-caption font-semibold uppercase tracking-wide text-label-3">Preset warna stiker</label>
                     <div className="grid grid-cols-3 gap-2">
                       {PRESET_COLORS.map((color, idx) => {
                         const isSelected = genBgColor === color.bg && genTextColor === color.text;
@@ -1081,8 +1076,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                               setGenTextColor(color.text);
                               setEditingStickerId(null);
                             }}
-                            className={`h-9 px-2 rounded-xl text-[10px] font-bold transition-all hover:scale-[1.03] active:scale-95 flex items-center justify-center gap-1 ${
-                              isSelected ? "ring-2 ring-emerald-500 dark:ring-emerald-400" : "border border-zinc-200 dark:border-white/5"
+                            className={`flex min-h-[40px] items-center justify-center rounded-control px-2 text-caption font-semibold transition-transform active:scale-95 ${
+                              isSelected ? "ring-2 ring-tint ring-offset-2 ring-offset-surface-2" : "ring-1 ring-edge"
                             }`}
                             style={{ backgroundColor: color.bg, color: color.text }}
                           >
@@ -1094,9 +1089,9 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                   </div>
 
                   {/* Custom Colors */}
-                  <div className="grid grid-cols-2 gap-4 mt-2">
+                  <div className="mt-1 grid grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1.5 text-left">
-                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Warna Background</label>
+                      <label className="text-caption font-semibold uppercase tracking-wide text-label-3">Warna latar</label>
                       <div className="flex gap-2">
                         <input
                           type="color"
@@ -1105,7 +1100,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                             setGenBgColor(e.target.value);
                             setEditingStickerId(null);
                           }}
-                          className="w-10 h-10 p-0.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-black cursor-pointer shrink-0"
+                          className="h-11 w-11 shrink-0 cursor-pointer rounded-control bg-surface p-0.5 ring-1 ring-edge"
                         />
                         <input
                           type="text"
@@ -1114,13 +1109,13 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                             setGenBgColor(e.target.value);
                             setEditingStickerId(null);
                           }}
-                          className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-3 text-xs font-mono font-bold focus:ring-2 focus:ring-emerald-500 outline-none text-zinc-800 dark:text-zinc-200"
+                          className="w-full min-h-[44px] rounded-control bg-surface px-3 font-mono text-[16px] sm:text-callout font-medium text-label ring-1 ring-edge focus:outline-none focus:ring-2 focus:ring-tint"
                         />
                       </div>
                     </div>
 
                     <div className="flex flex-col gap-1.5 text-left">
-                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Warna Teks</label>
+                      <label className="text-caption font-semibold uppercase tracking-wide text-label-3">Warna teks</label>
                       <div className="flex gap-2">
                         <input
                           type="color"
@@ -1129,7 +1124,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                             setGenTextColor(e.target.value);
                             setEditingStickerId(null);
                           }}
-                          className="w-10 h-10 p-0.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-black cursor-pointer shrink-0"
+                          className="h-11 w-11 shrink-0 cursor-pointer rounded-control bg-surface p-0.5 ring-1 ring-edge"
                         />
                         <input
                           type="text"
@@ -1138,41 +1133,48 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                             setGenTextColor(e.target.value);
                             setEditingStickerId(null);
                           }}
-                          className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-xl px-3 text-xs font-mono font-bold focus:ring-2 focus:ring-emerald-500 outline-none text-zinc-800 dark:text-zinc-200"
+                          className="w-full min-h-[44px] rounded-control bg-surface px-3 font-mono text-[16px] sm:text-callout font-medium text-label ring-1 ring-edge focus:outline-none focus:ring-2 focus:ring-tint"
                         />
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex gap-2.5 mt-4">
+                  <div className="mt-3 flex gap-2.5">
                     {editingStickerId && (
-                      <button
+                      <Button
                         type="button"
+                        variant="gray"
+                        size="lg"
                         onClick={() => {
                           setEditingStickerId(null);
                           setGenNumber(devices.length + 1);
                         }}
-                        className="bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-2xl px-4 py-3 text-xs font-black uppercase transition-all active:scale-95"
                       >
                         Reset
-                      </button>
+                      </Button>
                     )}
-                    <button
+                    <Button
                       type="submit"
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl py-3.5 text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-emerald-500/10 active:scale-95 flex items-center justify-center gap-2"
+                      variant="filled"
+                      size="lg"
+                      icon={<Save />}
+                      className="flex-1"
                     >
-                      <Save className="w-4 h-4" /> Simpan Stiker ke Database
-                    </button>
+                      Simpan stiker ke database
+                    </Button>
                   </div>
                 </form>
               </div>
 
               {/* Preview & Download Panel */}
-              <div className="lg:w-1/2 flex flex-col items-center justify-center bg-zinc-55 dark:bg-[#18181b] p-6 sm:p-8 rounded-3xl border border-zinc-200 dark:border-zinc-800/60 shadow-inner">
-                <h4 className="text-[10px] font-black tracking-widest uppercase text-zinc-400 mb-6 flex items-center gap-1.5"><Eye className="w-3.5 h-3.5 text-emerald-555" /> Preview Desain Stiker</h4>
+              <div className="flex flex-col items-center justify-center rounded-tile bg-surface-2 p-5 ring-1 ring-edge lg:w-1/2 sm:p-6">
+                <div className="mb-5 flex items-center gap-1.5">
+                  <Eye className="h-3.5 w-3.5 text-tint" />
+                  <Eyebrow>Preview desain stiker</Eyebrow>
+                </div>
 
                 {/* Sticker Elements Container */}
-                <div className="relative border-4 border-dashed border-zinc-300 dark:border-zinc-800 p-2 sm:p-4 rounded-[28px] bg-zinc-100 dark:bg-black/40 shadow-inner w-full max-w-[420px] overflow-hidden flex items-center justify-center min-h-[180px] sm:min-h-[260px]">
+                <div className="relative flex min-h-[180px] w-full max-w-[420px] items-center justify-center overflow-hidden rounded-card border-2 border-dashed border-sep bg-surface p-3 sm:min-h-[260px] sm:p-4">
                   <div className={`${
                     genType === "stik_ps4" 
                       ? "scale-[0.55] min-[400px]:scale-[0.65] sm:scale-[0.75]" 
@@ -1351,61 +1353,74 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                 </div>
 
                 {/* Download Buttons */}
-                <div className="mt-6 flex flex-col sm:flex-row gap-3 w-full justify-center">
-                  <button
+                <div className="mt-6 flex w-full flex-col justify-center gap-3 sm:flex-row">
+                  <Button
                     type="button"
+                    variant="filled"
+                    size="lg"
+                    icon={<Download />}
                     onClick={handleDownloadSticker}
-                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-blue-500/10 active:scale-95 animate-in fade-in duration-300"
+                    className="flex-1"
                   >
-                    <Download className="w-4 h-4" /> Download Sticker (PNG)
-                  </button>
-                  <button
+                    Download stiker (PNG)
+                  </Button>
+                  <Button
                     type="button"
+                    variant="tinted"
+                    size="lg"
+                    icon={<QrCode />}
                     onClick={() => handleDownloadAllStickersPDF()}
-                    className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-red-500/10 active:scale-95 animate-in fade-in duration-300"
+                    className="flex-1"
                   >
-                    <QrCode className="w-4 h-4" /> Download Semua Sticker (PDF)
-                  </button>
+                    Download semua (PDF)
+                  </Button>
                 </div>
               </div>
-
             </div>
           )}
 
           {/* Tab 3: History & Master Settings (Owner Only) */}
           {isOwner && activeSubTab === "history" && (
-            <div className="flex flex-col gap-8 z-10 w-full animate-in fade-in duration-300">
-
+            <div className="flex w-full flex-col gap-6 animate-in fade-in duration-300">
               {/* History Section */}
               <div className="flex flex-col gap-4 text-left">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
-                  <h3 className="text-sm font-black tracking-widest uppercase text-zinc-900 dark:text-white flex items-center gap-2">
-                    <History className="w-4 h-4 text-emerald-500" /> Daftar Unit Terdaftar ({devices.length} Unit)
-                  </h3>
+                <div className="mb-1 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                  <div className="flex items-center gap-2">
+                    <History className="h-4 w-4 text-tint" />
+                    <Eyebrow>Daftar unit terdaftar ({devices.length} unit)</Eyebrow>
+                  </div>
                   {devices.length > 0 && (
                     <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedStickerIds(selectedStickerIds.length === devices.length ? [] : devices.map((d) => d.id))}
-                      className="flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-white/10 dark:hover:bg-white/15 text-zinc-700 dark:text-zinc-200 rounded-xl text-xs font-bold transition-all active:scale-95"
-                    >
-                      {selectedStickerIds.length === devices.length ? "Batal Pilih" : "Pilih Semua"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={selectedStickerIds.length === 0 || isGeneratingPdf}
-                      onClick={() => handleDownloadAllStickersPDF(selectedStickerIds)}
-                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-zinc-300 dark:disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-xl text-xs font-bold transition-all active:scale-95"
-                    >
-                      <QrCode className="w-3.5 h-3.5" /> Cetak Terpilih ({selectedStickerIds.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDownloadAllStickersPDF()}
-                      className="self-start sm:self-auto flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-red-500/10 active:scale-95"
-                    >
-                      <QrCode className="w-3.5 h-3.5" /> Download Semua (PDF)
-                    </button>
+                      <Button
+                        type="button"
+                        variant="gray"
+                        size="sm"
+                        onClick={() => setSelectedStickerIds(selectedStickerIds.length === devices.length ? [] : devices.map((d) => d.id))}
+                        className="min-h-[44px] sm:min-h-[34px]"
+                      >
+                        {selectedStickerIds.length === devices.length ? "Batal pilih" : "Pilih semua"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="tinted"
+                        size="sm"
+                        icon={<QrCode />}
+                        disabled={selectedStickerIds.length === 0 || isGeneratingPdf}
+                        onClick={() => handleDownloadAllStickersPDF(selectedStickerIds)}
+                        className="min-h-[44px] sm:min-h-[34px]"
+                      >
+                        Cetak terpilih ({selectedStickerIds.length})
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="filled"
+                        size="sm"
+                        icon={<QrCode />}
+                        onClick={() => handleDownloadAllStickersPDF()}
+                        className="min-h-[44px] sm:min-h-[34px]"
+                      >
+                        Download semua (PDF)
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -1413,94 +1428,92 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                 {devices.length > 0 ? (
                   <>
                     {/* Desktop Responsive Table (visible on md screens and up) */}
-                    <div className="hidden md:block overflow-x-auto rounded-2xl border border-zinc-200 dark:border-white/5 bg-white dark:bg-[#161618]">
-                      <table className="w-full border-collapse text-left text-xs">
+                    <div className="hidden overflow-x-auto rounded-tile bg-surface ring-1 ring-edge md:block">
+                      <table className="w-full border-collapse text-left text-footnote">
                         <thead>
-                          <tr className="bg-zinc-50 dark:bg-white/5 border-b border-zinc-200 dark:border-white/5 text-zinc-400 font-bold uppercase tracking-wider">
-                            <th className="pl-6 pr-2 py-4 w-10">
+                          <tr className="border-b border-sep bg-surface-2 text-caption font-semibold uppercase tracking-wide text-label-3">
+                            <th className="w-10 py-3.5 pl-5 pr-2">
                               <input
                                 type="checkbox"
                                 aria-label="Pilih semua stiker"
-                                className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                                className="h-4 w-4 cursor-pointer accent-tint"
                                 checked={devices.length > 0 && selectedStickerIds.length === devices.length}
                                 onChange={(e) => setSelectedStickerIds(e.target.checked ? devices.map((d) => d.id) : [])}
                               />
                             </th>
-                            <th className="px-6 py-4">ID Unit</th>
-                            <th className="px-6 py-4">Tipe Alat</th>
-                            <th className="px-6 py-4">No</th>
-                            <th className="px-6 py-4">Kategori Stik</th>
-                            <th className="px-6 py-4">Kondisi</th>
-                            <th className="px-6 py-4">Warna Stiker</th>
-                            <th className="px-6 py-4">Diupdate Oleh</th>
-                            <th className="px-6 py-4 text-right">Aksi</th>
+                            <th className="px-4 py-3.5">ID unit</th>
+                            <th className="px-4 py-3.5">Tipe alat</th>
+                            <th className="px-4 py-3.5">No</th>
+                            <th className="px-4 py-3.5">Kategori stik</th>
+                            <th className="px-4 py-3.5">Kondisi</th>
+                            <th className="px-4 py-3.5">Warna stiker</th>
+                            <th className="px-4 py-3.5">Diupdate oleh</th>
+                            <th className="px-4 py-3.5 text-right">Aksi</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-zinc-200 dark:divide-white/5">
+                        <tbody className="divide-y divide-sep">
                           {[...devices]
                             .sort((a, b) => a.type.localeCompare(b.type) || a.number - b.number)
                             .map((dev) => (
-                              <tr key={dev.id} className="hover:bg-zinc-50 dark:hover:bg-white/5 transition-colors">
-                                <td className="pl-6 pr-2 py-4">
+                              <tr key={dev.id} className="transition-colors hover:bg-fill/40">
+                                <td className="py-3.5 pl-5 pr-2">
                                   <input
                                     type="checkbox"
                                     aria-label={`Pilih stiker ${dev.id}`}
-                                    className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                                    className="h-4 w-4 cursor-pointer accent-tint"
                                     checked={selectedStickerIds.includes(dev.id)}
                                     onChange={() => toggleStickerSelect(dev.id)}
                                   />
                                 </td>
-                                <td className="px-6 py-4 font-mono font-bold text-zinc-800 dark:text-zinc-200">{dev.id}</td>
-                                <td className="px-6 py-4 font-bold text-zinc-650 dark:text-zinc-300">{DEVICE_LABELS[dev.type]}</td>
-                                <td className="px-6 py-4 font-mono text-zinc-800 dark:text-zinc-200">{String(dev.number).padStart(2, "0")}</td>
-                                <td className="px-6 py-4">
+                                <td className="px-4 py-3.5 font-mono font-semibold text-label">{dev.id}</td>
+                                <td className="px-4 py-3.5 font-medium text-label-2">{DEVICE_LABELS[dev.type]}</td>
+                                <td className="px-4 py-3.5 font-mono tabular-nums text-label">{String(dev.number).padStart(2, "0")}</td>
+                                <td className="px-4 py-3.5">
                                   {dev.stikType ? (
-                                    <span className={`px-2.5 py-0.5 font-black rounded-lg text-[9px] tracking-wider uppercase ${
-                                      dev.stikType === "OM" 
-                                        ? "bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400" 
-                                        : "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
-                                    }`}>
+                                    <Pill tone={dev.stikType === "OM" ? "tint" : "positive"}>
                                       {dev.stikType === "OM" ? "Original Mesin" : "Original Pabrik"}
-                                    </span>
-                                  ) : "-"}
-                                </td>
-                                <td className="px-6 py-4">
-                                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[10px] ${
-                                    dev.status === "baik" 
-                                      ? "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
-                                      : "bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 animate-pulse"
-                                  }`}>
-                                    {dev.status === "baik" ? "Normal" : "Rusak"}
-                                  </span>
-                                  {dev.status === "rusak" && dev.keterangan && (
-                                    <p className="text-[10px] text-zinc-400 mt-0.5 italic max-w-xs truncate" title={dev.keterangan}>{dev.keterangan}</p>
+                                    </Pill>
+                                  ) : (
+                                    <span className="text-label-3">-</span>
                                   )}
                                 </td>
-                                <td className="px-6 py-4">
+                                <td className="px-4 py-3.5">
+                                  <Pill tone={dev.status === "baik" ? "positive" : "negative"}>
+                                    {dev.status === "baik" ? "Normal" : "Rusak"}
+                                  </Pill>
+                                  {dev.status === "rusak" && dev.keterangan && (
+                                    <p className="mt-1 max-w-xs truncate text-caption text-label-3 italic" title={dev.keterangan}>
+                                      {dev.keterangan}
+                                    </p>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3.5">
                                   <div className="flex items-center gap-2">
-                                    <div className="w-5 h-5 rounded border border-white/10" style={{ backgroundColor: dev.stickerColor }} />
-                                    <span className="font-mono text-[10px] text-zinc-400">{dev.stickerColor}</span>
+                                    <div className="h-5 w-5 rounded ring-1 ring-edge" style={{ backgroundColor: dev.stickerColor }} />
+                                    <span className="font-mono text-caption text-label-3">{dev.stickerColor}</span>
                                   </div>
                                 </td>
-                                <td className="px-6 py-4 text-zinc-400">
-                                  {dev.updatedBy.split("@")[0]}
-                                  <p className="text-[9px] opacity-75">{new Date(dev.updatedAt).toLocaleString("id-ID")}</p>
+                                <td className="px-4 py-3.5 text-label-2">
+                                  <span>{dev.updatedBy.split("@")[0]}</span>
+                                  <p className="text-caption2 text-label-3">{new Date(dev.updatedAt).toLocaleString("id-ID")}</p>
                                 </td>
-                                <td className="px-6 py-4 text-right">
-                                  <div className="flex justify-end gap-2">
+                                <td className="px-4 py-3.5 text-right">
+                                  <div className="flex justify-end gap-1.5">
                                     <button
+                                      type="button"
                                       onClick={() => startEditSticker(dev)}
-                                      className="p-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg text-zinc-650 dark:text-zinc-300 transition-colors"
-                                      title="Edit sticker style"
+                                      className="inline-flex h-9 w-9 items-center justify-center rounded-control bg-fill text-label-2 transition-colors hover:text-label"
+                                      title="Edit desain stiker"
                                     >
-                                      <Edit className="w-3.5 h-3.5" />
+                                      <Edit className="h-4 w-4" />
                                     </button>
                                     <button
+                                      type="button"
                                       onClick={() => handleDeleteDevice(dev.id)}
-                                      className="p-2 bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-950/40 text-red-600 dark:text-red-400 rounded-lg transition-colors"
+                                      className="inline-flex h-9 w-9 items-center justify-center rounded-control bg-negative/10 text-negative transition-colors hover:bg-negative/20"
                                       title="Hapus unit"
                                     >
-                                      <Trash2 className="w-3.5 h-3.5" />
+                                      <Trash2 className="h-4 w-4" />
                                     </button>
                                   </div>
                                 </td>
@@ -1511,69 +1524,73 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                     </div>
 
                     {/* Mobile Card-Based History (visible on mobile/tablet below md) */}
-                    <div className="grid grid-cols-1 gap-4 md:hidden">
+                    <div className="grid grid-cols-1 gap-3 md:hidden">
                       {[...devices]
                         .sort((a, b) => a.type.localeCompare(b.type) || a.number - b.number)
                         .map((dev) => (
-                          <div key={dev.id} className="bg-white dark:bg-[#161618] border border-zinc-200 dark:border-white/5 rounded-2xl p-4 flex flex-col gap-3 shadow-sm">
-                            <div className="flex justify-between items-start">
+                          <div key={dev.id} className="flex flex-col gap-3 rounded-tile bg-surface-2 p-4 ring-1 ring-edge">
+                            <div className="flex items-start justify-between gap-2">
                               <div className="flex items-center gap-2.5">
                                 <input
                                   type="checkbox"
                                   aria-label={`Pilih stiker ${dev.id}`}
-                                  className="w-5 h-5 accent-emerald-600 cursor-pointer shrink-0"
+                                  className="h-5 w-5 shrink-0 cursor-pointer accent-tint"
                                   checked={selectedStickerIds.includes(dev.id)}
                                   onChange={() => toggleStickerSelect(dev.id)}
                                 />
-                                <div className="w-7 h-7 rounded-lg border border-white/15 flex items-center justify-center text-xs font-mono font-black text-white shrink-0 shadow-sm" style={{ backgroundColor: dev.stickerColor }}>
+                                <div
+                                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control font-mono text-footnote font-bold ring-1 ring-edge"
+                                  style={{ backgroundColor: dev.stickerColor, color: dev.fontColor || "#ffffff" }}
+                                >
                                   {dev.number}
                                 </div>
                                 <div>
-                                  <h4 className="text-xs font-black text-zinc-800 dark:text-zinc-200 uppercase">{DEVICE_LABELS[dev.type]}</h4>
-                                  <p className="text-[10px] font-mono text-zinc-400 mt-0.5">{dev.id}</p>
+                                  <h4 className="text-subhead font-semibold text-label">{DEVICE_LABELS[dev.type]}</h4>
+                                  <p className="font-mono text-caption text-label-3">{dev.id}</p>
                                 </div>
                               </div>
-                              
-                              {/* Condition Badge */}
-                              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[9px] ${
-                                dev.status === "baik" 
-                                  ? "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
-                                  : "bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 animate-pulse"
-                              }`}>
+
+                              <Pill tone={dev.status === "baik" ? "positive" : "negative"}>
                                 {dev.status === "baik" ? "Normal" : "Rusak"}
-                              </span>
+                              </Pill>
                             </div>
 
                             {dev.stikType && (
-                               <div className="flex items-center gap-2">
-                                 <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Kategori:</span>
-                                 <span className={`px-2 py-0.5 font-black rounded text-[9px] uppercase tracking-wider ${
-                                    dev.stikType === "OM"
-                                      ? "bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400"
-                                      : "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
-                                 }`}>
-                                   {dev.stikType === "OM" ? "Original Mesin" : "Original Pabrik"}
-                                 </span>
-                               </div>
-                             )}
+                              <div className="flex items-center gap-2">
+                                <span className="text-caption font-medium text-label-3">Kategori:</span>
+                                <Pill tone={dev.stikType === "OM" ? "tint" : "positive"}>
+                                  {dev.stikType === "OM" ? "Original Mesin" : "Original Pabrik"}
+                                </Pill>
+                              </div>
+                            )}
 
                             {dev.status === "rusak" && dev.keterangan && (
-                              <p className="text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-black/35 p-2.5 rounded-xl border border-zinc-200/50 dark:border-white/5 italic">
+                              <p className="rounded-control bg-surface p-2.5 text-footnote italic text-label-2 ring-1 ring-edge">
                                 {dev.keterangan}
                               </p>
                             )}
 
-                            <div className="flex justify-between items-center text-[10px] text-zinc-400 border-t border-zinc-100 dark:border-white/5 pt-2.5 mt-1">
+                            <div className="mt-1 flex items-center justify-between border-t border-sep pt-3 text-caption text-label-3">
                               <div>
                                 <span>Oleh: {dev.updatedBy.split("@")[0]}</span>
-                                <span className="block text-[8px] opacity-75">{new Date(dev.updatedAt).toLocaleString("id-ID")}</span>
+                                <span className="block text-caption2">{new Date(dev.updatedAt).toLocaleString("id-ID")}</span>
                               </div>
                               <div className="flex gap-2">
-                                <button onClick={() => startEditSticker(dev)} className="p-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl text-zinc-600 dark:text-zinc-300 transition-all">
-                                  <Edit className="w-3.5 h-3.5" />
+                                <button
+                                  type="button"
+                                  onClick={() => startEditSticker(dev)}
+                                  className="inline-flex h-11 w-11 items-center justify-center rounded-control bg-fill text-label-2 transition-opacity active:opacity-75"
+                                  title="Edit desain stiker"
+                                >
+                                  <Edit className="h-4 w-4" />
                                 </button>
-                                <button onClick={() => handleDeleteDevice(dev.id)} className="p-2 bg-red-50 dark:bg-red-950/20 hover:bg-red-100 dark:hover:bg-red-950/40 text-red-600 dark:text-red-400 rounded-xl transition-all">
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteDevice(dev.id)}
+                                  className="inline-flex h-11 w-11 items-center justify-center rounded-control bg-negative/10 text-negative transition-opacity active:opacity-75"
+                                  title="Hapus unit"
+                                >
+                                  <Trash2 className="h-4 w-4" />
                                 </button>
                               </div>
                             </div>
@@ -1582,86 +1599,90 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                     </div>
                   </>
                 ) : (
-                  <div className="text-center py-12 text-zinc-400 dark:text-zinc-500 text-xs border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-zinc-50 dark:bg-black/20">
-                    Belum ada unit yang terdaftar. Gunakan Generator untuk mendaftarkan dan membuat stiker QR.
-                  </div>
+                  <EmptyState icon={<QrCode />} title="Belum ada unit terdaftar">
+                    Gunakan Sticker Generator untuk mendaftarkan dan membuat stiker QR.
+                  </EmptyState>
                 )}
               </div>
-
             </div>
           )}
-
         </div>
-      </Section>
+      </Card>
 
       {/* Hidden container for QR file reader temp scanner initialization */}
       <div id="qr-reader-file-temp" className="hidden" />
 
       {/* Modal 1: QR Scanner Modal (Floating) */}
       {showScanner && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={stopScanning}></div>
-          <div className="relative w-full max-w-md bg-zinc-950 rounded-[32px] overflow-hidden border border-white/10 shadow-2xl z-10 animate-in zoom-in-95 duration-200">
-            
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/55 backdrop-blur-md" onClick={stopScanning} />
+          <div className="relative z-10 w-full max-w-md overflow-hidden rounded-card bg-surface shadow-float ring-1 ring-edge animate-in zoom-in-95 duration-200">
             {/* Header */}
-            <div className="flex items-center justify-between p-5 border-b border-white/5">
+            <div className="flex items-center justify-between border-b border-sep p-4 sm:p-5">
               <div className="flex items-center gap-2 text-left">
-                <QrCode className="w-5 h-5 text-emerald-400 animate-pulse" />
-                <h3 className="text-sm font-black text-white uppercase tracking-wider">Pindai QR Code Device</h3>
+                <QrCode className="h-5 w-5 text-tint" />
+                <h3 className="text-headline font-semibold text-label">Pindai QR code device</h3>
               </div>
-              <button onClick={stopScanning} className="p-1.5 hover:bg-white/10 rounded-full text-zinc-400 hover:text-white transition-colors">
-                <X className="w-5 h-5" />
+              <button
+                type="button"
+                onClick={stopScanning}
+                aria-label="Tutup pemindai"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-fill text-label-2 transition-opacity active:opacity-75"
+              >
+                <X className="h-4 w-4" />
               </button>
             </div>
 
             {/* Camera Viewport */}
-            <div className="relative w-full aspect-square bg-black overflow-hidden">
-              <div id="qr-reader-view" className="w-full h-full" />
+            <div className="relative aspect-square w-full overflow-hidden bg-black">
+              <div id="qr-reader-view" className="h-full w-full" />
               <button
+                type="button"
                 onClick={toggleTorch}
-                className={`absolute bottom-4 left-4 z-20 p-3 rounded-full backdrop-blur-md transition-all border ${
+                className={`absolute bottom-4 left-4 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border backdrop-blur-md transition-transform active:scale-95 ${
                   isTorchOn
-                    ? "bg-yellow-500 border-yellow-400 text-black shadow-lg shadow-yellow-500/30 scale-105"
-                    : "bg-black/60 border-white/20 text-white hover:bg-black/80 hover:scale-105"
-                } active:scale-95`}
-                title="Toggle Flashlight"
+                    ? "border-warning bg-warning text-black shadow-lg"
+                    : "border-white/25 bg-black/60 text-white hover:bg-black/80"
+                }`}
+                title="Nyalakan/matikan lampu kilat"
               >
-                {isTorchOn ? <Flashlight className="w-5 h-5 fill-current" /> : <FlashlightOff className="w-5 h-5" />}
+                {isTorchOn ? <Flashlight className="h-5 w-5 fill-current" /> : <FlashlightOff className="h-5 w-5" />}
               </button>
             </div>
 
             {/* Footer / Alternate Options */}
-            <div className="p-5 bg-zinc-900/50 border-t border-white/5 flex flex-col gap-3">
-              <p className="text-[11px] text-zinc-400 text-center">
-                Posisikan QR Code di dalam kotak untuk memindai secara otomatis.
+            <div className="flex flex-col gap-3 border-t border-sep bg-surface-2 p-4 sm:p-5">
+              <p className="text-center text-footnote text-label-2">
+                Posisikan QR code di dalam kotak untuk memindai secara otomatis.
               </p>
-              <div className="flex gap-2">
-                <label className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-xs font-bold text-white transition-all cursor-pointer">
-                  <Upload className="w-4 h-4 text-emerald-400" /> Upload File QR
+              <div className="flex gap-2.5">
+                <label className="inline-flex min-h-[44px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-control bg-fill px-4 text-subhead font-medium text-label ring-1 ring-edge transition-opacity active:opacity-75">
+                  <Upload className="h-4 w-4 text-tint" />
+                  Unggah file QR
                   <input type="file" accept="image/*" onChange={handleUploadScanFile} className="hidden" />
                 </label>
-                <button onClick={stopScanning} className="flex-1 px-4 py-3 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 text-red-400 rounded-2xl text-xs font-bold transition-all">
+                <Button type="button" variant="destructive" size="lg" onClick={stopScanning} className="flex-1">
                   Batal
-                </button>
+                </Button>
               </div>
             </div>
 
             {scanningError && (
-              <div className="absolute inset-0 bg-zinc-950 flex flex-col items-center justify-center p-6 text-center z-20">
-                <AlertCircle className="w-12 h-12 text-red-500 mb-3 animate-bounce" />
-                <p className="text-sm text-zinc-300 font-bold mb-4">{scanningError}</p>
-                <div className="flex flex-col gap-2 w-full">
-                  <label className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white/10 hover:bg-white/15 border border-white/15 rounded-2xl text-xs font-bold text-white transition-all cursor-pointer">
-                    <Upload className="w-4 h-4 text-emerald-400" /> Upload File QR
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-surface p-6 text-center">
+                <AlertCircle className="mb-3 h-12 w-12 text-negative" />
+                <p className="mb-4 text-callout font-semibold text-label">{scanningError}</p>
+                <div className="flex w-full flex-col gap-2.5">
+                  <label className="inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center gap-2 rounded-control bg-fill px-4 text-subhead font-medium text-label ring-1 ring-edge transition-opacity active:opacity-75">
+                    <Upload className="h-4 w-4 text-tint" />
+                    Unggah file QR
                     <input type="file" accept="image/*" onChange={handleUploadScanFile} className="hidden" />
                   </label>
-                  <button onClick={stopScanning} className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-2xl text-xs font-bold transition-all">
+                  <Button type="button" variant="gray" size="lg" block onClick={stopScanning}>
                     Tutup
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
-
           </div>
         </div>,
         document.body
@@ -1669,16 +1690,15 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
       {/* Modal 2: Status Update Modal (Baik/Rusak + Keterangan) */}
       {updatingDevice && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setUpdatingDevice(null)}></div>
-          <div className="bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-2xl rounded-[32px] p-6 max-w-sm w-full max-h-[90vh] overflow-y-auto shadow-2xl shadow-black/30 border border-zinc-100 dark:border-white/10 relative z-10 animate-in zoom-in-95 duration-200">
-            
-            <div className="w-12 h-1.5 bg-zinc-300 dark:bg-zinc-700 rounded-full mx-auto mb-5"></div>
-            
-            <h3 className="text-lg font-black text-center text-zinc-950 dark:text-white uppercase tracking-tight">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setUpdatingDevice(null)} />
+          <div className="relative z-10 max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-card bg-surface/95 p-5 shadow-float ring-1 ring-edge backdrop-blur-xl animate-in zoom-in-95 duration-200 sm:p-6">
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-fill" />
+
+            <h3 className="text-center text-title3 font-bold text-label">
               {DEVICE_LABELS[updatingDevice.type as DeviceType]}
             </h3>
-            <p className="text-2xl font-black text-center text-emerald-600 dark:text-emerald-400 font-mono mt-1 mb-4">
+            <p className="mt-1 mb-4 text-center font-mono text-title2 font-bold tabular-nums text-tint">
               UNIT {String(updatingDevice.number).padStart(2, "0")}
             </p>
 
@@ -1686,15 +1706,15 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
               {/* Kategori Stik (Khusus Stik PS3 & PS4) */}
               {updatingDevice.type?.startsWith("stik") && (
                 <div className="flex flex-col gap-1.5 text-left animate-in fade-in duration-200">
-                  <label className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Kategori Stik</label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <label className="text-caption font-semibold uppercase tracking-wide text-label-3">Kategori stik</label>
+                  <div className="grid grid-cols-2 gap-2.5">
                     <button
                       type="button"
                       onClick={() => setUpdateStikType("OP")}
-                      className={`py-3.5 rounded-2xl font-bold text-xs flex flex-col items-center justify-center gap-1.5 border transition-all ${
+                      className={`flex min-h-[48px] items-center justify-center rounded-tile px-3 text-footnote font-semibold ring-1 transition-colors ${
                         updateStikType === "OP"
-                          ? "bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-sm font-black"
-                          : "bg-white dark:bg-black border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-white/5"
+                          ? "bg-positive/10 text-positive ring-positive"
+                          : "bg-surface-2 text-label-2 ring-edge hover:bg-fill"
                       }`}
                     >
                       Original Pabrik (OP)
@@ -1702,10 +1722,10 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                     <button
                       type="button"
                       onClick={() => setUpdateStikType("OM")}
-                      className={`py-3.5 rounded-2xl font-bold text-xs flex flex-col items-center justify-center gap-1.5 border transition-all ${
+                      className={`flex min-h-[48px] items-center justify-center rounded-tile px-3 text-footnote font-semibold ring-1 transition-colors ${
                         updateStikType === "OM"
-                          ? "bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400 shadow-sm font-black"
-                          : "bg-white dark:bg-black border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-white/5"
+                          ? "bg-tint/10 text-tint ring-tint"
+                          : "bg-surface-2 text-label-2 ring-edge hover:bg-fill"
                       }`}
                     >
                       Original Mesin (OM)
@@ -1716,27 +1736,29 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
               {/* Radio Group Status */}
               <div className="flex flex-col gap-1.5 text-left">
-                <label className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Kondisi Alat</label>
-                <div className="grid grid-cols-2 gap-3">
+                <label className="text-caption font-semibold uppercase tracking-wide text-label-3">Kondisi alat</label>
+                <div className="grid grid-cols-2 gap-2.5">
                   <button
+                    type="button"
                     onClick={() => setUpdateStatus("baik")}
-                    className={`py-3.5 rounded-2xl font-bold text-xs flex flex-col items-center justify-center gap-1.5 border transition-all ${
+                    className={`flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-tile text-footnote font-semibold ring-1 transition-colors ${
                       updateStatus === "baik"
-                        ? "bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-sm font-black"
-                        : "bg-white dark:bg-black border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-white/5"
+                        ? "bg-positive/10 text-positive ring-positive"
+                        : "bg-surface-2 text-label-2 ring-edge hover:bg-fill"
                     }`}
                   >
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Kondisi Normal
+                    <CheckCircle2 className="h-4 w-4 text-positive" /> Kondisi normal
                   </button>
                   <button
+                    type="button"
                     onClick={() => setUpdateStatus("rusak")}
-                    className={`py-3.5 rounded-2xl font-bold text-xs flex flex-col items-center justify-center gap-1.5 border transition-all ${
+                    className={`flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-tile text-footnote font-semibold ring-1 transition-colors ${
                       updateStatus === "rusak"
-                        ? "bg-red-500/10 border-red-500 text-red-600 dark:text-red-400 shadow-sm font-black"
-                        : "bg-white dark:bg-black border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-50 dark:hover:bg-white/5"
+                        ? "bg-negative/10 text-negative ring-negative"
+                        : "bg-surface-2 text-label-2 ring-edge hover:bg-fill"
                     }`}
                   >
-                    <XCircle className="w-4 h-4 text-red-500" /> Kondisi Rusak
+                    <XCircle className="h-4 w-4 text-negative" /> Kondisi rusak
                   </button>
                 </div>
               </div>
@@ -1744,77 +1766,79 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
               {/* Keterangan Kerusakan */}
               {updateStatus === "rusak" && (
                 <div className="flex flex-col gap-1.5 text-left animate-in slide-in-from-top-2 duration-200">
-                  <label className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">Keterangan Kerusakan</label>
+                  <label className="text-caption font-semibold uppercase tracking-wide text-label-3">Keterangan kerusakan</label>
                   <textarea
                     value={updateKeterangan}
                     onChange={(e) => setUpdateKeterangan(e.target.value)}
-                    placeholder="Contoh: Tombol R2 macet, Analog kiri ngedrift..."
+                    placeholder="Contoh: Tombol R2 macet, analog kiri ngedrift..."
                     rows={3}
-                    className="w-full bg-white dark:bg-black border border-zinc-200 dark:border-white/10 rounded-2xl p-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-full rounded-field bg-surface-2 p-3 text-[16px] sm:text-callout text-label ring-1 ring-edge focus:outline-none focus:ring-2 focus:ring-tint"
                   />
                 </div>
               )}
 
               {/* Update Log metadata */}
               {updatingDevice.updatedAt && (
-                <div className="text-[10px] text-zinc-500 dark:text-zinc-400 text-center">
+                <div className="text-center text-caption text-label-3">
                   Diupdate oleh: {updatingDevice.updatedBy?.split("@")[0]}
-                  <span className="block mt-0.5">Waktu: {new Date(updatingDevice.updatedAt || 0).toLocaleString("id-ID")}</span>
+                  <span className="mt-0.5 block">Waktu: {new Date(updatingDevice.updatedAt || 0).toLocaleString("id-ID")}</span>
                 </div>
               )}
 
-              <div className="flex gap-3 mt-4">
-                <button
+              <div className="mt-2 flex gap-2.5">
+                <Button
+                  type="button"
+                  variant="gray"
+                  size="lg"
                   onClick={() => setUpdatingDevice(null)}
-                  className="flex-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-bold rounded-2xl py-3.5 transition-all text-xs"
+                  className="flex-1"
                 >
                   Batal
-                </button>
-                <button
+                </Button>
+                <Button
+                  type="button"
+                  variant="filled"
+                  size="lg"
                   onClick={handleSaveStatusUpdate}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl py-3.5 transition-all text-xs shadow-md shadow-emerald-500/10 active:scale-95"
+                  className="flex-1"
                 >
-                  Simpan Status
-                </button>
+                  Simpan status
+                </Button>
               </div>
 
               {/* Damage/Repair History Section */}
-              <div className="border-t border-zinc-150 dark:border-white/5 pt-4 mt-2">
-                <label className="text-[10px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest block text-left mb-2">
-                  Riwayat Kerusakan & Perbaikan ({updatingDevice.history?.length || 0})
+              <div className="mt-2 border-t border-sep pt-4">
+                <label className="mb-2 block text-left text-caption font-semibold uppercase tracking-wide text-label-3">
+                  Riwayat kerusakan & perbaikan ({updatingDevice.history?.length || 0})
                 </label>
                 {updatingDevice.history && updatingDevice.history.length > 0 ? (
-                  <div className="flex flex-col gap-2 max-h-36 overflow-y-auto pr-1 text-left">
+                  <div className="flex max-h-36 flex-col gap-2 overflow-y-auto pr-1 text-left">
                     {[...updatingDevice.history].reverse().map((entry, idx) => (
-                      <div 
-                        key={idx} 
-                        className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/50 dark:border-white/5 text-[11px]"
+                      <div
+                        key={idx}
+                        className="rounded-tile bg-surface-2 p-2.5 text-footnote ring-1 ring-edge"
                       >
-                        <div className="flex justify-between items-center mb-1">
-                          <span className={`font-black px-1.5 py-0.5 rounded text-[9px] uppercase ${
-                            entry.status === "rusak"
-                              ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
-                              : "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
-                          }`}>
-                            {entry.status === "rusak" ? "RUSAK" : "NORMAL"}
-                          </span>
-                          <span className="text-[9px] text-zinc-400 font-mono">
-                            {new Date(entry.updatedAt).toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: '2-digit' })}
+                        <div className="mb-1 flex items-center justify-between">
+                          <Pill tone={entry.status === "rusak" ? "negative" : "positive"}>
+                            {entry.status === "rusak" ? "Rusak" : "Normal"}
+                          </Pill>
+                          <span className="font-mono text-caption2 text-label-3">
+                            {new Date(entry.updatedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "2-digit" })}
                           </span>
                         </div>
                         {entry.keterangan && (
-                          <p className="text-zinc-700 dark:text-zinc-300 font-bold leading-relaxed mb-0.5">
+                          <p className="mb-0.5 text-footnote font-medium leading-relaxed text-label">
                             {entry.keterangan}
                           </p>
                         )}
-                        <span className="text-[9px] text-zinc-500 dark:text-zinc-400 block">
+                        <span className="block text-caption2 text-label-3">
                           Oleh: {entry.updatedBy?.split("@")[0]}
                         </span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 italic text-center py-2">
+                  <p className="py-2 text-center text-footnote italic text-label-3">
                     Belum ada riwayat kondisi
                   </p>
                 )}
@@ -2027,35 +2051,31 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
       {/* PDF Loader Modal */}
       {isGeneratingPdf && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative w-full max-w-sm bg-white dark:bg-[#1C1C1E] rounded-[28px] p-8 shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200 ring-1 ring-black/5 dark:ring-white/10">
-             
-             {/* PDF Icon Animation */}
-             <div className="w-16 h-16 mb-6 relative flex items-center justify-center bg-red-50 dark:bg-red-500/10 rounded-2xl">
-                <QrCode className="w-8 h-8 text-red-600 dark:text-red-400 animate-pulse" />
-             </div>
-             
-             <h3 className="text-[19px] font-bold text-zinc-900 dark:text-white mb-2">Membuat PDF Stiker</h3>
-             <p className="text-[14px] font-medium text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-[260px] mx-auto mb-6 h-10 flex items-center justify-center">
-                 {pdfLoadingText}
-             </p>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="relative z-10 flex w-full max-w-sm flex-col items-center rounded-card bg-surface p-6 text-center shadow-float ring-1 ring-edge animate-in zoom-in-95 duration-200 sm:p-8">
+            {/* PDF Icon */}
+            <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-tile bg-tint/10 text-tint">
+              <QrCode className="h-7 w-7 animate-pulse" />
+            </div>
 
-             {/* Progress Bar */}
-             <div className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-full h-3.5 mb-2 overflow-hidden shadow-inner ring-1 ring-inset ring-black/5 dark:ring-white/5 p-0.5 relative">
-                <div 
-                   className="bg-red-600 dark:bg-red-500 h-full rounded-full transition-all duration-300 ease-out relative overflow-hidden" 
-                   style={{ width: `${pdfProgress}%` }}
-                >
-                    <div className="absolute top-0 right-0 bottom-0 left-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]"></div>
-                </div>
-             </div>
-             
-             {/* Percentage */}
-             <div className="text-[13px] font-bold text-red-600 dark:text-red-400 font-mono tracking-wider">
-                 {pdfProgress}%
-             </div>
-             
+            <h3 className="mb-1.5 text-title3 font-bold text-label">Membuat PDF stiker</h3>
+            <p className="mb-5 flex min-h-[2.5rem] max-w-[260px] items-center justify-center text-subhead text-label-2">
+              {pdfLoadingText}
+            </p>
+
+            {/* Progress Bar */}
+            <div className="mb-2 h-2.5 w-full overflow-hidden rounded-full bg-fill">
+              <div
+                className="h-full rounded-full bg-tint transition-all duration-300 ease-out"
+                style={{ width: `${pdfProgress}%` }}
+              />
+            </div>
+
+            {/* Percentage */}
+            <div className="font-mono text-footnote font-semibold tabular-nums text-tint">
+              {pdfProgress}%
+            </div>
           </div>
         </div>,
         document.body

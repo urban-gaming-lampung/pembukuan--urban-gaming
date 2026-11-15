@@ -1,18 +1,8 @@
 import React from "react";
-import Section from "./common/Section";
-import { rupiah } from "../lib/format";
+import { Calendar, CircleDollarSign, Coffee, Gamepad2, Wrench } from "lucide-react";
 import { totalPemasukanHarian } from "../lib/keuangan";
-import {
-  Wallet,
-  CreditCard,
-  Gamepad2,
-  Coffee,
-  Wrench,
-  Calendar,
-  TrendingUp,
-  TrendingDown,
-  CircleDollarSign,
-} from "lucide-react";
+import { persen } from "../lib/format";
+import { Amount, Card, Eyebrow, MARK, SplitBar, StatTile, StatusPill } from "../ui";
 
 interface RekapPemasukanProps {
   totalHarian: number;
@@ -36,217 +26,62 @@ const RekapPemasukan: React.FC<RekapPemasukanProps> = ({
   pendapatanBersih,
 }) => {
   const grand = totalPemasukanHarian({ totalHarian, totalJajanan, totalJasaAks, totalSewa });
-  const isProfit = pendapatanBersih >= 0;
-
-  /* ───────────────────────────────────────────────
-   *  iOS-style Stat Tile  —  rounded card with
-   *  generous padding, subtle depth, icon + label + value
-   * ─────────────────────────────────────────────── */
-  const StatTile = ({
-    label,
-    value,
-    icon: Icon,
-    accentBg,
-    accentText,
-  }: {
-    label: string;
-    value: number;
-    icon: React.ElementType;
-    accentBg: string;
-    accentText: string;
-  }) => (
-    <div
-      className="
-        rounded-2xl p-3 sm:p-3.5
-        bg-white/60 dark:bg-zinc-800/60
-        backdrop-blur-xl
-        border border-white/40 dark:border-zinc-700/50
-        shadow-[0_1px_3px_rgba(0,0,0,0.04)]
-        dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)]
-        transition-all duration-200
-        active:scale-[0.97] active:shadow-none
-      "
-    >
-      <div className={`inline-flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl ${accentBg} mb-2`}>
-        <Icon size={15} strokeWidth={2.2} className={accentText} />
-      </div>
-      <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-0.5">
-        {label}
-      </p>
-      <p className="text-sm sm:text-[15px] font-bold text-zinc-900 dark:text-zinc-50 tabular-nums leading-tight">
-        {rupiah(value)}
-      </p>
-    </div>
-  );
-
-  /* ───────────────────────────────────────────────
-   *  iOS-style Gradient Pill  —  Cash / Transfer
-   *  wide rounded bar with frosted icon badge
-   * ─────────────────────────────────────────────── */
-  const GradientPill = ({
-    label,
-    value,
-    icon: Icon,
-    gradient,
-  }: {
-    label: string;
-    value: number;
-    icon: React.ElementType;
-    gradient: string;
-  }) => (
-    <div
-      className={`
-        relative overflow-hidden rounded-2xl ${gradient}
-        shadow-sm
-        transition-transform duration-200
-        active:scale-[0.98]
-      `}
-    >
-      <div className="flex items-center justify-between px-3.5 py-2.5 sm:px-4 sm:py-3">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/20 backdrop-blur-md">
-            <Icon size={13} strokeWidth={2.5} className="text-white" />
-          </div>
-          <span className="text-[11px] sm:text-xs font-bold text-white/95 tracking-wide">
-            {label}
-          </span>
-        </div>
-        <span className="text-sm sm:text-[15px] font-extrabold text-white tabular-nums tracking-tight">
-          {rupiah(value)}
-        </span>
-      </div>
-    </div>
-  );
-
-  /* ───────────────────────────────────────────────
-   *  Full-width Summary Bar  —  Pendapatan / Pengeluaran
-   * ─────────────────────────────────────────────── */
-  const SummaryBar = ({
-    label,
-    value,
-    icon: Icon,
-    gradient,
-  }: {
-    label: string;
-    value: number;
-    icon: React.ElementType;
-    gradient: string;
-  }) => (
-    <div
-      className={`
-        relative overflow-hidden rounded-2xl ${gradient}
-        shadow-sm
-        transition-transform duration-200
-        active:scale-[0.98]
-      `}
-    >
-      <div className="flex items-center justify-between px-3.5 py-3 sm:px-5 sm:py-3.5">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-white/20 backdrop-blur-md">
-            <Icon size={14} strokeWidth={2.5} className="text-white" />
-          </div>
-          <span className="text-[11px] sm:text-sm font-bold text-white/95 tracking-wide">
-            {label}
-          </span>
-        </div>
-        <span className="text-sm sm:text-base font-extrabold text-white tabular-nums tracking-tight">
-          {rupiah(value)}
-        </span>
-      </div>
-    </div>
-  );
+  const totalBayar = totalCash + totalTransfer;
 
   return (
-    <Section title="Rekap Pemasukan Hari Ini">
-      <div className="space-y-3 sm:space-y-4">
-
-        {/* ── 2×2 Grid — iOS Widget-style tiles ── */}
+    <Card
+      title="Rekap pemasukan hari ini"
+      icon={<CircleDollarSign />}
+      iconColor="teal"
+      accessory={grand > 0 || totalPengeluaran > 0 ? <StatusPill net={pendapatanBersih} /> : undefined}
+    >
+      <div className="space-y-4">
         <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-          <StatTile label="Harian"        value={totalHarian}  icon={Calendar} accentBg="bg-zinc-500/15 dark:bg-zinc-400/15" accentText="text-zinc-600 dark:text-zinc-300" />
-          <StatTile label="Jajanan"       value={totalJajanan} icon={Coffee}   accentBg="bg-pink-500/15 dark:bg-pink-400/15" accentText="text-pink-600 dark:text-pink-400" />
-          <StatTile label="Usaha"         value={totalJasaAks} icon={Wrench}   accentBg="bg-purple-500/15 dark:bg-purple-400/15" accentText="text-purple-600 dark:text-purple-400" />
-          <StatTile label="Sewa Console"  value={totalSewa}    icon={Gamepad2} accentBg="bg-indigo-500/15 dark:bg-indigo-400/15" accentText="text-indigo-600 dark:text-indigo-400" />
+          <StatTile label="Harian" icon={<Calendar />} value={<Amount value={totalHarian} size="headline" fitAt={13} />} />
+          <StatTile label="Jajanan" icon={<Coffee />} value={<Amount value={totalJajanan} size="headline" fitAt={13} />} />
+          <StatTile label="Usaha" icon={<Wrench />} value={<Amount value={totalJasaAks} size="headline" fitAt={13} />} />
+          <StatTile label="Sewa konsol" icon={<Gamepad2 />} value={<Amount value={totalSewa} size="headline" fitAt={13} />} />
         </div>
 
-        {/* ── Separator ── */}
-        <div className="flex items-center gap-3 py-0.5">
-          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-zinc-300/60 to-transparent dark:via-zinc-700/60" />
-          <span className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500 select-none">
-            Rekap Pembayaran
-          </span>
-          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-zinc-300/60 to-transparent dark:via-zinc-700/60" />
+        <div className="space-y-2.5 border-t border-sep pt-3.5">
+          <Eyebrow>Rekap pembayaran</Eyebrow>
+          {totalBayar > 0 && (
+            <SplitBar
+              ariaLabel="Proporsi Cash dan Transfer"
+              segments={[
+                { key: "cash", label: "Cash", value: totalCash, color: MARK.tunai, note: persen((totalCash / totalBayar) * 100) },
+                { key: "tf", label: "Transfer", value: totalTransfer, color: MARK.transfer, note: persen((totalTransfer / totalBayar) * 100) },
+              ]}
+            />
+          )}
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+            <StatTile label="Cash" dot={MARK.tunai} value={<Amount value={totalCash} size="headline" fitAt={13} />} />
+            <StatTile label="Transfer" dot={MARK.transfer} value={<Amount value={totalTransfer} size="headline" fitAt={13} />} />
+          </div>
         </div>
 
-        {/* ── Cash & Transfer — side-by-side ── */}
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-          <GradientPill label="CASH"     value={totalCash}     icon={Wallet}     gradient="bg-gradient-to-br from-emerald-500 to-teal-600" />
-          <GradientPill label="TRANSFER" value={totalTransfer} icon={CreditCard} gradient="bg-gradient-to-br from-blue-500 to-indigo-600" />
-        </div>
-
-        {/* ── Totals — full width stacked ── */}
-        <div className="space-y-2 sm:space-y-2.5">
-          <SummaryBar label="TOTAL PENDAPATAN"  value={grand}            icon={TrendingUp}   gradient="bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500" />
-          <SummaryBar label="TOTAL PENGELUARAN" value={totalPengeluaran} icon={TrendingDown}  gradient="bg-gradient-to-r from-rose-500 via-red-500 to-pink-500" />
-        </div>
-
-        {/* ── Laba Bersih — Hero card ── */}
-        <div className="pt-1.5 sm:pt-2 border-t border-zinc-200/80 dark:border-zinc-700/60">
-          <div className="flex items-center gap-2 mb-2 px-0.5">
-            <span className={`flex h-2 w-2 rounded-full ${isProfit ? "bg-emerald-500" : "bg-red-500"} animate-pulse`} />
-            <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-500">
-              Laba Bersih Hari Ini
-            </span>
+        <div className="space-y-2.5 border-t border-sep pt-3.5">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+            <StatTile label="Total pendapatan" dot={MARK.masuk} value={<Amount value={grand} size="headline" fitAt={13} />} />
+            <StatTile label="Total pengeluaran" dot={MARK.keluar} value={<Amount value={totalPengeluaran} size="headline" fitAt={13} />} />
           </div>
 
-          <div
-            className={`
-              relative overflow-hidden rounded-2xl shadow-lg
-              transition-transform duration-200 active:scale-[0.98]
-              ${isProfit
-                ? "bg-zinc-900 dark:bg-white"
-                : "bg-gradient-to-r from-red-600 to-rose-600"
-              }
-            `}
-          >
-            <div className="flex items-center justify-between px-4 py-3 sm:px-5 sm:py-4">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className={`
-                    flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center
-                    rounded-full backdrop-blur-md
-                    ${isProfit
-                      ? "bg-white/10 dark:bg-black/5 text-white dark:text-zinc-900"
-                      : "bg-white/20 text-white"
-                    }
-                  `}
-                >
-                  <CircleDollarSign size={16} strokeWidth={2.2} />
-                </div>
-                <span
-                  className={`text-[11px] sm:text-sm font-bold tracking-wide ${
-                    isProfit
-                      ? "text-zinc-400 dark:text-zinc-500"
-                      : "text-white/90"
-                  }`}
-                >
-                  PENDAPATAN BERSIH
-                </span>
-              </div>
-              <span
-                className={`text-base sm:text-lg font-extrabold tabular-nums tracking-tight ${
-                  isProfit
-                    ? "text-white dark:text-zinc-900"
-                    : "text-white"
-                }`}
-              >
-                {rupiah(Math.max(0, pendapatanBersih))}
-              </span>
+          <div className="rounded-tile bg-surface-2 px-4 py-3.5 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <Eyebrow>Pendapatan bersih</Eyebrow>
+              <p className="mt-0.5 text-caption text-label-2 truncate">
+                {grand === 0 && totalPengeluaran === 0
+                  ? "Belum ada transaksi hari ini."
+                  : pendapatanBersih >= 0
+                    ? "Total pendapatan dikurangi pengeluaran."
+                    : "Pengeluaran lebih besar dari pendapatan."}
+              </p>
             </div>
+            <Amount value={pendapatanBersih} signed tone="auto" size="title2" fitAt={14} />
           </div>
         </div>
-
       </div>
-    </Section>
+    </Card>
   );
 };
 
