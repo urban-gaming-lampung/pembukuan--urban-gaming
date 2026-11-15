@@ -94,7 +94,7 @@ const RincianSewa: React.FC<{
         className={
           isMobileTable === false
             ? "inline-flex items-center justify-center w-8 h-8 rounded-control bg-tint/10 text-tint hover:bg-tint/15 dark:bg-tint/15 active:scale-90 transition"
-            : "inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-tint/10 text-tint hover:bg-tint/15 dark:bg-tint/15 text-[11px] font-semibold active:scale-95 transition"
+            : "inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-white/25 hover:bg-white/35 text-white ring-1 ring-white/25 text-[11px] font-semibold active:scale-95 transition"
         }
       >
         <Receipt size={13} strokeWidth={2.4} />

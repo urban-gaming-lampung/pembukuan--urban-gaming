@@ -65,6 +65,7 @@ function fieldKind(key: string) {
 
 
 function getThemeColors(title: string): {
+  color: string;
   iconColor: WarnaIkon;
   icon: React.ReactNode;
   borderFocus: string;
@@ -72,25 +73,25 @@ function getThemeColors(title: string): {
   const t = (title || "").toLowerCase();
 
   if (t.includes("jajanan")) {
-    return { iconColor: "orange", icon: <Coffee size={17} />, borderFocus: "focus:ring-tint/20 focus:border-tint/50" };
+    return { color: "#F1A41D", iconColor: "orange", icon: <Coffee size={17} />, borderFocus: "focus:ring-[#F1A41D]/25 focus:border-[#F1A41D]" };
   }
   if (t.includes("harian")) {
-    return { iconColor: "teal", icon: <Gamepad2 size={17} />, borderFocus: "focus:ring-tint/20 focus:border-tint/50" };
+    return { color: "#25BE8D", iconColor: "teal", icon: <Gamepad2 size={17} />, borderFocus: "focus:ring-[#25BE8D]/25 focus:border-[#25BE8D]" };
   }
   if (t.includes("sewa")) {
-    return { iconColor: "blue", icon: <CalendarCheck2 size={17} />, borderFocus: "focus:ring-tint/20 focus:border-tint/50" };
+    return { color: "#0EA5E8", iconColor: "blue", icon: <CalendarCheck2 size={17} />, borderFocus: "focus:ring-[#0EA5E8]/25 focus:border-[#0EA5E8]" };
   }
   if (t.includes("jasa") || t.includes("aksesoris") || t.includes("usaha")) {
-    return { iconColor: "indigo", icon: <Wrench size={17} />, borderFocus: "focus:ring-tint/20 focus:border-tint/50" };
+    return { color: "#ED4343", iconColor: "red", icon: <Wrench size={17} />, borderFocus: "focus:ring-[#ED4343]/25 focus:border-[#ED4343]" };
   }
   if (t.includes("pengeluaran")) {
-    return { iconColor: "red", icon: <Wallet size={17} />, borderFocus: "focus:ring-tint/20 focus:border-tint/50" };
+    return { color: "#E11D48", iconColor: "red", icon: <Wallet size={17} />, borderFocus: "focus:ring-[#E11D48]/25 focus:border-[#E11D48]" };
   }
   if (t.includes("setoran")) {
-    return { iconColor: "teal", icon: <Wallet size={17} />, borderFocus: "focus:ring-tint/20 focus:border-tint/50" };
+    return { color: "#0D9488", iconColor: "teal", icon: <Wallet size={17} />, borderFocus: "focus:ring-[#0D9488]/25 focus:border-[#0D9488]" };
   }
 
-  return { iconColor: "gray", icon: <Receipt size={17} />, borderFocus: "focus:ring-tint/20 focus:border-tint/50" };
+  return { color: "#71717A", iconColor: "gray", icon: <Receipt size={17} />, borderFocus: "focus:ring-tint/20 focus:border-tint/50" };
 }
 
 function parseBayar(val: any): Set<string> {
@@ -463,8 +464,8 @@ export default function TableEditor<T extends AnyRow>(props: {
     );
   };
 
-  // Header Table (tenang ala UDS: latar surface-2 + huruf label-2 + pemisah sep)
-  const thBase = `px-3 py-2.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-label-2 bg-surface-2 border-b border-sep whitespace-nowrap sticky top-0 z-10`;
+  // Header Table (berwarna per kategori agar mudah dibaca & dibedakan)
+  const thBase = `px-3 py-3 text-[12px] font-bold uppercase tracking-[0.05em] text-white whitespace-nowrap sticky top-0 z-10 border-b border-black/10`;
 
   const inputBase = `w-full min-h-[40px] px-2.5 rounded-control bg-transparent border border-transparent
     hover:border-sep focus:bg-surface focus:border-tint/40
@@ -632,12 +633,16 @@ export default function TableEditor<T extends AnyRow>(props: {
                     const lower = c.toLowerCase();
                     const centered = i === 0 || lower === "cash" || lower === "transfer";
                     return (
-                      <th key={i} className={`${thBase} ${centered ? "text-center" : "text-left"}`}>
+                      <th
+                        key={i}
+                        className={`${thBase} ${centered ? "text-center" : "text-left"}`}
+                        style={{ backgroundColor: theme.color }}
+                      >
                         {c}
                       </th>
                     );
                   })}
-                  <th className={`${thBase} text-center`}>Aksi</th>
+                  <th className={`${thBase} text-center`} style={{ backgroundColor: theme.color }}>Aksi</th>
                 </tr>
               </thead>
 
@@ -649,19 +654,22 @@ export default function TableEditor<T extends AnyRow>(props: {
                   const kolom = Object.keys(blank).filter((k) => k !== "bayar" && !k.startsWith("_"));
                   if (isMobile) {
                     return (
-                      <tr key={b.key} className="flex flex-col rounded-tile ring-1 ring-edge overflow-hidden bg-surface-2">
-                        <td className="flex justify-between items-center gap-3 px-4 py-3 border-b border-sep bg-surface-2 select-none">
+                      <tr key={b.key} className="flex flex-col rounded-tile ring-1 ring-edge overflow-hidden bg-surface">
+                        <td
+                          className="flex justify-between items-center gap-3 px-4 py-3 text-white select-none"
+                          style={{ backgroundColor: theme.color }}
+                        >
                           <div className="flex flex-col gap-1 min-w-0 flex-1">
                             <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                              <span className="inline-flex items-center gap-1 rounded-full bg-fill px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-label-2 shrink-0">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-white shrink-0">
                                 <Lock size={10} />{b.label}
                               </span>
                               {b.renderNo?.()}
-                              {b.info && <span className="text-caption font-mono text-label-2 truncate">{b.info}</span>}
+                              {b.info && <span className="text-caption font-mono text-white/85 truncate">{b.info}</span>}
                             </div>
-                            <span className="text-subhead font-semibold leading-snug truncate text-label">{b.ringkasan}</span>
+                            <span className="text-subhead font-semibold leading-snug truncate text-white">{b.ringkasan}</span>
                           </div>
-                          <span className="flex shrink-0 items-center justify-center w-9 h-9 rounded-full bg-fill text-label-2" title="Otomatis — tidak bisa diubah di sini">
+                          <span className="flex shrink-0 items-center justify-center w-9 h-9 rounded-full bg-black/15 text-white/95" title="Otomatis — tidak bisa diubah di sini">
                             <Lock size={14} />
                           </span>
                         </td>
@@ -748,14 +756,15 @@ export default function TableEditor<T extends AnyRow>(props: {
                       <td
                         onClick={() => { if (isMobile && !isAlwaysExpanded) toggleExpand(i) }}
                         className={isMobile
-                          ? `flex justify-between items-center px-4 py-3 ${!isAlwaysExpanded ? 'cursor-pointer active:opacity-80' : ''} ${isCollapsedEmpty ? 'bg-surface-2/50 text-label-2' : 'bg-surface-2 text-label border-b border-sep'} transition-colors select-none`
+                          ? `flex justify-between items-center px-4 py-3 ${!isAlwaysExpanded ? 'cursor-pointer active:opacity-90' : ''} ${isCollapsedEmpty ? 'bg-surface-2/60 text-label-2' : 'text-white'} transition-colors select-none`
                           : `table-cell w-[56px] text-center px-1.5 py-1.5 align-middle relative`
                         }
+                        style={isMobile && !isCollapsedEmpty ? { backgroundColor: theme.color } : undefined}
                       >
                          {isMobile ? (
                             <div className="flex flex-col gap-1 w-full max-w-[85%]">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="inline-flex items-center rounded-full bg-fill px-2.5 py-0.5 text-[11px] font-semibold tracking-wider uppercase text-label-2">
+                                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wider uppercase ${isCollapsedEmpty ? "bg-fill text-label-2" : "bg-white/20 text-white"}`}>
                                   Baris {i + 1}
                                 </span>
                                 {renderNo && (
@@ -764,13 +773,13 @@ export default function TableEditor<T extends AnyRow>(props: {
                                   </span>
                                 )}
                                 {!expanded && hasData && (
-                                   <span className="flex items-center justify-center rounded-full bg-positive/15 text-positive p-1">
+                                   <span className="flex items-center justify-center rounded-full bg-white/25 text-white p-1">
                                       <Check size={12} strokeWidth={2.8} />
                                    </span>
                                 )}
                               </div>
                               {!expanded && hasData && (
-                                <span className="text-subhead font-semibold leading-snug line-clamp-1 truncate mt-0.5 text-label">{summary}</span>
+                                <span className="text-subhead font-semibold leading-snug line-clamp-1 truncate mt-0.5 text-white">{summary}</span>
                               )}
                               {isCollapsedEmpty && (
                                 <span className="text-footnote leading-snug mt-0.5 text-label-2">Kosong — ketuk untuk mengisi</span>
@@ -784,7 +793,7 @@ export default function TableEditor<T extends AnyRow>(props: {
                          )}
 
                          {isMobile && !isAlwaysExpanded && (
-                            <div className="flex shrink-0 items-center justify-center w-9 h-9 rounded-full bg-fill text-label-2">
+                            <div className={`flex shrink-0 items-center justify-center w-9 h-9 rounded-full ${isCollapsedEmpty ? "bg-fill text-label-2" : "bg-black/15 text-white"}`}>
                                {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                             </div>
                          )}
