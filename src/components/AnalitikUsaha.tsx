@@ -678,61 +678,63 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
   };
 
   return (
-    <div className="fixed inset-0 z-[260] flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-[260] flex items-end sm:items-center justify-center font-sans">
       <div className="absolute inset-0 bg-black/55" onClick={onClose} />
-      <div className="relative w-full sm:max-w-md bg-zinc-50 dark:bg-[#141416] rounded-t-[26px] sm:rounded-[26px] max-h-[92vh] flex flex-col overflow-hidden">
-        <div className="flex justify-center pt-2 sm:hidden"><div className="w-9 h-[5px] rounded-full bg-zinc-300 dark:bg-zinc-600" /></div>
+      <div className="relative w-full sm:max-w-md bg-canvas rounded-t-card sm:rounded-card max-h-[92vh] flex flex-col overflow-hidden shadow-float ring-1 ring-edge">
+        <div className="flex justify-center pt-2 sm:hidden"><div className="w-9 h-[5px] rounded-full bg-sep" /></div>
         <div className="px-4 pt-2 pb-3 flex items-center gap-3">
           <div className="flex-1 min-w-0">
-            <h3 className="text-[17px] font-black text-zinc-900 dark:text-white font-mono">{live.noNota}</h3>
-            <p className="text-[12px] text-zinc-500">{fmtTanggalNota(live.ts)}</p>
+            <h3 className="text-headline font-bold text-label font-mono truncate">{live.noNota}</h3>
+            <p className="text-caption text-label-2">{fmtTanggalNota(live.ts)}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Tutup" className="w-9 h-9 rounded-full bg-zinc-200/70 dark:bg-zinc-800 flex items-center justify-center"><X className="w-4 h-4" /></button>
+          <button type="button" onClick={onClose} aria-label="Tutup" className="w-11 h-11 rounded-full bg-fill flex items-center justify-center text-label-2 hover:text-label active:opacity-70"><X className="w-4 h-4" /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-3">
-          {actions.msg && <div className="text-[12.5px] font-semibold text-zinc-700 dark:text-zinc-200 bg-white dark:bg-[#1c1c1e] rounded-xl px-3 py-2">{actions.msg}</div>}
+          {actions.msg && <Notice tone={actions.msg.toLowerCase().includes("gagal") ? "negative" : "info"}>{actions.msg}</Notice>}
           {notaDp && batalDp && (
             <BatalDp sale={live} onKembali={() => setBatalDp(false)} onSelesai={() => { setBatalDp(false); actions.setMsg("Nota DP dibatalkan ✅"); }} />
           )}
           {live.batal && (
-            <div className="rounded-2xl bg-zinc-200/70 dark:bg-zinc-800 p-3 text-[12.5px] text-zinc-700 dark:text-zinc-300">
+            <Notice tone="negative">
               <b>{live.status === "BATAL_PEMBELI" ? "Dibatalkan pembeli · DP hangus" : live.status === "BATAL_URBAN" ? "Dibatalkan URBAN · DP dikembalikan" : "Nota dibatalkan"}</b>{live.batalOleh ? ` oleh ${live.batalOleh.split("@")[0]}` : ""}{live.batalTs ? ` · ${new Date(live.batalTs).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}
-              {live.batalAlasan ? <div className="mt-0.5">Alasan: {live.batalAlasan}</div> : null}
-            </div>
+              {live.batalAlasan ? <div className="mt-0.5 text-label-2">Alasan: {live.batalAlasan}</div> : null}
+            </Notice>
           )}
           {live.buktiTransfer && (
-            <a href={live.buktiTransfer} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-2xl bg-white dark:bg-[#1c1c1e] p-3 active:opacity-80">
-              <img src={live.buktiTransfer} alt="Bukti transfer" className="w-14 h-14 rounded-xl object-cover bg-zinc-100" />
+            <a href={live.buktiTransfer} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-card bg-surface ring-1 ring-edge p-3 active:opacity-80">
+              <img src={live.buktiTransfer} alt="Bukti transfer" className="w-14 h-14 rounded-field object-cover bg-fill shrink-0" />
               <div className="flex-1 min-w-0">
-                <div className="text-[14px] font-bold text-zinc-900 dark:text-white">Bukti transfer</div>
-                <div className="text-[12px] text-zinc-500">Ketuk untuk lihat ukuran penuh</div>
+                <div className="text-subhead font-semibold text-label">Bukti transfer</div>
+                <div className="text-caption text-label-2">Ketuk untuk lihat ukuran penuh</div>
               </div>
-              <ImageIcon className="w-4 h-4 text-zinc-400" />
+              <ImageIcon className="w-4 h-4 text-label-3 shrink-0" />
             </a>
           )}
           {live.metode === "TRANSFER" && !live.buktiTransfer && (
-            <div className="rounded-2xl bg-amber-50 dark:bg-amber-500/10 p-3 text-[12px] text-amber-800 dark:text-amber-300">Transfer tanpa bukti (nota lama sebelum bukti transfer diwajibkan).</div>
+            <Notice tone="warning">Transfer tanpa bukti (nota lama sebelum bukti transfer diwajibkan).</Notice>
           )}
           {(live.stokKurang?.length || 0) > 0 && (
-            <div className="rounded-2xl bg-amber-50 dark:bg-amber-500/10 p-3 text-[12px] text-amber-800 dark:text-amber-300">
+            <Notice tone="warning">
               Saat transaksi, stok tercatat kurang: {live.stokKurang!.map((k) => `${k.item} (terjual ${k.diminta}, tercatat ${k.tersedia})`).join(", ")}
-            </div>
+            </Notice>
           )}
-          <div className={`rounded-[22px] bg-zinc-200/60 dark:bg-black/40 p-3 ${live.batal && !batalPakaiDp ? "opacity-60" : ""}`}>
+          <div className={`rounded-card bg-fill p-3 ${live.batal && !batalPakaiDp ? "opacity-60" : ""}`}>
             <NotaPreview sale={live} />
           </div>
         </div>
-        <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] bg-white dark:bg-[#1c1c1e] border-t border-zinc-200/70 dark:border-white/5 space-y-2">
+        <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] bg-surface border-t border-sep space-y-2">
           {(!live.batal || batalPakaiDp) && <NotaActionButtons sale={live} actions={actions} />}
           <div className={`grid gap-2 ${live.batal ? "grid-cols-1" : "grid-cols-[1fr_auto]"}`}>
             {!live.batal && (
-              <button type="button" disabled={!!busy || (notaDp && batalDp)} onClick={notaDp ? () => setBatalDp(true) : batalkan} className="h-11 rounded-xl text-[13px] font-bold text-red-600 bg-red-50 dark:bg-red-500/10 disabled:opacity-50 flex items-center justify-center gap-1.5">
-                {busy === "batal" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}{notaDp ? "Batalkan nota DP" : "Batalkan & kembalikan stok"}
-              </button>
+              <Button variant="destructive" size="md" disabled={!!busy || (notaDp && batalDp)} onClick={notaDp ? () => setBatalDp(true) : batalkan}
+                icon={busy === "batal" ? <Loader2 className="animate-spin" /> : <Ban />}>
+                {notaDp ? "Batalkan nota DP" : "Batalkan & kembalikan stok"}
+              </Button>
             )}
-            <button type="button" disabled={!!busy} onClick={hapus} className="h-11 px-4 rounded-xl text-[13px] font-bold text-white bg-red-600 disabled:opacity-50 flex items-center justify-center gap-1.5">
-              {busy === "hapus" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}Hapus nota
-            </button>
+            <Button size="md" disabled={!!busy} onClick={hapus} className="!bg-negative text-white px-4"
+              icon={busy === "hapus" ? <Loader2 className="animate-spin" /> : <Trash2 />}>
+              Hapus nota
+            </Button>
           </div>
         </div>
       </div>

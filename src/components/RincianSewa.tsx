@@ -29,7 +29,7 @@ function pickKey(row: any, candidates: string[]) {
 const SelectWrapper = ({ children }: { children: React.ReactNode }) => (
   <div className="relative w-full">
     {children}
-    <ChevronDown className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400 pointer-events-none opacity-60" />
+    <ChevronDown className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-label-3 pointer-events-none" />
   </div>
 );
 
@@ -94,7 +94,7 @@ const RincianSewa: React.FC<{
         className={
           isMobileTable === false
             ? "inline-flex items-center justify-center w-8 h-8 rounded-control bg-tint/10 text-tint hover:bg-tint/15 dark:bg-tint/15 active:scale-90 transition"
-            : "inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-white/25 hover:bg-white/35 text-white ring-1 ring-white/25 text-[11px] font-semibold active:scale-95 transition"
+            : "inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-white/25 hover:bg-white/35 text-white ring-1 ring-white/25 text-caption2 font-semibold active:scale-95 transition"
         }
       >
         <Receipt size={13} strokeWidth={2.4} />
@@ -192,7 +192,7 @@ const RincianSewa: React.FC<{
               <div className="min-w-[100px]">
                 <input
                   disabled
-                  className={`${inputBase} bg-zinc-100 dark:bg-black/40 text-zinc-400 cursor-not-allowed border-dashed text-center font-bold`}
+                  className={`${inputBase} bg-fill text-label-3 cursor-not-allowed border-dashed text-center font-bold`}
                   value="-"
                   readOnly
                 />
@@ -206,17 +206,17 @@ const RincianSewa: React.FC<{
                 <input
                   type="number" inputMode="numeric" pattern="[0-9]*"
                   min="0"
-                  className={`${inputBase} w-16 text-center pl-1 pr-1 font-bold text-sky-600 dark:text-sky-400`}
+                  className={`${inputBase} w-16 text-center pl-1 pr-1 font-bold text-tint`}
                   value={(row as any)._customDurasi || ""}
                   placeholder="0"
                   onChange={(e) => updateRow(rowIndex, { _customDurasi: e.target.value, _addedBy: (row as any)._addedBy || userEmail } as any)}
                   onKeyDown={onKeyNav}
                 />
-                <span className="text-[13px] font-bold text-zinc-500 uppercase tracking-wide">Jam</span>
+                <span className="text-footnote font-bold text-label-2 uppercase tracking-wide">Jam</span>
                 <button
                   type="button"
                   onClick={() => updateRow(rowIndex, { [lamaKey]: "", _customDurasi: "", _customBase: "" } as any)}
-                  className="ml-auto p-1.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-zinc-400 hover:text-red-500 transition-colors"
+                  className="ml-auto min-w-[32px] min-h-[32px] p-1.5 rounded-control hover:bg-fill text-label-3 hover:text-negative transition-colors flex items-center justify-center"
                   title="Batal Isi Sendiri"
                 >
                   <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -267,7 +267,7 @@ const RincianSewa: React.FC<{
               <div className="min-w-[110px]">
                 <input
                   disabled
-                  className={`${inputBase} w-full text-center bg-zinc-100 dark:bg-black/40 text-zinc-400 cursor-not-allowed border-dashed font-bold`}
+                  className={`${inputBase} w-full text-center bg-fill text-label-3 cursor-not-allowed border-dashed font-bold`}
                   value="-"
                   readOnly
                 />
@@ -279,7 +279,7 @@ const RincianSewa: React.FC<{
             <div className="min-w-[110px]">
               <input
                 type={isPelunasan ? "text" : "time"}
-                className={`${inputBase} w-full text-center tracking-wider ${isPelunasan ? "bg-zinc-100 dark:bg-black/40 text-zinc-400 cursor-not-allowed border-dashed" : "bg-transparent focus:bg-zinc-50 dark:focus:bg-[#2C2C2E]"}`}
+                className={`${inputBase} w-full text-center tracking-wider ${isPelunasan ? "bg-fill text-label-3 cursor-not-allowed border-dashed" : "bg-transparent focus:bg-surface-2"}`}
                 value={isPelunasan ? "-" : ((row as any).jamMasukSewa || "")}
                 disabled={isPelunasan}
                 onChange={(e) => {
@@ -297,7 +297,7 @@ const RincianSewa: React.FC<{
               <div className="min-w-[140px]">
                 <input
                   disabled
-                  className={`${inputBase} bg-zinc-100 dark:bg-black/40 text-zinc-400 cursor-not-allowed border-dashed text-center font-medium`}
+                  className={`${inputBase} bg-fill text-label-3 cursor-not-allowed border-dashed text-center font-medium`}
                   value="Hanya Ongkir"
                   readOnly
                 />
@@ -327,7 +327,7 @@ const RincianSewa: React.FC<{
           if (isHanyaOngkir) {
             return (
               <div className="min-w-[150px]">
-                <input disabled readOnly value="-" className={`${inputBase} bg-zinc-100 dark:bg-black/40 text-zinc-400 cursor-not-allowed border-dashed text-center font-bold`} />
+                <input disabled readOnly value="-" className={`${inputBase} bg-fill text-label-3 cursor-not-allowed border-dashed text-center font-bold`} />
               </div>
             );
           }
@@ -343,7 +343,7 @@ const RincianSewa: React.FC<{
                 type="tel"
                 inputMode="tel"
                 autoComplete="off"
-                className={`${inputBase} font-mono tracking-wide ${salah ? "!border-red-500/50 bg-red-50/50 dark:bg-red-500/10 focus:!ring-red-500/30" : ""}`}
+                className={`${inputBase} font-mono tracking-wide ${salah ? "!border-negative/50 bg-negative/10 focus:!ring-negative/30" : ""}`}
                 value={v}
                 onChange={(e) =>
                   updateRow(rowIndex, { waPenyewa: e.target.value.replace(/[^\d+\s-]/g, ""), _addedBy: (row as any)._addedBy || userEmail } as any)
@@ -356,12 +356,12 @@ const RincianSewa: React.FC<{
                 <button
                   type="button"
                   onClick={() => updateRow(rowIndex, { waPenyewa: saran, _addedBy: (row as any)._addedBy || userEmail } as any)}
-                  className="mt-1.5 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 text-[11px] font-bold active:scale-95 transition"
+                  className="mt-1.5 inline-flex items-center gap-1 px-2 py-1 rounded-control bg-tint/10 text-tint text-caption2 font-semibold active:scale-95 transition"
                 >
                   Pakai {formatWa(saran)} · sewa terakhir
                 </button>
               )}
-              {v && !waValid(v) && <div className="mt-1 text-[10.5px] font-semibold text-red-500">Format 08xx, 10–13 angka</div>}
+              {v && !waValid(v) && <div className="mt-1 text-caption2 font-semibold text-negative">Format 08xx, 10–13 angka</div>}
             </div>
           );
         }
@@ -372,7 +372,7 @@ const RincianSewa: React.FC<{
               <div className="min-w-[80px]">
                 <input
                   disabled
-                  className={`${inputBase} bg-zinc-100 dark:bg-black/40 text-emerald-500 font-bold cursor-not-allowed border-dashed text-center`}
+                  className={`${inputBase} bg-fill text-positive font-bold cursor-not-allowed border-dashed text-center`}
                   value="YA"
                   readOnly
                 />
@@ -383,7 +383,7 @@ const RincianSewa: React.FC<{
             <SelectWrapper>
               <select
                 data-fieldid={`sewa-${rowIndex}-isPaid`}
-                className={`${inputBase} appearance-none pr-8 cursor-pointer ${(row as any).isPaid === "TIDAK" ? "text-red-500 font-bold" : (row as any).isPaid === "YA" ? "text-emerald-500 font-bold" : ""
+                className={`${inputBase} appearance-none pr-8 cursor-pointer ${(row as any).isPaid === "TIDAK" ? "text-negative font-bold" : (row as any).isPaid === "YA" ? "text-positive font-bold" : ""
                   }`}
                 value={String(value || "")}
                 onKeyDown={onKeyNav}
@@ -411,7 +411,7 @@ const RincianSewa: React.FC<{
               <div className="min-w-[120px]">
                 <input
                   disabled
-                  className={`${inputBase} bg-zinc-100 dark:bg-black/40 text-zinc-400 cursor-not-allowed border-dashed text-center font-bold`}
+                  className={`${inputBase} bg-fill text-label-3 cursor-not-allowed border-dashed text-center font-bold`}
                   value="-"
                   readOnly
                 />
@@ -420,7 +420,7 @@ const RincianSewa: React.FC<{
           }
           return (
             <div className="flex flex-wrap items-center gap-2 min-w-[120px]">
-              <div className="flex items-center gap-1 bg-zinc-100/50 dark:bg-zinc-800/50 p-1 rounded-lg shrink-0">
+              <div className="flex items-center gap-1 bg-fill p-1 rounded-control shrink-0">
                 <button
                   type="button"
                   disabled={isHanyaOngkir}
@@ -431,14 +431,14 @@ const RincianSewa: React.FC<{
                     patch._addedBy = (row as any)._addedBy || userEmail;
                     updateRow(rowIndex, patch);
                   }}
-                  className={`flex items-center justify-center px-4 py-1.5 rounded-md transition-all duration-200 ${(row as any).isOngkir === "YA"
+                  className={`flex items-center justify-center min-h-[32px] px-3.5 py-1 rounded-icon transition-all duration-200 ${(row as any).isOngkir === "YA"
                     ? isHanyaOngkir
-                      ? "bg-emerald-500/70 text-white cursor-not-allowed shadow-none"
-                      : "bg-emerald-500 text-white shadow-sm shadow-emerald-500/20"
-                    : "hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 font-medium"
+                      ? "bg-positive/70 text-white cursor-not-allowed shadow-none"
+                      : "bg-positive text-white shadow-sm"
+                    : "hover:bg-surface/60 text-label-2 font-medium"
                     }`}
                 >
-                  <span className="text-[10px] font-bold tracking-tight">YA</span>
+                  <span className="text-caption2 font-bold tracking-tight">YA</span>
                 </button>
                 <button
                   type="button"
@@ -450,27 +450,27 @@ const RincianSewa: React.FC<{
                     patch._addedBy = (row as any)._addedBy || userEmail;
                     updateRow(rowIndex, patch);
                   }}
-                  className={`flex items-center justify-center px-3 py-1.5 rounded-md transition-all duration-200 ${
+                  className={`flex items-center justify-center min-h-[32px] px-3 py-1 rounded-icon transition-all duration-200 ${
                     isHanyaOngkir
-                      ? "opacity-30 cursor-not-allowed text-zinc-400"
+                      ? "opacity-30 cursor-not-allowed text-label-3"
                       : (row as any).isOngkir === "TIDAK"
-                        ? "bg-red-500 text-white shadow-sm shadow-red-500/20"
-                        : "hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400 font-medium"
+                        ? "bg-negative text-white shadow-sm"
+                        : "hover:bg-surface/60 text-label-2 font-medium"
                     }`}
                 >
-                  <span className="text-[10px] font-bold tracking-tight">TIDAK</span>
+                  <span className="text-caption2 font-bold tracking-tight">TIDAK</span>
                 </button>
               </div>
               {((value === "YA" || isHanyaOngkir) && (row as any).isPaid !== "TIDAK") && (
                 <div className="flex items-center gap-1.5 ml-1 animate-in slide-in-from-left-2 fade-in duration-200">
                   <div className="relative">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-400 font-bold">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-caption2 text-label-3 font-bold pointer-events-none">
                       Rp
                     </span>
                     <input
                       data-fieldid={`sewa-${rowIndex}-ongkir`}
                       inputMode="numeric"
-                      className={`${inputBase} pl-6 font-mono font-medium text-xs w-[100px] transition-all`}
+                      className={`${inputBase} pl-7 font-mono font-medium text-[16px] sm:text-footnote w-[112px] transition-all`}
                       value={(row as any)._ongkir || ""}
                       onChange={(e) => {
                         const val = toInt(e.target.value);
@@ -483,7 +483,7 @@ const RincianSewa: React.FC<{
                       placeholder="Ongkir"
                     />
                   </div>
-                  <div className="flex items-center gap-1 bg-zinc-100/50 dark:bg-zinc-800/50 p-1 rounded-lg shrink-0">
+                  <div className="flex items-center gap-1 bg-fill p-1 rounded-control shrink-0">
                     <button
                       type="button"
                       onClick={() => {
@@ -496,13 +496,13 @@ const RincianSewa: React.FC<{
                         patch._addedBy = (row as any)._addedBy || userEmail;
                         updateRow(rowIndex, patch);
                       }}
-                      className={`flex items-center justify-center p-1.5 rounded-md transition-all duration-200 ${(row as any)._bayarOngkir === "Cash"
-                        ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/20"
-                        : "hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400"
+                      className={`flex items-center justify-center min-h-[32px] px-2 py-1 rounded-icon transition-all duration-200 ${(row as any)._bayarOngkir === "Cash"
+                        ? "bg-positive text-white shadow-sm"
+                        : "hover:bg-surface/60 text-label-2"
                         }`}
                       title="Cash"
                     >
-                      <span className="text-[10px] font-bold tracking-tight">CASH</span>
+                      <span className="text-caption2 font-bold tracking-tight">CASH</span>
                     </button>
                     <button
                       type="button"
@@ -516,13 +516,13 @@ const RincianSewa: React.FC<{
                         patch._addedBy = (row as any)._addedBy || userEmail;
                         updateRow(rowIndex, patch);
                       }}
-                      className={`flex items-center justify-center p-1.5 rounded-md transition-all duration-200 ${(row as any)._bayarOngkir === "Transfer"
-                        ? "bg-blue-600 text-white shadow-sm shadow-blue-500/20"
-                        : "hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-400"
+                      className={`flex items-center justify-center min-h-[32px] px-2 py-1 rounded-icon transition-all duration-200 ${(row as any)._bayarOngkir === "Transfer"
+                        ? "bg-tint text-white shadow-sm"
+                        : "hover:bg-surface/60 text-label-2"
                         }`}
                       title="Transfer"
                     >
-                      <span className="text-[10px] font-bold tracking-tight">TF</span>
+                      <span className="text-caption2 font-bold tracking-tight">TF</span>
                     </button>
                   </div>
                 </div>
@@ -538,7 +538,7 @@ const RincianSewa: React.FC<{
             <SelectWrapper>
               <select
                 data-fieldid={`table-sewa-${rowIndex}-diantarOleh`}
-                className={`${inputBase} appearance-none pr-8 cursor-pointer ${isOngkirTidak ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 cursor-not-allowed opacity-50" : ""
+                className={`${inputBase} appearance-none pr-8 cursor-pointer ${isOngkirTidak ? "bg-fill text-label-3 cursor-not-allowed opacity-60" : ""
                   }`}
                 value={(row as any).diantarOleh || ""}
                 disabled={isOngkirTidak}
@@ -564,8 +564,8 @@ const RincianSewa: React.FC<{
 
           if (isHanyaOngkir) {
             return (
-              <div className="relative px-2 py-1.5 min-w-[120px] bg-zinc-100/50 dark:bg-black/20 rounded-lg border border-dashed border-zinc-200/80 dark:border-zinc-800">
-                <span className="font-bold text-zinc-400 dark:text-zinc-500">
+              <div className="relative px-2.5 py-1.5 min-w-[120px] bg-fill rounded-control border border-dashed border-sep">
+                <span className="font-bold tabular-nums text-label-2">
                   {currentTotal > 0 ? rupiah(currentTotal) : "-"}
                 </span>
               </div>
@@ -576,11 +576,11 @@ const RincianSewa: React.FC<{
             return (
               <div className="flex flex-col gap-1 min-w-[140px]">
                 <div className="relative">
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-zinc-400 font-medium">Rp</span>
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-caption text-label-3 font-medium pointer-events-none">Rp</span>
                   <input
                     data-fieldid={`sewa-${rowIndex}-customBase`}
                     type="number" inputMode="numeric" pattern="[0-9]*"
-                    className={`${inputBase} pl-8 font-mono font-bold text-sky-600 dark:text-sky-400`}
+                    className={`${inputBase} pl-8 font-mono font-bold text-tint`}
                     value={(row as any)._customBase || ""}
                     placeholder="Hrg Dasar"
                     onChange={(e) => {
@@ -593,7 +593,7 @@ const RincianSewa: React.FC<{
                   />
                 </div>
                 {row.isOngkir === "YA" && (
-                  <div className="text-[10px] text-zinc-500 font-bold ml-1 tracking-tight">Total: {rupiah(currentTotal)}</div>
+                  <div className="text-caption2 text-label-2 font-bold ml-1 tabular-nums">Total: {rupiah(currentTotal)}</div>
                 )}
               </div>
             );
@@ -602,7 +602,7 @@ const RincianSewa: React.FC<{
           // Kunci Readonly Permanen
           return (
             <div className="relative px-2 py-1.5 min-w-[120px]">
-              <span className="font-bold text-zinc-800 dark:text-zinc-200">
+              <span className="font-bold tabular-nums text-label">
                 {currentTotal > 0 ? rupiah(currentTotal) : "-"}
               </span>
             </div>

@@ -30,32 +30,31 @@ export const KartuTukarTambah: React.FC<{
   onTambah: () => void;
   onUbah: (key: string) => void;
 }> = ({ daftar, onTambah, onUbah }) => (
-  <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] p-3.5">
+  <div className="rounded-card bg-surface p-3.5">
     <div className="flex items-center justify-between">
-      <div className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Tukar tambah</div>
-      <ArrowLeftRight className="w-4 h-4 text-zinc-300" />
+      <div className="text-caption font-semibold uppercase tracking-[0.04em] text-label-2">Tukar tambah</div>
+      <ArrowLeftRight className="w-4 h-4 text-label-3" />
     </div>
     {daftar.length === 0 ? (
-      <p className="mt-1 text-[12.5px] leading-snug text-zinc-500">Pembeli menukar barangnya sebagai potongan harga. Barangnya masuk stok setelah dikonfirmasi owner.</p>
+      <p className="mt-1 text-footnote leading-snug text-label-2">Pembeli menukar barangnya sebagai potongan harga. Barangnya masuk stok setelah dikonfirmasi owner.</p>
     ) : (
-      <div className="mt-2 divide-y divide-zinc-100 dark:divide-white/5">
+      <div className="mt-2 divide-y divide-sep">
         {daftar.map((t) => (
-          <button key={t.key} type="button" onClick={() => onUbah(t.key)} className="w-full flex items-center gap-3 py-2.5 first:pt-0.5 text-left active:opacity-60">
-            <img src={t.fotoBarang} alt="" className="w-11 h-11 rounded-[10px] object-cover bg-zinc-100 dark:bg-zinc-800 shrink-0" />
+          <button key={t.key} type="button" onClick={() => onUbah(t.key)} className="w-full min-h-[44px] flex items-center gap-3 py-2.5 first:pt-0.5 text-left active:opacity-60">
+            <img src={t.fotoBarang} alt="" className="w-11 h-11 rounded-control object-cover bg-fill shrink-0" />
             <div className="min-w-0 flex-1">
-              <div className="text-[13.5px] font-bold text-zinc-900 dark:text-white leading-snug truncate">{t.nama}</div>
-              <div className="text-[11.5px] text-zinc-500 font-mono truncate">SN {t.sn}</div>
+              <div className="text-subhead font-semibold text-label leading-snug truncate">{t.nama}</div>
+              <div className="text-caption text-label-2 font-mono truncate">SN {t.sn}</div>
             </div>
-            <div className="shrink-0 text-[13px] font-black font-mono text-zinc-900 dark:text-white">−{rupiah(t.nilai * t.qty)}</div>
-            <ChevronRight className="w-4 h-4 text-zinc-300 shrink-0" />
+            <div className="shrink-0 text-footnote font-bold font-mono tabular-nums text-label">−{rupiah(t.nilai * t.qty)}</div>
+            <ChevronRight className="w-4 h-4 text-label-3 shrink-0" />
           </button>
         ))}
       </div>
     )}
-    <button type="button" onClick={onTambah}
-      className="mt-2.5 w-full h-11 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-[13px] font-bold text-zinc-800 dark:text-zinc-100 flex items-center justify-center gap-1.5 active:scale-[0.98]">
-      <Plus className="w-4 h-4" />{daftar.length ? "Tambah barang lain" : "Barang masuk"}
-    </button>
+    <Button variant="gray" size="md" block onClick={onTambah} icon={<Plus />} className="mt-2.5">
+      {daftar.length ? "Tambah barang lain" : "Barang masuk"}
+    </Button>
   </div>
 );
 
@@ -165,14 +164,14 @@ export const TukarTambahSheet: React.FC<{
   return (
     <div className="fixed inset-0 z-[260] flex items-end sm:items-center justify-center font-sans">
       <div className="absolute inset-0 bg-black/45" onClick={onClose} />
-      <div className="relative w-full sm:max-w-md bg-canvas rounded-t-[26px] sm:rounded-[26px] max-h-[92vh] flex flex-col overflow-hidden shadow-float">
+      <div className="relative w-full sm:max-w-md bg-canvas rounded-t-card sm:rounded-card max-h-[92vh] flex flex-col overflow-hidden shadow-float">
         <div className="flex justify-center pt-2 sm:hidden"><div className="w-9 h-[5px] rounded-full bg-sep" /></div>
         <div className="px-4 pt-2 pb-3 flex items-center gap-3">
           <div className="flex-1 min-w-0">
             <h3 className="text-title3 font-bold text-label leading-tight">Barang masuk</h3>
             <p className="text-footnote text-label-2">Tukar tambah · kondisi seken</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Tutup" className="w-9 h-9 rounded-full bg-fill flex items-center justify-center text-label-2"><X className="w-4 h-4" /></button>
+          <button type="button" onClick={onClose} aria-label="Tutup" className="w-11 h-11 rounded-full bg-fill flex items-center justify-center text-label-2 hover:text-label active:opacity-70"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-3">
@@ -194,7 +193,7 @@ export const TukarTambahSheet: React.FC<{
               <div className={`flex items-center h-12 px-3.5 rounded-field bg-fill ${nilaiSalah ? "ring-2 ring-negative/40" : ""}`}>
                 <span className="text-subhead font-semibold text-label-3 mr-1.5">Rp</span>
                 <input inputMode="numeric" autoComplete="off" value={uangStr} onChange={(e) => { setUangStr(ribuan(e.target.value)); setError(""); }} placeholder="0" aria-label={labelUang}
-                  className="flex-1 min-w-0 bg-transparent text-[17px] font-bold tabular-nums text-label focus:outline-none" />
+                  className="flex-1 min-w-0 bg-transparent text-headline font-bold tabular-nums text-label focus:outline-none" />
               </div>
             </Field>
             <div className="rounded-tile bg-fill/60 px-3.5 py-2.5 space-y-1 text-footnote">

@@ -25,7 +25,7 @@ const tgl = (ts: number) => new Date(ts).toLocaleDateString("id-ID", { day: "num
 const LABEL_SUB: Record<string, string> = { "Unit PS": "Unit konsol", Stik: "Stik", Hardisk: "Hardisk", Aksesoris: "Aksesoris", BD: "Kaset BD" };
 
 const Foto: React.FC<{ url?: string; size?: number; className?: string }> = ({ url, size = 48, className = "" }) => (
-  <div className={`shrink-0 rounded-[12px] bg-fill overflow-hidden flex items-center justify-center ${className}`} style={{ width: size, height: size }}>
+  <div className={`shrink-0 rounded-field bg-fill overflow-hidden flex items-center justify-center ${className}`} style={{ width: size, height: size }}>
     {url ? <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Package className="w-5 h-5 text-label-3" />}
   </div>
 );
@@ -36,25 +36,25 @@ const Foto: React.FC<{ url?: string; size?: number; className?: string }> = ({ u
 
 export const DaftarKonfirmasiTukar: React.FC<{ list: TukarTambah[]; loading: boolean; onPilih: (t: TukarTambah) => void }> = ({ list, loading, onPilih }) => (
   <section>
-    <p className="px-1 pb-2 text-[12.5px] text-zinc-500 leading-snug">
+    <p className="px-1 pb-2 text-footnote text-label-2 leading-snug">
       Barang dari tukar tambah di kasir POS. Tentukan produk & harga jualnya — stok bertambah setelah dikonfirmasi. Nilainya sudah tercatat sebagai belanja stok di nota.
     </p>
-    <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] border border-zinc-200/70 dark:border-white/5 overflow-hidden divide-y divide-zinc-100 dark:divide-white/5">
-      {loading && <div className="py-10 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-zinc-400" /></div>}
-      {!loading && list.length === 0 && <div className="py-10 text-center text-[14px] text-zinc-500">Tidak ada barang yang menunggu konfirmasi 👍</div>}
+    <div className="rounded-card bg-surface ring-1 ring-edge shadow-card overflow-hidden divide-y divide-sep">
+      {loading && <div className="py-10 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-label-3" /></div>}
+      {!loading && list.length === 0 && <div className="py-10 text-center text-subhead text-label-2">Tidak ada barang yang menunggu konfirmasi 👍</div>}
       {list.map((t) => (
-        <button key={t.id} type="button" onClick={() => onPilih(t)} className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-zinc-50 dark:active:bg-white/5">
+        <button key={t.id} type="button" onClick={() => onPilih(t)} className="w-full min-h-[44px] flex items-center gap-3 px-3.5 py-3 text-left active:bg-fill">
           <Foto url={t.fotoBarang} size={44} />
           <div className="flex-1 min-w-0">
-            <div className="text-[15px] font-semibold text-zinc-900 dark:text-white leading-snug line-clamp-2">{t.nama}</div>
-            <div className="text-[12.5px] text-zinc-500 mt-0.5 truncate">{tgl(t.ts)}{t.kasirNama ? ` · ${t.kasirNama}` : ""}</div>
-            <div className="text-[11.5px] text-zinc-400 font-mono truncate">{t.noNota}</div>
+            <div className="text-subhead font-semibold text-label leading-snug line-clamp-2">{t.nama}</div>
+            <div className="text-footnote text-label-2 mt-0.5 truncate">{tgl(t.ts)}{t.kasirNama ? ` · ${t.kasirNama}` : ""}</div>
+            <div className="text-caption text-label-3 font-mono truncate">{t.noNota}</div>
           </div>
           <div className="shrink-0 text-right">
-            <div className="text-[13.5px] font-semibold tabular-nums text-zinc-900 dark:text-white">{rupiah(t.nilai * (t.qty || 1))}</div>
-            <div className="text-[11.5px] text-zinc-500">nilai tukar</div>
+            <div className="text-footnote font-semibold tabular-nums text-label">{rupiah(t.nilai * (t.qty || 1))}</div>
+            <div className="text-caption2 text-label-2">nilai tukar</div>
           </div>
-          <ChevronRight className="w-4 h-4 text-zinc-300 dark:text-zinc-600 shrink-0" />
+          <ChevronRight className="w-4 h-4 text-label-3 shrink-0" />
         </button>
       ))}
     </div>
@@ -145,14 +145,14 @@ export const KonfirmasiTukarSheet: React.FC<{
   return (
     <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center font-sans">
       <div className="absolute inset-0 bg-black/45" onClick={() => !saving && onClose()} />
-      <div className="relative w-full sm:max-w-md bg-canvas rounded-t-[26px] sm:rounded-[26px] max-h-[94vh] flex flex-col overflow-hidden shadow-float">
+      <div className="relative w-full sm:max-w-md bg-canvas rounded-t-card sm:rounded-card max-h-[94vh] flex flex-col overflow-hidden shadow-float">
         <div className="flex justify-center pt-2 sm:hidden"><div className="w-9 h-[5px] rounded-full bg-sep" /></div>
         <div className="px-4 pt-2 pb-3 flex items-center gap-3">
           <div className="flex-1 min-w-0">
             <h3 className="text-title3 font-bold text-label leading-tight">Konfirmasi stok</h3>
             <p className="text-footnote text-label-2 truncate">Tukar tambah · {tt.noNota}</p>
           </div>
-          <button type="button" onClick={onClose} disabled={saving} aria-label="Tutup" className="w-9 h-9 rounded-full bg-fill flex items-center justify-center text-label-2"><X className="w-4 h-4" /></button>
+          <button type="button" onClick={onClose} disabled={saving} aria-label="Tutup" className="w-11 h-11 rounded-full bg-fill flex items-center justify-center text-label-2 hover:text-label active:opacity-70"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4">
@@ -178,7 +178,7 @@ export const KonfirmasiTukarSheet: React.FC<{
 
           {/* Produk tujuan */}
           <div>
-            <h4 className="px-4 pb-1.5 text-footnote font-semibold uppercase tracking-wide text-label-2">Masuk ke produk</h4>
+            <h4 className="px-4 pb-1.5 text-caption font-semibold uppercase tracking-[0.04em] text-label-2">Masuk ke produk</h4>
             <div className="rounded-card bg-surface overflow-hidden divide-y divide-sep">
               {kandidat.map((k) =>
                 rowPilih(
@@ -211,7 +211,7 @@ export const KonfirmasiTukarSheet: React.FC<{
               {rowPilih(
                 BARU,
                 <>
-                  <span className="shrink-0 w-10 h-10 rounded-[12px] bg-tint/10 text-tint flex items-center justify-center"><Plus className="w-5 h-5" /></span>
+                  <span className="shrink-0 w-10 h-10 rounded-field bg-tint/10 text-tint flex items-center justify-center"><Plus className="w-5 h-5" /></span>
                   <div className="flex-1 min-w-0">
                     <div className="text-subhead font-semibold text-label">Produk baru</div>
                     <div className="text-caption text-label-2">{kandidat.length ? "Bila belum ada yang sama persis" : "Belum ada produk seken yang mirip"}</div>
@@ -222,7 +222,7 @@ export const KonfirmasiTukarSheet: React.FC<{
               <label className="relative flex items-center gap-3 px-3.5 h-11">
                 <span className="text-subhead text-tint flex-1">Pilih produk seken lain…</span>
                 <ChevronRight className="w-4 h-4 text-label-3" />
-                <select value="" onChange={(e) => e.target.value && pilihProduk(e.target.value)} aria-label="Pilih produk seken lain" className="absolute inset-0 opacity-0 cursor-pointer">
+                <select value="" onChange={(e) => e.target.value && pilihProduk(e.target.value)} aria-label="Pilih produk seken lain" className="absolute inset-0 opacity-0 cursor-pointer text-[16px]">
                   <option value="">Pilih produk…</option>
                   {seken.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
@@ -252,7 +252,7 @@ export const KonfirmasiTukarSheet: React.FC<{
             </div>
             {varianList.length > 0 && (
               <select value={varian} onChange={(e) => { setVarian(e.target.value); setErr(""); }} aria-label="Varian stok"
-                className={`w-full h-12 px-3 rounded-field text-[15px] font-semibold ${varian ? "bg-fill text-label" : "bg-warning/10 text-label ring-1 ring-warning/40"}`}>
+                className={`w-full h-12 px-3 rounded-field text-[16px] sm:text-subhead font-semibold ${varian ? "bg-fill text-label" : "bg-warning/10 text-label ring-1 ring-warning/40"}`}>
                 <option value="">Pilih varian {tujuan.ref?.kategori.toLowerCase()}…</option>
                 {varianList.map((it) => <option key={it} value={it}>{it} — stok {Math.max(0, Math.round(Number(data?.[tujuan.ref!.kategori]?.[it]?.jumlah) || 0))}</option>)}
               </select>
@@ -266,7 +266,7 @@ export const KonfirmasiTukarSheet: React.FC<{
               <div className={`mt-1 flex items-center h-12 px-3.5 rounded-field bg-fill ${err && !(jual > 0) ? "ring-2 ring-negative/40" : ""}`}>
                 <span className="text-subhead font-semibold text-label-3 mr-1.5">Rp</span>
                 <input inputMode="numeric" value={jualStr} onChange={(e) => { setJualStr(ribuan(e.target.value)); setErr(""); }} placeholder="0" aria-label="Harga jual"
-                  className="flex-1 min-w-0 bg-transparent text-[17px] font-bold tabular-nums text-label focus:outline-none" />
+                  className="flex-1 min-w-0 bg-transparent text-headline font-bold tabular-nums text-label focus:outline-none" />
               </div>
               {produk && produk.price > 0 && jual !== produk.price && jual > 0 && (
                 <span className="mt-1 block text-caption text-label-2">Harga produk sekarang {rupiah(produk.price)} — ikut berubah untuk semua stok produk ini.</span>
@@ -277,7 +277,7 @@ export const KonfirmasiTukarSheet: React.FC<{
               <div className="mt-1 flex items-center h-12 px-3.5 rounded-field bg-fill">
                 <span className="text-subhead font-semibold text-label-3 mr-1.5">Rp</span>
                 <input inputMode="numeric" value={modalStr} onChange={(e) => { setModalStr(ribuan(e.target.value)); setErr(""); }} placeholder="0" aria-label="Harga modal"
-                  className="flex-1 min-w-0 bg-transparent text-[17px] font-bold tabular-nums text-label focus:outline-none" />
+                  className="flex-1 min-w-0 bg-transparent text-headline font-bold tabular-nums text-label focus:outline-none" />
               </div>
               <span className="mt-1 block text-caption text-label-2">
                 {modal === tt.nilai ? "Otomatis dari nilai tukar tambah." : `Nilai tukar tambah ${rupiah(tt.nilai)}.`}
