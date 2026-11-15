@@ -1029,6 +1029,7 @@ export default function useAppController() {
   const notaHariKerja = useNotaHariKerja(tanggal);
   const barisNotaJasa = notaHariKerja.baris;
   const notaBarangHari = notaHariKerja.barang;
+  const salesNotaHari = notaHariKerja.sales;
   const totalNotaJasa = useMemo(() => totalBaris(barisNotaJasa), [barisNotaJasa]);
   const totalJasaAksManual = useMemo(() => rowsJasaAks.reduce((s, r) => s + toInt(r.harga), 0), [rowsJasaAks]);
   const totalJasaAks = totalJasaAksManual + totalNotaJasa.total;
@@ -1107,20 +1108,25 @@ export default function useAppController() {
 
      setRowsPengeluaran(prev => {
        const manual = prev.filter(r => !r._autoOngkirKey && r.ket !== "Ongkir ");
+       const prevAuto = new Map(prev.filter(r => r._autoOngkirKey).map(r => [r._autoOngkirKey, r]));
        const result = [
          ...manual,
-         ...ongkirEntries.map(e => ({
-           ket: e.ket,
-           harga: e.harga,
-           bayar: e.bayar,
-           _autoOngkirKey: e.key,
-           _namaPengantar: e._namaPengantar,
-         }))
+         ...ongkirEntries.map(e => {
+           const old = prevAuto.get(e.key);
+           return {
+             ket: e.ket,
+             harga: e.harga,
+             bayar: e.bayar,
+             ...(e.bayar === "Transfer" && old?.buktiTransfer ? { buktiTransfer: old.buktiTransfer } : {}),
+             _autoOngkirKey: e.key,
+             _namaPengantar: e._namaPengantar,
+           };
+         })
        ];
        if (result.length === 0) result.push({ ket: "", harga: "", bayar: "" });
 
-       const prevStr = JSON.stringify(prev.map(r => ({ k: r.ket, h: r.harga, b: r.bayar, a: r._autoOngkirKey })));
-       const nextStr = JSON.stringify(result.map(r => ({ k: r.ket, h: r.harga, b: r.bayar, a: r._autoOngkirKey })));
+       const prevStr = JSON.stringify(prev.map(r => ({ k: r.ket, h: r.harga, b: r.bayar, a: r._autoOngkirKey, bt: r.buktiTransfer || "" })));
+       const nextStr = JSON.stringify(result.map(r => ({ k: r.ket, h: r.harga, b: r.bayar, a: r._autoOngkirKey, bt: (r as any).buktiTransfer || "" })));
        return prevStr === nextStr ? prev : result;
      });
   }, [rowsSewa, ongkirConfig.pegawaiPersen]);
@@ -2301,6 +2307,7 @@ export default function useAppController() {
     setRowsJasaAks,
     barisNotaJasa,
     notaBarangHari,
+    salesNotaHari,
     rowsSewa,
     setRowsSewa,
     rowsSetoran,

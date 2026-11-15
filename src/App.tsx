@@ -135,6 +135,7 @@ export default function App() {
     setRowsJasaAks,
     barisNotaJasa,
     notaBarangHari,
+    salesNotaHari,
     rowsSewa,
     setRowsSewa,
     rowsSetoran,
@@ -430,7 +431,7 @@ export default function App() {
               />
               {rincianVisibility.harian !== false && <RincianHarian rows={rowsHarian} setRows={setRowsHarian} blank={{ ...blankHarian }} hargaItems={hargaHarian} isMobileTable={isMobileTable} />}
               {rincianVisibility.jajanan !== false && <RincianJajanan rows={rowsJajanan} setRows={setRowsJajanan} blank={{ ...blankJajanan }} hargaItems={hargaJajanan} isMobileTable={isMobileTable} />}
-              {rincianVisibility.jasaAks !== false && <RincianJasaAksesoris rows={rowsJasaAks} setRows={setRowsJasaAks} blank={{ ...blankJasaAks }} hargaItems={hargaJasaAks} isMobileTable={isMobileTable} barisNota={barisNotaJasa} notaBarang={notaBarangHari} tampilNominalBarang={isSuperAdminOrOwner} />}
+              {rincianVisibility.jasaAks !== false && <RincianJasaAksesoris rows={rowsJasaAks} setRows={setRowsJasaAks} blank={{ ...blankJasaAks }} hargaItems={hargaJasaAks} isMobileTable={isMobileTable} barisNota={barisNotaJasa} notaBarang={notaBarangHari} salesNota={salesNotaHari} />}
               {rincianVisibility.sewa !== false && <RincianSewa rows={rowsSewa} setRows={setRowsSewa} blank={newBlankSewa()} hargaItems={hargaSewa} userEmail={user?.email} isMobileTable={isMobileTable} tanggal={tanggal} waTerakhir={waPenyewaTerakhir} />}
             </div>
             <div className="space-y-6">

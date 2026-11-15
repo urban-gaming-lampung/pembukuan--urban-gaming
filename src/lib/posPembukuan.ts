@@ -91,9 +91,21 @@ export function barisJasaDariNota(s: PosSale): BarisNota[] {
  * Uang barang yang disetor ke owner. `total` bisa NEGATIF pada nota tukar tambah yang nilai
  * barang masuknya lebih besar (URBAN membayar ke pembeli).
  */
-export type NotaBarang = { noNota: string; id: string; ts: number; pembeli: string; metode: PosSale["metode"]; total: number; jumlah: number; label?: "DP" | "Pelunasan" | "Tukar tambah" };
+export type NotaBarang = {
+  noNota: string;
+  id: string;
+  saleId: string;
+  ts: number;
+  pembeli: string;
+  metode: PosSale["metode"];
+  total: number;
+  jumlah: number;
+  buktiTransfer?: string;
+  label?: "DP" | "Pelunasan" | "Tukar tambah";
+};
 export function notaBarang(s: PosSale, from = 0, to = Infinity): NotaBarang[] {
   if (!s) return [];
+  const saleId = s.id || s.noNota;
   if (pernahDp(s)) {
     // Dibatalkan URBAN (DP dikembalikan) atau dibatalkan sesudah lunas (uang dikembalikan): tidak ada setoran.
     // Dibatalkan pembeli: DP hangus tetap disetor.
@@ -103,12 +115,14 @@ export function notaBarang(s: PosSale, from = 0, to = Infinity): NotaBarang[] {
       .filter(({ p }) => p.ts >= from && p.ts <= to)
       .map(({ p, i }) => ({
         noNota: s.noNota,
-        id: `${s.id || s.noNota}#${i}`,
+        id: `${saleId}#${i}`,
+        saleId,
         ts: p.ts,
         pembeli: String(s.pembeli || ""),
         metode: p.metode,
         total: Number(p.jumlah) || 0,
         jumlah: (s.items || []).reduce((a, it) => a + (Number(it.qty) || 0), 0),
+        buktiTransfer: p.metode === "TRANSFER" ? p.buktiTransfer : undefined,
         label: p.jenis === "DP" ? ("DP" as const) : ("Pelunasan" as const),
       }));
   }
@@ -119,19 +133,21 @@ export function notaBarang(s: PosSale, from = 0, to = Infinity): NotaBarang[] {
   if (!tukar && (!items.length || !items.some((it) => (Number(it.subtotal) || 0) > 0))) return [];
   return [{
     noNota: s.noNota,
-    id: s.id || s.noNota,
+    id: saleId,
+    saleId,
     ts: s.ts,
     pembeli: String(s.pembeli || ""),
     metode: s.metode,
     // Nilai barang tukar tambah memotong uang barang (jasa tetap utuh di kas harian)
     total: items.reduce((a, it) => a + (Number(it.subtotal) || 0), 0) - tukar,
     jumlah: items.reduce((a, it) => a + (Number(it.qty) || 0), 0),
+    buktiTransfer: s.metode === "TRANSFER" ? s.buktiTransfer : undefined,
     ...(tukar ? { label: "Tukar tambah" as const } : {}),
   }];
 }
 
 /** Nota POS satu hari kerja (realtime) -> baris jasa untuk rincian + pengingat nota barang. */
-export function useNotaHariKerja(tanggal: string): { baris: BarisNota[]; barang: NotaBarang[]; loading: boolean } {
+export function useNotaHariKerja(tanggal: string): { baris: BarisNota[]; barang: NotaBarang[]; sales: PosSale[]; loading: boolean } {
   const [sales, setSales] = useState<PosSale[]>([]);
   // Nota DP dari hari lain yang DILUNASI hari ini (pengingat setor pelunasan)
   const [lunas, setLunas] = useState<PosSale[]>([]);
@@ -162,15 +178,19 @@ export function useNotaHariKerja(tanggal: string): { baris: BarisNota[]; barang:
     return () => { u1(); u2(); };
   }, [from, to]);
   const baris = useMemo(() => sales.flatMap(barisJasaDariNota), [sales]);
-  const barang = useMemo(() => {
+  const semuaSales = useMemo(() => {
     const semua = new Map<string, PosSale>();
     [...sales, ...lunas].forEach((s) => semua.set(s.id || s.noNota, s));
-    return Array.from(semua.values()).flatMap((s) => notaBarang(s, from, to)).sort((a, b) => a.ts - b.ts);
-  }, [sales, lunas, from, to]);
-  return { baris, barang, loading };
+    return Array.from(semua.values());
+  }, [sales, lunas]);
+  const barang = useMemo(
+    () => semuaSales.flatMap((s) => notaBarang(s, from, to)).sort((a, b) => a.ts - b.ts),
+    [semuaSales, from, to],
+  );
+  return { baris, barang, sales: semuaSales, loading };
 }
 
-const tandaBaris = (rows: any[]) => JSON.stringify((rows || []).map((r) => [r._nota, r.tipe, toInt(r.harga), r.bayar, r.ket]));
+const tandaBaris = (rows: any[]) => JSON.stringify((rows || []).map((r) => [r._nota, r.tipe, toInt(r.harga), r.bayar, r.ket, r.buktiTransfer || ""]));
 
 /**
  * Hitung ulang rincian usaha sebuah dokumen pembukuan dengan baris nota terbaru.

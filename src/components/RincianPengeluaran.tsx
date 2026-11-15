@@ -231,6 +231,18 @@ export default function RincianPengeluaran({
                             {r.bayar || "-"}
                           </span>
                         </div>
+                        {r.bayar === "Transfer" && (
+                          <div className="mt-2.5 flex items-center justify-between gap-2 px-3 py-2 rounded-field bg-surface-2 ring-1 ring-edge">
+                            <span className="text-caption font-semibold uppercase tracking-[0.04em] text-label-2">
+                              Bukti Transfer
+                            </span>
+                            <UploadTransferProof
+                              value={r.buktiTransfer}
+                              onChange={(url) => updateRow(i, { buktiTransfer: url })}
+                              disabled={false}
+                            />
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="pt-3 border-t border-zinc-100 dark:border-white/5 space-y-2.5">
