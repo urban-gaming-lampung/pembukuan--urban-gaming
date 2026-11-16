@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import TableEditor from "./TableEditor";
+import TableEditor, { AutoFitInput, AutoFitSelect } from "./TableEditor";
 import { RowSewa } from "../lib/types";
-import { rupiah, toInt } from "../lib/format";
-import { ChevronDown, Receipt } from "lucide-react";
+import { rupiah, toInt, formatRibuanInput } from "../lib/format";
+import { Receipt } from "lucide-react";
 import { buildSewaTable } from "../lib/priceLists";
 import { dasarDariHarga, hargaDasarSewa, hargaKolomSewa } from "../lib/sewa";
 import { formatWa, rapikanWa, waValid } from "../lib/wa";
@@ -25,13 +25,6 @@ function pickKey(row: any, candidates: string[]) {
   return null;
 }
 
-
-const SelectWrapper = ({ children }: { children: React.ReactNode }) => (
-  <div className="relative w-full">
-    {children}
-    <ChevronDown className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-label-3 pointer-events-none" />
-  </div>
-);
 
 const RincianSewa: React.FC<{
   rows: RowSewa[];
@@ -107,14 +100,14 @@ const RincianSewa: React.FC<{
     <>
     <TableEditor<RowSewa>
       title="4. Rincian Pemasukan SEWA PS"
-      columns={["No.", "Jenis Sewa", "Lama Sewa", "Jam Sewa", "Nama Penyewa", "No. WA Penyewa", "Apakah sudah dibayar?", "Harga (Rp)", "Apakah di antar?", "Siapa Yang antar?", "Cash", "Transfer"]}
+      columns={["No.", "Jenis Sewa", "Lama Sewa", "Jam Sewa", "Nama Penyewa", "No. WA Penyewa", "Sudah Bayar?", "Harga (Rp)", "Apakah di antar?", "Siapa Yang antar?", "Cash", "Transfer"]}
       rows={rows}
       setRows={setRows}
       blank={blank}
       minRows={5}
       onClear={() => { }}
       getHarga={(r) => toInt(String((r as any).harga))}
-      renderCell={({ keyName, value, row, rowIndex, inputBase, onKeyNav, updateRow }) => {
+      renderCell={({ keyName, value, row, rowIndex, isMobile, onKeyNav, updateRow }) => {
         const jenisKey = pickKey(row, ["jenis sewa", "jenissewa", "jenis ps", "jenisps", "jenis", "ps"]);
         const lamaKey = pickKey(row, ["lama sewa", "lamasewa", "lama", "durasi", "waktu"]);
         const isHanyaOngkir = String(jenisKey ? (row as any)[jenisKey] : "") === "Hanya Ongkir";
@@ -124,99 +117,102 @@ const RincianSewa: React.FC<{
 
         if (jenisKey && keyName === jenisKey) {
           return (
-            <SelectWrapper>
-              <select
-                data-fieldid={`sewa-${rowIndex}-jenis`}
-                className={`${inputBase} appearance-none pr-8 cursor-pointer font-medium`}
-                value={String(value || "")}
-                onKeyDown={onKeyNav}
-                onChange={(e) => {
-                  const nextJenis = e.target.value;
-                  const patch: any = { [jenisKey]: nextJenis };
-                  const nextAddonPrice = table["-"]?.[nextJenis];
-                  if (typeof nextAddonPrice === "number") {
-                    patch.lamaSewa = "-";
-                    patch.jamMasukSewa = "-";
-                    patch.isOngkir = "TIDAK";
-                    patch._ongkir = "";
-                    patch._bayarOngkir = "";
-                    if ((row as any).jenisPS === "Hanya Ongkir") { patch.ket = ""; patch.isPaid = ""; }
-                    patch.harga = (row as any).isPaid === "TIDAK" ? 0 : nextAddonPrice;
-                  } else if (nextJenis === "Hanya Ongkir") {
-                    patch.lamaSewa = "-";
-                    patch.jamMasukSewa = "-";
-                    patch.ket = "Hanya Ongkir";
-                    patch.isPaid = "YA";
-                    patch.isOngkir = "YA";
-                    patch.harga = toInt((row as any)._ongkir || 0);
-                  } else if ((row as any).jenisPS === "Hanya Ongkir" || (row as any)[jenisKey] === "Hanya Ongkir") {
+            <AutoFitSelect
+              isMobile={isMobile}
+              data-fieldid={`sewa-${rowIndex}-jenis`}
+              className="font-medium"
+              value={String(value || "")}
+              onKeyDown={onKeyNav}
+              onChange={(e) => {
+                const nextJenis = e.target.value;
+                const patch: any = { [jenisKey]: nextJenis };
+                const nextAddonPrice = table["-"]?.[nextJenis];
+                if (typeof nextAddonPrice === "number") {
+                  patch.lamaSewa = "-";
+                  patch.jamMasukSewa = "-";
+                  patch.isOngkir = "TIDAK";
+                  patch._ongkir = "";
+                  patch._bayarOngkir = "";
+                  if ((row as any).jenisPS === "Hanya Ongkir") { patch.ket = ""; patch.isPaid = ""; }
+                  patch.harga = (row as any).isPaid === "TIDAK" ? 0 : nextAddonPrice;
+                } else if (nextJenis === "Hanya Ongkir") {
+                  patch.lamaSewa = "-";
+                  patch.jamMasukSewa = "-";
+                  patch.ket = "Hanya Ongkir";
+                  patch.isPaid = "YA";
+                  patch.isOngkir = "YA";
+                  patch.harga = toInt((row as any)._ongkir || 0);
+                } else if ((row as any).jenisPS === "Hanya Ongkir" || (row as any)[jenisKey] === "Hanya Ongkir") {
+                  patch.lamaSewa = "";
+                  patch.jamMasukSewa = "";
+                  patch.ket = "";
+                  patch.isPaid = "";
+                  patch.isOngkir = "TIDAK";
+                  patch._ongkir = "";
+                  patch._bayarOngkir = "";
+                  patch.harga = 0;
+                } else {
+                  if (isAddon) {
+                    // keluar dari item tambahan: kosongkan lama & jam supaya wajib diisi lagi
                     patch.lamaSewa = "";
                     patch.jamMasukSewa = "";
-                    patch.ket = "";
-                    patch.isPaid = "";
-                    patch.isOngkir = "TIDAK";
-                    patch._ongkir = "";
-                    patch._bayarOngkir = "";
-                    patch.harga = 0;
-                  } else {
-                    if (isAddon) {
-                      // keluar dari item tambahan: kosongkan lama & jam supaya wajib diisi lagi
-                      patch.lamaSewa = "";
-                      patch.jamMasukSewa = "";
-                    }
-                    patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable);
                   }
+                  patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable);
+                }
 
-                  patch._addedBy = (row as any)._addedBy || userEmail;
-                  updateRow(rowIndex, patch);
-                }}
-              >
-                <option value="" className="bg-surface text-label">Pilih Jenis Sewa...</option>
-                {jenisOptions.length > 0 ? (
-                  jenisOptions.map((m) => (
-                    <option key={m} value={m} className="bg-surface text-label">
-                      {m}
-                    </option>
-                  ))
-                ) : (
-                  <option disabled className="bg-surface text-label-3">List Kosong</option>
-                )}
-              </select>
-            </SelectWrapper>
+                patch._addedBy = (row as any)._addedBy || userEmail;
+                updateRow(rowIndex, patch);
+              }}
+            >
+              <option value="" className="bg-surface text-label">Pilih jenis...</option>
+              {jenisOptions.length > 0 ? (
+                jenisOptions.map((m) => (
+                  <option key={m} value={m} className="bg-surface text-label">
+                    {m}
+                  </option>
+                ))
+              ) : (
+                <option disabled className="bg-surface text-label-3">List Kosong</option>
+              )}
+            </AutoFitSelect>
           );
         }
 
         if (lamaKey && keyName === lamaKey) {
           if (isNoDuration) {
             return (
-              <div className="min-w-[100px]">
-                <input
-                  disabled
-                  className={`${inputBase} bg-fill text-label-3 cursor-not-allowed border-dashed text-center font-bold`}
-                  value="-"
-                  readOnly
-                />
-              </div>
+              <AutoFitInput
+                isMobile={isMobile}
+                disabled
+                className="bg-fill text-label-3 cursor-not-allowed border-dashed text-center font-bold"
+                value="-"
+                readOnly
+              />
             );
           }
 
           if (row.lamaSewa === "Isi Sendiri") {
             return (
-              <div className="flex items-center gap-1.5 min-w-[120px]">
-                <input
-                  type="number" inputMode="numeric" pattern="[0-9]*"
+              <div className="flex items-center gap-1.5">
+                <AutoFitInput
+                  isMobile={false}
+                  type="number"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   min="0"
-                  className={`${inputBase} w-16 text-center pl-1 pr-1 font-bold text-tint`}
+                  minSample="00"
+                  className="text-center pl-2 pr-2 font-bold text-tint"
+                  containerClassName="!min-w-0 shrink-0"
                   value={(row as any)._customDurasi || ""}
                   placeholder="0"
                   onChange={(e) => updateRow(rowIndex, { _customDurasi: e.target.value, _addedBy: (row as any)._addedBy || userEmail } as any)}
                   onKeyDown={onKeyNav}
                 />
-                <span className="text-footnote font-bold text-label-2 uppercase tracking-wide">Jam</span>
+                <span className="text-footnote font-bold text-label-2 uppercase tracking-wide shrink-0">Jam</span>
                 <button
                   type="button"
                   onClick={() => updateRow(rowIndex, { [lamaKey]: "", _customDurasi: "", _customBase: "" } as any)}
-                  className="ml-auto min-w-[32px] min-h-[32px] p-1.5 rounded-full hover:bg-fill text-label-3 hover:text-negative transition-colors flex items-center justify-center"
+                  className="ml-auto min-w-[32px] min-h-[32px] p-1.5 rounded-full hover:bg-fill text-label-3 hover:text-negative transition-colors flex items-center justify-center shrink-0"
                   title="Batal Isi Sendiri"
                 >
                   <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -226,109 +222,107 @@ const RincianSewa: React.FC<{
           }
 
           return (
-            <SelectWrapper>
-              <select
-                data-fieldid={`sewa-${rowIndex}-lamaSewa`}
-                className={`${inputBase} appearance-none pr-8 cursor-pointer`}
-                value={String(value || "")}
-                onKeyDown={onKeyNav}
-                onChange={(e) => {
-                  const nextLama = e.target.value;
-                  const patch: any = { [lamaKey]: nextLama };
-                  patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable);
-                  patch._addedBy = (row as any)._addedBy || userEmail;
-                  updateRow(rowIndex, patch);
-                }}
-              >
-                <option value="" className="bg-surface text-label">Pilih durasi...</option>
-                {lamaOptions.length > 0 ? (
-                  lamaOptions.map((m) => (
-                    <option key={m} value={m} className="bg-surface text-label">
-                      {m}
-                    </option>
-                  ))
-                ) : (
-                  <option disabled className="bg-surface text-label-3">List Kosong</option>
-                )}
-                <option value="Isi Sendiri" className="bg-surface text-label">Isi Sendiri</option>
-                {row.lamaSewa === "PELUNASAN" && (
-                  <option value="PELUNASAN" className="bg-surface text-positive font-bold">
-                    PELUNASAN
+            <AutoFitSelect
+              isMobile={isMobile}
+              data-fieldid={`sewa-${rowIndex}-lamaSewa`}
+              value={String(value || "")}
+              onKeyDown={onKeyNav}
+              onChange={(e) => {
+                const nextLama = e.target.value;
+                const patch: any = { [lamaKey]: nextLama };
+                patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable);
+                patch._addedBy = (row as any)._addedBy || userEmail;
+                updateRow(rowIndex, patch);
+              }}
+            >
+              <option value="" className="bg-surface text-label">Pilih durasi...</option>
+              {lamaOptions.length > 0 ? (
+                lamaOptions.map((m) => (
+                  <option key={m} value={m} className="bg-surface text-label">
+                    {m}
                   </option>
-                )}
-              </select>
-            </SelectWrapper>
+                ))
+              ) : (
+                <option disabled className="bg-surface text-label-3">List Kosong</option>
+              )}
+              <option value="Isi Sendiri" className="bg-surface text-label">Isi Sendiri</option>
+              {row.lamaSewa === "PELUNASAN" && (
+                <option value="PELUNASAN" className="bg-surface text-positive font-bold">
+                  PELUNASAN
+                </option>
+              )}
+            </AutoFitSelect>
           );
         }
 
         if (keyName === "jamMasukSewa") {
           if (isNoDuration) {
             return (
-              <div className="min-w-[110px]">
-                <input
-                  disabled
-                  className={`${inputBase} w-full text-center bg-fill text-label-3 cursor-not-allowed border-dashed font-bold`}
-                  value="-"
-                  readOnly
-                />
-              </div>
+              <AutoFitInput
+                isMobile={isMobile}
+                disabled
+                className="text-center bg-fill text-label-3 cursor-not-allowed border-dashed font-bold"
+                value="-"
+                readOnly
+              />
             );
           }
           const isPelunasan = row.lamaSewa === "PELUNASAN";
           return (
-            <div className="min-w-[110px]">
-              <input
-                type={isPelunasan ? "text" : "time"}
-                className={`${inputBase} w-full text-center tracking-wider ${isPelunasan ? "bg-fill text-label-3 cursor-not-allowed border-dashed" : "bg-transparent focus:bg-surface-2"}`}
-                value={isPelunasan ? "-" : ((row as any).jamMasukSewa || "")}
-                disabled={isPelunasan}
-                onChange={(e) => {
-                  if(!isPelunasan) updateRow(rowIndex, { jamMasukSewa: e.target.value, _addedBy: (row as any)._addedBy || userEmail } as any);
-                }}
-                onKeyDown={onKeyNav}
-              />
-            </div>
+            <AutoFitInput
+              isMobile={isMobile}
+              type={isPelunasan ? "text" : "time"}
+              className={`text-center tracking-wider ${isPelunasan ? "bg-fill text-label-3 cursor-not-allowed border-dashed font-bold" : "font-mono"}`}
+              value={isPelunasan ? "-" : ((row as any).jamMasukSewa || "")}
+              disabled={isPelunasan}
+              onChange={(e) => {
+                if (!isPelunasan) updateRow(rowIndex, { jamMasukSewa: e.target.value, _addedBy: (row as any)._addedBy || userEmail } as any);
+              }}
+              onKeyDown={onKeyNav}
+            />
           );
         }
 
         if (keyName === "ket") {
           if (isHanyaOngkir) {
             return (
-              <div className="min-w-[140px]">
-                <input
-                  disabled
-                  className={`${inputBase} bg-fill text-label-3 cursor-not-allowed border-dashed text-center font-medium`}
-                  value="Hanya Ongkir"
-                  readOnly
-                />
-              </div>
+              <AutoFitInput
+                isMobile={isMobile}
+                disabled
+                className="bg-fill text-label-3 cursor-not-allowed border-dashed text-center font-medium"
+                value="Hanya Ongkir"
+                readOnly
+              />
             );
           }
           return (
-            <div className="min-w-[140px]">
-              <input
-                data-fieldid={`table-sewa-${rowIndex}-ket`}
-                className={inputBase}
-                value={(row as any).ket || ""}
-                onChange={(e) =>
-                  updateRow(rowIndex, {
-                    ket: e.target.value,
-                    _addedBy: (row as any)._addedBy || userEmail
-                  } as any)
-                }
-                onKeyDown={onKeyNav}
-                placeholder="Nama Penyewa (Wajib)"
-              />
-            </div>
+            <AutoFitInput
+              isMobile={isMobile}
+              data-fieldid={`table-sewa-${rowIndex}-ket`}
+              minSample="Nama"
+              value={(row as any).ket || ""}
+              onChange={(e) =>
+                updateRow(rowIndex, {
+                  ket: e.target.value,
+                  _addedBy: (row as any)._addedBy || userEmail
+                } as any)
+              }
+              onKeyDown={onKeyNav}
+              placeholder="Nama penyewa"
+            />
           );
         }
 
         if (keyName === "waPenyewa") {
           if (isHanyaOngkir) {
             return (
-              <div className="min-w-[150px]">
-                <input disabled readOnly value="-" className={`${inputBase} bg-fill text-label-3 cursor-not-allowed border-dashed text-center font-bold`} />
-              </div>
+              <AutoFitInput
+                isMobile={isMobile}
+                disabled
+                readOnly
+                value="-"
+                className="bg-fill text-label-3 cursor-not-allowed border-dashed text-center font-bold"
+              />
             );
           }
           const v = String(value || "");
@@ -337,31 +331,32 @@ const RincianSewa: React.FC<{
           const salah = aktif && (v ? !waValid(v) : wajib);
           const saran = !v && (row as any).ket ? waTerakhir[kunciNama((row as any).ket)] : "";
           return (
-            <div className="min-w-[150px]">
-              <input
+            <div>
+              <AutoFitInput
+                isMobile={isMobile}
                 data-fieldid={`table-sewa-${rowIndex}-wa`}
                 type="tel"
                 inputMode="tel"
                 autoComplete="off"
-                className={`${inputBase} font-mono tracking-wide ${salah ? "!border-negative/50 bg-negative/10 focus:!ring-negative/30" : ""}`}
+                className={`font-mono tracking-wide ${salah ? "!border-negative/50 bg-negative/10 focus:!ring-negative/30" : ""}`}
                 value={v}
                 onChange={(e) =>
                   updateRow(rowIndex, { waPenyewa: e.target.value.replace(/[^\d+\s-]/g, ""), _addedBy: (row as any)._addedBy || userEmail } as any)
                 }
                 onBlur={() => { if (v && rapikanWa(v) !== v) updateRow(rowIndex, { waPenyewa: rapikanWa(v) } as any); }}
                 onKeyDown={onKeyNav}
-                placeholder={wajib ? "08xx (wajib)" : "08xx (opsional)"}
+                placeholder={wajib ? "08xx (wajib)" : "08xx"}
               />
               {saran && (
                 <button
                   type="button"
                   onClick={() => updateRow(rowIndex, { waPenyewa: saran, _addedBy: (row as any)._addedBy || userEmail } as any)}
-                  className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-tint/10 text-tint text-caption2 font-semibold active:scale-95 transition"
+                  className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-tint/10 text-tint text-caption2 font-semibold whitespace-nowrap active:scale-95 transition"
                 >
                   Pakai {formatWa(saran)} · sewa terakhir
                 </button>
               )}
-              {v && !waValid(v) && <div className="mt-1 text-caption2 font-semibold text-negative">Format 08xx, 10–13 angka</div>}
+              {v && !waValid(v) && <div className="mt-1 text-caption2 font-semibold text-negative whitespace-nowrap">Format 08xx, 10–13 angka</div>}
             </div>
           );
         }
@@ -369,58 +364,54 @@ const RincianSewa: React.FC<{
         if (keyName === "isPaid") {
           if (isHanyaOngkir) {
             return (
-              <div className="min-w-[80px]">
-                <input
-                  disabled
-                  className={`${inputBase} bg-fill text-positive font-bold cursor-not-allowed border-dashed text-center`}
-                  value="YA"
-                  readOnly
-                />
-              </div>
+              <AutoFitInput
+                isMobile={isMobile}
+                disabled
+                className="bg-fill text-positive font-bold cursor-not-allowed border-dashed text-center"
+                value="YA"
+                readOnly
+              />
             );
           }
           return (
-            <SelectWrapper>
-              <select
-                data-fieldid={`sewa-${rowIndex}-isPaid`}
-                className={`${inputBase} appearance-none pr-8 cursor-pointer ${(row as any).isPaid === "TIDAK" ? "text-negative font-bold" : (row as any).isPaid === "YA" ? "text-positive font-bold" : ""
-                  }`}
-                value={String(value || "")}
-                onKeyDown={onKeyNav}
-                onChange={(e) => {
-                  const nextVal = e.target.value;
-                  const patch: any = { isPaid: nextVal };
-                  if (nextVal === "TIDAK") patch.bayar = "";
-                  patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable);
+            <AutoFitSelect
+              isMobile={isMobile}
+              data-fieldid={`sewa-${rowIndex}-isPaid`}
+              className={(row as any).isPaid === "TIDAK" ? "text-negative font-bold" : (row as any).isPaid === "YA" ? "text-positive font-bold" : ""}
+              value={String(value || "")}
+              onKeyDown={onKeyNav}
+              onChange={(e) => {
+                const nextVal = e.target.value;
+                const patch: any = { isPaid: nextVal };
+                if (nextVal === "TIDAK") patch.bayar = "";
+                patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable);
 
-                  patch._addedBy = (row as any)._addedBy || userEmail;
-                  updateRow(rowIndex, patch);
-                }}
-              >
-                <option value="" className="bg-surface text-label">Pilih...</option>
-                <option value="YA" className="bg-surface text-label">YA</option>
-                <option value="TIDAK" className="bg-surface text-label">TIDAK</option>
-              </select>
-            </SelectWrapper>
+                patch._addedBy = (row as any)._addedBy || userEmail;
+                updateRow(rowIndex, patch);
+              }}
+            >
+              <option value="" className="bg-surface text-label">Pilih...</option>
+              <option value="YA" className="bg-surface text-label">YA</option>
+              <option value="TIDAK" className="bg-surface text-label">TIDAK</option>
+            </AutoFitSelect>
           );
         }
 
         if (keyName === "isOngkir") {
           if (isAddon) {
             return (
-              <div className="min-w-[120px]">
-                <input
-                  disabled
-                  className={`${inputBase} bg-fill text-label-3 cursor-not-allowed border-dashed text-center font-bold`}
-                  value="-"
-                  readOnly
-                />
-              </div>
+              <AutoFitInput
+                isMobile={isMobile}
+                disabled
+                className="bg-fill text-label-3 cursor-not-allowed border-dashed text-center font-bold"
+                value="-"
+                readOnly
+              />
             );
           }
           return (
-            <div className="flex flex-wrap items-center gap-2 min-w-[120px]">
-              <div className="flex items-center gap-1 bg-fill p-1 rounded-control shrink-0">
+            <div className={isMobile ? "flex flex-wrap items-center gap-2" : "inline-flex items-center gap-2 whitespace-nowrap"}>
+              <div className="flex items-center gap-1 apple-segmented p-1 rounded-full shrink-0">
                 <button
                   type="button"
                   disabled={isHanyaOngkir}
@@ -431,9 +422,9 @@ const RincianSewa: React.FC<{
                     patch._addedBy = (row as any)._addedBy || userEmail;
                     updateRow(rowIndex, patch);
                   }}
-                  className={`flex items-center justify-center min-h-[32px] px-3.5 py-1 rounded-icon transition-all duration-200 ${(row as any).isOngkir === "YA"
+                  className={`flex items-center justify-center min-h-[32px] px-3 py-1 rounded-full transition-all duration-200 ${(row as any).isOngkir === "YA"
                     ? isHanyaOngkir
-                      ? "bg-positive/70 text-white cursor-not-allowed shadow-none"
+                      ? "bg-positive/75 text-white cursor-not-allowed shadow-none"
                       : "bg-positive text-white shadow-sm"
                     : "hover:bg-surface/60 text-label-2 font-medium"
                     }`}
@@ -450,7 +441,7 @@ const RincianSewa: React.FC<{
                     patch._addedBy = (row as any)._addedBy || userEmail;
                     updateRow(rowIndex, patch);
                   }}
-                  className={`flex items-center justify-center min-h-[32px] px-3 py-1 rounded-icon transition-all duration-200 ${
+                  className={`flex items-center justify-center min-h-[32px] px-3 py-1 rounded-full transition-all duration-200 ${
                     isHanyaOngkir
                       ? "opacity-30 cursor-not-allowed text-label-3"
                       : (row as any).isOngkir === "TIDAK"
@@ -462,28 +453,30 @@ const RincianSewa: React.FC<{
                 </button>
               </div>
               {((value === "YA" || isHanyaOngkir) && (row as any).isPaid !== "TIDAK") && (
-                <div className="flex items-center gap-1.5 ml-1 animate-in slide-in-from-left-2 fade-in duration-200">
-                  <div className="relative">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-caption2 text-label-3 font-bold pointer-events-none">
-                      Rp
-                    </span>
-                    <input
-                      data-fieldid={`sewa-${rowIndex}-ongkir`}
-                      inputMode="numeric"
-                      className={`${inputBase} pl-7 font-mono font-medium text-[16px] sm:text-footnote w-[112px] transition-all`}
-                      value={(row as any)._ongkir || ""}
-                      onChange={(e) => {
-                        const val = toInt(e.target.value);
-                        const patch: any = { _ongkir: val };
-                        patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable, dasarDariHarga(row));
-                        patch._addedBy = (row as any)._addedBy || userEmail;
-                        updateRow(rowIndex, patch);
-                      }}
-                      onKeyDown={onKeyNav}
-                      placeholder="Ongkir"
-                    />
-                  </div>
-                  <div className="flex items-center gap-1 bg-fill p-1 rounded-control shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <AutoFitInput
+                    isMobile={false}
+                    prefixText="Rp"
+                    prefixOffsetClass="left-2"
+                    minSample="00.000"
+                    containerClassName="!min-w-0 shrink-0"
+                    data-fieldid={`sewa-${rowIndex}-ongkir`}
+                    type="text"
+                    inputMode="numeric"
+                    className="pl-7 pr-2.5 font-mono font-medium text-[16px] sm:text-footnote"
+                    value={formatRibuanInput((row as any)._ongkir)}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/\D/g, "");
+                      const val = raw === "" ? "" : toInt(raw);
+                      const patch: any = { _ongkir: val };
+                      patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable, dasarDariHarga(row));
+                      patch._addedBy = (row as any)._addedBy || userEmail;
+                      updateRow(rowIndex, patch);
+                    }}
+                    onKeyDown={onKeyNav}
+                    placeholder="0"
+                  />
+                  <div className="flex items-center gap-1 apple-segmented p-1 rounded-full shrink-0">
                     <button
                       type="button"
                       onClick={() => {
@@ -496,7 +489,7 @@ const RincianSewa: React.FC<{
                         patch._addedBy = (row as any)._addedBy || userEmail;
                         updateRow(rowIndex, patch);
                       }}
-                      className={`flex items-center justify-center min-h-[32px] px-2 py-1 rounded-icon transition-all duration-200 ${(row as any)._bayarOngkir === "Cash"
+                      className={`flex items-center justify-center min-h-[32px] px-2.5 py-1 rounded-full transition-all duration-200 ${(row as any)._bayarOngkir === "Cash"
                         ? "bg-positive text-white shadow-sm"
                         : "hover:bg-surface/60 text-label-2"
                         }`}
@@ -516,7 +509,7 @@ const RincianSewa: React.FC<{
                         patch._addedBy = (row as any)._addedBy || userEmail;
                         updateRow(rowIndex, patch);
                       }}
-                      className={`flex items-center justify-center min-h-[32px] px-2 py-1 rounded-icon transition-all duration-200 ${(row as any)._bayarOngkir === "Transfer"
+                      className={`flex items-center justify-center min-h-[32px] px-2.5 py-1 rounded-full transition-all duration-200 ${(row as any)._bayarOngkir === "Transfer"
                         ? "bg-tint text-white shadow-sm"
                         : "hover:bg-surface/60 text-label-2"
                         }`}
@@ -535,26 +528,24 @@ const RincianSewa: React.FC<{
         if (keyName === "diantarOleh") {
           const isOngkirTidak = (row as any).isOngkir === "TIDAK" && !isHanyaOngkir;
           return (
-            <SelectWrapper>
-              <select
-                data-fieldid={`table-sewa-${rowIndex}-diantarOleh`}
-                className={`${inputBase} appearance-none pr-8 cursor-pointer ${isOngkirTidak ? "bg-fill text-label-3 cursor-not-allowed opacity-60" : ""
-                  }`}
-                value={(row as any).diantarOleh || ""}
-                disabled={isOngkirTidak}
-                onChange={(e) =>
-                  updateRow(rowIndex, {
-                    diantarOleh: e.target.value,
-                    _addedBy: (row as any)._addedBy || userEmail
-                  } as any)
-                }
-              >
-                <option value="" className="bg-surface text-label">-- Pilih --</option>
-                {allUsers.map((u, i) => (
-                  <option key={i} value={u.id} className="bg-surface text-label">{u.id.split("@")[0]}</option>
-                ))}
-              </select>
-            </SelectWrapper>
+            <AutoFitSelect
+              isMobile={isMobile}
+              data-fieldid={`table-sewa-${rowIndex}-diantarOleh`}
+              className={isOngkirTidak ? "bg-fill text-label-3 cursor-not-allowed opacity-60" : ""}
+              value={(row as any).diantarOleh || ""}
+              disabled={isOngkirTidak}
+              onChange={(e) =>
+                updateRow(rowIndex, {
+                  diantarOleh: e.target.value,
+                  _addedBy: (row as any)._addedBy || userEmail
+                } as any)
+              }
+            >
+              <option value="" className="bg-surface text-label">Pilih...</option>
+              {allUsers.map((u, i) => (
+                <option key={i} value={u.id} className="bg-surface text-label">{u.id.split("@")[0]}</option>
+              ))}
+            </AutoFitSelect>
           );
         }
 
@@ -564,7 +555,7 @@ const RincianSewa: React.FC<{
 
           if (isHanyaOngkir) {
             return (
-              <div className="relative px-2.5 py-1.5 min-w-[120px] bg-fill rounded-control border border-dashed border-sep">
+              <div className="relative px-2.5 py-1.5 whitespace-nowrap bg-fill rounded-control border border-dashed border-sep text-center">
                 <span className="font-bold tabular-nums text-label-2">
                   {currentTotal > 0 ? rupiah(currentTotal) : "-"}
                 </span>
@@ -574,26 +565,29 @@ const RincianSewa: React.FC<{
 
           if (isCustom) {
             return (
-              <div className="flex flex-col gap-1 min-w-[140px]">
-                <div className="relative">
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-caption text-label-3 font-medium pointer-events-none">Rp</span>
-                  <input
-                    data-fieldid={`sewa-${rowIndex}-customBase`}
-                    type="number" inputMode="numeric" pattern="[0-9]*"
-                    className={`${inputBase} pl-8 font-mono font-bold text-tint`}
-                    value={(row as any)._customBase || ""}
-                    placeholder="Hrg Dasar"
-                    onChange={(e) => {
-                      const patch: any = { _customBase: toInt(e.target.value) };
-                      patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable);
-                      patch._addedBy = (row as any)._addedBy || userEmail;
-                      updateRow(rowIndex, patch);
-                    }}
-                    onKeyDown={onKeyNav}
-                  />
-                </div>
+              <div className="flex flex-col gap-1">
+                <AutoFitInput
+                  isMobile={isMobile}
+                  prefixText="Rp"
+                  prefixOffsetClass="left-2.5"
+                  minSample="00.000"
+                  data-fieldid={`sewa-${rowIndex}-customBase`}
+                  type="text"
+                  inputMode="numeric"
+                  className="pl-8 font-mono font-bold text-tint"
+                  value={formatRibuanInput((row as any)._customBase)}
+                  placeholder="Hrg Dasar"
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, "");
+                    const patch: any = { _customBase: raw === "" ? "" : toInt(raw) };
+                    patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable);
+                    patch._addedBy = (row as any)._addedBy || userEmail;
+                    updateRow(rowIndex, patch);
+                  }}
+                  onKeyDown={onKeyNav}
+                />
                 {row.isOngkir === "YA" && (
-                  <div className="text-caption2 text-label-2 font-bold ml-1 tabular-nums">Total: {rupiah(currentTotal)}</div>
+                  <div className="text-caption2 text-label-2 font-bold ml-1 tabular-nums whitespace-nowrap">Total: {rupiah(currentTotal)}</div>
                 )}
               </div>
             );
@@ -601,7 +595,7 @@ const RincianSewa: React.FC<{
 
           // Kunci Readonly Permanen
           return (
-            <div className="relative px-2 py-1.5 min-w-[120px]">
+            <div className="relative px-2 py-1.5 whitespace-nowrap">
               <span className="font-bold tabular-nums text-label">
                 {currentTotal > 0 ? rupiah(currentTotal) : "-"}
               </span>

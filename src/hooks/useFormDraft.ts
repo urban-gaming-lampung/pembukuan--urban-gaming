@@ -6,13 +6,20 @@ export function useFormDraft(
   currentSignature: string,
   onIncomingUpdate: (data: any) => void,
   activeTab: string,
-  isEditing: boolean
+  isEditing: boolean,
+  enabled = true
 ) {
   const skipNextWrite = useRef(false);
   const [hasHydrated, setHasHydrated] = useState(false);
 
+  // Reset hidrasi ketika sesi auth logout / ganti akun
+  useEffect(() => {
+    if (!enabled) setHasHydrated(false);
+  }, [enabled]);
+
   // 1. Tulis ke Firestore saat ada perubahan lokal dari admin
   useEffect(() => {
+    if (!enabled) return;
     if (activeTab !== "USAHA RENTAL") return; // Hanya jalankan draft untuk Usaha Rental
     if (!hasHydrated) return; // FIX: Jangan timpa DB sebelum mendapatkan state awal dari server
     if (isEditing) return; // FIX: Jangan ubah draft global jika sedang melihat/edit history
@@ -29,10 +36,11 @@ export function useFormDraft(
     } catch (e) {
       console.error("Gagal menyimpan draft", e);
     }
-  }, [currentSignature, activeTab, hasHydrated, isEditing]);
+  }, [enabled, currentSignature, activeTab, hasHydrated, isEditing]);
 
   // 2. Dengarkan perubahan dari admin lain secara realtime
   useEffect(() => {
+    if (!enabled) return;
     const unsub = onSnapshot(doc(db, "data", "draft"), (snap) => {
       // Saat pertama kali komponen load, ambil data DB
       if (!hasHydrated) {
@@ -51,8 +59,10 @@ export function useFormDraft(
         skipNextWrite.current = true;
         onIncomingUpdate(snap.data());
       }
+    }, (err) => {
+      console.error("Firestore onSnapshot error (draft):", err);
     });
 
     return () => unsub();
-  }, [hasHydrated, onIncomingUpdate, isEditing]);
+  }, [enabled, hasHydrated, onIncomingUpdate, isEditing]);
 }

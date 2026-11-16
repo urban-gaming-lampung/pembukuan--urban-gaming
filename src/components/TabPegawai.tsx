@@ -10,7 +10,7 @@ import UserAvatar from "./common/UserAvatar";
 import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, getTodayYmd, BULAN_NAMES, normalizeBulanTahun, normalizeDateStr } from "../lib/absenPeriod";
 import { isUrbanUserDocId } from "../lib/urbanUsers";
 import { tanggalHariKerja, toLocalYmd } from "../lib/dateLocal";
-import { rpShort, rupiah, toInt } from "../lib/format";
+import { rpShort, rupiah, toInt, formatRibuanInput } from "../lib/format";
 import { Amount, Button, Card, EmptyState, Eyebrow, Footnote, IconBadge, kartu, LineItem, LineList, ListGroup, Notice, Pill, SectionHeader, SubTabs, TileValue } from "../ui";
 import { ongkirPengantarTersimpan } from "../lib/sewa";
 
@@ -1845,7 +1845,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                    <div className="flex justify-between items-end gap-3 w-full">
                                       <div className="flex-1">
                                         <label className="mb-1.5 block text-footnote font-medium text-label-2">Bulan & Tahun</label>
-                                        <input type="text" value={r.bulanTahun} onChange={e => handleUpdateRecord(r.id, { bulanTahun: e.target.value })} placeholder="MM/YY" className="w-full bg-surface rounded-control px-3 py-2 text-[16px] border-0 font-bold text-tint outline-none focus:ring-2 focus:ring-tint/40" />
+                                        <input type="text" value={r.bulanTahun} onChange={e => handleUpdateRecord(r.id, { bulanTahun: e.target.value })} placeholder="MM/YY" className="w-full h-11 bg-surface rounded-control px-3 py-0 text-[16px] border-0 font-bold text-tint outline-none focus:ring-2 focus:ring-tint/40" />
                                       </div>
                                       <button type="button" onClick={() => handleDeleteRecord(r.id)} className="h-11 w-11 flex items-center justify-center shrink-0 bg-negative/10 text-negative rounded-full hover:bg-negative/20 transition-colors" title="Hapus Gaji Ini" aria-label="Hapus gaji ini">
                                          <Trash2 size={16} />
@@ -1854,7 +1854,17 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
 
                                    <div>
                                       <label className="mb-1.5 block text-footnote font-medium text-label-2">Gaji Pokok</label>
-                                      <input type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={r.gajiPokok} onChange={e => handleUpdateRecord(r.id, { gajiPokok: e.target.value })} className="w-full bg-surface rounded-control px-3 py-2 text-[16px] border-0 font-bold text-label outline-none focus:ring-2 focus:ring-positive/40" />
+                                      <div className="relative">
+                                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-subhead font-semibold text-label-3">Rp</span>
+                                        <input
+                                          type="text"
+                                          inputMode="numeric"
+                                          value={r.gajiPokok === "" || r.gajiPokok === undefined || r.gajiPokok === null ? "" : formatRibuanInput(r.gajiPokok, { allowZero: true })}
+                                          onChange={e => handleUpdateRecord(r.id, { gajiPokok: e.target.value.replace(/\D/g, "") })}
+                                          placeholder="0"
+                                          className="w-full h-11 bg-surface rounded-control pl-10 pr-3 py-0 text-[16px] border-0 font-bold tabular-nums text-label outline-none focus:ring-2 focus:ring-positive/40"
+                                        />
+                                      </div>
                                    </div>
 
                                    <div className="w-full space-y-2">
@@ -1870,16 +1880,26 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                        {(r.gajiTambahan || []).map((tb: any, i: number) => (
                                           <div key={tb.id || i} className="flex flex-col gap-2 w-full bg-canvas/70 p-2.5 rounded-field border border-sep">
                                               <div className="flex gap-2 items-center w-full">
-                                                  <input type="number" inputMode="numeric" pattern="[0-9]*" min="0" value={tb.nominal} onChange={e => {
-                                                      const newTb = [...r.gajiTambahan];
-                                                      newTb[i] = { ...newTb[i], nominal: e.target.value };
-                                                      handleUpdateRecord(r.id, { gajiTambahan: newTb });
-                                                  }} className="w-28 shrink-0 bg-surface rounded-control px-3 py-2 text-[16px] border-0 font-bold text-positive outline-none" placeholder="Nominal" />
+                                                  <div className="relative w-32 sm:w-36 shrink-0">
+                                                    <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-caption font-semibold text-label-3">Rp</span>
+                                                    <input
+                                                      type="text"
+                                                      inputMode="numeric"
+                                                      value={tb.nominal === "" || tb.nominal === undefined || tb.nominal === null ? "" : formatRibuanInput(tb.nominal, { allowZero: true })}
+                                                      onChange={e => {
+                                                        const newTb = [...r.gajiTambahan];
+                                                        newTb[i] = { ...newTb[i], nominal: e.target.value.replace(/\D/g, "") };
+                                                        handleUpdateRecord(r.id, { gajiTambahan: newTb });
+                                                      }}
+                                                      className="w-full h-11 bg-surface rounded-control pl-8 pr-2.5 py-0 text-[16px] border-0 font-bold tabular-nums text-positive outline-none"
+                                                      placeholder="0"
+                                                    />
+                                                  </div>
                                                   <input type="text" value={tb.ket} onChange={e => {
                                                       const newTb = [...r.gajiTambahan];
                                                       newTb[i] = { ...newTb[i], ket: e.target.value };
                                                       handleUpdateRecord(r.id, { gajiTambahan: newTb });
-                                                  }} className="flex-1 min-w-0 bg-surface rounded-control px-3 py-2 text-[16px] border-0 font-medium text-label outline-none" placeholder="Keterangan" />
+                                                  }} className="flex-1 min-w-0 h-11 bg-surface rounded-control px-3 py-0 text-[16px] border-0 font-medium text-label outline-none" placeholder="Keterangan" />
                                                   <button type="button" onClick={() => {
                                                       const newTb = r.gajiTambahan.filter((_: any, idx: number) => idx !== i);
                                                       handleUpdateRecord(r.id, { gajiTambahan: newTb });
@@ -1963,24 +1983,25 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                               }`}
                                             >
                                                 <div className="flex gap-2 items-center w-full">
-                                                    <input 
-                                                      type="number" 
-                                                      inputMode="numeric" 
-                                                      pattern="[0-9]*" 
-                                                      min="0" 
-                                                      value={pg.nominal} 
-                                                      onChange={e => {
-                                                        const newPg = [...r.gajiPengurangan];
-                                                        newPg[i] = { ...newPg[i], nominal: e.target.value };
-                                                        handleUpdateRecord(r.id, { gajiPengurangan: newPg });
-                                                      }} 
-                                                      className={`w-28 shrink-0 border rounded-control px-3 py-2 text-[16px] font-bold outline-none transition-colors ${
-                                                        isCanceled
-                                                          ? 'line-through text-label-3 bg-fill border-sep'
-                                                          : 'bg-surface border-transparent text-negative'
-                                                      }`} 
-                                                      placeholder="Nominal" 
-                                                    />
+                                                    <div className="relative w-32 sm:w-36 shrink-0">
+                                                      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-caption font-semibold text-label-3">Rp</span>
+                                                      <input
+                                                        type="text"
+                                                        inputMode="numeric"
+                                                        value={pg.nominal === "" || pg.nominal === undefined || pg.nominal === null ? "" : formatRibuanInput(pg.nominal, { allowZero: true })}
+                                                        onChange={e => {
+                                                          const newPg = [...r.gajiPengurangan];
+                                                          newPg[i] = { ...newPg[i], nominal: e.target.value.replace(/\D/g, "") };
+                                                          handleUpdateRecord(r.id, { gajiPengurangan: newPg });
+                                                        }}
+                                                        className={`w-full h-11 border rounded-control pl-8 pr-2.5 py-0 text-[16px] font-bold tabular-nums outline-none transition-colors ${
+                                                          isCanceled
+                                                            ? 'line-through text-label-3 bg-fill border-sep'
+                                                            : 'bg-surface border-transparent text-negative'
+                                                        }`}
+                                                        placeholder="0"
+                                                      />
+                                                    </div>
                                                     <input 
                                                       type="text" 
                                                       value={pg.ket} 
@@ -1989,7 +2010,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                                         newPg[i] = { ...newPg[i], ket: e.target.value };
                                                         handleUpdateRecord(r.id, { gajiPengurangan: newPg });
                                                       }} 
-                                                      className={`flex-1 min-w-0 border rounded-control px-3 py-2 text-[16px] outline-none transition-colors ${
+                                                      className={`flex-1 min-w-0 h-11 border rounded-control px-3 py-0 text-[16px] outline-none transition-colors ${
                                                         isCanceled
                                                           ? 'line-through text-label-3 bg-fill border-sep'
                                                           : 'bg-surface border-transparent text-label'

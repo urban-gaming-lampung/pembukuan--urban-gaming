@@ -42,7 +42,7 @@ const StokMasukSheet: React.FC<{
   const selisih = qty - rec.qty;
   const berubah = qty !== rec.qty || modalN !== rec.modalSatuan || tanggal !== rec.tanggal || catat !== rec.catatPengeluaran;
   const stokSekarang = Math.max(0, Math.round(Number((stokState?.jualan as any)?.[rec.kategori]?.[rec.item]?.jumlah) || 0));
-  const field = "w-full h-11 px-3.5 rounded-field bg-fill text-[16px] sm:text-subhead font-medium text-label placeholder:text-label-3 focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35";
+  const field = "w-full h-11 px-3.5 py-0 rounded-field bg-fill text-[16px] sm:text-subhead font-medium text-label placeholder:text-label-3 focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35";
 
   const simpan = async () => {
     setErr("");

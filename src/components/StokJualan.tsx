@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { AlertCircle, CheckCircle, Check, Clock, ClipboardPaste, Copy, History, Minus, Plus, ShoppingCart, TrendingUp, X } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, CheckCircle, Check, Clock, ClipboardPaste, Copy, History, Loader2, Minus, Plus, ShoppingCart, TrendingUp, X } from "lucide-react";
 import useStokData from "../hooks/useStokData";
 import { Kondisi, kondisiStok, stokBeririsan } from "../lib/posSales";
 import { useProdukJualan } from "../lib/barangJualan";
@@ -9,7 +9,7 @@ import { Button, Card, EmptyState, Eyebrow, Pill, SearchField, Sheet, SubTabs } 
 import { KartuStok, StatusChip, StepperStok, TileStok, LABEL_STATUS, DOT_STATUS } from "./common/StokUI";
 import {
   ALASAN_LABEL, ALASAN_SHORT, StokAlasan, StokLog, StokRow, StokStatus, buildStokRows, commitStokChanges, defaultMinStok, fmtWaktu, isStale,
-  restockText, saveMinStok, shortName, soldMap, useMinStok, useStokLog, STALE_DAYS, kunciStok } from "../lib/stokJualan";
+  pulihkanStokJualanDariRiwayat, restockText, saveMinStok, shortName, soldMap, useMinStok, useStokLog, STALE_DAYS, kunciStok } from "../lib/stokJualan";
 import { buildStokReport } from "../lib/stokReport";
 
 /**
@@ -66,7 +66,7 @@ const LogRow: React.FC<{ l: StokLog; showItem?: boolean }> = ({ l, showItem = tr
 );
 
 const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
-  const { stokState, masterCategories } = useStokData();
+  const { stokState, stokLoaded, masterLoaded, masterCategories } = useStokData();
   const minMap = useMinStok();
   const { logs, loading: logsLoading } = useStokLog(400);
   const [tab, setTab] = useState<"barang" | "riwayat">("barang");
@@ -85,7 +85,13 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
   const kategoriJualan = Array.isArray(masterCategories?.jualan) ? masterCategories.jualan : [];
   const dataJualan = (stokState?.jualan || {}) as Record<string, Record<string, any>>;
 
-  const { products } = useProdukJualan();
+  const { products, loaded: productsLoaded } = useProdukJualan();
+  const recoveryTried = useRef(false);
+  useEffect(() => {
+    if (!isOwner || !stokLoaded || !masterLoaded || !productsLoaded || recoveryTried.current || Object.keys(dataJualan).length > 0 || !products.length) return;
+    recoveryTried.current = true;
+    pulihkanStokJualanDariRiwayat(products).catch((e) => console.warn("Pemulihan stok dari riwayat gagal:", e));
+  }, [isOwner, stokLoaded, masterLoaded, productsLoaded, dataJualan, products]);
   const [kondisi, setKondisi] = useState<Kondisi>("BARU");
   const rowsAll = useMemo(() => buildStokRows(kategoriJualan, dataJualan, minMap), [kategoriJualan, dataJualan, minMap]);
   // Halaman Baru / Seken (draft di halaman lain tetap ikut tersimpan)
@@ -217,6 +223,10 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
     { key: "aman", title: "Aman", value: count.aman, sub: "stok cukup", cls: "text-positive", icon: <CheckCircle className="w-4 h-4" /> },
     { key: "cek", title: "Perlu dicek", value: count.cek, sub: `> ${STALE_DAYS} hari tak diupdate`, cls: "text-label", icon: <Clock className="w-4 h-4" /> },
   ];
+
+  if (!stokLoaded || !masterLoaded) {
+    return <div className="py-16 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-label-3" /></div>;
+  }
 
   return (
     <div className={`space-y-4 ${changed.length ? "pb-24" : ""}`}>

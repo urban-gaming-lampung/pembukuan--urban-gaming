@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FolderOpen, GripVertical, MinusCircle, Plus, RotateCcw } from "lucide-react";
+import { formatRibuanInput, toInt } from "../lib/format";
 import { AlertDialog, Button, Card, EmptyState, Eyebrow, Footnote, Notice, SearchField, Sheet } from "../ui";
 
 interface PriceItem {
@@ -153,12 +154,12 @@ const EditRincian: React.FC<EditRincianProps> = ({
                         <div className="flex items-center shrink-0">
                           <span className="text-footnote text-label-3 mr-1">Rp</span>
                           <input
-                            type="number"
+                            type="text"
                             inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={item.price}
-                            onChange={(e) => handleChange(realIndex, "price", Number(e.target.value))}
-                            className="w-24 min-h-[36px] bg-transparent text-right text-[16px] sm:text-subhead font-semibold text-label focus:outline-none tabular-nums"
+                            value={formatRibuanInput(item.price, { allowZero: true })}
+                            onChange={(e) => handleChange(realIndex, "price", toInt(e.target.value))}
+                            placeholder="0"
+                            className="w-28 min-h-[36px] bg-transparent text-right text-[16px] sm:text-subhead font-semibold text-label placeholder:text-label-3 focus:outline-none tabular-nums"
                           />
                         </div>
 

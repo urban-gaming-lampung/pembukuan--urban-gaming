@@ -133,10 +133,9 @@ export type MasterStokCategories = {
   jualan: StokKategori[];
 };
 
-const STOK_LS_KEY = "URBAN_STOK_DATA"; // Keep for migration if needed
-
-import { doc, onSnapshot, setDoc, getDoc, collection } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { doc, onSnapshot, setDoc, getDocFromServer, runTransaction, collection } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
+import { db, auth } from "../lib/firebase";
 
 // ============================================================
 // SINGLETON STORE — shared across all components using this hook
@@ -170,10 +169,15 @@ export interface RegisteredDevice {
 let _stokState: StokData = { rental: {}, jualan: {} };
 let _masterCategories: MasterStokCategories = { rental: INITIAL_STOK_RENTAL, jualan: INITIAL_STOK_JUALAN };
 let _stokLoaded = false;
+let _masterLoaded = false;
 let _initialized = false;
 let _unsubStok: (() => void) | null = null;
 let _unsubMaster: (() => void) | null = null;
+let _unsubAuth: (() => void) | null = null;
+let _authUid: string | null = null;
 let _subscriberCount = 0;
+let _retryCount = 0;
+let _retryTimer: ReturnType<typeof setTimeout> | null = null;
 
 let _devicesState: RegisteredDevice[] = [];
 let _capacitiesState: Record<string, number> = {
@@ -216,7 +220,9 @@ function subscribeDevices(listener: Listener) {
   return () => { _devicesListeners.delete(listener); };
 }
 function getStokSnapshot() { return _stokState; }
+function getStokLoadedSnapshot() { return _stokLoaded; }
 function getMasterSnapshot() { return _masterCategories; }
+function getMasterLoadedSnapshot() { return _masterLoaded; }
 function getDevicesSnapshot() { return _devicesState; }
 function getDevicesLoadedSnapshot() { return _devicesLoaded; }
 
@@ -372,8 +378,52 @@ function checkAndSyncIntegratedCounts() {
   }
 }
 
+function resetStokStoreState() {
+  _stokState = { rental: {}, jualan: {} };
+  _masterCategories = { rental: INITIAL_STOK_RENTAL, jualan: INITIAL_STOK_JUALAN };
+  _stokLoaded = false;
+  _masterLoaded = false;
+  _devicesLoaded = false;
+  _capacitiesLoaded = false;
+  _devicesState = [];
+  _capacitiesState = {
+    ps3: 0,
+    ps4: 0,
+    stik_ps3: 0,
+    stik_ps4: 0,
+    tv: 0,
+    playbox: 0
+  };
+  notifyStokListeners();
+  notifyMasterListeners();
+  notifyDevicesListeners();
+}
+
+function clearStokRetry() {
+  if (_retryTimer) {
+    clearTimeout(_retryTimer);
+    _retryTimer = null;
+  }
+}
+
+function scheduleStokRetry(source: string, err: unknown) {
+  console.error(`Firestore onSnapshot error (${source}):`, err);
+  const code = (err as { code?: string } | null)?.code;
+  // Izinkan maks 1x retry bila listener gagal sesaat saat auth/token baru tersambung
+  if (_retryCount < 1 && auth.currentUser && _subscriberCount > 0 && !_retryTimer && (code === "permission-denied" || code === "unavailable")) {
+    _retryCount++;
+    _retryTimer = setTimeout(() => {
+      _retryTimer = null;
+      if (!auth.currentUser || _subscriberCount <= 0) return;
+      cleanupStokListeners();
+      initStokListeners();
+    }, 1500);
+  }
+}
+
 function initStokListeners() {
-  if (_initialized) return;
+  if (_initialized || !auth.currentUser) return;
+  clearStokRetry();
   _initialized = true;
 
   const docRef = doc(db, "data", "stok");
@@ -381,57 +431,42 @@ function initStokListeners() {
   _unsubStok = onSnapshot(docRef, (snap) => {
     if (snap.exists()) {
       const data = snap.data() as StokData;
-
-      // Only migrate from localStorage if Firestore has truly empty data
-      // AND we haven't loaded successfully before (prevents accidental overwrite)
-      if (!_stokLoaded && Object.keys(data.rental || {}).length === 0 && Object.keys(data.jualan || {}).length === 0) {
-        const raw = localStorage.getItem(STOK_LS_KEY);
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw);
-            if (Object.keys(parsed.rental || {}).length > 0 || Object.keys(parsed.jualan || {}).length > 0) {
-              setDoc(docRef, parsed, { merge: true }).catch(console.error);
-              return; // onSnapshot will fire again with the migrated data
-            }
-          } catch (e) {}
-        }
-      }
-
       _stokState = {
         rental: data.rental || {},
         jualan: data.jualan || {},
       };
       _stokLoaded = true;
+      if (_masterLoaded) _retryCount = 0;
       notifyStokListeners();
       checkAndSyncIntegratedCounts();
-    } else {
-      // Document doesn't exist — only create if we've never loaded before
-      if (!_stokLoaded) {
-        const raw = localStorage.getItem(STOK_LS_KEY);
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw);
-            if (Object.keys(parsed.rental || {}).length > 0 || Object.keys(parsed.jualan || {}).length > 0) {
-              setDoc(docRef, parsed).catch(console.error);
-              return;
-            }
-          } catch (e) {}
-        }
-        console.warn("[useStokData] stok doc does not exist. Creating empty shell.");
-        setDoc(docRef, { rental: {}, jualan: {} }).catch(console.error);
-      }
+    } else if (!snap.metadata.fromCache && !_stokLoaded) {
+      // Pastikan ke server sebelum menandai termuat; listener baca tidak boleh menimpa dokumen di server
+      getDocFromServer(docRef)
+        .then((srv) => {
+          if (srv.exists() || !_initialized) return;
+          _stokState = { rental: {}, jualan: {} };
+          _stokLoaded = true;
+          notifyStokListeners();
+        })
+        .catch((err) => console.error("[useStokData] Server check (stok) failed:", err));
     }
   }, (err) => {
-    console.error("Firestore onSnapshot error (stok):", err);
+    scheduleStokRetry("stok", err);
   });
 
   const masterDocRef = doc(db, "data", "master_stok_categories");
   _unsubMaster = onSnapshot(masterDocRef, (snap) => {
     if (snap.exists()) {
-      const data = snap.data() as MasterStokCategories;
+      const raw = snap.data() as Partial<MasterStokCategories>;
+      const rentalList = Array.isArray(raw.rental) ? [...raw.rental] : [];
+      const jualanList = Array.isArray(raw.jualan)
+        ? [...raw.jualan]
+        : _masterLoaded
+          ? _masterCategories.jualan
+          : INITIAL_STOK_JUALAN;
       let modified = false;
-      const existingCategories = (data.rental || []).map(c => c.kategori.toUpperCase());
-      
+      const existingCategories = rentalList.map(c => c.kategori.toUpperCase());
+
       const newRentalCategories = [
         { kategori: "UPDATE KONSOL - PLAYSTATION 3", items: ["Bagus", "Rusak"] },
         { kategori: "UPDATE KONSOL - PLAYSTATION 4", items: ["Bagus", "Rusak"] },
@@ -439,27 +474,42 @@ function initStokListeners() {
         { kategori: "UPDATE DEVICE - PLAYBOX / PORTABEL", items: ["Bagus", "Rusak"] }
       ];
 
-      newRentalCategories.forEach(newCat => {
-        if (!existingCategories.includes(newCat.kategori.toUpperCase())) {
-          if (!data.rental) data.rental = [];
-          data.rental.push(newCat);
-          modified = true;
-        }
-      });
-
-      if (modified) {
-        setDoc(masterDocRef, data).catch(console.error);
+      if (!snap.metadata.fromCache && Array.isArray(raw.rental)) {
+        newRentalCategories.forEach(newCat => {
+          if (!existingCategories.includes(newCat.kategori.toUpperCase())) {
+            rentalList.push(newCat);
+            modified = true;
+          }
+        });
       }
 
-      _masterCategories = data;
+      if (modified) {
+        setDoc(masterDocRef, { rental: rentalList }, { merge: true }).catch(console.error);
+      }
+
+      _masterCategories = { rental: rentalList, jualan: jualanList };
+      _masterLoaded = true;
+      if (_stokLoaded) _retryCount = 0;
       notifyMasterListeners();
       checkAndSyncIntegratedCounts();
-    } else {
+    } else if (!snap.metadata.fromCache) {
       const initialMaster = { rental: INITIAL_STOK_RENTAL, jualan: INITIAL_STOK_JUALAN };
-      setDoc(masterDocRef, initialMaster).catch(console.error);
-      _masterCategories = initialMaster;
-      notifyMasterListeners();
+      runTransaction(db, async (tx) => {
+        const srv = await tx.get(masterDocRef);
+        if (srv.exists()) return false;
+        tx.set(masterDocRef, initialMaster, { merge: true });
+        return true;
+      })
+        .then((created) => {
+          if (!created || !_initialized) return;
+          _masterCategories = initialMaster;
+          _masterLoaded = true;
+          notifyMasterListeners();
+        })
+        .catch((err) => console.error("[useStokData] Server check (master_stok_categories) failed:", err));
     }
+  }, (err) => {
+    scheduleStokRetry("master_stok_categories", err);
   });
 
   // Listen to Registered Devices
@@ -489,12 +539,14 @@ function initStokListeners() {
 }
 
 function cleanupStokListeners() {
+  clearStokRetry();
   if (_unsubStok) { _unsubStok(); _unsubStok = null; }
   if (_unsubMaster) { _unsubMaster(); _unsubMaster = null; }
   if (_unsubDevices) { _unsubDevices(); _unsubDevices = null; }
   if (_unsubCapacities) { _unsubCapacities(); _unsubCapacities = null; }
   _initialized = false;
   _stokLoaded = false;
+  _masterLoaded = false;
   _devicesLoaded = false;
   _capacitiesLoaded = false;
 }
@@ -554,30 +606,66 @@ function updateStokItem(tipe: "rental" | "jualan", kategori: string, item: strin
 async function addStokItemToMaster(tipe: "rental" | "jualan", kategoriName: string, itemName: string): Promise<boolean> {
   try {
     const masterDocRef = doc(db, "data", "master_stok_categories");
-    const snap = await getDoc(masterDocRef);
-    let data: MasterStokCategories = { rental: INITIAL_STOK_RENTAL, jualan: INITIAL_STOK_JUALAN };
-    if (snap.exists()) data = snap.data() as MasterStokCategories;
-
-    const list = data[tipe] || [];
-    const catIndex = list.findIndex(c => c.kategori.toLowerCase() === kategoriName.toLowerCase());
-
-    if (catIndex >= 0) {
-      if (!list[catIndex].items.includes(itemName)) {
-        list[catIndex].items.push(itemName);
-      } else {
-        return false; // Item already exists
+    return await runTransaction(db, async (tx) => {
+      const snap = await tx.get(masterDocRef);
+      const existing = snap.exists() ? (snap.data() as Record<string, unknown>) : null;
+      const rawList = existing?.[tipe];
+      if (snap.exists() && rawList !== undefined && !Array.isArray(rawList)) {
+        throw new Error("Format master_stok_categories tidak valid");
       }
-    } else {
-      list.push({ kategori: kategoriName.toUpperCase(), items: [itemName] });
-    }
+      const fallback = tipe === "rental" ? INITIAL_STOK_RENTAL : INITIAL_STOK_JUALAN;
+      const list: StokKategori[] = Array.isArray(rawList)
+        ? (rawList as StokKategori[]).map((c) => ({ ...c, items: Array.isArray(c?.items) ? [...c.items] : [] }))
+        : fallback.map((c) => ({ ...c, items: [...c.items] }));
 
-    data[tipe] = list;
-    await setDoc(masterDocRef, data);
-    return true;
+      const catIndex = list.findIndex(c => c.kategori.toLowerCase() === kategoriName.toLowerCase());
+
+      if (catIndex >= 0) {
+        if (!list[catIndex].items.includes(itemName)) {
+          list[catIndex].items.push(itemName);
+        } else {
+          return false; // Item already exists
+        }
+      } else {
+        list.push({ kategori: kategoriName.toUpperCase(), items: [itemName] });
+      }
+
+      tx.set(masterDocRef, { [tipe]: list }, { merge: true });
+      return true;
+    });
   } catch (err) {
     console.error("Add stok item failed:", err);
     return false;
   }
+}
+
+function ensureStokAuthListener() {
+  if (_unsubAuth) return;
+  _authUid = auth.currentUser?.uid ?? null;
+  if (_authUid && _subscriberCount > 0) {
+    initStokListeners();
+  }
+  _unsubAuth = onAuthStateChanged(auth, (currentUser) => {
+    const nextUid = currentUser?.uid ?? null;
+    if (!nextUid) {
+      _retryCount = 0;
+      cleanupStokListeners();
+      if (_authUid !== null) {
+        _authUid = null;
+        resetStokStoreState();
+      }
+      return;
+    }
+    if (_authUid && _authUid !== nextUid) {
+      _retryCount = 0;
+      cleanupStokListeners();
+      resetStokStoreState();
+    }
+    _authUid = nextUid;
+    if (_subscriberCount > 0 && !_initialized) {
+      initStokListeners();
+    }
+  });
 }
 
 // ============================================================
@@ -585,19 +673,27 @@ async function addStokItemToMaster(tipe: "rental" | "jualan", kategoriName: stri
 // ============================================================
 export default function useStokData() {
   const stokState = useSyncExternalStore(subscribeStok, getStokSnapshot, getStokSnapshot);
+  const stokLoaded = useSyncExternalStore(subscribeStok, getStokLoadedSnapshot, getStokLoadedSnapshot);
   const masterCategories = useSyncExternalStore(subscribeMaster, getMasterSnapshot, getMasterSnapshot);
+  const masterLoaded = useSyncExternalStore(subscribeMaster, getMasterLoadedSnapshot, getMasterLoadedSnapshot);
   const devices = useSyncExternalStore(subscribeDevices, getDevicesSnapshot, getDevicesSnapshot);
   const devicesLoaded = useSyncExternalStore(subscribeDevices, getDevicesLoadedSnapshot, getDevicesLoadedSnapshot);
 
   useEffect(() => {
     _subscriberCount++;
-    initStokListeners();
+    ensureStokAuthListener();
     return () => {
       _subscriberCount--;
       // Only cleanup if no more subscribers (all components unmounted)
       if (_subscriberCount <= 0) {
         _subscriberCount = 0;
+        _retryCount = 0;
         cleanupStokListeners();
+        if (_unsubAuth) {
+          _unsubAuth();
+          _unsubAuth = null;
+        }
+        _authUid = null;
       }
     };
   }, []);
@@ -616,5 +712,5 @@ export default function useStokData() {
     []
   );
 
-  return { stokState, updateStok, masterCategories, addStokItem, devices, devicesLoaded };
+  return { stokState, stokLoaded, masterLoaded, updateStok, masterCategories, addStokItem, devices, devicesLoaded };
 }

@@ -10,7 +10,7 @@
  * mengubah stok bersamaan tidak saling menimpa.
  */
 import { useEffect, useState } from "react";
-import { collection, deleteField, doc, FieldPath, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc, type Transaction, writeBatch } from "firebase/firestore";
+import { collection, deleteField, doc, FieldPath, getDocFromServer, getDocs, getDocsFromServer, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, setDoc, type Transaction, where, writeBatch } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 
@@ -358,4 +358,190 @@ export function soldMap(logs: StokLog[], days = 30): Map<string, number> {
     m.set(k, (m.get(k) || 0) - l.delta);
   });
   return m;
+}
+
+type RecoveryProduct = { id: string; stokRef?: { kategori: string; item: string } | null };
+let _recoveryRun: Promise<{ restoredItems: number; totalUnits: number }> | null = null;
+
+/**
+ * Memulihkan peta stok jualan (`data/stok.jualan`) dan item master dari riwayat `stok_log`,
+ * pencocokan rename di `stok_masuk`, serta pelunasan nota POS (`pos_transaksi`) yang terjadi
+ * ketika `data/stok.jualan` sempat kosong. Bersifat idempoten: hanya menulis ke server bila
+ * field `jualan` di `data/stok` benar-benar masih kosong.
+ */
+export function pulihkanStokJualanDariRiwayat(
+  products?: RecoveryProduct[]
+): Promise<{ restoredItems: number; totalUnits: number }> {
+  if (_recoveryRun) return _recoveryRun;
+  _recoveryRun = (async () => {
+    const stokDocRef = doc(db, "data", "stok");
+    const masterDocRef = doc(db, "data", "master_stok_categories");
+    const curSnap = await getDocFromServer(stokDocRef);
+    const existingJualan = (curSnap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
+    if (Object.keys(existingJualan).length > 0) {
+      return { restoredItems: 0, totalUnits: 0 };
+    }
+
+    const [logsSnap, masukSnap, resolvedProducts] = await Promise.all([
+      getDocsFromServer(query(collection(db, "stok_log"), orderBy("ts", "desc"))),
+      getDocsFromServer(collection(db, "stok_masuk")).catch(() => null),
+      products && products.length
+        ? Promise.resolve(products)
+        : getDocsFromServer(query(collection(db, "products"), where("category", "==", "JUALAN"))).then((s) =>
+            s.docs.map((d) => ({ id: d.id, ...(d.data() as { stokRef?: { kategori: string; item: string } | null }) }))
+          ),
+    ]);
+
+  if (logsSnap.empty) return { restoredItems: 0, totalUnits: 0 };
+
+  type Rec = { jumlah: number; ts: number; oleh: string; delta: number };
+  const latestMap = new Map<string, Rec>();
+  let latestLogTs = 0;
+
+  logsSnap.docs.forEach((d) => {
+    const l = d.data() as StokLog & { tipe?: string };
+    if (l.tipe && l.tipe !== "jualan") return;
+    const kat = String(l.kategori || "").trim();
+    const item = String(l.item || "").trim();
+    if (!kat || !item) return;
+    const ts = Number(l.ts) || 0;
+    if (ts > latestLogTs) latestLogTs = ts;
+    const k = kunciStok({ kategori: kat, item });
+    if (!latestMap.has(k)) {
+      latestMap.set(k, {
+        jumlah: Math.max(0, Math.round(Number(l.sesudah) || 0)),
+        ts,
+        oleh: String(l.oleh || "admin"),
+        delta: Number(l.delta) || 0,
+      });
+    }
+  });
+
+  const [posTsSnap, posLunasSnap] = await Promise.all([
+    getDocsFromServer(query(collection(db, "pos_transaksi"), where("ts", ">=", latestLogTs))),
+    getDocsFromServer(query(collection(db, "pos_transaksi"), where("lunasTs", ">=", latestLogTs))),
+  ]);
+  const posDocs = new Map<string, any>();
+  posTsSnap.docs.forEach((d) => posDocs.set(d.id, d.data()));
+  posLunasSnap.docs.forEach((d) => posDocs.set(d.id, d.data()));
+
+  // Rekonsiliasi item yang di-rename: stok_log lama masih memakai nama lama sementara
+  // stok_masuk & products sudah memakai nama baru (mis. KABEL CHARGER PS4 -> KABEL CHARGER PS4 PREMIUM).
+  const productKeys = new Set<string>();
+  resolvedProducts.forEach((p) => {
+    if (p.stokRef?.kategori && p.stokRef?.item && p.stokRef.item !== "*") {
+      productKeys.add(kunciStok({ kategori: p.stokRef.kategori, item: p.stokRef.item }));
+    }
+  });
+  masukSnap?.docs.forEach((d) => {
+    const m = d.data() as { kategori?: string; item?: string; produkId?: string; qty?: number };
+    if (!m.kategori || !m.item) return;
+    const mk = kunciStok({ kategori: m.kategori, item: m.item });
+    if (latestMap.has(mk)) return;
+    const prod = resolvedProducts.find((p) => p.id === m.produkId);
+    const targetRef =
+      prod?.stokRef?.kategori && prod.stokRef.item && prod.stokRef.item !== "*"
+        ? prod.stokRef
+        : { kategori: m.kategori, item: m.item };
+    const tk = kunciStok(targetRef);
+    if (latestMap.has(tk)) return;
+    for (const [lk, rec] of latestMap.entries()) {
+      const [lKat] = lk.split("||");
+      if (lKat === targetRef.kategori && !productKeys.has(lk) && rec.jumlah > 0 && rec.jumlah === Number(m.qty)) {
+        latestMap.set(tk, rec);
+        latestMap.delete(lk);
+        break;
+      }
+    }
+  });
+
+  // Kurangi penjualan POS yang memotong 0 unit (tersedia === 0 di stokKurang) saat data/stok sempat kosong.
+  posDocs.forEach((sale) => {
+    if (sale.batal || sale.status === "DP") return;
+    const effectiveTs = Number(sale.lunasTs || sale.ts || 0);
+    if (!(effectiveTs > latestLogTs)) return;
+    const kurangList: Array<{ kategori?: string; item?: string; tersedia?: number }> = Array.isArray(sale.stokKurang)
+      ? sale.stokKurang
+      : [];
+    const items: Array<{ qty?: number; stokRef?: { kategori: string; item: string } | null }> = Array.isArray(sale.items)
+      ? sale.items
+      : [];
+    items.forEach((it) => {
+      if (!it.stokRef?.kategori || !it.stokRef?.item || it.stokRef.item === "*") return;
+      const k = kunciStok(it.stokRef);
+      const rec = latestMap.get(k);
+      if (!rec || rec.jumlah <= 0) return;
+      const kurang = kurangList.find((x) => x.kategori === it.stokRef!.kategori && x.item === it.stokRef!.item);
+      if (kurang && Number(kurang.tersedia) === 0 && rec.ts < effectiveTs) {
+        const q = Math.max(1, Math.round(Number(it.qty) || 1));
+        rec.jumlah = Math.max(0, rec.jumlah - q);
+        rec.ts = effectiveTs;
+        rec.oleh = String(sale.lunasOleh || sale.kasir || "kasir");
+        rec.delta = -q;
+      }
+    });
+  });
+
+  const jualanPatch: Record<string, Record<string, StokItemValue>> = {};
+  let restoredItems = 0;
+  let totalUnits = 0;
+  latestMap.forEach((rec, k) => {
+    const [kat, item] = k.split("||");
+    if (rec.jumlah === 0 && !productKeys.has(k)) return;
+    const ts = rec.ts || Date.now();
+    const tz = new Date(ts)
+      .toLocaleString("id-ID", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+      .replace(/\./g, ":");
+    (jualanPatch[kat] ||= {})[item] = {
+      jumlah: rec.jumlah,
+      lastEditTs: ts,
+      lastEditDate: tz,
+      lastEditDelta: rec.delta,
+      lastEditBy: rec.oleh,
+    };
+    restoredItems++;
+    totalUnits += rec.jumlah;
+  });
+
+  if (restoredItems === 0) return { restoredItems: 0, totalUnits: 0 };
+
+  let applied = false;
+  await runTransaction(db, async (tx) => {
+    const [sSnap, mSnap] = await Promise.all([tx.get(stokDocRef), tx.get(masterDocRef)]);
+    const curServerJualan = (sSnap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
+    if (Object.keys(curServerJualan).length > 0) return;
+
+    tx.set(stokDocRef, { jualan: jualanPatch }, { merge: true });
+
+    if (mSnap.exists()) {
+      const curMaster = Array.isArray(mSnap.data()?.jualan)
+        ? (mSnap.data()!.jualan as StokKategori[]).map((c) => ({ kategori: c.kategori, items: [...(c.items || [])] }))
+        : [];
+      let masterChanged = false;
+      Object.entries(jualanPatch).forEach(([kat, itemsMap]) => {
+        let cat = curMaster.find((c) => c.kategori === kat);
+        if (!cat) {
+          cat = { kategori: kat, items: [] };
+          curMaster.push(cat);
+          masterChanged = true;
+        }
+        Object.keys(itemsMap).forEach((item) => {
+          if (!cat!.items.includes(item)) {
+            cat!.items.push(item);
+            masterChanged = true;
+          }
+        });
+      });
+      if (masterChanged) {
+        tx.set(masterDocRef, { jualan: curMaster }, { merge: true });
+      }
+    }
+    applied = true;
+  });
+
+    return applied ? { restoredItems, totalUnits } : { restoredItems: 0, totalUnits: 0 };
+  })().finally(() => {
+    _recoveryRun = null;
+  });
+  return _recoveryRun;
 }

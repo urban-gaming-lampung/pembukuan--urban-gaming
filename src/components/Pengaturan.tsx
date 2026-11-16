@@ -42,7 +42,7 @@ import KonfirmasiAkun from "./KonfirmasiAkun";
 import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr } from "../lib/absenPeriod";
 import { toLocalYmd } from "../lib/dateLocal";
 import { ongkirPengantarTersimpan } from "../lib/sewa";
-import { toInt, rupiah } from "../lib/format";
+import { toInt, rupiah, formatRibuanInput } from "../lib/format";
 import {
   AlertDialog,
   Button,
@@ -1512,14 +1512,14 @@ const Pengaturan: React.FC<Props> = ({
                 value={formAsisten.nama_pengeluaran}
                 onChange={(e) => setFormAsisten({ ...formAsisten, nama_pengeluaran: e.target.value })}
                 placeholder="Nama Pengeluaran (misal: Tagihan Wi-Fi)"
-                className="w-full min-h-[44px] bg-fill border border-sep rounded-field px-3.5 py-2 text-[16px] sm:text-subhead text-label placeholder:text-label-3 focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"
+                className="w-full h-11 bg-fill border border-sep rounded-field px-3.5 py-0 text-[16px] sm:text-subhead text-label placeholder:text-label-3 focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"
               />
               <input
                 type="text"
                 value={formAsisten.kategori}
                 onChange={(e) => setFormAsisten({ ...formAsisten, kategori: e.target.value })}
                 placeholder="Kategori (misal: Listrik / Air / Internet)"
-                className="w-full min-h-[44px] bg-fill border border-sep rounded-field px-3.5 py-2 text-[16px] sm:text-subhead text-label placeholder:text-label-3 focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"
+                className="w-full h-11 bg-fill border border-sep rounded-field px-3.5 py-0 text-[16px] sm:text-subhead text-label placeholder:text-label-3 focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"
               />
               <div className="flex items-center gap-2.5">
                 <span className="text-footnote font-semibold text-label-2 shrink-0">Tgl Aktif:</span>
@@ -1529,15 +1529,19 @@ const Pengaturan: React.FC<Props> = ({
                   max="31"
                   value={formAsisten.tanggal}
                   onChange={(e) => setFormAsisten({ ...formAsisten, tanggal: e.target.value })}
-                  className="w-20 min-h-[44px] bg-fill border border-sep rounded-field px-3 py-2 text-[16px] sm:text-subhead text-center tabular-nums text-label focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"
+                  className="w-20 h-11 bg-fill border border-sep rounded-field px-3 py-0 text-[16px] sm:text-subhead text-center tabular-nums text-label focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"
                 />
-                <input
-                  type="number"
-                  value={(formAsisten as any).nominal || ""}
-                  onChange={(e) => setFormAsisten({ ...formAsisten, nominal: e.target.value } as any)}
-                  placeholder="Nominal (Opsional)"
-                  className="flex-1 min-w-0 min-h-[44px] bg-fill border border-sep rounded-field px-3.5 py-2 text-[16px] sm:text-subhead tabular-nums text-label placeholder:text-label-3 focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"
-                />
+                <div className="relative flex-1 min-w-0">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[16px] sm:text-subhead text-label-3">Rp</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatRibuanInput((formAsisten as any).nominal)}
+                    onChange={(e) => setFormAsisten({ ...formAsisten, nominal: e.target.value.replace(/\D/g, "") } as any)}
+                    placeholder="Nominal (Opsional)"
+                    className="w-full h-11 bg-fill border border-sep rounded-field pl-10 pr-3.5 py-0 text-[16px] sm:text-subhead tabular-nums text-label placeholder:text-label-3 focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"
+                  />
+                </div>
               </div>
               <Button
                 variant="filled"

@@ -20,7 +20,7 @@ export const EmptyState: React.FC<{ icon?: React.ReactNode; title: React.ReactNo
       </div>
     )}
     <div className="text-title3 font-bold tracking-tight text-label">{title}</div>
-    {children && <p className="mx-auto mt-1 max-w-sm text-footnote text-label-2">{children}</p>}
+    {children && <div className="mx-auto mt-1 max-w-sm text-footnote text-label-2">{children}</div>}
   </div>
 );
 

@@ -60,6 +60,13 @@ function getHariIndonesia(yyyyMmDd: string) {
   return d ? namaHari(d) : "";
 }
 
+/** Normalisasi "10.10" / "9:5" ke format HTML <input type="time"> ("HH:mm") agar validasi DOM tidak error. */
+function toTimeInputValue(val: string) {
+  const m = (val || "").trim().match(/^(\d{1,2})[:.](\d{2})$/);
+  if (!m) return "";
+  return `${m[1].padStart(2, "0")}:${m[2]}`;
+}
+
 const Input: React.FC<InputProps> = ({
   tanggal,
   setTanggal,
@@ -508,7 +515,7 @@ const Input: React.FC<InputProps> = ({
                 <input
                   data-fieldid="manualAbsenPagi"
                   type="time"
-                  defaultValue={rukoBuka || "10:00"}
+                  defaultValue={toTimeInputValue(rukoBuka) || "10:00"}
                   onChange={(e) => handleManualAbsenChange("Masuk", e.target.value)}
                   className={`${inputStyle} flex-1 min-w-0 cursor-pointer`}
                   autoFocus
@@ -602,7 +609,7 @@ const Input: React.FC<InputProps> = ({
                 <input
                   data-fieldid="manualAbsenSiang"
                   type="time"
-                  defaultValue={rukoTutup || "20:00"}
+                  defaultValue={toTimeInputValue(rukoTutup) || "20:00"}
                   onChange={(e) => handleManualAbsenChange("Pulang", e.target.value)}
                   className={`${inputStyle} flex-1 min-w-0 cursor-pointer`}
                   autoFocus
@@ -682,7 +689,7 @@ const Input: React.FC<InputProps> = ({
               <input
                 data-fieldid="rukoBuka"
                 type="time"
-                value={rukoBuka}
+                value={toTimeInputValue(rukoBuka)}
                 onChange={(e) => setRukoBuka(e.target.value)}
                 readOnly={!isOwner}
                 className={`${inputStyle} min-w-0 ${!isOwner ? "opacity-75 cursor-not-allowed pointer-events-none" : "cursor-pointer"}`}
@@ -716,7 +723,7 @@ const Input: React.FC<InputProps> = ({
               <input
                 data-fieldid="rukoTutup"
                 type="time"
-                value={rukoTutup}
+                value={toTimeInputValue(rukoTutup)}
                 onChange={(e) => setRukoTutup(e.target.value)}
                 readOnly={!isOwner}
                 className={`${inputStyle} min-w-0 ${!isOwner ? "opacity-75 cursor-not-allowed pointer-events-none" : "cursor-pointer"}`}

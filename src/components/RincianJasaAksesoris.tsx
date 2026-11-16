@@ -1,6 +1,6 @@
 import React from "react";
-import { ChevronDown, Package, Receipt } from "lucide-react";
-import TableEditor, { BarisTerkunci, UploadTransferProof } from "./TableEditor";
+import { Package, Receipt } from "lucide-react";
+import TableEditor, { AutoFitInput, AutoFitSelect, BarisTerkunci, UploadTransferProof } from "./TableEditor";
 import { NotaPosSheet } from "./NotaPosSheet";
 import { RowJasaAks } from "../lib/types";
 import { rupiah, toInt } from "../lib/format";
@@ -260,48 +260,45 @@ const RincianJasaAksesoris: React.FC<{
         slotAtas={slot}
         barisTerkunci={terkunci}
         getHarga={(r) => toInt(String((r as any).harga))}
-        renderCell={({ keyName, value, row, rowIndex, inputBase, onKeyNav, updateRow }) => {
+        renderCell={({ keyName, value, row, rowIndex, isMobile, onKeyNav, updateRow }) => {
           const harga = toInt(String((row as any).harga));
           const isHargaKeluar = harga > 0;
 
           if (keyName === "tipe") {
             return (
-              <div className="relative w-full">
-                <select
-                  className={`${inputBase} appearance-none pr-8 cursor-pointer`}
-                  value={String(value || "")}
-                  onKeyDown={onKeyNav}
-                  onChange={(e) => {
-                    const tipe = e.target.value;
-                    const item = items.find((it) => it.label === tipe);
-                    // Harga otomatis dari Edit Rincian bila harga di baris masih kosong (tetap bisa diubah)
-                    const patch: any = { tipe };
-                    if (item && item.price > 0 && !harga) patch.harga = item.price;
-                    updateRow(rowIndex, patch);
-                  }}
-                >
-                  <option value="" className="bg-surface text-label">Pilih tipe...</option>
-                  {items.map((it) => (
-                    <option key={it.label} value={it.label} className="bg-surface text-label">
-                      {it.price > 0 ? `${it.label} — ${rupiah(it.price)}` : it.label}
-                    </option>
-                  ))}
-                  {value && !items.some((it) => it.label === value) && (
-                    <option value={String(value)} className="bg-surface text-label">{String(value)}</option>
-                  )}
-                </select>
-                <ChevronDown className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-label-3 pointer-events-none" />
-              </div>
+              <AutoFitSelect
+                isMobile={isMobile}
+                value={String(value || "")}
+                onKeyDown={onKeyNav}
+                onChange={(e) => {
+                  const tipe = e.target.value;
+                  const item = items.find((it) => it.label === tipe);
+                  // Harga otomatis dari Edit Rincian bila harga di baris masih kosong (tetap bisa diubah)
+                  const patch: any = { tipe };
+                  if (item && item.price > 0 && !harga) patch.harga = item.price;
+                  updateRow(rowIndex, patch);
+                }}
+              >
+                <option value="" className="bg-surface text-label">Pilih tipe...</option>
+                {items.map((it) => (
+                  <option key={it.label} value={it.label} className="bg-surface text-label">
+                    {it.price > 0 ? `${it.label} — ${rupiah(it.price)}` : it.label}
+                  </option>
+                ))}
+                {value && !items.some((it) => it.label === value) && (
+                  <option value={String(value)} className="bg-surface text-label">{String(value)}</option>
+                )}
+              </AutoFitSelect>
             );
           }
 
           if (keyName === "ket") {
             const invalid = isHargaKeluar && String(value || "").trim() === "";
             return (
-              <input
-                className={`${inputBase} ${
-                  invalid ? "!border-negative/50 bg-negative/5 focus:!ring-negative/25" : ""
-                }`}
+              <AutoFitInput
+                isMobile={isMobile}
+                minSample="Keterangan"
+                className={invalid ? "!border-negative/50 bg-negative/5 focus:!ring-negative/25" : ""}
                 value={String(value || "")}
                 onKeyDown={onKeyNav}
                 onChange={(e) => updateRow(rowIndex, { ket: e.target.value } as any)}

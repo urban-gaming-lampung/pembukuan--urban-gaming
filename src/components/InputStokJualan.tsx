@@ -3,7 +3,7 @@ import { Plus, Minus, X, ChevronRight, Camera, Package, Sparkles, Trash2, Loader
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { toLocalYmd } from "../lib/dateLocal";
-import { getMinStok, removeJualanItem, statusOf, StokLog, useMinStok, useStokLog, kunciStok } from "../lib/stokJualan";
+import { getMinStok, pulihkanStokJualanDariRiwayat, removeJualanItem, statusOf, StokLog, useMinStok, useStokLog, kunciStok } from "../lib/stokJualan";
 import { Kondisi, kondisiProduk, kondisiStok, PILIH_SAAT_CHECKOUT, produkSubKategori, stokBeririsan, StokRef, SubKategoriJualan, syncProdukKeStok } from "../lib/posSales";
 import KondisiSwitch from "./KondisiSwitch";
 import {
@@ -78,7 +78,7 @@ export default function InputStokJualan() {
   // Halaman Baru / Seken: semua ringkasan & daftar mengikuti kondisi terpilih
   const products = useMemo(() => semuaProduk.filter((p) => kondisiProduk(p) === kondisi), [semuaProduk, kondisi]);
   const { map: modalMap } = useModalProduk();
-  const { stokState, masterCategories } = useStokData();
+  const { stokState, stokLoaded, masterLoaded, masterCategories } = useStokData();
   const minMap = useMinStok();
   const cats: StokKategori[] = Array.isArray(masterCategories?.jualan) ? masterCategories.jualan : [];
   const data = (stokState?.jualan || {}) as Data;
@@ -97,21 +97,35 @@ export default function InputStokJualan() {
     toastTimer.current = window.setTimeout(() => setToast(""), 2800);
   };
 
+  // Pulihkan otomatis peta jumlah stok jualan jika dokumen data/stok.jualan di server sempat kosong
+  const [recoveryInfo, setRecoveryInfo] = useState<{ restoredItems: number; totalUnits: number } | null>(null);
+  const recoveryTried = useRef(false);
+  useEffect(() => {
+    if (!loaded || !stokLoaded || !masterLoaded || recoveryTried.current || Object.keys(data).length > 0 || !semuaProduk.length) return;
+    recoveryTried.current = true;
+    pulihkanStokJualanDariRiwayat(semuaProduk)
+      .then((r) => {
+        if (r.restoredItems > 0) setRecoveryInfo(r);
+      })
+      .catch((e) => console.warn("Pemulihan stok dari riwayat gagal:", e));
+  }, [loaded, stokLoaded, masterLoaded, data, semuaProduk]);
+
   // Produk lama yang belum pernah dihubungkan -> disinkron otomatis sekali
   const [syncInfo, setSyncInfo] = useState<{ linked: number; created: number } | null>(null);
   const syncTried = useRef(false);
   useEffect(() => {
-    if (!loaded || syncTried.current || !semuaProduk.some((p) => p.stokRef === undefined)) return;
+    if (!loaded || !masterLoaded || syncTried.current || !semuaProduk.some((p) => p.stokRef === undefined)) return;
     syncTried.current = true;
     syncProdukKeStok(semuaProduk)
       .then((r) => { if (r.linked || r.created) setSyncInfo(r); })
       .catch((e) => console.warn("Sinkron produk ke stok gagal:", e));
-  }, [loaded, semuaProduk]);
+  }, [loaded, masterLoaded, semuaProduk]);
 
   const modalOf = (id: string) => modalMap[id]?.hargaModal ?? null;
 
   // Barang di stok yang belum dipakai produk mana pun
   const yatim = useMemo(() => {
+    if (!loaded || !masterLoaded) return [];
     const dipakai = new Set<string>();
     semuaProduk.forEach((p) => {
       const r = p.stokRef;
@@ -124,7 +138,7 @@ export default function InputStokJualan() {
       if (!dipakai.has(`${c.kategori}||${it}`) && kondisiStok(c.kategori, it, semuaProduk) === kondisi) out.push({ kategori: c.kategori, item: it });
     }));
     return out;
-  }, [semuaProduk, cats, kondisi]);
+  }, [loaded, masterLoaded, semuaProduk, cats, kondisi]);
 
   // Nilai stok (modal) SELURUH barang jualan (baru + seken): jumlah barang x rata-rata modal produk yang memakainya
   const nilaiStok = useMemo(() => {
@@ -224,6 +238,20 @@ export default function InputStokJualan() {
       {/* Halaman Baru / Seken */}
       <KondisiSwitch value={kondisi} onChange={(k) => { setKondisi(k); setFilter("semua"); }} counts={kondisiCount} />
 
+      {recoveryInfo && (
+        <Notice tone="info">
+          <div className="flex items-start gap-2.5">
+            <Sparkles className="w-4 h-4 shrink-0 mt-0.5" />
+            <p className="flex-1 text-footnote leading-snug">
+              Stok jualan berhasil dipulihkan dari riwayat log stok: {recoveryInfo.restoredItems} barang ({recoveryInfo.totalUnits} unit). Nilai stok &amp; hitungan fisik kembali sinkron.
+            </p>
+            <button type="button" onClick={() => setRecoveryInfo(null)} aria-label="Tutup" className="text-tint/70 hover:text-tint shrink-0">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </Notice>
+      )}
+
       {syncInfo && (
         <Notice tone="info">
           <div className="flex items-start gap-2.5">
@@ -284,7 +312,7 @@ export default function InputStokJualan() {
         })}
       </div>
 
-      {!loaded ? (
+      {!loaded || !stokLoaded || !masterLoaded ? (
         <div className="py-16 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-label-3" /></div>
       ) : filter === "konfirmasi" ? (
         <DaftarKonfirmasiTukar
@@ -597,7 +625,7 @@ const BarangJualanSheet: React.FC<{
     }
   };
 
-  const field = "w-full h-11 px-3.5 rounded-field bg-fill text-[16px] sm:text-subhead font-medium text-label placeholder:text-label-3 focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35";
+  const field = "w-full h-11 px-3.5 py-0 rounded-field bg-fill text-[16px] sm:text-subhead font-medium text-label placeholder:text-label-3 focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35";
   const label = "block text-footnote font-medium text-label-2 mb-1.5 px-0.5";
 
   return (

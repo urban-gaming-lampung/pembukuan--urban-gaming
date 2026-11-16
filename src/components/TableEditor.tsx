@@ -1,6 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
-import { rupiah, toInt } from "../lib/format";
+import { rupiah, toInt, formatRibuanInput } from "../lib/format";
 import { AKSEN_TILE, AlertDialog, Amount, Button, Card, Pill } from "../ui";
 import type { WarnaIkon } from "../ui/tokens";
 import {
@@ -105,8 +105,199 @@ export type RenderCellArgs<T> = {
   row: T;
   rowIndex: number;
   inputBase: string;
+  isMobile: boolean;
   onKeyNav: (e: React.KeyboardEvent<any>) => void;
   updateRow: (idx: number, patch: Partial<T>) => void;
+};
+
+/** Kelas visual field tabel tanpa memaksa w-full supaya AutoFit dapat mengecilkan/memanjangkan lebar sesuai teks. */
+export const TABLE_INPUT_VISUAL =
+  "h-[44px] min-h-[44px] px-3 rounded-control bg-transparent border border-transparent hover:border-sep focus:bg-surface focus:border-tint/40 focus:outline-none focus:ring-2 focus:ring-tint/25 transition-all duration-150 text-[16px] sm:text-subhead text-label placeholder:text-label-3";
+
+function extractMirrorClasses(cls: string) {
+  return cls
+    .split(/\s+/)
+    .filter((token) =>
+      /^(?:(?:sm|md|lg):)?(?:text-\[|text-(?:xs|sm|base|lg|subhead|footnote|caption2?|headline)|font-(?:sans|mono|normal|medium|semibold|bold)|tracking-|px-|pl-|pr-|py-)/.test(
+        token
+      )
+    )
+    .join(" ");
+}
+
+function textFromNode(node: React.ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textFromNode).join("");
+  if (React.isValidElement<{ children?: React.ReactNode }>(node)) {
+    return textFromNode(node.props?.children);
+  }
+  return "";
+}
+
+function collectOptionTexts(children: React.ReactNode): Array<{ value: string; label: string }> {
+  const out: Array<{ value: string; label: string }> = [];
+  React.Children.forEach(children, (child) => {
+    if (!child) return;
+    if (Array.isArray(child)) {
+      out.push(...collectOptionTexts(child));
+      return;
+    }
+    if (React.isValidElement<{ value?: any; children?: React.ReactNode }>(child)) {
+      if (child.type === "option") {
+        const val = child.props.value !== undefined ? String(child.props.value) : textFromNode(child.props.children);
+        out.push({ value: val, label: textFromNode(child.props.children) });
+      } else if (child.props?.children) {
+        out.push(...collectOptionTexts(child.props.children));
+      }
+    }
+  });
+  return out;
+}
+
+export type AutoFitInputProps = React.InputHTMLAttributes<HTMLInputElement> & {
+  isMobile?: boolean;
+  prefixText?: string;
+  prefixOffsetClass?: string;
+  minSample?: string;
+  containerClassName?: string;
+  rightAdornment?: React.ReactNode;
+};
+
+/** Input tabel adaptif: selebar kartu di mobile, menyesuaikan isi/placeholder secara otomatis di mode tabel klasik. */
+export const AutoFitInput: React.FC<AutoFitInputProps> = ({
+  isMobile = false,
+  prefixText,
+  prefixOffsetClass = "left-3",
+  minSample = "",
+  containerClassName = "",
+  rightAdornment,
+  className = "",
+  value,
+  placeholder,
+  type,
+  ...rest
+}) => {
+  const valStr = value === undefined || value === null ? "" : String(value);
+  const phStr = String(placeholder ?? "");
+  const longest = valStr.length >= phStr.length ? valStr : phStr;
+  const sample =
+    type === "time"
+      ? "00:00"
+      : longest.length >= minSample.length
+        ? longest
+        : minSample;
+  const mirrorStr =
+    type === "time"
+      ? `${sample}   `
+      : type === "number"
+        ? `${sample}  `
+        : `${sample || " "} `;
+
+  const prefixPad = prefixText && !/\bpl-/.test(className) ? "pl-9" : "";
+  const extraMirrorCls = extractMirrorClasses(className);
+  const rightInputPad = rightAdornment && !/\bpr-/.test(className) ? "pr-9" : "";
+  const rightMirrorPad = type === "time" || rightAdornment ? (!/\bpr-/.test(className) ? "pr-9" : "") : "";
+
+  if (isMobile) {
+    return (
+      <div className={`relative w-full ${containerClassName}`}>
+        {prefixText && (
+          <span className={`z-[1] absolute ${prefixOffsetClass} top-1/2 -translate-y-1/2 text-caption text-label-3 font-semibold select-none pointer-events-none`}>
+            {prefixText}
+          </span>
+        )}
+        <input
+          size={1}
+          type={type}
+          value={value}
+          placeholder={placeholder}
+          className={`w-full ${TABLE_INPUT_VISUAL} ${prefixPad} ${rightInputPad} ${className}`}
+          {...rest}
+        />
+        {rightAdornment}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`relative inline-grid items-center min-w-full ${containerClassName}`}>
+      {prefixText && (
+        <span className={`z-[1] absolute ${prefixOffsetClass} top-1/2 -translate-y-1/2 text-caption text-label-3 font-semibold select-none pointer-events-none`}>
+          {prefixText}
+        </span>
+      )}
+      <span
+        aria-hidden
+        className={`col-start-1 row-start-1 invisible pointer-events-none whitespace-pre min-h-[44px] flex items-center px-3 border border-transparent text-[16px] sm:text-subhead ${prefixPad} ${extraMirrorCls} ${rightMirrorPad}`}
+      >
+        {mirrorStr}
+      </span>
+      <input
+        size={1}
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        className={`col-start-1 row-start-1 absolute inset-0 w-full h-full ${TABLE_INPUT_VISUAL} ${prefixPad} ${rightInputPad} ${className}`}
+        {...rest}
+      />
+      {rightAdornment}
+    </div>
+  );
+};
+
+export type AutoFitSelectProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
+  isMobile?: boolean;
+  containerClassName?: string;
+};
+
+/** Dropdown tabel adaptif: menyempit saat opsi singkat dan melebar otomatis agar seluruh teks opsi terpilih selalu terbaca. */
+export const AutoFitSelect: React.FC<AutoFitSelectProps> = ({
+  isMobile = false,
+  containerClassName = "",
+  className = "",
+  value,
+  children,
+  ...rest
+}) => {
+  const options = React.useMemo(() => collectOptionTexts(children), [children]);
+  const valStr = value === undefined || value === null ? "" : String(value);
+  const selected = options.find((o) => o.value === valStr) ?? options[0];
+  const displayLabel = selected?.label || "Pilih...";
+  const extraMirrorCls = extractMirrorClasses(className);
+
+  if (isMobile) {
+    return (
+      <div className={`relative w-full ${containerClassName}`}>
+        <select
+          value={value}
+          className={`w-full ${TABLE_INPUT_VISUAL} appearance-none pr-8 cursor-pointer ${className}`}
+          {...rest}
+        >
+          {children}
+        </select>
+        <ChevronDown className="z-[1] absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-label-3 pointer-events-none" />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`relative inline-grid items-center min-w-full ${containerClassName}`}>
+      <span
+        aria-hidden
+        className={`col-start-1 row-start-1 invisible pointer-events-none whitespace-pre min-h-[44px] flex items-center px-3 border border-transparent text-[16px] sm:text-subhead ${extraMirrorCls} pr-9`}
+      >
+        {displayLabel}
+      </span>
+      <select
+        value={value}
+        className={`col-start-1 row-start-1 absolute inset-0 w-full h-full ${TABLE_INPUT_VISUAL} appearance-none pr-8 cursor-pointer ${className}`}
+        {...rest}
+      >
+        {children}
+      </select>
+      <ChevronDown className="z-[1] absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-label-3 pointer-events-none" />
+    </div>
+  );
 };
 
 const SwipeableRow = ({ isMobile, className, style, children, onSwipe, disabled }: any) => {
@@ -588,10 +779,7 @@ export default function TableEditor<T extends AnyRow>(props: {
   // Header Table frosted glass + garis aksen kategori halus
   const thBase = `apple-bar px-3 py-3 text-caption font-semibold uppercase tracking-[0.05em] text-label-2 whitespace-nowrap sticky top-0 z-10 border-b border-sep`;
 
-  const inputBase = `w-full min-h-[44px] px-3 rounded-control bg-transparent border border-transparent
-    hover:border-sep focus:bg-surface focus:border-tint/40
-    focus:outline-none focus:ring-2 focus:ring-tint/25
-    transition-all duration-150 text-[16px] sm:text-subhead text-label placeholder:text-label-3`;
+  const inputBase = `w-full ${TABLE_INPUT_VISUAL}`;
 
   React.useEffect(() => {
     if (rows.length < actualMinRows) {
@@ -761,10 +949,11 @@ export default function TableEditor<T extends AnyRow>(props: {
                     {columns.map((c, i) => {
                       const lower = c.toLowerCase();
                       const centered = i === 0 || lower === "cash" || lower === "transfer";
+                      const compactCol = i === 0 || lower === "cash" || lower === "transfer" ? "w-px" : "";
                       return (
                         <th
                           key={i}
-                          className={`${thBase} ${centered ? "text-center" : "text-left"}`}
+                          className={`${thBase} ${compactCol} ${centered ? "text-center" : "text-left"}`}
                           style={{ boxShadow: `inset 0 -2px 0 ${catAccent.bar}55` }}
                         >
                           {c}
@@ -774,7 +963,7 @@ export default function TableEditor<T extends AnyRow>(props: {
                     {extraColumns.map((ec, idx) => (
                       <th
                         key={`extra-h-${idx}`}
-                        className={`${thBase} ${ec.center ? "text-center" : "text-left"}`}
+                        className={`${thBase} ${ec.center ? "w-px text-center" : "text-left"}`}
                         style={{ boxShadow: `inset 0 -2px 0 ${catAccent.bar}55` }}
                       >
                         {ec.header}
@@ -782,7 +971,7 @@ export default function TableEditor<T extends AnyRow>(props: {
                     ))}
                     {!hideRowActions && (
                       <th
-                        className={`${thBase} text-center`}
+                        className={`${thBase} w-px text-center`}
                         style={{ boxShadow: `inset 0 -2px 0 ${catAccent.bar}55` }}
                       >
                         Aksi
@@ -986,6 +1175,7 @@ export default function TableEditor<T extends AnyRow>(props: {
                                     row: r,
                                     rowIndex: i,
                                     inputBase,
+                                    isMobile,
                                     onKeyNav,
                                     updateRow,
                                   });
@@ -993,74 +1183,90 @@ export default function TableEditor<T extends AnyRow>(props: {
                                   if (overridden !== undefined) return tdWrapper(overridden);
 
                                   if (k === "harga") {
+                                    const formattedHarga =
+                                      rowAny.harga === "" || rowAny.harga === undefined || rowAny.harga === null
+                                        ? ""
+                                        : formatRibuanInput(rowAny.harga, { allowZero: true });
                                     return tdWrapper(
-                                        <div className="relative">
-                                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-caption text-label-3 font-semibold select-none pointer-events-none">Rp</span>
-                                          <input
-                                            data-fieldid={`table-${title.replace(/\s+/g,'-')}-${i}-${k}`}
-                                            inputMode="numeric"
-                                            readOnly={locked}
-                                            className={`${inputBase} pl-9 font-mono font-medium text-label placeholder:text-label-3 ${locked ? "opacity-75 cursor-not-allowed" : ""}`}
-                                            value={rowAny.harga ?? ""}
-                                            onChange={(e) => { if (!locked) updateRow(i, { harga: toInt(e.target.value) } as any); }}
-                                            onKeyDown={onKeyNav}
-                                            placeholder="0"
-                                          />
-                                        </div>,
-                                        !isMobile ? "w-[136px] lg:w-[156px]" : ""
+                                      <AutoFitInput
+                                        isMobile={isMobile}
+                                        prefixText="Rp"
+                                        minSample="00.000"
+                                        data-fieldid={`table-${title.replace(/\s+/g, "-")}-${i}-${k}`}
+                                        type="text"
+                                        inputMode="numeric"
+                                        readOnly={locked}
+                                        className={`font-mono font-medium text-label placeholder:text-label-3 ${locked ? "opacity-75 cursor-not-allowed" : ""}`}
+                                        value={formattedHarga}
+                                        onChange={(e) => {
+                                          if (!locked) {
+                                            const raw = e.target.value.replace(/\D/g, "");
+                                            updateRow(i, { harga: raw === "" ? "" : toInt(raw) } as any);
+                                          }
+                                        }}
+                                        onKeyDown={onKeyNav}
+                                        placeholder="0"
+                                      />
                                     );
                                   }
 
                                   if (kind === "time") {
                                     return tdWrapper(
-                                        <div className="relative flex items-center">
-                                          <input
-                                            data-fieldid={`table-${title.replace(/\s+/g,'-')}-${i}-${k}`}
-                                            type="time"
-                                            readOnly={locked}
-                                            className={`${inputBase} font-mono ${locked ? "opacity-75 cursor-not-allowed" : ""}`}
-                                            value={value}
-                                            onChange={(e) => { if (!locked) updateRow(i, { [k]: e.target.value } as any); }}
-                                            onKeyDown={onKeyNav}
-                                          />
-                                          {!value && <Clock className="absolute right-3 h-4 w-4 text-label-3 pointer-events-none" />}
-                                        </div>
-                                    );
-                                  }
-                                  
-                                  if (kind === "number") {
-                                    return tdWrapper(
-                                        <input
-                                          data-fieldid={`table-${title.replace(/\s+/g,'-')}-${i}-${k}`}
-                                          type="number" inputMode="numeric" pattern="[0-9]*"
-                                          min={0}
-                                          readOnly={locked}
-                                          className={`${inputBase} font-mono ${locked ? "opacity-75 cursor-not-allowed" : ""}`}
-                                          value={value}
-                                          onChange={(e) => { if (!locked) updateRow(i, { [k]: e.target.value } as any); }}
-                                          onKeyDown={onKeyNav}
-                                          placeholder={placeholders?.[k] ?? "0"}
-                                        />
-                                    );
-                                  }
-                                  
-                                  return tdWrapper(
-                                      <input
-                                        data-fieldid={`table-${title.replace(/\s+/g,'-')}-${i}-${k}`}
+                                      <AutoFitInput
+                                        isMobile={isMobile}
+                                        data-fieldid={`table-${title.replace(/\s+/g, "-")}-${i}-${k}`}
+                                        type="time"
                                         readOnly={locked}
-                                        className={`${inputBase} ${locked ? "opacity-75 cursor-not-allowed" : ""}`}
+                                        className={`font-mono ${locked ? "opacity-75 cursor-not-allowed" : ""}`}
                                         value={value}
                                         onChange={(e) => { if (!locked) updateRow(i, { [k]: e.target.value } as any); }}
                                         onKeyDown={onKeyNav}
-                                        placeholder={placeholders?.[k] ?? k.replace(/_/g, " ")}
+                                        rightAdornment={
+                                          !value ? <Clock className="z-[1] absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-label-3 pointer-events-none" /> : undefined
+                                        }
                                       />
+                                    );
+                                  }
+
+                                  if (kind === "number") {
+                                    return tdWrapper(
+                                      <AutoFitInput
+                                        isMobile={isMobile}
+                                        minSample="00"
+                                        data-fieldid={`table-${title.replace(/\s+/g, "-")}-${i}-${k}`}
+                                        type="number"
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
+                                        min={0}
+                                        readOnly={locked}
+                                        className={`font-mono ${locked ? "opacity-75 cursor-not-allowed" : ""}`}
+                                        value={value}
+                                        onChange={(e) => { if (!locked) updateRow(i, { [k]: e.target.value } as any); }}
+                                        onKeyDown={onKeyNav}
+                                        placeholder={placeholders?.[k] ?? "0"}
+                                      />
+                                    );
+                                  }
+
+                                  return tdWrapper(
+                                    <AutoFitInput
+                                      isMobile={isMobile}
+                                      minSample="Ket..."
+                                      data-fieldid={`table-${title.replace(/\s+/g, "-")}-${i}-${k}`}
+                                      readOnly={locked}
+                                      className={`${locked ? "opacity-75 cursor-not-allowed" : ""}`}
+                                      value={value}
+                                      onChange={(e) => { if (!locked) updateRow(i, { [k]: e.target.value } as any); }}
+                                      onKeyDown={onKeyNav}
+                                      placeholder={placeholders?.[k] ?? k.replace(/_/g, " ")}
+                                    />
                                   );
                               })}
                               
                               {!hidePayColumns && (
                                 <>
                                   {/* Cash Toggle */}
-                                  <td className={isMobile ? `flex justify-between items-center px-4 py-2.5 border-b border-sep` : `table-cell w-[80px] text-center align-middle px-2 py-1.5`}>
+                                  <td className={isMobile ? `flex justify-between items-center px-4 py-2.5 border-b border-sep` : `table-cell w-px whitespace-nowrap text-center align-middle px-2 py-1.5`}>
                                      {isMobile && <span className="text-caption2 font-semibold text-label-2 uppercase tracking-[0.04em]">Metode Cash</span>}
                                      <button
                                        type="button"
@@ -1089,7 +1295,7 @@ export default function TableEditor<T extends AnyRow>(props: {
                                   </td>
 
                                   {/* Transfer Toggle */}
-                                  <td className={isMobile ? `flex justify-between items-center px-4 py-2.5 ${hideRowActions && extraColumns.length === 0 ? "bg-transparent" : "border-b border-sep bg-transparent"}` : `table-cell min-w-[100px] text-center align-middle px-2 py-1.5`}>
+                                  <td className={isMobile ? `flex justify-between items-center px-4 py-2.5 ${hideRowActions && extraColumns.length === 0 ? "bg-transparent" : "border-b border-sep bg-transparent"}` : `table-cell w-px whitespace-nowrap text-center align-middle px-2 py-1.5`}>
                                      {isMobile && <span className="text-caption2 font-semibold text-label-2 uppercase tracking-[0.04em] shrink-0">Metode TF / QRIS</span>}
                                      <div className={`flex items-center gap-2 ${isMobile ? "justify-end" : "justify-center w-full"}`}>
                                        <button
@@ -1137,7 +1343,7 @@ export default function TableEditor<T extends AnyRow>(props: {
                                   className={
                                     isMobile
                                       ? `flex justify-between items-center px-4 py-2.5 ${idx < extraColumns.length - 1 || !hideRowActions ? "border-b border-sep" : "bg-transparent"}`
-                                      : `table-cell ${ec.center ? "text-center" : ""} align-middle px-2 py-1.5`
+                                      : `table-cell ${ec.center ? "w-px whitespace-nowrap text-center" : ""} align-middle px-2 py-1.5`
                                   }
                                 >
                                   {isMobile && (
@@ -1189,7 +1395,7 @@ export default function TableEditor<T extends AnyRow>(props: {
 
                               {/* Per-Row Action Buttons (Classic Mode) */}
                               {!isMobile && !hideRowActions && (
-                                <td className="table-cell text-center align-middle px-2 py-1.5">
+                                <td className="table-cell w-px whitespace-nowrap text-center align-middle px-2 py-1.5">
                                   {locked ? (
                                     <span className="inline-flex items-center gap-1 rounded-full bg-fill px-2.5 py-1 text-caption font-medium text-label-2 whitespace-nowrap">
                                       <Lock size={11} />Otomatis

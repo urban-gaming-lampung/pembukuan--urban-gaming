@@ -7,7 +7,7 @@
  *   pos_transaksi, pengurangan stok jualan, dan riwayat stok "Terjual".
  */
 import { useEffect, useState } from "react";
-import { collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, updateDoc, where, writeBatch } from "firebase/firestore";
+import { collection, doc, getDoc, getDocFromServer, getDocs, limit, onSnapshot, orderBy, query, runTransaction, serverTimestamp, updateDoc, where, writeBatch } from "firebase/firestore";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { auth, db, storage } from "./firebase";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
@@ -450,7 +450,7 @@ export function planStokSync(products: ProdukSync[], master: StokKategori[]) {
 /** Jalankan sinkron (owner / super admin). Master dibaca langsung dari server. */
 export async function syncProdukKeStok(products: ProdukSync[]): Promise<{ linked: number; created: number; items: StokRef[] }> {
   if (!products.some((p) => p.category === "JUALAN" && p.stokRef === undefined)) return { linked: 0, created: 0, items: [] };
-  const snap = await getDoc(doc(db, "data", "master_stok_categories"));
+  const snap = await getDocFromServer(doc(db, "data", "master_stok_categories"));
   const raw = snap.data()?.jualan;
   if (!Array.isArray(raw)) throw new Error("Master stok belum terbaca.");
   const plan = planStokSync(products, raw as StokKategori[]);

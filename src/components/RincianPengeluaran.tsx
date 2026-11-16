@@ -114,7 +114,7 @@ export default function RincianPengeluaran({
       hideRowActions={!isOwner}
       isRowLocked={isAutoRow}
       allowProofOnLocked
-      placeholders={{ ket: "Keterangan pengeluaran..." }}
+      placeholders={{ ket: "Keterangan..." }}
       renderNo={(r) =>
         isAutoRow(r) ? (
           <Pill color="purple" icon={<Zap size={10} className="fill-current" />}>
@@ -126,14 +126,14 @@ export default function RincianPengeluaran({
         if (!isAutoRow(row)) return undefined;
         if (keyName === "ket") {
           return (
-            <div className={`min-h-[44px] flex items-center rounded-control px-3 py-2 text-subhead font-medium select-none ${AKSEN_TILE.purple.bg} ${AKSEN_TILE.purple.iconText}`}>
+            <div className={`min-h-[44px] flex items-center rounded-control px-3 py-2 text-subhead font-medium select-none ${!isMobileTable ? "whitespace-nowrap" : ""} ${AKSEN_TILE.purple.bg} ${AKSEN_TILE.purple.iconText}`}>
               {row.ket}
             </div>
           );
         }
         if (keyName === "harga") {
           return (
-            <div className={`min-h-[44px] flex items-center rounded-control px-3 py-2 text-subhead font-mono tabular-nums font-bold select-none ${AKSEN_TILE.purple.bg} ${AKSEN_TILE.purple.iconText}`}>
+            <div className={`min-h-[44px] flex items-center rounded-control px-3 py-2 text-subhead font-mono tabular-nums font-bold select-none whitespace-nowrap ${AKSEN_TILE.purple.bg} ${AKSEN_TILE.purple.iconText}`}>
               {rupiah(toInt(row.harga))}
             </div>
           );

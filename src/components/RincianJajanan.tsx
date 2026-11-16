@@ -1,8 +1,7 @@
 import React from "react";
-import TableEditor from "./TableEditor";
+import TableEditor, { AutoFitInput, AutoFitSelect } from "./TableEditor";
 import { RowJajanan } from "../lib/types";
-import { toInt } from "../lib/format";
-import { ChevronDown } from "lucide-react";
+import { toInt, formatRibuanInput } from "../lib/format";
 
 type PriceItem = { label: string; price: number };
 
@@ -64,48 +63,49 @@ const RincianJajanan: React.FC<{
       minRows={5} 
       onClear={() => {}} 
       getHarga={(r) => toInt(String((r as any).harga))}
-      renderCell={({ keyName, value, row, rowIndex, inputBase, onKeyNav, updateRow }) => {
+      renderCell={({ keyName, value, row, rowIndex, isMobile, onKeyNav, updateRow }) => {
         const jenisKey = pickKey(row, ["jenis jajanan", "jenisjajanan", "jenis", "jajanan", "menu"]);
         const qtyKey = pickKey(row, ["qty", "jumlah"]);
 
         if (jenisKey && keyName === jenisKey) {
           const selected = String(value || "");
           return (
-            <div className="relative w-full">
-              <select
-                className={`${inputBase} appearance-none pr-8 cursor-pointer`}
-                value={selected}
-                onKeyDown={onKeyNav}
-                onChange={(e) => {
-                  const nextJenis = e.target.value;
-                  const qtyNow = toInt(String(qtyKey ? (row as any)[qtyKey] : 0)) || 0;
-                  const unit = priceMap[nextJenis] ?? 0;
-                  updateRow(rowIndex, { [jenisKey]: nextJenis, harga: qtyNow * unit } as any);
-                }}
-              >
-                <option value="" className="bg-surface text-label">Pilih jajanan...</option>
-                {menu.length > 0 ? (
-                  menu.map((m) => (
-                    <option key={m} value={m} className="bg-surface text-label">
-                      {m}
-                    </option>
-                  ))
-                ) : (
-                  <option disabled className="bg-surface text-label-3">List Kosong</option>
-                )}
-              </select>
-              <ChevronDown className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-label-3 pointer-events-none" />
-            </div>
+            <AutoFitSelect
+              isMobile={isMobile}
+              value={selected}
+              onKeyDown={onKeyNav}
+              onChange={(e) => {
+                const nextJenis = e.target.value;
+                const qtyNow = toInt(String(qtyKey ? (row as any)[qtyKey] : 0)) || 0;
+                const unit = priceMap[nextJenis] ?? 0;
+                updateRow(rowIndex, { [jenisKey]: nextJenis, harga: qtyNow * unit } as any);
+              }}
+            >
+              <option value="" className="bg-surface text-label">Pilih jajanan...</option>
+              {menu.length > 0 ? (
+                menu.map((m) => (
+                  <option key={m} value={m} className="bg-surface text-label">
+                    {m}
+                  </option>
+                ))
+              ) : (
+                <option disabled className="bg-surface text-label-3">List Kosong</option>
+              )}
+            </AutoFitSelect>
           );
         }
 
         if (qtyKey && keyName === qtyKey) {
           const v = value ?? "";
           return (
-            <input
-              type="number" inputMode="numeric" pattern="[0-9]*"
+            <AutoFitInput
+              isMobile={isMobile}
+              type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
               min={0}
-              className={`${inputBase} font-mono`}
+              minSample="00"
+              className="font-mono"
               value={v}
               onKeyDown={onKeyNav}
               onChange={(e) => {
@@ -124,17 +124,18 @@ const RincianJajanan: React.FC<{
           const computed = calcHarga(row, priceMap);
           const shown = computed || toInt(String((row as any).harga)) || 0;
           return (
-             <div className="relative">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-caption text-label-3 font-semibold select-none pointer-events-none">Rp</span>
-              <input
-                inputMode="numeric"
-                className={`${inputBase} pl-8 font-mono font-medium text-label`}
-                value={shown}
-                onKeyDown={onKeyNav}
-                readOnly
-                placeholder="0"
-              />
-            </div>
+            <AutoFitInput
+              isMobile={isMobile}
+              prefixText="Rp"
+              minSample="00.000"
+              type="text"
+              inputMode="numeric"
+              className="font-mono font-medium text-label"
+              value={shown > 0 ? formatRibuanInput(shown) : ""}
+              onKeyDown={onKeyNav}
+              readOnly
+              placeholder="0"
+            />
           );
         }
         return undefined;

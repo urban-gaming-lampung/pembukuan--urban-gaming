@@ -7,7 +7,7 @@
  * Riwayat harga modal disimpan supaya laba bulan lalu tetap akurat walau modal berubah.
  */
 import { useEffect, useState } from "react";
-import { addDoc, arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, runTransaction, serverTimestamp, setDoc, where } from "firebase/firestore";
+import { addDoc, arrayUnion, collection, deleteDoc, doc, getDoc, getDocFromServer, getDocs, onSnapshot, query, runTransaction, serverTimestamp, setDoc, where } from "firebase/firestore";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { auth, db, storage } from "./firebase";
 import type { StokKategori } from "../hooks/useStokData";
@@ -159,7 +159,7 @@ export async function simpanBarangJualan(
   let dibuat = false;
   let bersihkan: StokRef | null = null;
   if (input.stokRef === undefined) {
-    const snap = await getDoc(doc(db, "data", "master_stok_categories"));
+    const snap = await getDocFromServer(doc(db, "data", "master_stok_categories"));
     const master = snap.data()?.jualan;
     if (!Array.isArray(master)) throw new Error("Master stok belum terbaca, coba lagi.");
     const plan = planStokSync([{ id: "_", name: nama, category: "JUALAN", subcategory: input.subkategori, kondisi: input.kondisi, stokRef: undefined }], master as StokKategori[]);

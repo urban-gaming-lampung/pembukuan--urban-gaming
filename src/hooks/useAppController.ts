@@ -14,6 +14,7 @@ import { RowHarian, RowJajanan, RowJasaAks, RowSewa, HistoryItem } from "../lib/
 import { DEFAULT_HARGA_HARIAN, DEFAULT_HARGA_JAJANAN, DEFAULT_HARGA_JASA_AKS, DEFAULT_HARGA_SEWA } from "../constants/prices";
 import { checkCatalogBaselineAndLogUpdates, isVersionLower, SavedCatalogState } from "../lib/catalog";
 import useStokData from "./useStokData";
+import { pulihkanStokJualanDariRiwayat } from "../lib/stokJualan";
 import { bukaHalamanStok } from "../lib/stokRental";
 import { isBarisNota, sinkronNotaKePembukuan, useNotaHariKerja } from "../lib/posPembukuan";
 import { CatatanPengingat, wajibWaPenyewa } from "../lib/pengingatSewa";
@@ -399,6 +400,28 @@ export default function useAppController() {
   }, [dbCatalogState]);
   const [userProfileLoaded, setUserProfileLoaded] = useState(false);
   const [isDeactivated, setIsDeactivated] = useState(false);
+  const autoStokRecoveredRef = useRef(false);
+
+  // Pulihkan stok jualan dari riwayat log jika dokumen data/stok.jualan di server sempat kosong
+  useEffect(() => {
+    if (!user) {
+      autoStokRecoveredRef.current = false;
+      return;
+    }
+    if (
+      !userProfileLoaded ||
+      isDeactivated ||
+      !isSuperAdminOrOwner ||
+      !appStokData.stokLoaded ||
+      !appStokData.masterLoaded ||
+      autoStokRecoveredRef.current ||
+      Object.keys(appStokData.stokState?.jualan || {}).length > 0
+    ) {
+      return;
+    }
+    autoStokRecoveredRef.current = true;
+    pulihkanStokJualanDariRiwayat().catch((e) => console.warn("Pemulihan otomatis stok jualan gagal:", e));
+  }, [user, userProfileLoaded, isDeactivated, isSuperAdminOrOwner, appStokData.stokLoaded, appStokData.masterLoaded, appStokData.stokState]);
 
 
   useEffect(() => {
@@ -428,6 +451,7 @@ export default function useAppController() {
   }, [tanggal]);
 
   useEffect(() => {
+    if (!user) return;
     const q = query(
       collection(db, "log_absensi"),
       where("timestamp", ">=", new Date(`${logWindowStart}T00:00:00`).toISOString())
@@ -437,7 +461,7 @@ export default function useAppController() {
       setAllLogAbsensi(data);
     }, (err) => console.error("Error fetching log_absensi:", err));
     return () => unsub();
-  }, [logWindowStart]);
+  }, [logWindowStart, user?.uid]);
 
   // Sync absenPagi, absenSiang, shiftPegawai, and initial rukoBuka/Tutup with log_absensi SSOT (Identical to TabPegawai)
   useEffect(() => {
@@ -766,6 +790,7 @@ export default function useAppController() {
   }, [posBaseline, posBaselineLoaded]);
 
   useEffect(() => {
+    if (!user) return;
     const unsub = onSnapshot(doc(db, "data", "ruko_status"), (snap) => {
       if (snap.exists() && !editingId) {
         const data = snap.data();
@@ -781,9 +806,9 @@ export default function useAppController() {
            }
         }
       }
-    });
+    }, (err) => console.error("Error fetching ruko_status:", err));
     return () => unsub();
-  }, [tanggal, editingId]);
+  }, [tanggal, editingId, user?.uid]);
 
   // State untuk Alert (UI Apple Style)
   const [showDuplicateDateAlert, setShowDuplicateDateAlert] = useState(false);
@@ -849,7 +874,7 @@ export default function useAppController() {
               break;
           case "isPaid_empty":
               title = "Status Pembayaran Kosong";
-              message = "Pilihan 'Apakah sudah dibayar?' wajib diisi pada baris Sewa PS yang terisi!";
+              message = "Pilihan 'Sudah Bayar?' wajib diisi pada baris Sewa PS yang terisi!";
               targetId = "section-rincian";
               break;
           case "harga_sewa_empty":
@@ -1248,7 +1273,7 @@ export default function useAppController() {
     if (data.rowsPengeluaran) setRowsPengeluaran(cleanRows(data.rowsPengeluaran, 1));
   }, [editingId]);
 
-  useFormDraft(currentFormSignature, applyRemoteDraft, activeTab, !!editingId);
+  useFormDraft(currentFormSignature, applyRemoteDraft, activeTab, !!editingId, Boolean(user));
 
   // ===== PERINGATAN "WAKTU SEWA HABIS" (halaman Usaha Rental) =====
   // Data unit dari sumber yang sama dengan Monitoring Status Unit (lib/sewa)

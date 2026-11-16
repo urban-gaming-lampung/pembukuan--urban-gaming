@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Package, Trash2 } from "lucide-react";
 import { addDoc, collection, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { rupiah } from "../lib/format";
+import { rupiah, formatRibuanInput } from "../lib/format";
 import { toLocalYmd } from "../lib/dateLocal";
 import { Bisnis, bisnisOf, JenisTransaksi, KOLEKSI, TransaksiOwner } from "../lib/keuangan";
 import SubTabs from "./common/SubTabs";
@@ -192,7 +192,7 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
   }, [items, tab]);
   const toggle = (arr: string[], set: (v: string[]) => void, k: string) => set(arr.includes(k) ? arr.filter((x) => x !== k) : [...arr, k]);
 
-  const inputCls = "w-full min-h-[44px] px-3.5 py-2.5 rounded-field bg-surface-2 border border-sep text-[16px] sm:text-subhead font-medium text-label placeholder:text-label-3 focus:outline-none focus:ring-2 focus:ring-tint/30";
+  const inputCls = "w-full h-12 px-3.5 py-0 rounded-field bg-surface-2 border border-sep text-[16px] sm:text-subhead font-medium text-label placeholder:text-label-3 focus:outline-none focus:ring-2 focus:ring-tint/30";
   const lblCls = "block text-footnote font-medium text-label-2 px-0.5";
 
   return (
@@ -234,7 +234,20 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className={lblCls}>Nominal {label}</label>
-                <input type="text" inputMode="numeric" value={form.harga === "" ? "" : rupiah(nominal)} onChange={(e) => setForm({ ...form, harga: e.target.value })} className={`${inputCls} tabular-nums font-semibold`} placeholder="Rp 0" />
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[16px] sm:text-subhead font-semibold text-label-3">Rp</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={form.harga === "" ? "" : formatRibuanInput(form.harga, { allowZero: true })}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/\D/g, "");
+                      setForm({ ...form, harga: raw });
+                    }}
+                    className={`${inputCls} pl-10 tabular-nums font-semibold`}
+                    placeholder="0"
+                  />
+                </div>
               </div>
             </div>
             <div className="flex flex-col gap-1.5">

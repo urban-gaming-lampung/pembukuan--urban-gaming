@@ -1,7 +1,7 @@
 import React from "react";
 import { Calculator, Check, X } from "lucide-react";
-import TableEditor from "./TableEditor";
-import { toInt } from "../lib/format";
+import TableEditor, { AutoFitInput } from "./TableEditor";
+import { toInt, formatRibuanInput } from "../lib/format";
 
 interface Props {
   rows: any[];
@@ -41,26 +41,31 @@ export default function RincianSetoran({
       hideRowActions
       showAddRow={false}
       showReset={false}
-      placeholders={{ ket: "Keterangan setoran..." }}
-      renderCell={({ keyName, row, rowIndex, inputBase }) => {
+      placeholders={{ ket: "Keterangan..." }}
+      renderCell={({ keyName, row, rowIndex, isMobile }) => {
         if (keyName === "harga" && rowIndex === 0) {
           return (
             <div className="space-y-1">
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-caption text-label-3 font-semibold select-none pointer-events-none">
-                  Rp
-                </span>
-                <input
-                  readOnly
-                  value={row?.harga ?? ""}
-                  placeholder="0"
-                  title={hintOtomatis}
-                  className={`${inputBase} pl-9 pr-9 font-mono font-semibold tabular-nums text-label opacity-80 cursor-not-allowed`}
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" title={hintOtomatis}>
-                  <Calculator size={14} className="text-label-3" />
-                </span>
-              </div>
+              <AutoFitInput
+                isMobile={isMobile}
+                prefixText="Rp"
+                minSample="00.000"
+                readOnly
+                type="text"
+                value={
+                  row?.harga === "" || row?.harga === undefined || row?.harga === null
+                    ? ""
+                    : formatRibuanInput(row.harga, { allowZero: true })
+                }
+                placeholder="0"
+                title={hintOtomatis}
+                className="pr-9 font-mono font-semibold tabular-nums text-label opacity-80 cursor-not-allowed"
+                rightAdornment={
+                  <span className="z-[1] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" title={hintOtomatis}>
+                    <Calculator size={14} className="text-label-3" />
+                  </span>
+                }
+              />
               {isMobileTable && (
                 <p className="text-caption2 text-label-3 italic px-0.5">{hintOtomatis}</p>
               )}

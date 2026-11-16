@@ -13,7 +13,7 @@ import { StokRefSelect } from "./StokRefSelect";
 import { dipesanDari, hapusStokOtomatisBilaYatim, hariKeJatuhTempo, Kondisi, kondisiProduk, PILIH_SAAT_CHECKOUT, StokRef, stokBaruUntukProduk, useNotaDp } from "../lib/posSales";
 import KondisiSwitch from "./KondisiSwitch";
 import { getMinStok, renameJualanItem, statusOf, useMinStok, kunciStok } from "../lib/stokJualan";
-import { rupiah } from "../lib/format";
+import { rupiah, formatRibuanInput } from "../lib/format";
 import { resolveProductThumb } from "../lib/servisThumbnails";
 
 const qrisImg = new URL("/images/QRIS.jpeg", import.meta.url).href;
@@ -1405,18 +1405,21 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
             <div>
               <label className={labelCls}>Harga (Rupiah)</label>
-              <input
-                type="number"
-                required
-                min="0"
-                placeholder="Contoh: 35000"
-                value={newProdPrice}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setNewProdPrice(val === "" ? "" : Number(val));
-                }}
-                className={`${inputCls} font-mono tabular-nums`}
-              />
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-subhead text-label-3">Rp</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  required
+                  placeholder="35.000"
+                  value={newProdPrice === "" ? "" : formatRibuanInput(newProdPrice, { allowZero: true })}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, "");
+                    setNewProdPrice(raw === "" ? "" : Number(raw));
+                  }}
+                  className={`${inputCls} pl-10 font-mono tabular-nums`}
+                />
+              </div>
               {newProdPrice !== "" && newProdPrice >= 0 && (
                 <div className="text-caption font-semibold text-label-2 font-mono mt-1">
                   Preview: {rupiah(Number(newProdPrice))}
@@ -1497,18 +1500,21 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
               <div>
                 <label className={labelCls}>Harga (Rupiah)</label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  placeholder="Contoh: 35000"
-                  value={editProdPrice}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setEditProdPrice(val === "" ? "" : Number(val));
-                  }}
-                  className={`${inputCls} font-mono tabular-nums`}
-                />
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-subhead text-label-3">Rp</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    required
+                    placeholder="35.000"
+                    value={editProdPrice === "" ? "" : formatRibuanInput(editProdPrice, { allowZero: true })}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/\D/g, "");
+                      setEditProdPrice(raw === "" ? "" : Number(raw));
+                    }}
+                    className={`${inputCls} pl-10 font-mono tabular-nums`}
+                  />
+                </div>
                 {editProdPrice !== "" && editProdPrice >= 0 && (
                   <div className="text-caption font-semibold text-label-2 font-mono mt-1">
                     Preview: {rupiah(Number(editProdPrice))}

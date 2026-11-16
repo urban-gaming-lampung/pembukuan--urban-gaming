@@ -735,7 +735,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
                         setJatuhTempo(e.target.value);
                         setError("");
                       }}
-                      className={`mt-1 w-full h-11 px-3.5 rounded-field bg-fill text-[16px] sm:text-subhead font-medium text-label focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35 ${
+                      className={`mt-1 w-full h-11 px-3.5 py-0 rounded-field bg-fill text-[16px] sm:text-subhead font-medium text-label focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35 ${
                         jatuhTempoSalah ? "ring-2 ring-negative/50" : ""
                       }`}
                     />

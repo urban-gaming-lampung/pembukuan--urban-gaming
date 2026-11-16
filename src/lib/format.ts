@@ -41,6 +41,19 @@ export const toInt = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+/** Format angka input dengan pemisah ribuan bertitik ("40000" -> "40.000", "" -> ""). */
+export const formatRibuanInput = (
+  v: unknown,
+  opts: { allowZero?: boolean } = {}
+): string => {
+  const raw = String(v ?? "").replace(/\D/g, "");
+  if (!raw) return "";
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n)) return "";
+  if (n === 0 && !opts.allowZero) return "";
+  return n.toLocaleString("id-ID");
+};
+
 /** Angka dengan nol di depan: pad(7) -> "07", pad(5, 3) -> "005". */
 export const pad = (n: number, w = 2) => String(n).padStart(w, "0");
 

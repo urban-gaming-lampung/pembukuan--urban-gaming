@@ -1,8 +1,7 @@
 import React from "react";
-import TableEditor from "./TableEditor";
+import TableEditor, { AutoFitInput, AutoFitSelect } from "./TableEditor";
 import { toInt } from "../lib/format";
 import { RowHarian } from "../lib/types";
-import { ChevronDown } from "lucide-react";
 
 type PsType = string; 
 type PriceItem = { label: string; price: number };
@@ -92,47 +91,48 @@ const RincianHarian: React.FC<{
       minRows={5}
       onClear={() => {}}
       getHarga={(r) => toInt(String(r.harga))}
-      renderCell={({ keyName, value, row, rowIndex, inputBase, onKeyNav, updateRow }) => {
+      renderCell={({ keyName, value, row, rowIndex, isMobile, onKeyNav, updateRow }) => {
         const jamKey = findJamKey(row as any);
         const psKey = findPsKey(row as any);
 
         if (psKey && keyName === psKey) {
           const psVal = normalizePs(value);
           return (
-            <div className="relative w-full">
-              <select
-                className={`${inputBase} appearance-none pr-8 cursor-pointer`}
-                value={psVal}
-                onKeyDown={onKeyNav}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  const nextRow = { ...(row as any), [keyName]: v } as RowHarian;
-                  updateRow(rowIndex, { [keyName]: v } as any);
-                  recalcHarga(rowIndex, nextRow);
-                }}
-              >
-                <option value="" className="bg-surface text-label">Pilih</option>
-                {psOptions.length > 0 ? (
-                  psOptions.map((ps) => (
-                    <option key={ps} value={ps} className="bg-surface text-label">
-                      {ps}
-                    </option>
-                  ))
-                ) : (
-                  <option disabled className="bg-surface text-label-3">List Kosong</option>
-                )}
-              </select>
-              <ChevronDown className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-label-3 pointer-events-none" />
-            </div>
+            <AutoFitSelect
+              isMobile={isMobile}
+              value={psVal}
+              onKeyDown={onKeyNav}
+              onChange={(e) => {
+                const v = e.target.value;
+                const nextRow = { ...(row as any), [keyName]: v } as RowHarian;
+                updateRow(rowIndex, { [keyName]: v } as any);
+                recalcHarga(rowIndex, nextRow);
+              }}
+            >
+              <option value="" className="bg-surface text-label">Pilih</option>
+              {psOptions.length > 0 ? (
+                psOptions.map((ps) => (
+                  <option key={ps} value={ps} className="bg-surface text-label">
+                    {ps}
+                  </option>
+                ))
+              ) : (
+                <option disabled className="bg-surface text-label-3">List Kosong</option>
+              )}
+            </AutoFitSelect>
           );
         }
 
         if (jamKey && keyName === jamKey) {
           return (
-            <input
-              type="number" inputMode="numeric" pattern="[0-9]*"
+            <AutoFitInput
+              isMobile={isMobile}
+              type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
               min={0}
-              className={`${inputBase} font-mono`}
+              minSample="00"
+              className="font-mono"
               value={value ?? ""}
               onKeyDown={onKeyNav}
               onChange={(e) => {
