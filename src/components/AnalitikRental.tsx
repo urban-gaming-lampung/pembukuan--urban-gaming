@@ -282,7 +282,7 @@ export default function AnalitikRental(p: Props) {
               </div>
             </Card>
 
-            <Card className="flex flex-col" title="Jam ramai" icon={<Clock />} iconColor="orange" accessory={puncak && puncak.count > 0 ? <>Puncak <b className="font-semibold text-label">{puncak.hour.replace(":00", ".00")}</b></> : undefined}>
+            <Card className="flex flex-col" bodyClassName="flex-1 flex flex-col" title="Jam ramai" icon={<Clock />} iconColor="orange" accessory={puncak && puncak.count > 0 ? <>Puncak <b className="font-semibold text-label">{puncak.hour.replace(":00", ".00")}</b></> : undefined}>
               {maxJam > 0 ? (
                 <div className="-ml-2 min-h-[170px] flex-1">
                   <ResponsiveContainer width="100%" height="100%">

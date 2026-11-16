@@ -13,53 +13,306 @@
   /* Kontrol bawaan (dropdown, tanggal) ikut tema aplikasi, bukan tema HP/PC */
   color-scheme: light;
 
-  /* ===== URBAN Design System — token warna (lihat src/ui/DESIGN.md) =====
+  /* ===== URBAN Design System — Official Apple iOS 27 UI Kit Tokens (lihat src/ui/DESIGN.md) =====
      Kanal RGB supaya bisa dipakai dengan opacity Tailwind (bg-surface/80).
      Nilai rgba() = warna tembus pandang (tidak memakai modifier opacity). */
-  --ui-canvas: 242 242 247;      /* latar halaman  #F2F2F7 */
-  --ui-surface: 255 255 255;     /* kartu          #FFFFFF */
-  --ui-surface-2: 242 242 247;   /* kotak di dalam kartu #F2F2F7 */
-  --ui-fill: rgba(118, 118, 128, 0.12); /* track, segmented, tombol abu */
-  --ui-label: 0 0 0;             /* teks utama */
-  --ui-label-2: 108 108 112;     /* teks sekunder #6C6C70 (AA) */
-  --ui-label-3: 161 161 166;     /* teks tersier / placeholder #A1A1A6 */
-  --ui-sep: rgba(60, 60, 67, 0.14);     /* garis pemisah */
-  --ui-edge: rgba(0, 0, 0, 0.05);       /* tepi kartu */
-  --ui-positive: 4 120 87;       /* surplus / uang masuk  #047857 */
-  --ui-negative: 190 18 60;      /* minus / uang keluar   #BE123C */
-  --ui-warning: 180 83 9;        /* peringatan            #B45309 */
-  --ui-tint: 0 122 255;          /* aksi / tautan (iOS blue) #007AFF */
+  --ui-canvas: 242 242 247;              /* Backgrounds Grouped/Light/Primary #F2F2F7 */
+  --ui-surface: 255 255 255;             /* Backgrounds/Light/Primary #FFFFFF */
+  --ui-surface-2: 242 242 247;           /* Backgrounds/Light/Secondary #F2F2F7 */
+  --ui-surface-elevated: 255 255 255;    /* Backgrounds Grouped/Light/Secondary #FFFFFF */
+  --ui-chrome: rgba(255, 255, 255, 0.80); /* Materials Light Regular / Chrome Bar */
+  --ui-card: rgba(255, 255, 255, 0.78);   /* Liquid Glass kartu frosted jernih */
+  --ui-glass-border: rgba(255, 255, 255, 0.86); /* Bezel specular kaca */
+  --ui-tile: rgba(246, 246, 250, 0.74);   /* Tile nested jernih di dalam kartu */
+  --ui-tile-hover: rgba(255, 255, 255, 0.94);
+  --ui-tile-border: rgba(0, 0, 0, 0.08);
+  --ui-fill: rgba(118, 118, 128, 0.12);   /* Fills/Light/3 Tertiary */
+  --ui-fill-2: rgba(120, 120, 128, 0.16); /* Fills/Light/2 Secondary */
+  --ui-fill-1: rgba(120, 120, 120, 0.20); /* Fills/Light/1 Primary */
+  --ui-label: 0 0 0;                     /* Labels/Light/1 Primary #000000 */
+  --ui-label-2: 82 82 88;                /* Teks sekunder tajam di atas frosted glass */
+  --ui-label-3: 134 134 142;             /* Teks tersier / placeholder #86868E */
+  --ui-sep: rgba(0, 0, 0, 0.12);         /* Separators/Light/Non-Opaque */
+  --ui-sep-opaque: rgba(198, 198, 200, 1); /* Separators/Light/Opaque #C6C6C8 */
+  --ui-edge: rgba(0, 0, 0, 0.08);        /* Ring hairline kartu */
+  --ui-positive: 0 137 50;               /* Accessible Light Green (#34C759 fill/bar) */
+  --ui-negative: 224 36 42;              /* Accessible Light Red (#FF383C iOS 27 fill/bar) */
+  --ui-warning: 197 83 0;                /* Accessible Light Orange (#FF8D28 iOS 27 fill/bar) */
+  --ui-tint: 0 136 255;                  /* System Colors/Light/8 Blue #0088FF */
+  --ui-action: 17 17 19;                 /* Tombol aksi utama (hitam profesional) #111113 */
+  --ui-action-label: 255 255 255;        /* Teks di atas tombol aksi #FFFFFF */
 
-  /* ===== Income Colors (Light) ===== */
-  --income-low: 0 84% 60%;      /* merah */
-  --income-cukup: 45 93% 47%;   /* kuning */
-  --income-bagus: 210 90% 56%;  /* biru */
-  --income-sangat: 220 85% 45%; /* biru tua */
-  --income-mantap: 142 71% 45%; /* hijau */
+  /* ===== Income Colors (Light — Official iOS 27 System Colors) ===== */
+  --income-low: 359 100% 61%;            /* iOS 27 Red    #FF383C */
+  --income-cukup: 48 100% 50%;           /* iOS 27 Yellow #FFCC00 */
+  --income-bagus: 196 100% 45%;          /* iOS 27 Cyan   #00C0E8 */
+  --income-sangat: 208 100% 50%;         /* iOS 27 Blue   #0088FF */
+  --income-mantap: 135 59% 49%;          /* iOS 27 Green  #34C759 */
 }
 
 /* Dark mode */
 .dark {
   color-scheme: dark;
-  --ui-canvas: 0 0 0;
-  --ui-surface: 28 28 30;        /* #1C1C1E */
-  --ui-surface-2: 44 44 46;      /* #2C2C2E */
-  --ui-fill: rgba(118, 118, 128, 0.24);
-  --ui-label: 255 255 255;
-  --ui-label-2: 174 174 178;     /* #AEAEB2 */
-  --ui-label-3: 99 99 102;       /* #636366 */
-  --ui-sep: rgba(84, 84, 88, 0.55);
-  --ui-edge: rgba(255, 255, 255, 0.07);
-  --ui-positive: 52 211 153;     /* #34D399 */
-  --ui-negative: 251 113 133;    /* #FB7185 */
-  --ui-warning: 251 191 36;      /* #FBBF24 */
-  --ui-tint: 10 132 255;         /* #0A84FF */
+  --ui-canvas: 0 0 0;                    /* Backgrounds/Dark - Base/Primary #000000 */
+  --ui-surface: 28 28 30;                /* Backgrounds/Dark - Base/Secondary #1C1C1E */
+  --ui-surface-2: 44 44 46;              /* Backgrounds/Dark - Base/Tertiary #2C2C2E */
+  --ui-surface-elevated: 44 44 46;       /* Backgrounds Grouped/Dark - Elevated/Secondary #2C2C2E */
+  --ui-chrome: rgba(28, 28, 30, 0.78);   /* Materials Dark Regular / Chrome Bar */
+  --ui-card: rgba(28, 28, 30, 0.74);     /* Liquid Glass Dark kartu frosted */
+  --ui-glass-border: rgba(255, 255, 255, 0.14); /* Bezel specular kaca dark */
+  --ui-tile: rgba(44, 44, 46, 0.64);     /* Grays/Dark/Gray 5 translucency */
+  --ui-tile-hover: rgba(58, 58, 60, 0.80);
+  --ui-tile-border: rgba(255, 255, 255, 0.10);
+  --ui-fill: rgba(118, 118, 128, 0.24);  /* Fills/Dark/3 Tertiary */
+  --ui-fill-2: rgba(120, 120, 128, 0.32); /* Fills/Dark/2 Secondary */
+  --ui-fill-1: rgba(120, 120, 128, 0.36); /* Fills/Dark/1 Primary */
+  --ui-label: 255 255 255;               /* Labels/Dark/1 Primary #FFFFFF */
+  --ui-label-2: 200 200 206;             /* #C8C8CE (jelas & terbaca di glass gelap) */
+  --ui-label-3: 142 142 147;             /* Grays/Dark/Gray #8E8E93 */
+  --ui-sep: rgba(255, 255, 255, 0.12);   /* Separators/Dark/Non-Opaque */
+  --ui-sep-opaque: rgba(56, 56, 58, 1);   /* Separators/Dark/Opaque #38383A */
+  --ui-edge: rgba(255, 255, 255, 0.08);
+  --ui-positive: 48 209 88;              /* System Colors/Dark/4 Green  #30D158 */
+  --ui-negative: 255 66 69;              /* System Colors/Dark/1 Red    #FF4245 */
+  --ui-warning: 255 146 48;              /* System Colors/Dark/2 Orange #FF9230 */
+  --ui-tint: 0 145 255;                  /* System Colors/Dark/8 Blue   #0091FF */
+  --ui-action: 255 255 255;              /* Tombol aksi utama kontras tinggi di dark mode */
+  --ui-action-label: 17 17 19;           /* Teks gelap di atas tombol putih */
 
-  --income-low: 0 84% 63%;
-  --income-cukup: 45 93% 55%;
-  --income-bagus: 210 95% 64%;
-  --income-sangat: 220 90% 60%;
-  --income-mantap: 142 76% 50%;
+  --income-low: 359 100% 63%;            /* iOS 27 Dark Red    #FF4245 */
+  --income-cukup: 50 100% 50%;           /* iOS 27 Dark Yellow #FFD600 */
+  --income-bagus: 194 99% 62%;           /* iOS 27 Dark Cyan   #3CD3FE */
+  --income-sangat: 206 100% 50%;         /* iOS 27 Dark Blue   #0091FF */
+  --income-mantap: 135 64% 50%;          /* iOS 27 Dark Green  #30D158 */
+}
+
+@layer base {
+  html {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", Inter, ui-sans-serif, system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+}
+
+@layer components {
+  /* Kanvas halaman dengan pembiasan warna iOS 27 agar Liquid Glass terasa hidup & jernih */
+  .apple-canvas {
+    background-color: rgb(var(--ui-canvas));
+    background-image:
+      radial-gradient(85% 55% at 92% -6%, rgba(0, 136, 255, 0.14), transparent 62%),
+      radial-gradient(75% 50% at 4% 18%, rgba(97, 85, 245, 0.095), transparent 60%),
+      radial-gradient(65% 50% at 88% 95%, rgba(0, 200, 179, 0.08), transparent 60%);
+    background-attachment: fixed;
+  }
+
+  .dark .apple-canvas {
+    background-color: rgb(var(--ui-canvas));
+    background-image:
+      radial-gradient(85% 55% at 90% -8%, rgba(0, 145, 255, 0.18), transparent 60%),
+      radial-gradient(70% 50% at 6% 24%, rgba(109, 124, 255, 0.12), transparent 58%),
+      radial-gradient(60% 45% at 85% 92%, rgba(0, 210, 224, 0.07), transparent 60%);
+    background-attachment: fixed;
+  }
+
+  /* Permukaan kartu utama (iOS 27 Liquid Glass — saturate 200% + rim specular multi-lapis) */
+  .apple-card {
+    background-color: var(--ui-card);
+    border: 1px solid var(--ui-glass-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.90), inset 0 -1px 0 rgba(255, 255, 255, 0.36);
+    backdrop-filter: saturate(200%) blur(28px);
+    -webkit-backdrop-filter: saturate(200%) blur(28px);
+  }
+
+  .dark .apple-card {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  /* Permukaan tile nested di dalam kartu kaca */
+  .apple-tile {
+    background-color: var(--ui-tile);
+    border: 1px solid var(--ui-tile-border);
+    transition: background-color 200ms ease, border-color 200ms ease;
+  }
+
+  .apple-tile-interactive:hover {
+    background-color: var(--ui-tile-hover);
+    border-color: var(--ui-edge);
+  }
+
+  /* Material kaca Apple (Liquid Glass Regular — toolbar, dock tab bar, popover, sidebar) */
+  .apple-glass {
+    background-color: var(--ui-chrome);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), inset 0 0 0 0.5px rgba(255, 255, 255, 0.72);
+    backdrop-filter: saturate(200%) blur(28px);
+    -webkit-backdrop-filter: saturate(200%) blur(28px);
+  }
+
+  .dark .apple-glass {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 0 0 0.5px rgba(255, 255, 255, 0.08);
+  }
+
+  .apple-bar {
+    background-color: var(--ui-chrome);
+    backdrop-filter: saturate(200%) blur(28px);
+    -webkit-backdrop-filter: saturate(200%) blur(28px);
+  }
+
+  /* Sheet & modal elevated frosted surfaces (SSOT iOS 27 — Light & Dark) */
+  .apple-sheet {
+    background-color: rgba(255, 255, 255, 0.90);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.96);
+    backdrop-filter: saturate(200%) blur(30px);
+    -webkit-backdrop-filter: saturate(200%) blur(30px);
+  }
+
+  .dark .apple-sheet {
+    background-color: rgba(28, 28, 30, 0.92);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  }
+
+  .apple-sheet-grouped {
+    background-color: rgba(242, 242, 247, 0.94);
+    backdrop-filter: saturate(200%) blur(30px);
+    -webkit-backdrop-filter: saturate(200%) blur(30px);
+  }
+
+  .dark .apple-sheet-grouped {
+    background-color: rgba(18, 18, 20, 0.95);
+  }
+
+  .apple-sheet-grouped .apple-card {
+    background-color: rgba(255, 255, 255, 0.92);
+    border-color: rgba(255, 255, 255, 0.88);
+  }
+
+  .dark .apple-sheet-grouped .apple-card,
+  .dark .apple-sheet .apple-card {
+    background-color: rgba(44, 44, 46, 0.92);
+    border-color: rgba(255, 255, 255, 0.13);
+  }
+
+  /* Switch Tab / Segmented Control Frosted Liquid Glass (SSOT iOS 27 Light & Dark) */
+  .apple-segmented {
+    background-color: rgba(255, 255, 255, 0.60);
+    border: 1px solid rgba(255, 255, 255, 0.80);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78), 0 4px 16px rgba(0, 0, 0, 0.045);
+    backdrop-filter: saturate(200%) blur(28px);
+    -webkit-backdrop-filter: saturate(200%) blur(28px);
+  }
+
+  .dark .apple-segmented {
+    background-color: rgba(28, 28, 30, 0.64);
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 8px 24px rgba(0, 0, 0, 0.30);
+  }
+
+  .apple-card .apple-segmented,
+  .apple-sheet .apple-segmented,
+  .apple-sheet-grouped .apple-segmented {
+    background-color: rgba(118, 118, 128, 0.12);
+    border-color: rgba(0, 0, 0, 0.05);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+    backdrop-filter: saturate(180%) blur(18px);
+    -webkit-backdrop-filter: saturate(180%) blur(18px);
+  }
+
+  .dark .apple-card .apple-segmented,
+  .dark .apple-sheet .apple-segmented,
+  .dark .apple-sheet-grouped .apple-segmented {
+    background-color: rgba(118, 118, 128, 0.24);
+    border-color: rgba(255, 255, 255, 0.10);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.22);
+  }
+
+  .apple-segmented-thumb {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 255, 255, 0.80) 100%);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.95), inset 0 1.5px 0 rgba(255, 255, 255, 1), 0 2px 16px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    backdrop-filter: saturate(200%) blur(20px);
+    -webkit-backdrop-filter: saturate(200%) blur(20px);
+  }
+
+  .dark .apple-segmented-thumb {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.27) 0%, rgba(255, 255, 255, 0.17) 100%);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24), inset 0 1.5px 0 rgba(255, 255, 255, 0.26), 0 3px 12px rgba(0, 0, 0, 0.30);
+  }
+
+  /* Slider resmi iOS 27 (Track 6px, Pill Knob 37x24px) */
+  input[type="range"].ios-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--ui-fill-1);
+    outline: none;
+    transition: background 0.2s ease;
+  }
+
+  input[type="range"].ios-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 37px;
+    height: 24px;
+    border-radius: 9999px;
+    background: #FFFFFF;
+    border: 0.5px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.14), 0 1px 2px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 1);
+    cursor: pointer;
+    transition: transform 0.16s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.16s ease;
+  }
+
+  input[type="range"].ios-slider::-moz-range-thumb {
+    width: 37px;
+    height: 24px;
+    border-radius: 9999px;
+    background: #FFFFFF;
+    border: 0.5px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.14), 0 1px 2px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 1);
+    cursor: pointer;
+    transition: transform 0.16s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.16s ease;
+  }
+
+  input[type="range"].ios-slider:active::-webkit-slider-thumb {
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18), 0 0 0 4px rgba(0, 136, 255, 0.14);
+  }
+
+  input[type="range"].ios-slider:active::-moz-range-thumb {
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18), 0 0 0 4px rgba(0, 136, 255, 0.14);
+  }
+}
+
+.animate-tab-change {
+  animation: iosTabSlide 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes iosTabSlide {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+  }
 }
 
 html,

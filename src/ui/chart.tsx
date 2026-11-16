@@ -21,7 +21,7 @@ export const ChartTip: React.FC<{
   rows: { color?: string; label: React.ReactNode; value: React.ReactNode }[];
   footer?: { label: React.ReactNode; value: React.ReactNode };
 }> = ({ title, rows, footer }) => (
-  <div className="min-w-[170px] rounded-tile bg-surface/95 px-3 py-2 shadow-float ring-1 ring-edge backdrop-blur-xl">
+  <div className="min-w-[170px] rounded-tile apple-glass px-3 py-2 shadow-float ring-1 ring-edge">
     <div className="mb-1 text-footnote font-semibold text-label">{title}</div>
     {rows.map((r, i) => (
       <div key={i} className="flex items-center justify-between gap-3 text-caption text-label-2">

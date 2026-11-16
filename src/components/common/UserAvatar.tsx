@@ -37,12 +37,12 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
   size = "md",
   className = "",
   showStatusBadge = false,
-  statusBadgeColor = "bg-emerald-500",
+  statusBadgeColor = "bg-[#34C759] dark:bg-[#30D158]",
   statusBadgeActive = true,
 }) => {
   const [imgError, setImgError] = React.useState(false);
   const initial = getInitials(name || email);
-  const bgColor = profileColor || "#3b82f6";
+  const bgColor = profileColor || "#0088FF";
   const sizeClasses = SIZE_MAP[size] || SIZE_MAP.md;
 
   React.useEffect(() => {
@@ -73,7 +73,7 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
 
       {showStatusBadge && (
         <div
-          className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ${statusBadgeActive ? statusBadgeColor : "bg-zinc-400"} border-2 border-white dark:border-zinc-800`}
+          className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ${statusBadgeActive ? statusBadgeColor : "bg-[#8E8E93]"} border-2 border-surface`}
         />
       )}
     </div>

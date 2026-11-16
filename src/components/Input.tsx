@@ -7,6 +7,8 @@ import { db, auth, storage } from "../lib/firebase";
 import { getAbsenCycleInfo, normalizeBulanTahun } from "../lib/absenPeriod";
 import { dariYmd, menitHariKerja, namaHari, toLocalYmd } from "../lib/dateLocal";
 import { rupiah } from "../lib/format";
+import { RotateCcw } from "lucide-react";
+import { AlertDialog, Button } from "../ui";
 
 // === KONSTANTA ABSENSI ===
 // (Catatan: Konstanta di bawah sudah dipindah ke dinamis via absenConfig, kecuali yang tidak terkait denda keterlambatan per blok)
@@ -88,7 +90,9 @@ const Input: React.FC<InputProps> = ({
   absenConfig = { durasiWaktuPotongan: 15, waktuToleransi: 15, nominalDenda: 1500 },
   isOwner = false
 }) => {
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetTarget, setResetTarget] = useState<
+    "all" | "absenPagi" | "absenSiang" | "rukoBuka" | "rukoTutup" | null
+  >(null);
   const [popupAbsen, setPopupAbsen] = useState<"Masuk" | "Pulang" | null>(null);
   const [showAbsenBlockedAlert, setShowAbsenBlockedAlert] = useState(false);
 
@@ -378,86 +382,112 @@ const Input: React.FC<InputProps> = ({
   };
 
   // --- STYLES ---
-  // Container utama dengan efek glass material yang smooth
-  const glassPanel = "rounded-3xl border border-white/20 dark:border-white/10 bg-white/60 dark:bg-zinc-900/40 p-1 shadow-xl shadow-zinc-200/50 dark:shadow-black/20 backdrop-blur-2xl";
+  const glassPanel =
+    "rounded-card apple-card ring-1 ring-edge shadow-card p-1.5 sm:p-2";
+  const tileBase =
+    "group relative flex flex-col justify-center px-3.5 sm:px-4 py-3 sm:py-3.5 rounded-tile apple-tile apple-tile-interactive";
+  const focusRing =
+    "focus-within:ring-2 focus-within:ring-tint/20 focus-within:bg-white dark:focus-within:bg-[#2C2C2E]/90 focus-within:border-tint/30";
 
-  // Style untuk setiap "Tile" input
-  const tileBase = "group relative flex flex-col justify-center px-4 py-3 rounded-2xl bg-white/50 dark:bg-zinc-800/40 hover:bg-white/80 dark:hover:bg-zinc-800/60 border border-transparent hover:border-zinc-200/50 dark:hover:border-zinc-700/50 transition-all duration-200";
-  const focusRing = "focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:bg-white dark:focus-within:bg-zinc-800 focus-within:border-blue-500/30";
-
-  const labelStyle = "text-[11px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-1 flex items-center gap-1.5";
-  const inputStyle = "w-full bg-transparent p-0 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 outline-none border-none ring-0 appearance-none relative z-[1] min-h-[44px]";
+  const labelStyle =
+    "text-[11px] font-semibold uppercase tracking-wider text-label-3 mb-1.5 flex items-center gap-1.5";
+  const inputStyle =
+    "w-full bg-transparent p-0 text-[16px] sm:text-subhead font-medium text-label placeholder:text-label-3 outline-none border-none ring-0 appearance-none relative z-[1] min-h-[44px]";
 
   return (
     <div className={glassPanel}>
-      <div className="flex flex-col gap-1">
-
+      <div className="flex flex-col gap-1.5">
         {/* --- SECTION 1: DATE & SHIFT --- */}
-        <div className={`${tileBase} ${focusRing} flex flex-col md:flex-row items-center justify-between !py-3 gap-3 md:gap-4`}>
+        <div
+          className={`${tileBase} ${focusRing} flex flex-col md:flex-row items-center justify-between !py-3 sm:!py-3.5 gap-3 md:gap-4`}
+        >
           <div className="flex flex-col w-full flex-1 md:pr-4">
             <label className={labelStyle}>
               <Icons.Calendar />
               <span>Tanggal Pembukuan</span>
             </label>
-            <div className="flex items-center gap-3 mt-1.5">
+            <div className="flex items-center gap-2.5 sm:gap-3 mt-1.5">
               <input
                 data-fieldid="tanggal"
                 type="date"
                 value={tanggal}
                 onChange={(e) => handleTanggalChange(e.target.value)}
-                className={`${inputStyle} text-[15px] max-w-[140px] tracking-tight`}
+                className={`${inputStyle} max-w-[160px] tracking-tight`}
               />
-              {/* Day Badge */}
               {hari && (
-                <div className="shrink-0 px-2.5 py-1 rounded-md bg-black/5 dark:bg-white/10 text-[11px] font-bold tracking-wide text-zinc-600 dark:text-zinc-300 animate-in fade-in slide-in-from-left-2 duration-300 uppercase">
+                <div className="shrink-0 px-2.5 py-1 rounded-full bg-fill border border-sep text-[11px] font-bold tracking-wide text-label-2 uppercase">
                   {hari}
                 </div>
               )}
             </div>
           </div>
 
-          <div className="hidden md:block w-[1px] self-stretch bg-zinc-200/50 dark:bg-zinc-700/50" />
+          <div className="hidden md:block w-px self-stretch bg-sep" />
 
           <div className="flex flex-col w-full flex-1 relative">
-             <label className={labelStyle}>
-               <Icons.Note />
-               <span>Shift Apa?</span>
-             </label>
-             <div className="relative mt-1">
-               <select 
-                 value={shiftPegawai} 
-                 onChange={(e) => {
-                    setShiftPegawai(e.target.value);
-                    if (e.target.value === "Libur") {
-                       handleLiburLog();
-                    }
-                 }}
-                 disabled={absenPagi !== "" || absenSiang !== ""}
-                 className="w-full bg-transparent border-none p-0 text-[15px] font-semibold text-zinc-900 dark:text-zinc-100 outline-none appearance-none cursor-pointer h-11 pb-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:text-zinc-400 dark:disabled:text-zinc-500"
-               >
-                 <option value="" disabled hidden className="bg-white dark:bg-[#1C1C1E] text-zinc-900 dark:text-zinc-100">Pilih Shift</option>
-                 <option value="Shift Pagi" className="bg-white dark:bg-[#1C1C1E] text-zinc-900 dark:text-zinc-100">Shift Pagi (10:00 - 20:00)</option>
-                 <option value="Shift Sore" className="bg-white dark:bg-[#1C1C1E] text-zinc-900 dark:text-zinc-100">Shift Sore (15:00 - 24:00)</option>
-                 <option value="Libur" className="bg-white dark:bg-[#1C1C1E] text-zinc-900 dark:text-zinc-100">Libur</option>
-               </select>
-               <div className={`pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2 ${absenPagi !== "" || absenSiang !== "" ? "text-zinc-300 dark:text-zinc-600" : "text-zinc-400 dark:text-zinc-500"}`}>
-                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-               </div>
-             </div>
+            <label className={labelStyle}>
+              <Icons.Note />
+              <span>Shift Apa?</span>
+            </label>
+            <div className="relative mt-1">
+              <select
+                value={shiftPegawai}
+                onChange={(e) => {
+                  setShiftPegawai(e.target.value);
+                  if (e.target.value === "Libur") {
+                    handleLiburLog();
+                  }
+                }}
+                disabled={absenPagi !== "" || absenSiang !== ""}
+                className="w-full bg-transparent border-none p-0 text-[16px] sm:text-subhead font-semibold text-label outline-none appearance-none cursor-pointer h-11 pb-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="" disabled hidden className="bg-surface text-label">
+                  Pilih Shift
+                </option>
+                <option value="Shift Pagi" className="bg-surface text-label">
+                  Shift Pagi (10:00 - 20:00)
+                </option>
+                <option value="Shift Sore" className="bg-surface text-label">
+                  Shift Sore (15:00 - 24:00)
+                </option>
+                <option value="Libur" className="bg-surface text-label">
+                  Libur
+                </option>
+              </select>
+              <div
+                className={`pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2 ${
+                  absenPagi !== "" || absenSiang !== "" ? "text-label-3/50" : "text-label-3"
+                }`}
+              >
+                <svg
+                  className="w-4 h-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* --- SECTION 2: GRID TIME INPUTS --- */}
-        <div className="grid grid-cols-2 gap-1">
+        {/* --- SECTION 2: GRID TIME INPUTS (2 COLUMNS MOBILE + PC) --- */}
+        <div className="grid grid-cols-2 gap-1.5">
           {/* Absen Masuk */}
-          <div className={`${tileBase} ${focusRing} overflow-hidden relative`}>
+          <div className={`${tileBase} ${focusRing} overflow-hidden relative min-w-0`}>
             {onResetAbsenPagi && isOwner && absenPagi && (
-              <button 
-                onClick={onResetAbsenPagi}
-                className="absolute top-2 right-2 p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-colors z-10"
+              <button
+                type="button"
+                onClick={() => setResetTarget("absenPagi")}
+                className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center text-label-3 hover:text-negative hover:bg-negative/10 rounded-full transition-colors z-10"
                 title="Reset Absen Masuk"
+                aria-label="Reset Absen Masuk"
               >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                <RotateCcw className="w-3.5 h-3.5" />
               </button>
             )}
             <label className={labelStyle}>
@@ -465,58 +495,76 @@ const Input: React.FC<InputProps> = ({
               <span>Absen Masuk</span>
             </label>
             {absenPagi ? (
-              <div className="flex flex-col mt-2 mb-1">
-                 <span className="text-[17px] font-bold tracking-tight text-emerald-600 dark:text-emerald-400">{absenPagi}</span>
-                 <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">Sistem mendeteksi potong gaji jika telat</span>
+              <div className="flex flex-col mt-2 mb-0.5">
+                <span className="text-[16px] sm:text-[18px] font-bold tracking-tight text-positive tabular-nums">
+                  {absenPagi}
+                </span>
+                <span className="text-[11px] text-label-3 font-medium leading-tight mt-0.5">
+                  Sistem mendeteksi potong gaji jika telat
+                </span>
               </div>
             ) : isManualPagi && isOwner ? (
-              <div className="flex items-center gap-2 mt-2">
+              <div className="flex items-center gap-1.5 mt-2">
                 <input
                   data-fieldid="manualAbsenPagi"
                   type="time"
                   defaultValue={rukoBuka || "10:00"}
                   onChange={(e) => handleManualAbsenChange("Masuk", e.target.value)}
-                  className={`${inputStyle} flex-1 cursor-pointer`}
+                  className={`${inputStyle} flex-1 min-w-0 cursor-pointer`}
                   autoFocus
                 />
                 <button
                   type="button"
                   onClick={() => setIsManualPagi(false)}
-                  className="px-2.5 py-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-xs font-semibold shrink-0 transition-colors"
+                  className="px-3 py-2 rounded-full bg-fill hover:brightness-95 text-label text-xs font-semibold shrink-0 transition-colors"
                 >
                   Batal
                 </button>
               </div>
             ) : (
-              <div className="flex flex-col gap-1.5 mt-2.5 w-full">
-                <button 
+              <div className="flex flex-col gap-2 mt-2 w-full">
+                <button
+                  type="button"
                   onClick={() => {
-                    if (isAbsenBlocked) { setShowAbsenBlockedAlert(true); return; }
+                    if (isAbsenBlocked) {
+                      setShowAbsenBlockedAlert(true);
+                      return;
+                    }
                     setPopupAbsen("Masuk");
                   }}
                   disabled={shiftPegawai === "Libur" || shiftPegawai === ""}
-                  className="group relative flex items-center justify-center gap-2 w-full rounded-[10px] transition-all duration-200 active:scale-[0.97] disabled:opacity-50 font-semibold select-none overflow-hidden px-3 py-2 text-[13px] sm:text-[14px] bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md shadow-zinc-500/10 disabled:bg-zinc-100 dark:disabled:bg-white/5 disabled:text-zinc-400 dark:disabled:text-zinc-600"
+                  className="group relative flex items-center justify-center gap-1.5 w-full rounded-full transition-all duration-200 active:scale-[0.97] disabled:opacity-50 font-semibold select-none overflow-hidden px-3 py-2.5 min-h-[44px] text-[13px] sm:text-subhead bg-action text-action-label hover:opacity-90 shadow-card disabled:bg-fill disabled:text-label-3"
                 >
                   {shiftPegawai === "" ? (
-                     <span className="relative z-0 text-[12px] opacity-70">Pilih Shift Dahulu</span>
+                    <span className="relative z-0 opacity-75 truncate">Pilih Shift Dahulu</span>
                   ) : shiftPegawai === "Libur" ? (
-                     <span className="relative z-0 text-[13px]">Selamat Berlibur</span>
+                    <span className="relative z-0 truncate">Selamat Berlibur</span>
                   ) : (
-                     <>
-                       <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/10 dark:via-black/10 to-transparent z-10" />
-                       <span className="relative z-0">Klik untuk Absen</span>
-                     </>
+                    <>
+                      <div className="pointer-events-none absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/15 dark:via-black/15 to-transparent z-10" />
+                      <span className="relative z-0 truncate">Klik untuk Absen</span>
+                    </>
                   )}
                 </button>
                 {isOwner && (
                   <button
                     type="button"
                     onClick={() => setIsManualPagi(true)}
-                    className="w-full py-1.5 px-2.5 rounded-[8px] bg-red-600 hover:bg-red-700 active:scale-[0.97] text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm shadow-red-600/20"
+                    className="w-full py-2 px-3 rounded-full bg-negative text-white text-[12px] font-semibold flex items-center justify-center gap-1 hover:opacity-90 active:scale-[0.97] transition-all"
                     title="Emergency Absen (Set Jam Masuk Manual)"
                   >
-                    <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                    <span>Emergency Absen</span>
+                    <svg
+                      className="w-3.5 h-3.5 shrink-0"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                    </svg>
+                    <span className="truncate">Emergency Absen</span>
                   </button>
                 )}
               </div>
@@ -524,14 +572,16 @@ const Input: React.FC<InputProps> = ({
           </div>
 
           {/* Absen Pulang */}
-          <div className={`${tileBase} ${focusRing} overflow-hidden relative`}>
+          <div className={`${tileBase} ${focusRing} overflow-hidden relative min-w-0`}>
             {onResetAbsenSiang && isOwner && absenSiang && (
-              <button 
-                onClick={onResetAbsenSiang}
-                className="absolute top-2 right-2 p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-colors z-10"
+              <button
+                type="button"
+                onClick={() => setResetTarget("absenSiang")}
+                className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center text-label-3 hover:text-negative hover:bg-negative/10 rounded-full transition-colors z-10"
                 title="Reset Absen Pulang"
+                aria-label="Reset Absen Pulang"
               >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                <RotateCcw className="w-3.5 h-3.5" />
               </button>
             )}
             <label className={labelStyle}>
@@ -539,59 +589,72 @@ const Input: React.FC<InputProps> = ({
               <span>Absen Pulang</span>
             </label>
             {absenSiang ? (
-              <div className="flex flex-col mt-2 mb-1">
-                 <span className="text-[17px] font-bold tracking-tight text-emerald-600 dark:text-emerald-400">{absenSiang}</span>
-                 <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">Sistem mendeteksi potong gaji jika telat</span>
+              <div className="flex flex-col mt-2 mb-0.5">
+                <span className="text-[16px] sm:text-[18px] font-bold tracking-tight text-positive tabular-nums">
+                  {absenSiang}
+                </span>
+                <span className="text-[11px] text-label-3 font-medium leading-tight mt-0.5">
+                  Sistem mendeteksi potong gaji jika telat
+                </span>
               </div>
             ) : isManualSiang && isOwner ? (
-              <div className="flex items-center gap-2 mt-2">
+              <div className="flex items-center gap-1.5 mt-2">
                 <input
                   data-fieldid="manualAbsenSiang"
                   type="time"
                   defaultValue={rukoTutup || "20:00"}
                   onChange={(e) => handleManualAbsenChange("Pulang", e.target.value)}
-                  className={`${inputStyle} flex-1 cursor-pointer`}
+                  className={`${inputStyle} flex-1 min-w-0 cursor-pointer`}
                   autoFocus
                 />
                 <button
                   type="button"
                   onClick={() => setIsManualSiang(false)}
-                  className="px-2.5 py-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-xs font-semibold shrink-0 transition-colors"
+                  className="px-3 py-2 rounded-full bg-fill hover:brightness-95 text-label text-xs font-semibold shrink-0 transition-colors"
                 >
                   Batal
                 </button>
               </div>
             ) : (
-              <div className="flex flex-col gap-1.5 mt-2.5 w-full">
-                <button 
-                  onClick={() => {
-                    setPopupAbsen("Pulang");
-                  }}
+              <div className="flex flex-col gap-2 mt-2 w-full">
+                <button
+                  type="button"
+                  onClick={() => setPopupAbsen("Pulang")}
                   disabled={shiftPegawai === "Libur" || shiftPegawai === "" || !isSudahWaktuPulang}
-                  className="group relative flex items-center justify-center gap-2 w-full rounded-[10px] transition-all duration-200 active:scale-[0.97] disabled:opacity-50 font-semibold select-none overflow-hidden px-3 py-2 text-[13px] sm:text-[14px] bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md shadow-zinc-500/10 disabled:bg-zinc-100 dark:disabled:bg-white/5 disabled:text-zinc-400 dark:disabled:text-zinc-600"
+                  className="group relative flex items-center justify-center gap-1.5 w-full rounded-full transition-all duration-200 active:scale-[0.97] disabled:opacity-50 font-semibold select-none overflow-hidden px-3 py-2.5 min-h-[44px] text-[13px] sm:text-subhead bg-action text-action-label hover:opacity-90 shadow-card disabled:bg-fill disabled:text-label-3"
                 >
                   {shiftPegawai === "" ? (
-                     <span className="relative z-0 text-[12px] opacity-70">Pilih Shift Dahulu</span>
+                    <span className="relative z-0 opacity-75 truncate">Pilih Shift Dahulu</span>
                   ) : shiftPegawai === "Libur" ? (
-                     <span className="relative z-0 text-[13px]">Selamat Berlibur</span>
+                    <span className="relative z-0 truncate">Selamat Berlibur</span>
                   ) : !isSudahWaktuPulang ? (
-                     <span className="relative z-0 text-[12px] opacity-70">Belum Waktu Pulang</span>
+                    <span className="relative z-0 opacity-75 truncate">Belum Waktu Pulang</span>
                   ) : (
-                     <>
-                       <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/10 dark:via-black/10 to-transparent z-10" />
-                       <span className="relative z-0">Klik untuk Absen</span>
-                     </>
+                    <>
+                      <div className="pointer-events-none absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/15 dark:via-black/15 to-transparent z-10" />
+                      <span className="relative z-0 truncate">Klik untuk Absen</span>
+                    </>
                   )}
                 </button>
                 {isOwner && (
                   <button
                     type="button"
                     onClick={() => setIsManualSiang(true)}
-                    className="w-full py-1.5 px-2.5 rounded-[8px] bg-red-600 hover:bg-red-700 active:scale-[0.97] text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm shadow-red-600/20"
+                    className="w-full py-2 px-3 rounded-full bg-negative text-white text-[12px] font-semibold flex items-center justify-center gap-1 hover:opacity-90 active:scale-[0.97] transition-all"
                     title="Emergency Absen (Set Jam Pulang Manual)"
                   >
-                    <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                    <span>Emergency Absen</span>
+                    <svg
+                      className="w-3.5 h-3.5 shrink-0"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                    </svg>
+                    <span className="truncate">Emergency Absen</span>
                   </button>
                 )}
               </div>
@@ -599,31 +662,33 @@ const Input: React.FC<InputProps> = ({
           </div>
 
           {/* Ruko Buka */}
-          <div className={`${tileBase} ${focusRing} relative`}>
+          <div className={`${tileBase} ${focusRing} relative min-w-0`}>
             {onResetRukoBuka && isOwner && rukoBuka && (
-              <button 
-                onClick={onResetRukoBuka}
-                className="absolute top-2 right-2 p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-colors z-10"
+              <button
+                type="button"
+                onClick={() => setResetTarget("rukoBuka")}
+                className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center text-label-3 hover:text-negative hover:bg-negative/10 rounded-full transition-colors z-10"
                 title="Reset Ruko Buka"
+                aria-label="Reset Ruko Buka"
               >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                <RotateCcw className="w-3.5 h-3.5" />
               </button>
             )}
             <label className={labelStyle}>
               <Icons.Store />
               <span>Ruko Buka</span>
             </label>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-1.5 mt-1">
               <input
                 data-fieldid="rukoBuka"
                 type="time"
                 value={rukoBuka}
                 onChange={(e) => setRukoBuka(e.target.value)}
                 readOnly={!isOwner}
-                className={`${inputStyle} ${!isOwner ? 'opacity-70 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
+                className={`${inputStyle} min-w-0 ${!isOwner ? "opacity-75 cursor-not-allowed pointer-events-none" : "cursor-pointer"}`}
               />
               {rukoBukaDate && rukoBuka && (
-                <span className="text-[11px] font-medium text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-md shrink-0">
+                <span className="text-[11px] font-medium text-label-2 bg-fill border border-sep px-2.5 py-0.5 rounded-full shrink-0">
                   {rukoBukaDate}
                 </span>
               )}
@@ -631,31 +696,33 @@ const Input: React.FC<InputProps> = ({
           </div>
 
           {/* Ruko Tutup */}
-          <div className={`${tileBase} ${focusRing} relative`}>
+          <div className={`${tileBase} ${focusRing} relative min-w-0`}>
             {onResetRukoTutup && isOwner && rukoTutup && (
-              <button 
-                onClick={onResetRukoTutup}
-                className="absolute top-2 right-2 p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-colors z-10"
+              <button
+                type="button"
+                onClick={() => setResetTarget("rukoTutup")}
+                className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center text-label-3 hover:text-negative hover:bg-negative/10 rounded-full transition-colors z-10"
                 title="Reset Ruko Tutup"
+                aria-label="Reset Ruko Tutup"
               >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                <RotateCcw className="w-3.5 h-3.5" />
               </button>
             )}
             <label className={labelStyle}>
               <Icons.StoreOff />
               <span>Ruko Tutup</span>
             </label>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-1.5 mt-1">
               <input
                 data-fieldid="rukoTutup"
                 type="time"
                 value={rukoTutup}
                 onChange={(e) => setRukoTutup(e.target.value)}
                 readOnly={!isOwner}
-                className={`${inputStyle} ${!isOwner ? 'opacity-70 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
+                className={`${inputStyle} min-w-0 ${!isOwner ? "opacity-75 cursor-not-allowed pointer-events-none" : "cursor-pointer"}`}
               />
               {rukoTutupDate && rukoTutup && (
-                <span className="text-[11px] font-medium text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-md shrink-0">
+                <span className="text-[11px] font-medium text-label-2 bg-fill border border-sep px-2.5 py-0.5 rounded-full shrink-0">
                   {rukoTutupDate}
                 </span>
               )}
@@ -679,128 +746,167 @@ const Input: React.FC<InputProps> = ({
             className={`${inputStyle} mt-1`}
           />
         </div>
-
       </div>
 
-      {/* --- FOOTER: Reset Button --- */}
+      {/* --- FOOTER: Reset Button (UDS SSOT) --- */}
       {onReset && isOwner && (
-        <div className="flex items-center justify-start px-1 pt-2">
-          <button
-            onClick={() => setShowResetConfirm(true)}
-            className="group flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-zinc-600 transition-all hover:bg-zinc-100 hover:text-zinc-900 active:scale-95 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+        <div className="flex items-center justify-start px-1 pt-2 pb-1">
+          <Button
+            variant="gray"
+            size="md"
+            icon={<RotateCcw />}
+            onClick={() => setResetTarget("all")}
+            title="Reset Semua Input"
           >
-            <svg className="w-4 h-4 transition-transform group-hover:-rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-            <span>Reset Input</span>
-          </button>
+            Reset Input
+          </Button>
         </div>
       )}
 
-      {/* Apple-style Reset Confirmation */}
-      {showResetConfirm && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 font-sans">
-          <div className="absolute inset-0 bg-black/20 dark:bg-black/50 backdrop-blur-[2px] transition-opacity" onClick={() => setShowResetConfirm(false)} />
-          <div className="relative w-full max-w-[280px] sm:max-w-[320px] overflow-hidden rounded-[20px] bg-white/90 dark:bg-[#1C1C1E]/95 backdrop-blur-xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-in zoom-in-95 duration-200">
-            <div className="p-6 text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400">
-                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-              </div>
-              <h3 className="text-[17px] font-semibold text-zinc-900 dark:text-white mb-1">Reset Semua Input?</h3>
-              <p className="text-[13px] leading-relaxed text-zinc-500 dark:text-zinc-400">Absen Pagi, Absen Siang, Ruko Buka, Ruko Tutup, dan Catatan akan dikosongkan. Tindakan ini tidak dapat dibatalkan.</p>
-            </div>
-            <div className="grid grid-cols-2 border-t border-gray-300/30 dark:border-white/10">
-              <button onClick={() => setShowResetConfirm(false)} className="py-3.5 text-[15px] font-semibold text-blue-500 hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors active:bg-zinc-200 dark:active:bg-white/10 border-r border-gray-300/30 dark:border-white/10">Batal</button>
-              <button onClick={() => { setShowResetConfirm(false); onReset?.(); }} className="py-3.5 text-[15px] font-semibold text-red-500 hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors active:bg-zinc-200 dark:active:bg-white/10">Reset</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AlertDialog
+        open={!!resetTarget}
+        onClose={() => setResetTarget(null)}
+        zClassName="z-[700]"
+        icon={<RotateCcw />}
+        iconColor="red"
+        title={
+          resetTarget === "absenPagi"
+            ? "Reset Absen Masuk?"
+            : resetTarget === "absenSiang"
+              ? "Reset Absen Pulang?"
+              : resetTarget === "rukoBuka"
+                ? "Reset Jam Ruko Buka?"
+                : resetTarget === "rukoTutup"
+                  ? "Reset Jam Ruko Tutup?"
+                  : "Reset Semua Input?"
+        }
+        description={
+          resetTarget === "absenPagi"
+            ? "Data Absen Masuk & jam Ruko Buka hari ini akan dikosongkan dari catatan absensi. Tindakan ini tidak dapat dibatalkan."
+            : resetTarget === "absenSiang"
+              ? "Data Absen Pulang & jam Ruko Tutup hari ini akan dikosongkan dari catatan absensi. Tindakan ini tidak dapat dibatalkan."
+              : resetTarget === "rukoBuka"
+                ? "Jam Ruko Buka hari ini akan dikosongkan."
+                : resetTarget === "rukoTutup"
+                  ? "Jam Ruko Tutup hari ini akan dikosongkan."
+                  : "Absen Pagi, Absen Siang, Ruko Buka, Ruko Tutup, dan Catatan akan dikosongkan. Tindakan ini tidak dapat dibatalkan."
+        }
+        actions={[
+          { label: "Batal", role: "cancel", onClick: () => setResetTarget(null) },
+          {
+            label: "Reset",
+            role: "destructive",
+            onClick: () => {
+              const target = resetTarget;
+              setResetTarget(null);
+              if (target === "all") onReset?.();
+              else if (target === "absenPagi") onResetAbsenPagi?.();
+              else if (target === "absenSiang") onResetAbsenSiang?.();
+              else if (target === "rukoBuka") onResetRukoBuka?.();
+              else if (target === "rukoTutup") onResetRukoTutup?.();
+            },
+          },
+        ]}
+      />
 
       {/* Absen Popup (Realtime Location) */}
-      <AbsenPopup 
+      <AbsenPopup
         isOpen={popupAbsen !== null}
         jenisAbsen={popupAbsen}
         onClose={() => setPopupAbsen(null)}
         shift={shiftPegawai}
         tanggal={tanggal}
         onSubmit={async (waktu, fotoBase64, _coord, evidence) => {
-           const currentMode = popupAbsen;
-           if (!currentMode) return;
+          const currentMode = popupAbsen;
+          if (!currentMode) return;
 
-           // 1. Eksekusi backend & upload foto (storage + log_absensi + denda)
-           const ok = await handlePotongGaji(waktu, fotoBase64, currentMode, evidence);
-           if (ok === false) return; // Jika gagal, popup tetap terbuka dan foto tidak hilang
+          // 1. Eksekusi backend & upload foto (storage + log_absensi + denda)
+          const ok = await handlePotongGaji(waktu, fotoBase64, currentMode, evidence);
+          if (ok === false) return; // Jika gagal, popup tetap terbuka dan foto tidak hilang
 
-           if (onAbsenSubmit) onAbsenSubmit(); // Clear suppress flag — admin aktif absen
+          if (onAbsenSubmit) onAbsenSubmit(); // Clear suppress flag — admin aktif absen
 
-           // Urutan jam dalam satu hari kerja (00:xx dini hari lebih malam dari 23:xx; "10.30" = "10:30")
-           const toMinutes = menitHariKerja;
+          // Urutan jam dalam satu hari kerja (00:xx dini hari lebih malam dari 23:xx; "10.30" = "10:30")
+          const toMinutes = menitHariKerja;
 
-           const convertToYmd = (dStr: string) => {
-             const [d, m, y] = dStr.split("-");
-             return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-           };
+          const convertToYmd = (dStr: string) => {
+            const [d, m, y] = dStr.split("-");
+            return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+          };
 
-           if (currentMode === "Masuk") {
-              setAbsenPagi(waktu);
-              // Auto-fill Ruko Buka: selalu isi saat Masuk (ambil yang paling awal)
-              const timeOnly = waktu.split(" - ")[0];
-              const dateOnly = waktu.split(" - ")[1]?.replace(/\//g, "-");
-              if (!rukoBuka || toMinutes(timeOnly) < toMinutes(rukoBuka)) {
-                 setRukoBuka(timeOnly, convertToYmd(dateOnly));
-              }
-           } else if (currentMode === "Pulang") {
-              setAbsenSiang(waktu);
-              // Auto-fill Ruko Tutup: ambil yang paling akhir (date-aware)
-              // SSOT: bandingkan tanggal aktual + waktu, bukan hanya waktu saja.
-              // Ini mencegah waktu 00:00 (tanggal beda) menimpa 20:25 (tanggal pembukuan).
-              const timeOnly = waktu.split(" - ")[0];
-              const dateOnly = waktu.split(" - ")[1]?.replace(/\//g, "-");
-              const newDateYmd = dateOnly ? convertToYmd(dateOnly) : "";
+          if (currentMode === "Masuk") {
+            setAbsenPagi(waktu);
+            // Auto-fill Ruko Buka: selalu isi saat Masuk (ambil yang paling awal)
+            const timeOnly = waktu.split(" - ")[0];
+            const dateOnly = waktu.split(" - ")[1]?.replace(/\//g, "-");
+            if (!rukoBuka || toMinutes(timeOnly) < toMinutes(rukoBuka)) {
+              setRukoBuka(timeOnly, convertToYmd(dateOnly));
+            }
+          } else if (currentMode === "Pulang") {
+            setAbsenSiang(waktu);
+            // Auto-fill Ruko Tutup: ambil yang paling akhir (date-aware)
+            // SSOT: bandingkan tanggal aktual + waktu, bukan hanya waktu saja.
+            // Ini mencegah waktu 00:00 (tanggal beda) menimpa 20:25 (tanggal pembukuan).
+            const timeOnly = waktu.split(" - ")[0];
+            const dateOnly = waktu.split(" - ")[1]?.replace(/\//g, "-");
+            const newDateYmd = dateOnly ? convertToYmd(dateOnly) : "";
 
-              // Bandingkan dengan tanggal+waktu existing
-              const existingDateYmd = rukoTutupDate || tanggal; // fallback ke tanggal pembukuan
+            // Bandingkan dengan tanggal+waktu existing
+            const existingDateYmd = rukoTutupDate || tanggal; // fallback ke tanggal pembukuan
 
-              if (!rukoTutup) {
-                 // Belum ada ruko tutup → langsung set
-                 setRukoTutup(timeOnly, newDateYmd);
-              } else if (newDateYmd > existingDateYmd) {
-                 // Tanggal aktual lebih baru → pasti lebih larut (cross-midnight)
-                 setRukoTutup(timeOnly, newDateYmd);
-              } else if (newDateYmd === existingDateYmd && toMinutes(timeOnly) > toMinutes(rukoTutup)) {
-                 // Tanggal sama → bandingkan waktu (ambil yang lebih malam)
-                 setRukoTutup(timeOnly, newDateYmd);
-              }
-              // else: waktu baru lebih awal dari yang existing → abaikan
-           }
+            if (!rukoTutup) {
+              // Belum ada ruko tutup → langsung set
+              setRukoTutup(timeOnly, newDateYmd);
+            } else if (newDateYmd > existingDateYmd) {
+              // Tanggal aktual lebih baru → pasti lebih larut (cross-midnight)
+              setRukoTutup(timeOnly, newDateYmd);
+            } else if (newDateYmd === existingDateYmd && toMinutes(timeOnly) > toMinutes(rukoTutup)) {
+              // Tanggal sama → bandingkan waktu (ambil yang lebih malam)
+              setRukoTutup(timeOnly, newDateYmd);
+            }
+            // else: waktu baru lebih awal dari yang existing → abaikan
+          }
 
-           // 2. Tutup popup hanya setelah backend dan local state sukses tersimpan
-           setPopupAbsen(null);
+          // 2. Tutup popup hanya setelah backend dan local state sukses tersimpan
+          setPopupAbsen(null);
         }}
       />
 
-      {/* WARNING POPUP: Absen Blocked di Jam Awal */}
-      {showAbsenBlockedAlert && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 font-sans">
-          <div className="absolute inset-0 bg-black/20 dark:bg-black/50 backdrop-blur-[2px] transition-opacity" onClick={() => setShowAbsenBlockedAlert(false)} />
-          <div className="relative w-full max-w-[300px] sm:max-w-[340px] overflow-hidden rounded-[20px] bg-white/90 dark:bg-[#1C1C1E]/95 backdrop-blur-xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-in zoom-in-95 duration-200">
-            <div className="p-6 text-center">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400">
-                <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-              </div>
-              <h3 className="text-[17px] font-bold text-zinc-900 dark:text-white mb-2">Absen Belum Tersedia</h3>
-              <p className="text-[13px] leading-relaxed text-zinc-500 dark:text-zinc-400 mb-1">
-                Data hari sebelumnya sudah tersimpan. Absen untuk hari baru akan tersedia mulai jam <strong className="text-zinc-900 dark:text-white">09:45 WIB</strong>.
-              </p>
-              <p className="text-[11px] leading-relaxed text-zinc-400 dark:text-zinc-500 mt-2">
-                Ini untuk mencegah data absen tercampur antar hari kerja.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 border-t border-gray-300/30 dark:border-white/10">
-              <button onClick={() => setShowAbsenBlockedAlert(false)} className="w-full py-3.5 text-[15px] font-semibold text-blue-500 hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors active:bg-zinc-200 dark:active:bg-white/10">Oke, Mengerti</button>
-            </div>
+      <AlertDialog
+        open={showAbsenBlockedAlert}
+        onClose={() => setShowAbsenBlockedAlert(false)}
+        zClassName="z-[300]"
+        icon={
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+        }
+        iconColor="yellow"
+        title="Absen Belum Tersedia"
+        description={
+          <div className="space-y-1.5">
+            <p>
+              Data hari sebelumnya sudah tersimpan. Absen untuk hari baru akan tersedia mulai jam{" "}
+              <strong className="font-semibold text-label">09:45 WIB</strong>.
+            </p>
+            <p className="text-caption2 text-label-3">
+              Ini untuk mencegah data absen tercampur antar hari kerja.
+            </p>
           </div>
-        </div>
-      )}
+        }
+        actions={[
+          { label: "Oke, Mengerti", role: "primary", onClick: () => setShowAbsenBlockedAlert(false) },
+        ]}
+      />
     </div>
   );
 };

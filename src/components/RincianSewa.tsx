@@ -93,8 +93,8 @@ const RincianSewa: React.FC<{
         title={ada ? `Nota ${(row as any)._noNota}` : "Buat nota sewa"}
         className={
           isMobileTable === false
-            ? "inline-flex items-center justify-center w-8 h-8 rounded-control bg-tint/10 text-tint hover:bg-tint/15 dark:bg-tint/15 active:scale-90 transition"
-            : "inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-white/25 hover:bg-white/35 text-white ring-1 ring-white/25 text-caption2 font-semibold active:scale-95 transition"
+            ? "inline-flex items-center justify-center w-8 h-8 rounded-full bg-tint/10 text-tint hover:bg-tint/15 dark:bg-tint/15 active:scale-90 transition"
+            : "inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-fill/90 hover:bg-fill text-tint ring-1 ring-edge text-caption2 font-semibold active:scale-95 transition"
         }
       >
         <Receipt size={13} strokeWidth={2.4} />
@@ -171,15 +171,15 @@ const RincianSewa: React.FC<{
                   updateRow(rowIndex, patch);
                 }}
               >
-                <option value="">Pilih Jenis Sewa...</option>
+                <option value="" className="bg-surface text-label">Pilih Jenis Sewa...</option>
                 {jenisOptions.length > 0 ? (
                   jenisOptions.map((m) => (
-                    <option key={m} value={m}>
+                    <option key={m} value={m} className="bg-surface text-label">
                       {m}
                     </option>
                   ))
                 ) : (
-                  <option disabled>List Kosong</option>
+                  <option disabled className="bg-surface text-label-3">List Kosong</option>
                 )}
               </select>
             </SelectWrapper>
@@ -216,7 +216,7 @@ const RincianSewa: React.FC<{
                 <button
                   type="button"
                   onClick={() => updateRow(rowIndex, { [lamaKey]: "", _customDurasi: "", _customBase: "" } as any)}
-                  className="ml-auto min-w-[32px] min-h-[32px] p-1.5 rounded-control hover:bg-fill text-label-3 hover:text-negative transition-colors flex items-center justify-center"
+                  className="ml-auto min-w-[32px] min-h-[32px] p-1.5 rounded-full hover:bg-fill text-label-3 hover:text-negative transition-colors flex items-center justify-center"
                   title="Batal Isi Sendiri"
                 >
                   <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -240,19 +240,19 @@ const RincianSewa: React.FC<{
                   updateRow(rowIndex, patch);
                 }}
               >
-                <option value="">Pilih durasi...</option>
+                <option value="" className="bg-surface text-label">Pilih durasi...</option>
                 {lamaOptions.length > 0 ? (
                   lamaOptions.map((m) => (
-                    <option key={m} value={m}>
+                    <option key={m} value={m} className="bg-surface text-label">
                       {m}
                     </option>
                   ))
                 ) : (
-                  <option disabled>List Kosong</option>
+                  <option disabled className="bg-surface text-label-3">List Kosong</option>
                 )}
-                <option value="Isi Sendiri">Isi Sendiri</option>
+                <option value="Isi Sendiri" className="bg-surface text-label">Isi Sendiri</option>
                 {row.lamaSewa === "PELUNASAN" && (
-                  <option value="PELUNASAN" className="bg-emerald-100 text-emerald-800 font-bold">
+                  <option value="PELUNASAN" className="bg-surface text-positive font-bold">
                     PELUNASAN
                   </option>
                 )}
@@ -356,7 +356,7 @@ const RincianSewa: React.FC<{
                 <button
                   type="button"
                   onClick={() => updateRow(rowIndex, { waPenyewa: saran, _addedBy: (row as any)._addedBy || userEmail } as any)}
-                  className="mt-1.5 inline-flex items-center gap-1 px-2 py-1 rounded-control bg-tint/10 text-tint text-caption2 font-semibold active:scale-95 transition"
+                  className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-tint/10 text-tint text-caption2 font-semibold active:scale-95 transition"
                 >
                   Pakai {formatWa(saran)} · sewa terakhir
                 </button>
@@ -397,9 +397,9 @@ const RincianSewa: React.FC<{
                   updateRow(rowIndex, patch);
                 }}
               >
-                <option value="">Pilih...</option>
-                <option value="YA">YA</option>
-                <option value="TIDAK">TIDAK</option>
+                <option value="" className="bg-surface text-label">Pilih...</option>
+                <option value="YA" className="bg-surface text-label">YA</option>
+                <option value="TIDAK" className="bg-surface text-label">TIDAK</option>
               </select>
             </SelectWrapper>
           );
@@ -549,9 +549,9 @@ const RincianSewa: React.FC<{
                   } as any)
                 }
               >
-                <option value="">-- Pilih --</option>
+                <option value="" className="bg-surface text-label">-- Pilih --</option>
                 {allUsers.map((u, i) => (
-                  <option key={i} value={u.id}>{u.id.split("@")[0]}</option>
+                  <option key={i} value={u.id} className="bg-surface text-label">{u.id.split("@")[0]}</option>
                 ))}
               </select>
             </SelectWrapper>

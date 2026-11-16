@@ -32,7 +32,7 @@ export const StokRefSelect: React.FC<{
   <select
     value={value === undefined && allowAuto ? AUTO : encode(value)}
     onChange={(e) => onChange(e.target.value === AUTO ? undefined : decode(e.target.value))}
-    className={className || "w-full h-11 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-[13px] font-semibold text-zinc-900 dark:text-white"}
+    className={className || "w-full h-11 px-3 rounded-field bg-fill text-[15px] sm:text-footnote font-semibold text-label focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"}
   >
     {allowAuto && <option value={AUTO}>✨ Otomatis — sistem hubungkan / buat barang stok</option>}
     <option value="">— Tidak dihubungkan (stok tidak berkurang) —</option>

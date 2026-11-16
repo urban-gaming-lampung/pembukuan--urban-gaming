@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { PresenceData } from "../hooks/usePresence";
 
 const USER_COLORS = [
-  "#ef4444", "#f97316", "#f59e0b", "#84cc16", "#10b981", "#14b8a6", "#06b6d4",
-  "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899", "#f43f5e"
+  "#FF383C", "#FF8D28", "#FFCC00", "#34C759", "#00C8B3", "#00C0E8", "#0088FF",
+  "#6155F5", "#CB30E0", "#FF2D55"
 ];
 
 export function getColorForEmailHex(email: string) {
-  if (!email) return "#3b82f6";
+  if (!email) return "#0088FF";
   let hash = 0;
   for (let i = 0; i < email.length; i++) {
     hash = email.charCodeAt(i) + ((hash << 5) - hash);

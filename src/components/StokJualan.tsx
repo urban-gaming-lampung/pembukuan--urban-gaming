@@ -1,13 +1,12 @@
 import React, { useMemo, useState } from "react";
-import { AlertCircle, CheckCircle, Check, Clock, ClipboardPaste, Copy, History, Minus, Plus, Search, ShoppingCart, TrendingUp, X } from "lucide-react";
+import { AlertCircle, CheckCircle, Check, Clock, ClipboardPaste, Copy, History, Minus, Plus, ShoppingCart, TrendingUp, X } from "lucide-react";
 import useStokData from "../hooks/useStokData";
 import { Kondisi, kondisiStok, stokBeririsan } from "../lib/posSales";
 import { useProdukJualan } from "../lib/barangJualan";
 import KondisiSwitch from "./KondisiSwitch";
 import StokReportPaste from "./StokReportPaste";
-import SubTabs from "./common/SubTabs";
-import { KartuStok, StatusChip, StepperStok, TileStok, BADGE_STATUS, LABEL_STATUS, DOT_STATUS } from "./common/StokUI";
-import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
+import { Button, Card, EmptyState, Eyebrow, Pill, SearchField, Sheet, SubTabs } from "../ui";
+import { KartuStok, StatusChip, StepperStok, TileStok, LABEL_STATUS, DOT_STATUS } from "./common/StokUI";
 import {
   ALASAN_LABEL, ALASAN_SHORT, StokAlasan, StokLog, StokRow, StokStatus, buildStokRows, commitStokChanges, defaultMinStok, fmtWaktu, isStale,
   restockText, saveMinStok, shortName, soldMap, useMinStok, useStokLog, STALE_DAYS, kunciStok } from "../lib/stokJualan";
@@ -22,10 +21,10 @@ type Filter = "semua" | StokStatus | "cek";
 type Draft = { delta: number; setTo?: number };
 const STATUS_RANK: Record<StokStatus, number> = { habis: 0, menipis: 1, aman: 2 };
 const ALASAN_COLOR: Record<string, string> = {
-  masuk: "text-emerald-600 dark:text-emerald-400",
-  terjual: "text-blue-600 dark:text-blue-400",
-  rusak: "text-red-600 dark:text-red-400",
-  koreksi: "text-zinc-500",
+  masuk: "text-positive",
+  terjual: "text-tint",
+  rusak: "text-negative",
+  koreksi: "text-label-2",
 };
 
 async function shareOrCopy(text: string, okMsg: string) {
@@ -49,19 +48,19 @@ const dayLabel = (ts: number) => {
 };
 
 const LogRow: React.FC<{ l: StokLog; showItem?: boolean }> = ({ l, showItem = true }) => (
-  <div className="px-4 py-3 flex items-start gap-3 border-t border-zinc-100 dark:border-white/5 first:border-t-0">
-    <div className={`w-12 shrink-0 text-right text-[15px] font-black tabular-nums ${l.delta > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}>
+  <div className="px-4 py-3 flex items-start gap-3 border-t border-sep first:border-t-0">
+    <div className={`w-12 shrink-0 text-right text-subhead font-bold tabular-nums ${l.delta > 0 ? "text-positive" : "text-negative"}`}>
       {l.delta > 0 ? `+${l.delta}` : l.delta}
     </div>
     <div className="min-w-0 flex-1">
-      {showItem && <div className="text-[14px] font-semibold text-zinc-900 dark:text-white truncate">{l.item}</div>}
-      <div className="text-[12px] text-zinc-500 truncate">
-        <span className={`font-bold ${ALASAN_COLOR[l.alasan] || ""}`}>{ALASAN_SHORT[l.alasan] || l.alasan}</span>
+      {showItem && <div className="text-footnote font-semibold text-label truncate">{l.item}</div>}
+      <div className="text-caption text-label-2 truncate">
+        <span className={`font-semibold ${ALASAN_COLOR[l.alasan] || ""}`}>{ALASAN_SHORT[l.alasan] || l.alasan}</span>
         {" · "}{l.sebelum} → {l.sesudah}{" · "}{shortName(l.oleh)}{" · "}
         {new Date(l.ts).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }).replace(".", ":")}
       </div>
-      {showItem && <div className="text-[11px] text-zinc-400 truncate">{l.kategori}</div>}
-      {l.catatan && <div className="text-[11px] italic text-zinc-500 truncate">“{l.catatan}”</div>}
+      {showItem && <div className="text-caption2 text-label-3 truncate">{l.kategori}</div>}
+      {l.catatan && <div className="text-caption2 italic text-label-2 truncate">“{l.catatan}”</div>}
     </div>
   </div>
 );
@@ -82,7 +81,6 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
   const [alasan, setAlasan] = useState<StokAlasan | null>(null);
   const [catatanSimpan, setCatatanSimpan] = useState("");
   const [saving, setSaving] = useState(false);
-  useBodyScrollLock(sheetOpen);
 
   const kategoriJualan = Array.isArray(masterCategories?.jualan) ? masterCategories.jualan : [];
   const dataJualan = (stokState?.jualan || {}) as Record<string, Record<string, any>>;
@@ -214,10 +212,10 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
   }, [logs]);
 
   const tiles: { key: Filter; title: string; value: number; sub: string; cls: string; icon: React.ReactNode }[] = [
-    { key: "habis", title: "Habis", value: count.habis, sub: "harus beli", cls: "text-red-600 dark:text-red-400", icon: <AlertCircle className="w-4 h-4" /> },
-    { key: "menipis", title: "Menipis", value: count.menipis, sub: "di bawah minimum", cls: "text-amber-600 dark:text-amber-400", icon: <AlertCircle className="w-4 h-4" /> },
-    { key: "aman", title: "Aman", value: count.aman, sub: "stok cukup", cls: "text-emerald-600 dark:text-emerald-400", icon: <CheckCircle className="w-4 h-4" /> },
-    { key: "cek", title: "Perlu dicek", value: count.cek, sub: `> ${STALE_DAYS} hari tak diupdate`, cls: "text-zinc-700 dark:text-zinc-200", icon: <Clock className="w-4 h-4" /> },
+    { key: "habis", title: "Habis", value: count.habis, sub: "harus beli", cls: "text-negative", icon: <AlertCircle className="w-4 h-4" /> },
+    { key: "menipis", title: "Menipis", value: count.menipis, sub: "di bawah minimum", cls: "text-warning", icon: <AlertCircle className="w-4 h-4" /> },
+    { key: "aman", title: "Aman", value: count.aman, sub: "stok cukup", cls: "text-positive", icon: <CheckCircle className="w-4 h-4" /> },
+    { key: "cek", title: "Perlu dicek", value: count.cek, sub: `> ${STALE_DAYS} hari tak diupdate`, cls: "text-label", icon: <Clock className="w-4 h-4" /> },
   ];
 
   return (
@@ -243,29 +241,36 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
 
       {/* Aksi */}
       <div className="space-y-2">
-        <button
-          type="button"
+        <Button
+          variant="filled"
+          size="lg"
+          block
           disabled={!perluBeli.length}
+          icon={<ShoppingCart />}
           onClick={() => shareOrCopy(restockText(rows), "Daftar belanja disalin 📋")}
-          className="w-full h-12 rounded-2xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[14px] font-black flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[0.98]"
         >
-          <ShoppingCart className="w-4 h-4" /> Daftar Belanja ({perluBeli.length} barang)
-        </button>
+          Daftar Belanja ({perluBeli.length} barang)
+        </Button>
         <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
+          <Button
+            variant="tinted"
+            size="lg"
+            block
+            icon={<ClipboardPaste />}
             onClick={() => setPasteOpen(true)}
-            className="h-12 rounded-2xl bg-blue-600 text-white text-[14px] font-black flex items-center justify-center gap-2 active:scale-[0.98]"
           >
-            <ClipboardPaste className="w-4 h-4" /> Tempel Laporan
-          </button>
-          <button
-            type="button"
+            Tempel Laporan
+          </Button>
+          <Button
+            variant="gray"
+            size="lg"
+            block
+            icon={<Copy />}
             onClick={() => shareOrCopy(buildStokReport(kategoriJualan, dataJualan as any), "Laporan stok disalin 📋")}
-            className="h-12 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-zinc-200 dark:border-white/10 text-zinc-800 dark:text-zinc-100 text-[14px] font-black flex items-center justify-center gap-2 active:scale-[0.98]"
+            className="bg-surface ring-1 ring-edge"
           >
-            <Copy className="w-4 h-4" /> Salin Laporan
-          </button>
+            Salin Laporan
+          </Button>
         </div>
       </div>
       <StokReportPaste open={pasteOpen} onClose={() => setPasteOpen(false)} categories={kategoriJualan} data={dataJualan as any} isOwner={isOwner} />
@@ -281,34 +286,41 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
       {tab === "barang" ? (
         <>
           {terlaris.length > 0 && filter === "semua" && !q && (
-            <div className="rounded-2xl bg-white dark:bg-[#1c1c1e] border border-zinc-200 dark:border-white/10 p-3.5">
-              <div className="flex items-center gap-1.5 text-[12px] font-bold text-zinc-500 mb-2"><TrendingUp className="w-4 h-4" /> Paling laku 30 hari</div>
+            <Card>
+              <div className="mb-2.5">
+                <Eyebrow icon={<TrendingUp />}>Paling laku 30 hari</Eyebrow>
+              </div>
               <div className="flex gap-2 overflow-x-auto no-scrollbar">
                 {terlaris.map((t) => (
-                  <div key={t.kategori + t.item} className="shrink-0 rounded-xl bg-zinc-100 dark:bg-zinc-800 px-3 py-2">
-                    <div className="text-[13px] font-bold text-zinc-900 dark:text-white whitespace-nowrap">{t.item}</div>
-                    <div className="text-[11px] text-zinc-500 whitespace-nowrap">{t.n} terjual · {t.kategori}</div>
+                  <div key={t.kategori + t.item} className="shrink-0 rounded-field bg-fill px-3 py-2">
+                    <div className="text-footnote font-semibold text-label whitespace-nowrap">{t.item}</div>
+                    <div className="text-caption2 text-label-2 whitespace-nowrap tabular-nums">{t.n} terjual · {t.kategori}</div>
                   </div>
                 ))}
               </div>
-            </div>
+            </Card>
           )}
 
-          <div className="flex items-center gap-2 h-11 px-3 rounded-xl bg-white dark:bg-[#1c1c1e] border border-zinc-200 dark:border-white/10">
-            <Search className="w-4 h-4 text-zinc-400 shrink-0" />
-            <input value={cari} onChange={(e) => setCari(e.target.value)} placeholder="Cari barang…" className="flex-1 min-w-0 bg-transparent text-[15px] focus:outline-none text-zinc-900 dark:text-white" />
-            {cari && <button type="button" onClick={() => setCari("")} aria-label="Hapus pencarian" className="p-1 text-zinc-400"><X className="w-4 h-4" /></button>}
-          </div>
+          <SearchField value={cari} onChange={setCari} placeholder="Cari barang…" />
+
           {filter !== "semua" && (
-            <button type="button" onClick={() => setFilter("semua")} className="h-8 px-3 rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 text-[12px] font-bold flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setFilter("semua")}
+              className="h-8 px-3 rounded-full bg-tint/15 text-tint text-caption font-semibold inline-flex items-center gap-1.5"
+            >
               Filter: {tiles.find((t) => t.key === filter)?.title} <X className="w-3.5 h-3.5" />
             </button>
           )}
 
           {grouped.length === 0 ? (
-            <div className="text-center text-sm text-zinc-500 py-10 rounded-2xl border border-dashed border-zinc-300 dark:border-white/10">
-              {filter === "habis" || filter === "menipis" ? `Tidak ada barang ${kondisi === "BARU" ? "baru" : "seken"} dengan status ini 👍` : "Tidak ada barang yang cocok."}
-            </div>
+            <EmptyState
+              title={
+                filter === "habis" || filter === "menipis"
+                  ? `Tidak ada barang ${kondisi === "BARU" ? "baru" : "seken"} dengan status ini 👍`
+                  : "Tidak ada barang yang cocok."
+              }
+            />
           ) : (
             grouped.map((g) => (
               <KartuStok key={g.kategori} judul={g.kategori} kanan={`${g.items.reduce((s, r) => s + r.jumlah, 0)} pcs`}>
@@ -318,17 +330,17 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
                   const nq = nextQty(r);
                   const diff = nq - r.jumlah;
                   return (
-                    <div key={kunciStok(r)} className={`pl-4 pr-3 py-2.5 flex items-center gap-2 border-t border-zinc-100 dark:border-white/5 ${diff ? "bg-blue-50/60 dark:bg-blue-500/5" : ""}`}>
+                    <div key={kunciStok(r)} className={`pl-4 pr-3 py-2.5 flex items-center gap-2 border-t border-sep ${diff ? "bg-tint/[0.06] dark:bg-tint/10" : ""}`}>
                       <button type="button" onClick={() => setSelected(r)} className="flex-1 min-w-0 text-left py-0.5 active:opacity-70">
                         <div className="flex items-center gap-2 min-w-0">
                           <span className={`w-2 h-2 rounded-full shrink-0 ${DOT_STATUS[r.status]}`} aria-hidden />
-                          <span className="text-[15px] font-semibold text-zinc-900 dark:text-zinc-100 truncate">{r.item}</span>
+                          <span className="text-subhead font-semibold text-label truncate">{r.item}</span>
                         </div>
-                        {note && <div className="text-[11px] italic text-amber-600 dark:text-amber-400 truncate pl-4">“{note}”</div>}
+                        {note && <div className="text-caption2 italic text-warning truncate pl-4">“{note}”</div>}
                         <div className="mt-0.5 pl-4 flex items-center gap-1.5 min-w-0">
                           {r.status !== "aman" && <StatusChip status={r.status} kurang={r.kurang} />}
-                          <span className="text-[11px] text-zinc-400 truncate">
-                            min {r.min}{sold ? ` · ${sold} laku/30h` : ""} · <span className={isStale(r.lastTs) ? "text-amber-600" : ""}>{fmtWaktu(r.lastTs)}</span>
+                          <span className="text-caption2 text-label-3 truncate">
+                            min {r.min}{sold ? ` · ${sold} laku/30h` : ""} · <span className={isStale(r.lastTs) ? "text-warning" : ""}>{fmtWaktu(r.lastTs)}</span>
                             {isOwner && tanpaProduk(r) ? " · tanpa produk" : ""}
                           </span>
                         </div>
@@ -340,24 +352,25 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
               </KartuStok>
             ))
           )}
-          <p className="text-center text-[11.5px] text-zinc-400 px-4">Ketuk nama barang untuk lihat riwayat{isOwner ? " & atur stok minimum" : ""}. Ubah jumlah dengan − / +, lalu tekan Simpan.</p>
+          <p className="text-center text-caption text-label-3 px-4">Ketuk nama barang untuk lihat riwayat{isOwner ? " & atur stok minimum" : ""}. Ubah jumlah dengan − / +, lalu tekan Simpan.</p>
         </>
       ) : (
         <div className="space-y-3">
           {logsLoading ? (
-            <div className="text-center text-sm text-zinc-500 py-10">Memuat riwayat…</div>
+            <div className="text-center text-footnote text-label-2 py-10">Memuat riwayat…</div>
           ) : logsByDay.length === 0 ? (
-            <div className="text-center text-sm text-zinc-500 py-10 rounded-2xl border border-dashed border-zinc-300 dark:border-white/10">
-              <History className="w-6 h-6 mx-auto mb-2 text-zinc-400" />
-              Belum ada riwayat. Riwayat tercatat setiap kali stok jualan diubah, terjual di POS, atau dari tempel laporan.
-            </div>
+            <EmptyState icon={<History />} title="Belum ada riwayat">
+              Riwayat tercatat setiap kali stok jualan diubah, terjual di POS, atau dari tempel laporan.
+            </EmptyState>
           ) : (
             logsByDay.map(([day, list]) => (
-              <div key={day}>
-                <div className="px-1 pb-1.5 text-[12px] font-bold text-zinc-500">{day}</div>
-                <div className="rounded-2xl bg-white dark:bg-[#1c1c1e] border border-zinc-200 dark:border-white/10 overflow-hidden">
-                  {list.map((l) => <LogRow key={l.id} l={l} />)}
+              <div key={day} className="space-y-1.5">
+                <div className="px-1">
+                  <Eyebrow>{day}</Eyebrow>
                 </div>
+                <Card flush>
+                  {list.map((l) => <LogRow key={l.id} l={l} />)}
+                </Card>
               </div>
             ))
           )}
@@ -366,91 +379,97 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
 
       {/* Bar simpan (muncul bila ada perubahan) */}
       {changed.length > 0 && !sheetOpen && (
-        <div className="fixed inset-x-0 bottom-0 z-[300] px-3 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] bg-white/95 dark:bg-[#1c1c1e]/95 backdrop-blur-xl border-t border-zinc-200 dark:border-white/10 shadow-[0_-8px_30px_rgba(0,0,0,0.08)]">
+        <div className="fixed inset-x-0 bottom-0 z-[300] px-3 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] apple-bar border-t border-sep shadow-[0_-8px_30px_rgba(0,0,0,0.08)]">
           <div className="max-w-xl mx-auto flex items-center gap-2">
             <div className="flex-1 min-w-0">
-              <div className="text-[14px] font-black text-zinc-900 dark:text-white">{changed.length} barang diubah</div>
-              <div className="text-[11px] text-zinc-500 truncate">Belum tersimpan</div>
+              <div className="text-footnote font-bold text-label">{changed.length} barang diubah</div>
+              <div className="text-caption2 text-label-2 truncate">Belum tersimpan</div>
             </div>
-            <button type="button" onClick={() => setDrafts({})} className="h-11 px-4 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-[14px] font-bold text-zinc-700 dark:text-zinc-200">
+            <Button variant="gray" size="md" onClick={() => setDrafts({})}>
               Batal
-            </button>
-            <button type="button" onClick={() => setSheetOpen(true)} className="h-11 px-5 rounded-xl bg-blue-600 text-white text-[14px] font-black active:scale-95">
+            </Button>
+            <Button variant="filled" size="md" onClick={() => setSheetOpen(true)}>
               Simpan
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {/* Lembar konfirmasi simpan */}
-      {sheetOpen && (
-        <div className="fixed inset-0 z-[310] flex items-end sm:items-center justify-center">
-          <div className="absolute inset-0 bg-black/50" onClick={() => !saving && setSheetOpen(false)} />
-          <div className="relative w-full sm:max-w-md bg-white dark:bg-[#1c1c1e] rounded-t-[24px] sm:rounded-[24px] max-h-[88vh] flex flex-col pb-[env(safe-area-inset-bottom)]">
-            <div className="flex justify-center pt-2 sm:hidden"><div className="w-9 h-[5px] rounded-full bg-zinc-300 dark:bg-zinc-600" /></div>
-            <div className="px-5 pt-3 pb-2 flex items-center justify-between">
-              <h3 className="text-[17px] font-black text-zinc-900 dark:text-white">Simpan perubahan stok</h3>
-              <button type="button" onClick={() => setSheetOpen(false)} disabled={saving} aria-label="Tutup" className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="px-5 overflow-y-auto space-y-4 pb-4">
-              <div className="rounded-2xl border border-zinc-200 dark:border-white/10 divide-y divide-zinc-100 dark:divide-white/5">
-                {changed.map((r) => {
-                  const nq = nextQty(r);
-                  const d = nq - r.jumlah;
+      <Sheet
+        open={sheetOpen}
+        onClose={() => !saving && setSheetOpen(false)}
+        title="Simpan Perubahan Stok"
+        size="sm"
+        variant="grouped"
+        zClassName="z-[310]"
+        footer={
+          <Button variant="filled" size="lg" block loading={saving} onClick={simpan}>
+            {saving ? "Menyimpan…" : `Simpan ${changed.length} perubahan`}
+          </Button>
+        }
+      >
+        <div className="space-y-3.5">
+          <Card flush bodyClassName="divide-y divide-sep">
+            {changed.map((r) => {
+              const nq = nextQty(r);
+              const d = nq - r.jumlah;
+              return (
+                <div key={kunciStok(r)} className="px-3.5 py-2.5 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-footnote font-semibold text-label truncate">{r.item}</div>
+                    <div className="text-caption2 text-label-3 truncate">{r.kategori}</div>
+                  </div>
+                  <div className="text-footnote font-semibold tabular-nums shrink-0 text-label">
+                    {r.jumlah} → {nq}{" "}
+                    <span className={d > 0 ? "text-positive" : "text-negative"}>({d > 0 ? `+${d}` : d})</span>
+                  </div>
+                </div>
+              );
+            })}
+          </Card>
+
+          <Card bodyClassName="space-y-3">
+            <div>
+              <div className="mb-2">
+                <Eyebrow>Jenis Perubahan</Eyebrow>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {(Object.keys(ALASAN_LABEL) as StokAlasan[]).map((a) => {
+                  const active = (alasan || autoAlasan) === a;
                   return (
-                    <div key={kunciStok(r)} className="px-3 py-2.5 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-[14px] font-semibold text-zinc-900 dark:text-white truncate">{r.item}</div>
-                        <div className="text-[11px] text-zinc-400 truncate">{r.kategori}</div>
-                      </div>
-                      <div className="text-[13px] font-bold tabular-nums shrink-0 text-zinc-700 dark:text-zinc-200">
-                        {r.jumlah} → {nq} <span className={d > 0 ? "text-emerald-600" : "text-red-500"}>({d > 0 ? `+${d}` : d})</span>
-                      </div>
-                    </div>
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => setAlasan(a)}
+                      className={`min-h-[44px] px-3 py-2 rounded-field text-caption font-semibold text-left flex items-center gap-2 transition-all ring-1 ${
+                        active
+                          ? "ring-2 ring-action bg-action/[0.06] text-label"
+                          : "ring-edge bg-fill/50 text-label-2 hover:text-label"
+                      }`}
+                    >
+                      {active && <Check className="w-4 h-4 shrink-0 text-label" />}
+                      {ALASAN_LABEL[a]}
+                    </button>
                   );
                 })}
               </div>
-              <div>
-                <div className="text-[12px] font-bold uppercase tracking-wider text-zinc-400 mb-2">Jenis perubahan</div>
-                <div className="grid grid-cols-2 gap-2">
-                  {(Object.keys(ALASAN_LABEL) as StokAlasan[]).map((a) => {
-                    const active = (alasan || autoAlasan) === a;
-                    return (
-                      <button
-                        key={a}
-                        type="button"
-                        onClick={() => setAlasan(a)}
-                        className={`min-h-[44px] px-3 py-2 rounded-xl text-[13px] font-bold text-left border flex items-center gap-2 ${
-                          active ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300" : "border-zinc-200 dark:border-white/10 text-zinc-600 dark:text-zinc-300"
-                        }`}
-                      >
-                        {active && <Check className="w-4 h-4 shrink-0" />}
-                        {ALASAN_LABEL[a]}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div>
-                <div className="text-[12px] font-bold uppercase tracking-wider text-zinc-400 mb-2">Catatan (opsional)</div>
-                <input
-                  value={catatanSimpan}
-                  onChange={(e) => setCatatanSimpan(e.target.value)}
-                  placeholder="Mis. restock dari supplier, dijual ke Budi…"
-                  className="w-full h-11 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-[15px] focus:outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900 dark:text-white"
-                />
-              </div>
             </div>
-            <div className="px-5 pt-2 pb-4 border-t border-zinc-100 dark:border-white/5">
-              <button type="button" onClick={simpan} disabled={saving} className="w-full h-12 rounded-2xl bg-blue-600 text-white text-[15px] font-black active:scale-[0.98] disabled:opacity-60">
-                {saving ? "Menyimpan…" : `Simpan ${changed.length} perubahan`}
-              </button>
+
+            <div>
+              <div className="mb-1.5">
+                <Eyebrow>Catatan (opsional)</Eyebrow>
+              </div>
+              <input
+                value={catatanSimpan}
+                onChange={(e) => setCatatanSimpan(e.target.value)}
+                placeholder="Mis. restock dari supplier, dijual ke Budi…"
+                className="w-full h-11 px-3.5 rounded-field bg-fill text-[16px] sm:text-footnote text-label placeholder:text-label-3 focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"
+              />
             </div>
-          </div>
+          </Card>
         </div>
-      )}
+      </Sheet>
 
       {selected && (
         <ItemSheet
@@ -466,7 +485,6 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
 };
 
 const ItemSheet: React.FC<{ row: StokRow; catatan: string; logs: StokLog[]; isOwner?: boolean; onClose: () => void }> = ({ row, catatan, logs, isOwner, onClose }) => {
-  useBodyScrollLock(true);
   const [min, setMin] = useState(row.min);
   const [saving, setSaving] = useState(false);
   const since = Date.now() - 30 * 86400000;
@@ -482,73 +500,106 @@ const ItemSheet: React.FC<{ row: StokRow; catatan: string; logs: StokLog[]; isOw
   };
 
   return (
-    <div className="fixed inset-0 z-[320] flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full sm:max-w-md bg-white dark:bg-[#1c1c1e] rounded-t-[24px] sm:rounded-[24px] max-h-[90vh] flex flex-col pb-[env(safe-area-inset-bottom)]">
-        <div className="flex justify-center pt-2 sm:hidden"><div className="w-9 h-[5px] rounded-full bg-zinc-300 dark:bg-zinc-600" /></div>
-        <div className="px-5 pt-2 pb-3 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 truncate">{row.kategori}</div>
-            <h3 className="text-[19px] font-black text-zinc-900 dark:text-white">{row.item}</h3>
-            {catatan && <div className="text-[12px] italic text-amber-600 dark:text-amber-400">“{catatan}”</div>}
+    <Sheet
+      open
+      onClose={onClose}
+      title={row.item}
+      subtitle={catatan ? `${row.kategori} · “${catatan}”` : row.kategori}
+      size="sm"
+      variant="grouped"
+      zClassName="z-[320]"
+    >
+      <div className="space-y-3.5">
+        <div className="grid grid-cols-3 gap-2">
+          <div className="rounded-tile apple-tile ring-1 ring-edge p-3 text-center">
+            <div className="text-title2 font-bold text-label tabular-nums">{row.jumlah}</div>
+            <div className="mt-1 flex justify-center">
+              <Pill tone={row.status === "habis" ? "negative" : row.status === "menipis" ? "warning" : "positive"}>
+                {LABEL_STATUS[row.status]}
+              </Pill>
+            </div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Tutup" className="w-9 h-9 shrink-0 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center"><X className="w-4 h-4" /></button>
+          <div className="rounded-tile apple-tile ring-1 ring-edge p-3 text-center">
+            <div className="text-title2 font-bold text-tint tabular-nums">{terjual}</div>
+            <div className="text-caption2 font-semibold text-label-2 mt-1">terjual 30h</div>
+          </div>
+          <div className="rounded-tile apple-tile ring-1 ring-edge p-3 text-center">
+            <div className="text-title2 font-bold text-positive tabular-nums">{masuk}</div>
+            <div className="text-caption2 font-semibold text-label-2 mt-1">masuk 30h</div>
+          </div>
         </div>
-        <div className="px-5 pb-5 overflow-y-auto space-y-4">
-          <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-xl bg-zinc-100 dark:bg-zinc-800 p-3 text-center">
-              <div className="text-[24px] font-black text-zinc-900 dark:text-white">{row.jumlah}</div>
-              <div className={`inline-block mt-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold ${BADGE_STATUS[row.status]}`}>{LABEL_STATUS[row.status]}</div>
-            </div>
-            <div className="rounded-xl bg-zinc-100 dark:bg-zinc-800 p-3 text-center">
-              <div className="text-[24px] font-black text-blue-600 dark:text-blue-400">{terjual}</div>
-              <div className="text-[10px] font-bold text-zinc-500">terjual 30h</div>
-            </div>
-            <div className="rounded-xl bg-zinc-100 dark:bg-zinc-800 p-3 text-center">
-              <div className="text-[24px] font-black text-emerald-600 dark:text-emerald-400">{masuk}</div>
-              <div className="text-[10px] font-bold text-zinc-500">masuk 30h</div>
-            </div>
-          </div>
 
-          <div className="rounded-2xl border border-zinc-200 dark:border-white/10 p-3.5">
-            <div className="text-[14px] font-bold text-zinc-900 dark:text-white">Stok minimum</div>
-            <div className="text-[12px] text-zinc-500 mb-3">Di bawah angka ini barang ditandai “Menipis” & masuk Daftar Belanja. Bawaan: {defaultMinStok(row.kategori)}.</div>
-            {isOwner ? (
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => setMin((m) => Math.max(0, m - 1))} aria-label="Kurangi minimum" className="w-11 h-11 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center"><Minus className="w-4 h-4" /></button>
-                <div className="w-14 text-center text-[22px] font-black tabular-nums text-zinc-900 dark:text-white">{min}</div>
-                <button type="button" onClick={() => setMin((m) => Math.min(999, m + 1))} aria-label="Tambah minimum" className="w-11 h-11 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center"><Plus className="w-4 h-4" /></button>
-                <button type="button" disabled={saving || min === row.min} onClick={simpanMin} className="ml-auto h-11 px-4 rounded-xl bg-blue-600 text-white text-[14px] font-black disabled:opacity-40">
-                  {saving ? "…" : "Simpan"}
-                </button>
-              </div>
-            ) : (
-              <div className="text-[22px] font-black tabular-nums text-zinc-900 dark:text-white">{row.min} <span className="text-[12px] font-semibold text-zinc-400">diatur owner</span></div>
-            )}
+        <Card>
+          <div className="text-footnote font-bold text-label">Stok minimum</div>
+          <div className="text-caption text-label-2 mb-3">
+            Di bawah angka ini barang ditandai “Menipis” & masuk Daftar Belanja. Bawaan: {defaultMinStok(row.kategori)}.
           </div>
+          {isOwner ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMin((m) => Math.max(0, m - 1))}
+                aria-label="Kurangi minimum"
+                className="w-11 h-11 rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label flex items-center justify-center active:scale-95 transition-all"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
+              <div className="w-14 text-center text-title2 font-bold tabular-nums text-label">{min}</div>
+              <button
+                type="button"
+                onClick={() => setMin((m) => Math.min(999, m + 1))}
+                aria-label="Tambah minimum"
+                className="w-11 h-11 rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label flex items-center justify-center active:scale-95 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+              <Button
+                variant="filled"
+                size="md"
+                loading={saving}
+                disabled={saving || min === row.min}
+                onClick={simpanMin}
+                className="ml-auto"
+              >
+                Simpan
+              </Button>
+            </div>
+          ) : (
+            <div className="text-title2 font-bold tabular-nums text-label">
+              {row.min} <span className="text-caption font-medium text-label-2">diatur owner</span>
+            </div>
+          )}
+        </Card>
 
-          <div>
-            <div className="text-[12px] font-bold uppercase tracking-wider text-zinc-400 mb-2">Riwayat barang ini</div>
-            {logs.length === 0 ? (
-              <div className="text-[13px] text-zinc-500 rounded-xl bg-zinc-50 dark:bg-white/5 p-3">
+        <div>
+          <div className="mb-2 px-1">
+            <Eyebrow>Riwayat barang ini</Eyebrow>
+          </div>
+          {logs.length === 0 ? (
+            <Card>
+              <div className="text-footnote text-label-2">
                 Belum ada riwayat. Terakhir diubah: {fmtWaktu(row.lastTs)}{row.lastBy ? ` oleh ${shortName(row.lastBy)}` : ""}.
               </div>
-            ) : (
-              <div className="rounded-2xl border border-zinc-200 dark:border-white/10 overflow-hidden">
-                {logs.slice(0, 20).map((l) => (
-                  <div key={l.id}>
-                    <div className="px-4 pt-2 text-[10px] font-bold text-zinc-400">{dayLabel(l.ts)}</div>
-                    <LogRow l={l} showItem={false} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {isOwner && <p className="text-center text-[12px] text-zinc-400 leading-snug px-2">Ubah nama, harga, atau hapus barang lewat Owner › Input › Atur Stok.</p>}
+            </Card>
+          ) : (
+            <Card flush>
+              {logs.slice(0, 20).map((l) => (
+                <div key={l.id}>
+                  <div className="px-4 pt-2 text-caption2 font-semibold text-label-3">{dayLabel(l.ts)}</div>
+                  <LogRow l={l} showItem={false} />
+                </div>
+              ))}
+            </Card>
+          )}
         </div>
+
+        {isOwner && (
+          <p className="text-center text-caption text-label-3 leading-snug px-2">
+            Ubah nama, harga, atau hapus barang lewat Owner › Input › Atur Stok.
+          </p>
+        )}
       </div>
-    </div>
+    </Sheet>
   );
 };
 

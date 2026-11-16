@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import HistoryPembukuan from "./HistoryPembukuan";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { AlertCircle, Activity, ChevronRight, ClipboardEdit, Terminal, X } from "lucide-react";
@@ -237,27 +238,27 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     return "Lainnya";
   };
 
-  // Category color palette (fixed mapping for consistency)
+  // Palet kategori memakai official iOS 27 System Colors
   const CATEGORY_COLORS: Record<string, string> = {
-    "Ongkir / Pengiriman": "#f59e0b",
-    "Gaji Pegawai": "#3b82f6",
-    "Listrik / Air / Internet": "#06b6d4",
-    "Maintenance / Servis": "#ef4444",
-    "Belanja Modal": "#8b5cf6",
-    "Konsumsi": "#ec4899",
-    "Sewa Tempat": "#14b8a6",
-    "Lainnya": "#6b7280",
+    "Ongkir / Pengiriman": "#FF8D28",
+    "Gaji Pegawai": "#0088FF",
+    "Listrik / Air / Internet": "#00C0E8",
+    "Maintenance / Servis": "#FF383C",
+    "Belanja Modal": "#CB30E0",
+    "Konsumsi": "#FF2D55",
+    "Sewa Tempat": "#00C8B3",
+    "Lainnya": "#8E8E93",
   };
-  const getCategoryColor = (cat: string) => CATEGORY_COLORS[cat] || "#6b7280";
+  const getCategoryColor = (cat: string) => CATEGORY_COLORS[cat] || "#8E8E93";
 
-  // Income category colors
+  // Palet sumber pemasukan memakai official iOS 27 System Colors
   const INCOME_COLORS: Record<string, string> = {
-    "Pemasukan Harian": "#3b82f6",
-    "Jajanan & Minuman": "#f59e0b",
-    "Sewa PS": "#10b981",
-    "Ongkir": "#06b6d4",
+    "Pemasukan Harian": "#0088FF",
+    "Jajanan & Minuman": "#FF8D28",
+    "Sewa PS": "#34C759",
+    "Ongkir": "#00C0E8",
   };
-  const getIncomeColor = (cat: string) => INCOME_COLORS[cat] || "#6b7280";
+  const getIncomeColor = (cat: string) => INCOME_COLORS[cat] || "#8E8E93";
 
   const { totalPemasukanBulanIni, totalPengeluaranBulanIni, combinedExpensesBulanIni } = useMemo(() => {
     let income = 0;
@@ -475,7 +476,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   // --- 1. TOP PERFORMING UNITS ---
   const topUnitsData = useMemo(() => {
     const counts = new Map<string, { revenue: number, count: number }>();
-    const colors = ['#3b82f6', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#f43f5e'];
+    const colors = ['#0088FF', '#FF8D28', '#34C759', '#CB30E0', '#FF2D55', '#6155F5'];
     const LABEL_KONSOL = { PS5: "PlayStation 5", PS4: "PlayStation 4", PS3: "PlayStation 3" } as const;
 
     filteredHistory.forEach(h => {
@@ -736,11 +737,11 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     selectedCatItems: any[];
     getColor: (cat: string) => string;
   }) => {
-    if (!open) return null;
-    return (
+    if (!open || typeof document === "undefined") return null;
+    return createPortal(
       <div className="fixed inset-0 z-[600] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
         <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-card bg-surface/95 shadow-float ring-1 ring-edge backdrop-blur-xl animate-in slide-in-from-bottom-4 duration-300 sm:max-h-[85vh] sm:w-[95%] sm:max-w-[960px] sm:rounded-card sm:zoom-in-95">
+        <div className="relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-sheet apple-sheet border border-white/50 dark:border-white/[0.12] shadow-float ring-1 ring-edge animate-in slide-in-from-bottom-4 duration-300 sm:max-h-[85vh] sm:w-[95%] sm:max-w-[960px] sm:rounded-[32px] sm:zoom-in-95">
           {/* Drag Handle (mobile) */}
           <div className="flex justify-center pt-2.5 pb-1 sm:hidden">
             <div className="h-1 w-9 rounded-full bg-fill" />
@@ -845,7 +846,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                           className={`relative overflow-hidden rounded-tile p-3 text-left transition-all active:scale-[0.97] ${
                             isActive
                               ? "bg-tint/10 ring-2 ring-tint"
-                              : "bg-surface-2 ring-1 ring-edge hover:bg-fill/40"
+                              : "apple-tile apple-tile-interactive ring-1 ring-edge"
                           }`}
                         >
                           <div className="mb-1.5 flex items-center gap-1.5">
@@ -906,7 +907,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                   </div>
                   <div className="flex max-h-[280px] flex-col gap-1.5 overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: "touch" }}>
                     {selectedCatItems.map((o, idx) => (
-                      <div key={idx} className="flex items-center justify-between gap-3 rounded-tile bg-surface-2 px-3.5 py-2.5 ring-1 ring-edge">
+                      <div key={idx} className="flex items-center justify-between gap-3 rounded-tile apple-tile px-3.5 py-2.5 ring-1 ring-edge">
                         <div className="flex min-w-0 flex-1 flex-col">
                           <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
                             <span className="font-mono text-caption text-label-3">{formatDateShort(o.tanggal)}</span>
@@ -946,7 +947,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                         type="button"
                         key={idx}
                         onClick={() => setSelectedCat(o.kategori)}
-                        className="flex w-full items-center justify-between gap-3 rounded-tile bg-surface-2 px-3.5 py-2.5 text-left ring-1 ring-edge transition-colors hover:bg-fill/40"
+                        className="flex w-full items-center justify-between gap-3 rounded-tile apple-tile apple-tile-interactive px-3.5 py-2.5 text-left ring-1 ring-edge"
                       >
                         <div className="flex min-w-0 flex-1 items-center gap-2.5">
                           <div className="h-8 w-1 shrink-0 rounded-full" style={{ backgroundColor: catColor }} />
@@ -984,7 +985,8 @@ const PageOwner: React.FC<PageOwnerProps> = ({
             </div>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
     );
   };
 
@@ -1149,7 +1151,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                     {groupedLogs.map(monthGroup => {
                       const isMonthExpanded = expandedMonths.includes(monthGroup.key);
                       return (
-                        <div key={monthGroup.key} className="overflow-hidden rounded-tile bg-surface-2 ring-1 ring-edge">
+                        <div key={monthGroup.key} className="overflow-hidden rounded-tile apple-tile ring-1 ring-edge">
                           <button
                             type="button"
                             onClick={() => toggleMonth(monthGroup.key)}
@@ -1297,7 +1299,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                       ];
 
                       return (
-                        <div key={req.id} className="space-y-3 rounded-tile bg-surface-2 p-4 ring-1 ring-edge">
+                        <div key={req.id} className="space-y-3 rounded-tile apple-tile p-4 ring-1 ring-edge">
                           <div className="flex flex-col justify-between gap-2.5 border-b border-sep pb-3 sm:flex-row sm:items-center">
                             <div>
                               <div className="flex flex-wrap items-center gap-2">
@@ -1422,10 +1424,10 @@ const PageOwner: React.FC<PageOwnerProps> = ({
           { label: "Ruko tutup", o: req.originalData?.rukoTutup, p: req.proposedData?.rukoTutup },
           { label: "Shift", o: req.originalData?.shiftPegawai, p: req.proposedData?.shiftPegawai },
         ];
-        return (
+        return typeof document !== "undefined" ? createPortal(
           <div className="fixed inset-0 z-[600] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
             <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={() => setSelectedRequest(null)} />
-            <div className="relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-card bg-surface/95 shadow-float ring-1 ring-edge backdrop-blur-xl animate-in slide-in-from-bottom-4 duration-300 sm:max-h-[85vh] sm:w-[95%] sm:max-w-[850px] sm:rounded-card sm:zoom-in-95">
+            <div className="relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-sheet apple-sheet border border-white/50 dark:border-white/[0.12] shadow-float ring-1 ring-edge animate-in slide-in-from-bottom-4 duration-300 sm:max-h-[85vh] sm:w-[95%] sm:max-w-[850px] sm:rounded-[32px] sm:zoom-in-95">
               {/* Drag Handle */}
               <div className="flex justify-center pt-2.5 pb-1 sm:hidden">
                 <div className="h-1 w-9 rounded-full bg-fill" />
@@ -1452,7 +1454,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
               {/* Scrollable Content */}
               <div className="flex-1 space-y-5 overflow-y-auto p-5 sm:p-6" style={{ WebkitOverflowScrolling: "touch" }}>
                 {/* General Info Comparison */}
-                <div className="space-y-3 rounded-tile bg-surface-2 p-4 ring-1 ring-edge">
+                <div className="space-y-3 rounded-tile apple-tile p-4 ring-1 ring-edge">
                   <Eyebrow>Informasi umum</Eyebrow>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                     {infoFields.map((f, i) => (
@@ -1563,7 +1565,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
 
               {/* Footer Actions */}
               {isPending ? (
-                <div className="flex shrink-0 justify-end gap-2.5 border-t border-sep bg-surface-2 px-5 py-4 sm:px-6">
+                <div className="flex shrink-0 justify-end gap-2.5 border-t border-sep apple-bar px-5 py-4 sm:px-6">
                   <Button type="button" variant="destructive" size="md" onClick={() => handleRejectRequest(req)}>
                     Tolak request
                   </Button>
@@ -1572,7 +1574,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                   </Button>
                 </div>
               ) : (
-                <div className="flex shrink-0 items-center justify-between border-t border-sep bg-surface-2 px-5 py-4 sm:px-6">
+                <div className="flex shrink-0 items-center justify-between border-t border-sep apple-bar px-5 py-4 sm:px-6">
                   <div className="flex items-center gap-2 text-footnote text-label-2">
                     <span>Status:</span>
                     <Pill tone={req.status === "approved" ? "positive" : "negative"}>
@@ -1585,8 +1587,9 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                 </div>
               )}
             </div>
-          </div>
-        );
+          </div>,
+          document.body
+        ) : null;
       })()}
     </div>
   );

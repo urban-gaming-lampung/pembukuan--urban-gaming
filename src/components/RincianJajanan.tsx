@@ -83,18 +83,18 @@ const RincianJajanan: React.FC<{
                   updateRow(rowIndex, { [jenisKey]: nextJenis, harga: qtyNow * unit } as any);
                 }}
               >
-                <option value="">Pilih jajanan...</option>
+                <option value="" className="bg-surface text-label">Pilih jajanan...</option>
                 {menu.length > 0 ? (
                   menu.map((m) => (
-                    <option key={m} value={m}>
+                    <option key={m} value={m} className="bg-surface text-label">
                       {m}
                     </option>
                   ))
                 ) : (
-                  <option disabled>List Kosong</option>
+                  <option disabled className="bg-surface text-label-3">List Kosong</option>
                 )}
               </select>
-              <ChevronDown className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400 pointer-events-none opacity-60" />
+              <ChevronDown className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-label-3 pointer-events-none" />
             </div>
           );
         }
@@ -125,10 +125,10 @@ const RincianJajanan: React.FC<{
           const shown = computed || toInt(String((row as any).harga)) || 0;
           return (
              <div className="relative">
-              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-zinc-400 font-medium select-none">Rp</span>
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-caption text-label-3 font-semibold select-none pointer-events-none">Rp</span>
               <input
                 inputMode="numeric"
-                className={`${inputBase} pl-8 font-mono font-medium text-zinc-900 dark:text-zinc-100`}
+                className={`${inputBase} pl-8 font-mono font-medium text-label`}
                 value={shown}
                 onKeyDown={onKeyNav}
                 readOnly

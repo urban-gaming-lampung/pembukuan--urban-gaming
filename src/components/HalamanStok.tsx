@@ -6,7 +6,7 @@ import { ambilPermintaanStok, EVENT_BUKA_STOK, JenisStok } from "../lib/stokRent
 
 /**
  * HALAMAN STOK — satu UI untuk semua akun:
- * - Super admin / owner: Page Owner › STOK
+ * - Super admin / owner: Dashboard › STOK
  * - Admin: tab UPDATE STOK
  * Sub halaman: STOK RENTAL · STOK JUALAN.
  */

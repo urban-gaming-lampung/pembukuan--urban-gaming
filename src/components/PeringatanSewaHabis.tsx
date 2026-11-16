@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { AlertCircle, MessageCircle } from "lucide-react";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { pesanPengingat } from "../lib/pengingatSewa";
@@ -65,40 +66,52 @@ const PeringatanSewaHabis: React.FC<{
   const nama = (userEmail || "").split("@")[0];
   const sapaan = nama ? nama.charAt(0).toUpperCase() + nama.slice(1) : "Admin";
 
-  return (
-    <div className="fixed inset-0 z-[800] flex items-center justify-center p-6 font-sans">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-[6px] pointer-events-auto" />
-      <div className="relative w-full max-w-[320px] overflow-hidden rounded-[24px] bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-xl shadow-2xl ring-1 ring-black/10 dark:ring-white/10 animate-in zoom-in-90 duration-300">
-        <div className="p-6 text-center flex flex-col items-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400 ring-4 ring-red-500/10">
-            <AlertCircle className="w-8 h-8 animate-pulse" />
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[800] flex items-center justify-center p-6 font-sans" role="alertdialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/65 backdrop-blur-sm pointer-events-auto" />
+      <div className="relative w-full max-w-[340px] overflow-hidden rounded-sheet apple-sheet shadow-float border border-white/65 dark:border-white/[0.14] ring-1 ring-black/10 dark:ring-white/10 p-3.5 animate-in zoom-in-95 duration-200">
+        <div className="px-2 pt-2.5 pb-4 text-center flex flex-col items-center">
+          <div className="mb-4 flex justify-center">
+            <div className="h-16 w-16 rounded-full bg-negative/15 text-negative ring-4 ring-negative/10 flex items-center justify-center">
+              <AlertCircle className="w-8 h-8 animate-pulse" />
+            </div>
           </div>
-          <h3 className="text-[19px] font-black text-zinc-900 dark:text-white mb-2 leading-tight tracking-tight">Waktu Sewa Habis!</h3>
-          <p className="text-[14px] leading-relaxed text-zinc-600 dark:text-zinc-400 mb-4">
-            Unit <strong className="text-zinc-900 dark:text-white bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">{u.jenis}</strong> atas nama <strong className="text-blue-600 dark:text-blue-400">{u.namaPenyewa}</strong> telah selesai durasi sewanya.
+          <h3 className="text-title3 font-bold text-label mb-2 tracking-tight">Waktu Sewa Habis!</h3>
+          <p className="text-subhead leading-relaxed text-label-2 mb-3">
+            Unit{" "}
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-fill text-label font-semibold">
+              {u.jenis}
+            </span>{" "}
+            atas nama <strong className="text-label font-semibold">{u.namaPenyewa}</strong> telah selesai durasi sewanya.
           </p>
-          <p className="text-[16px] font-bold text-zinc-900 dark:text-white mb-4 leading-tight tracking-tight">Apakah sewa sudah habis atau belum, {sapaan}?</p>
+          <p className="text-callout font-semibold text-label leading-snug">
+            Apakah sewa sudah habis atau belum, {sapaan}?
+          </p>
         </div>
-        <div className="flex flex-col border-t border-gray-200/50 dark:border-white/10">
+        <div className="flex flex-col gap-2.5">
           <button
             type="button"
             onClick={() => onVerify(sumberSewa(u))}
-            className="w-full py-4 text-[15px] shadow-inner font-black text-blue-600 dark:text-blue-500 bg-white/50 dark:bg-black/20 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors active:bg-blue-100 dark:active:bg-blue-500/20"
+            className="w-full min-h-[48px] px-4 rounded-full bg-action text-action-label text-subhead font-semibold hover:opacity-90 active:opacity-80 transition-opacity shadow-card"
           >
-            YA, SUDAH HABIS & KEMBALI
+            Ya, Sudah Habis &amp; Kembali
           </button>
           {bisaIngatkan(u) && (
             <button
               type="button"
               onClick={() => { kirimPengingatSewa(u, onPengingat); tundaPeringatan(u.uid); }}
-              className="w-full py-3.5 text-[14px] font-bold text-emerald-700 dark:text-emerald-400 border-t border-gray-200/50 dark:border-white/10 bg-white/30 dark:bg-black/10 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors flex items-center justify-center gap-2"
+              className="w-full min-h-[48px] px-4 rounded-full bg-fill text-positive text-subhead font-semibold hover:bg-fill/80 transition-colors flex items-center justify-center gap-2"
             >
-              <MessageCircle className="w-4 h-4" />BELUM KEMBALI · INGATKAN VIA WA
+              <MessageCircle className="w-4 h-4 shrink-0" />
+              Belum Kembali · Ingatkan via WA
             </button>
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

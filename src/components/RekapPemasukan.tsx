@@ -30,17 +30,20 @@ const RekapPemasukan: React.FC<RekapPemasukanProps> = ({
 
   return (
     <Card
+      variant="hero"
+      accent="teal"
       title="Rekap pemasukan hari ini"
+      subtitle="Ringkasan kategori & metode bayar"
       icon={<CircleDollarSign />}
       iconColor="teal"
       accessory={grand > 0 || totalPengeluaran > 0 ? <StatusPill net={pendapatanBersih} /> : undefined}
     >
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-          <StatTile label="Harian" icon={<Calendar />} value={<Amount value={totalHarian} size="headline" fitAt={13} />} />
-          <StatTile label="Jajanan" icon={<Coffee />} value={<Amount value={totalJajanan} size="headline" fitAt={13} />} />
-          <StatTile label="Usaha" icon={<Wrench />} value={<Amount value={totalJasaAks} size="headline" fitAt={13} />} />
-          <StatTile label="Sewa konsol" icon={<Gamepad2 />} value={<Amount value={totalSewa} size="headline" fitAt={13} />} />
+          <StatTile label="Harian" accent="teal" icon={<Calendar />} value={<Amount value={totalHarian} size="headline" fitAt={13} />} />
+          <StatTile label="Jajanan" accent="orange" icon={<Coffee />} value={<Amount value={totalJajanan} size="headline" fitAt={13} />} />
+          <StatTile label="Usaha" accent="red" icon={<Wrench />} value={<Amount value={totalJasaAks} size="headline" fitAt={13} />} />
+          <StatTile label="Sewa konsol" accent="blue" icon={<Gamepad2 />} value={<Amount value={totalSewa} size="headline" fitAt={13} />} />
         </div>
 
         <div className="space-y-2.5 border-t border-sep pt-3.5">
@@ -66,7 +69,7 @@ const RekapPemasukan: React.FC<RekapPemasukanProps> = ({
             <StatTile label="Total pengeluaran" dot={MARK.keluar} value={<Amount value={totalPengeluaran} size="headline" fitAt={13} />} />
           </div>
 
-          <div className="rounded-tile bg-surface-2 px-4 py-3.5 flex items-center justify-between gap-3">
+          <div className="rounded-tile apple-tile ring-1 ring-black/[0.03] dark:ring-white/[0.04] px-4 py-3.5 flex items-center justify-between gap-3">
             <div className="min-w-0">
               <Eyebrow>Pendapatan bersih</Eyebrow>
               <p className="mt-0.5 text-caption text-label-2 truncate">

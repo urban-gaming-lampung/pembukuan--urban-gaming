@@ -46,8 +46,8 @@ function barisTerkunciDariNota(
           title={`Nota ${nota}`}
           className={
             isMobileTable === false
-              ? "inline-flex items-center justify-center w-8 h-8 rounded-control bg-tint/10 text-tint hover:bg-tint/15 dark:bg-tint/15 active:scale-90 transition"
-              : "inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-white/25 hover:bg-white/35 text-white ring-1 ring-white/25 text-[11px] font-semibold active:scale-95 transition"
+              ? "inline-flex items-center justify-center w-8 h-8 rounded-full bg-tint/10 text-tint hover:bg-tint/15 dark:bg-tint/15 active:scale-90 transition"
+              : "inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-fill/90 hover:bg-fill text-tint ring-1 ring-edge text-[11px] font-semibold active:scale-95 transition"
           }
         >
           <Receipt size={13} strokeWidth={2.2} />
@@ -87,7 +87,7 @@ const DaftarNotaOwner: React.FC<{
         <Amount value={subtotal} size="footnote" className="shrink-0 font-semibold text-label" />
       </div>
 
-      <div className="overflow-hidden rounded-tile bg-surface-2 divide-y divide-sep">
+      <div className="overflow-hidden rounded-tile apple-tile ring-1 ring-black/[0.03] dark:ring-white/[0.04] divide-y divide-sep">
         {items.map((n) => (
           <div key={n.id} className="px-3.5 py-2.5">
             <div className="flex items-start justify-between gap-2.5">
@@ -125,7 +125,7 @@ const DaftarNotaOwner: React.FC<{
                   type="button"
                   onClick={() => onOpenNota(n)}
                   aria-label={`Lihat nota ${n.noNota}`}
-                  className="inline-flex h-11 sm:h-9 items-center gap-1.5 rounded-field bg-tint/10 px-3 text-caption font-semibold text-tint transition hover:bg-tint/15 dark:bg-tint/15 active:scale-95"
+                  className="inline-flex h-11 sm:h-9 items-center gap-1.5 rounded-full bg-tint/10 px-3.5 text-caption font-semibold text-tint transition hover:bg-tint/15 dark:bg-tint/15 active:scale-95"
                 >
                   <Receipt size={14} />
                   <span>Nota</span>
@@ -280,14 +280,14 @@ const RincianJasaAksesoris: React.FC<{
                     updateRow(rowIndex, patch);
                   }}
                 >
-                  <option value="">Pilih tipe...</option>
+                  <option value="" className="bg-surface text-label">Pilih tipe...</option>
                   {items.map((it) => (
-                    <option key={it.label} value={it.label}>
+                    <option key={it.label} value={it.label} className="bg-surface text-label">
                       {it.price > 0 ? `${it.label} — ${rupiah(it.price)}` : it.label}
                     </option>
                   ))}
                   {value && !items.some((it) => it.label === value) && (
-                    <option value={String(value)}>{String(value)}</option>
+                    <option value={String(value)} className="bg-surface text-label">{String(value)}</option>
                   )}
                 </select>
                 <ChevronDown className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-label-3 pointer-events-none" />

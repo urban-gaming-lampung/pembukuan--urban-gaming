@@ -172,9 +172,9 @@ export const NotaPosSheet: React.FC<Props> = ({ open, saleId, noNota, initialSal
         aria-modal="true"
         aria-label={`Detail Nota ${noNota || sale?.noNota || ""}`}
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-card sm:rounded-card bg-canvas text-label ring-1 ring-edge shadow-float sm:max-w-lg"
+        className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-sheet sm:rounded-[32px] apple-sheet-grouped border border-white/50 dark:border-white/[0.12] text-label ring-1 ring-edge shadow-float sm:max-w-lg"
       >
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-sep bg-surface px-4 py-3.5">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-sep apple-bar px-4 py-3.5">
           <div className="flex min-w-0 items-center gap-3">
             <IconBadge color={sale?.batal ? "gray" : sale?.metode === "TRANSFER" ? "blue" : "teal"} size="md">
               <Receipt size={18} />
@@ -210,7 +210,7 @@ export const NotaPosSheet: React.FC<Props> = ({ open, saleId, noNota, initialSal
           )}
 
           {loading ? (
-            <div className="flex flex-col items-center justify-center gap-2 rounded-tile bg-surface py-12 text-label-2 ring-1 ring-edge">
+            <div className="flex flex-col items-center justify-center gap-2 rounded-tile apple-card py-12 text-label-2 ring-1 ring-edge shadow-card">
               <Loader2 className="h-6 w-6 animate-spin text-tint" />
               <span className="text-footnote">Memuat detail nota...</span>
             </div>
@@ -263,7 +263,7 @@ export const NotaPosSheet: React.FC<Props> = ({ open, saleId, noNota, initialSal
                     {buktiList.map((b, idx) => (
                       <div
                         key={idx}
-                        className="flex items-center justify-between gap-3 rounded-tile bg-surface p-2.5 ring-1 ring-edge"
+                        className="flex items-center justify-between gap-3 rounded-tile apple-card p-2.5 ring-1 ring-edge shadow-card"
                       >
                         <button
                           type="button"
@@ -283,7 +283,7 @@ export const NotaPosSheet: React.FC<Props> = ({ open, saleId, noNota, initialSal
                         <button
                           type="button"
                           onClick={() => setZoomUrl(b.url)}
-                          className="inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-field bg-tint/10 px-3 text-caption font-semibold text-tint transition hover:bg-tint/15 dark:bg-tint/15"
+                          className="inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full bg-tint/10 px-3.5 text-caption font-semibold text-tint transition hover:bg-tint/15 dark:bg-tint/15"
                         >
                           <ImageIcon size={14} />
                           <span>Lihat</span>
@@ -302,7 +302,7 @@ export const NotaPosSheet: React.FC<Props> = ({ open, saleId, noNota, initialSal
         </div>
 
         {sale && (!sale.batal || batalPakaiDp) && (
-          <footer className="shrink-0 border-t border-sep bg-surface px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+          <footer className="shrink-0 border-t border-sep apple-bar px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))]">
             <NotaActionButtons sale={sale} actions={actions} />
           </footer>
         )}
@@ -317,7 +317,7 @@ export const NotaPosSheet: React.FC<Props> = ({ open, saleId, noNota, initialSal
           }}
         >
           <div
-            className="w-full max-w-md overflow-hidden rounded-card bg-surface shadow-float ring-1 ring-edge"
+            className="w-full max-w-md overflow-hidden rounded-sheet apple-sheet border border-white/50 dark:border-white/[0.12] shadow-float ring-1 ring-edge"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-sep px-4 py-3">

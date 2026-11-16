@@ -8,5 +8,6 @@ export * from "./layout";
 export * from "./data";
 export * from "./feedback";
 export * from "./chart";
+export * from "./shell";
 export { default as SubTabs } from "../components/common/SubTabs";
 export type { SubTabOption } from "../components/common/SubTabs";

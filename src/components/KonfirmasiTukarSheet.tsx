@@ -5,6 +5,7 @@
  * harga modal otomatis = nilai tukar tambah (bisa diubah). Aturan: src/lib/tukarTambah.ts.
  */
 import React, { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { ArrowLeftRight, Check, ChevronRight, ImageOff, Loader2, Package, Plus, X } from "lucide-react";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
@@ -37,9 +38,9 @@ const Foto: React.FC<{ url?: string; size?: number; className?: string }> = ({ u
 export const DaftarKonfirmasiTukar: React.FC<{ list: TukarTambah[]; loading: boolean; onPilih: (t: TukarTambah) => void }> = ({ list, loading, onPilih }) => (
   <section>
     <p className="px-1 pb-2 text-footnote text-label-2 leading-snug">
-      Barang dari tukar tambah di kasir POS. Tentukan produk & harga jualnya — stok bertambah setelah dikonfirmasi. Nilainya sudah tercatat sebagai belanja stok di nota.
+      Barang dari tukar tambah di Kasir URBAN. Tentukan produk & harga jualnya — stok bertambah setelah dikonfirmasi. Nilainya sudah tercatat sebagai belanja stok di nota.
     </p>
-    <div className="rounded-card bg-surface ring-1 ring-edge shadow-card overflow-hidden divide-y divide-sep">
+    <div className="rounded-card apple-card ring-1 ring-edge shadow-card overflow-hidden divide-y divide-sep">
       {loading && <div className="py-10 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-label-3" /></div>}
       {!loading && list.length === 0 && <div className="py-10 text-center text-subhead text-label-2">Tidak ada barang yang menunggu konfirmasi 👍</div>}
       {list.map((t) => (
@@ -142,10 +143,12 @@ export const KonfirmasiTukarSheet: React.FC<{
     </button>
   );
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center font-sans">
-      <div className="absolute inset-0 bg-black/45" onClick={() => !saving && onClose()} />
-      <div className="relative w-full sm:max-w-md bg-canvas rounded-t-card sm:rounded-card max-h-[94vh] flex flex-col overflow-hidden shadow-float">
+      <div className="absolute inset-0 bg-black/45 dark:bg-black/70 backdrop-blur-[8px]" onClick={() => !saving && onClose()} />
+      <div className="relative w-full sm:max-w-md apple-sheet-grouped border border-white/50 dark:border-white/[0.12] rounded-t-sheet sm:rounded-[32px] max-h-[94vh] flex flex-col overflow-hidden shadow-float">
         <div className="flex justify-center pt-2 sm:hidden"><div className="w-9 h-[5px] rounded-full bg-sep" /></div>
         <div className="px-4 pt-2 pb-3 flex items-center gap-3">
           <div className="flex-1 min-w-0">
@@ -157,7 +160,7 @@ export const KonfirmasiTukarSheet: React.FC<{
 
         <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4">
           {/* Barang dari pembeli */}
-          <div className="rounded-card bg-surface p-3.5">
+          <div className="rounded-card apple-card ring-1 ring-edge shadow-card p-3.5">
             <div className="grid grid-cols-2 gap-2">
               {[{ l: "Barang", u: tt.fotoBarang }, { l: "Nomor seri", u: tt.fotoSn }].map((f) => (
                 <a key={f.l} href={f.u || undefined} target="_blank" rel="noreferrer" className="relative aspect-[4/3] rounded-tile overflow-hidden bg-fill flex items-center justify-center">
@@ -179,7 +182,7 @@ export const KonfirmasiTukarSheet: React.FC<{
           {/* Produk tujuan */}
           <div>
             <h4 className="px-4 pb-1.5 text-caption font-semibold uppercase tracking-[0.04em] text-label-2">Masuk ke produk</h4>
-            <div className="rounded-card bg-surface overflow-hidden divide-y divide-sep">
+            <div className="rounded-card apple-card ring-1 ring-edge shadow-card overflow-hidden divide-y divide-sep">
               {kandidat.map((k) =>
                 rowPilih(
                   k.produk.id,
@@ -231,7 +234,7 @@ export const KonfirmasiTukarSheet: React.FC<{
           </div>
 
           {/* Detail produk & stok */}
-          <div className="rounded-card bg-surface p-3.5 space-y-3">
+          <div className="rounded-card apple-card ring-1 ring-edge shadow-card p-3.5 space-y-3">
             {!produk && (
               <label className="block">
                 <span className="text-footnote font-semibold text-label-2">Nama produk</span>
@@ -260,7 +263,7 @@ export const KonfirmasiTukarSheet: React.FC<{
           </div>
 
           {/* Harga */}
-          <div className="rounded-card bg-surface p-3.5 space-y-3">
+          <div className="rounded-card apple-card ring-1 ring-edge shadow-card p-3.5 space-y-3">
             <label className="block">
               <span className="text-footnote font-semibold text-label-2">Harga jual</span>
               <div className={`mt-1 flex items-center h-12 px-3.5 rounded-field bg-fill ${err && !(jual > 0) ? "ring-2 ring-negative/40" : ""}`}>
@@ -297,13 +300,14 @@ export const KonfirmasiTukarSheet: React.FC<{
           <Notice>Stok bertambah {qty} dan tercatat di riwayat stok masuk tanpa pengeluaran baru — nilainya sudah dihitung sebagai belanja stok dari nota {tt.noNota}.</Notice>
         </div>
 
-        <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] bg-surface border-t border-sep space-y-2">
+        <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] apple-bar border-t border-sep space-y-2">
           {err && <div className="text-footnote font-semibold text-negative bg-negative/10 rounded-field px-3 py-2">{err}</div>}
           <Button size="lg" block disabled={saving} onClick={simpan} icon={saving ? <Loader2 className="animate-spin" /> : <Check />}>
             {saving ? "Menyimpan…" : "Konfirmasi & tambah stok"}
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

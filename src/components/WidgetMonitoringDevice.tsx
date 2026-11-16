@@ -802,7 +802,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
           {(!isOwner || activeSubTab === "kondisi") && (
             <div className="flex w-full flex-col gap-5 animate-in fade-in duration-300">
               {/* Camera Scanner Trigger Card */}
-              <div className="flex flex-col items-start justify-between gap-4 rounded-tile bg-surface-2 p-4 ring-1 ring-edge md:flex-row md:items-center sm:p-5">
+              <div className="flex flex-col items-start justify-between gap-4 rounded-tile apple-tile p-4 ring-1 ring-edge md:flex-row md:items-center sm:p-5">
                 <div className="flex items-start gap-3.5 text-left sm:items-center">
                   <IconBadge color="teal" size="md">
                     <QrCode />
@@ -841,7 +841,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
               </div>
 
               {/* Master Inventaris Card (Visible to both Owner and Admin) */}
-              <div className="w-full rounded-tile bg-surface-2 p-4 ring-1 ring-edge sm:p-5">
+              <div className="w-full rounded-tile apple-tile p-4 ring-1 ring-edge sm:p-5">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <Save className="h-4 w-4 text-tint" />
@@ -867,7 +867,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                   {(Object.keys(DEVICE_LABELS) as DeviceType[]).map((type) => {
                     const InputIcon = type === "tv" ? Monitor : type === "playbox" ? Smartphone : Gamepad2;
                     return (
-                      <div key={type} className="flex flex-col items-center justify-center gap-1.5 rounded-tile bg-surface p-3 ring-1 ring-edge">
+                      <div key={type} className="flex flex-col items-center justify-center gap-1.5 rounded-tile apple-card p-3 ring-1 ring-edge">
                         <div className="flex w-full items-center justify-center gap-1 truncate text-center text-caption2 font-semibold uppercase tracking-wide text-label-3">
                           <InputIcon className="h-3.5 w-3.5 shrink-0 text-label-3" />
                           <span className="truncate">{DEVICE_LABELS[type]}</span>
@@ -903,7 +903,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                   return (
                     <div
                       key={type}
-                      className="flex min-h-[170px] flex-col justify-between rounded-tile bg-surface-2 p-4 ring-1 ring-edge"
+                      className="flex min-h-[170px] flex-col justify-between rounded-tile apple-tile p-4 ring-1 ring-edge"
                     >
                       <div>
                         {/* Header */}
@@ -992,7 +992,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
             <div className="flex w-full flex-col gap-6 lg:flex-row animate-in fade-in duration-300">
               {/* Generator Configuration Panel */}
               <div className="flex flex-col gap-5 lg:w-1/2">
-                <form onSubmit={handleSaveSticker} className="flex flex-col gap-4 rounded-tile bg-surface-2 p-4 ring-1 ring-edge sm:p-5">
+                <form onSubmit={handleSaveSticker} className="flex flex-col gap-4 rounded-tile apple-tile p-4 ring-1 ring-edge sm:p-5">
                   <div className="mb-1 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-tint" />
@@ -1167,7 +1167,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
               </div>
 
               {/* Preview & Download Panel */}
-              <div className="flex flex-col items-center justify-center rounded-tile bg-surface-2 p-5 ring-1 ring-edge lg:w-1/2 sm:p-6">
+              <div className="flex flex-col items-center justify-center rounded-tile apple-tile p-5 ring-1 ring-edge lg:w-1/2 sm:p-6">
                 <div className="mb-5 flex items-center gap-1.5">
                   <Eye className="h-3.5 w-3.5 text-tint" />
                   <Eyebrow>Preview desain stiker</Eyebrow>
@@ -1502,7 +1502,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                                     <button
                                       type="button"
                                       onClick={() => startEditSticker(dev)}
-                                      className="inline-flex h-9 w-9 items-center justify-center rounded-control bg-fill text-label-2 transition-colors hover:text-label"
+                                      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-fill text-label-2 transition-colors hover:text-label"
                                       title="Edit desain stiker"
                                     >
                                       <Edit className="h-4 w-4" />
@@ -1510,7 +1510,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                                     <button
                                       type="button"
                                       onClick={() => handleDeleteDevice(dev.id)}
-                                      className="inline-flex h-9 w-9 items-center justify-center rounded-control bg-negative/10 text-negative transition-colors hover:bg-negative/20"
+                                      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-negative/10 text-negative transition-colors hover:bg-negative/20"
                                       title="Hapus unit"
                                     >
                                       <Trash2 className="h-4 w-4" />
@@ -1528,7 +1528,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                       {[...devices]
                         .sort((a, b) => a.type.localeCompare(b.type) || a.number - b.number)
                         .map((dev) => (
-                          <div key={dev.id} className="flex flex-col gap-3 rounded-tile bg-surface-2 p-4 ring-1 ring-edge">
+                          <div key={dev.id} className="flex flex-col gap-3 rounded-tile apple-tile p-4 ring-1 ring-edge">
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex items-center gap-2.5">
                                 <input
@@ -1579,7 +1579,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                                 <button
                                   type="button"
                                   onClick={() => startEditSticker(dev)}
-                                  className="inline-flex h-11 w-11 items-center justify-center rounded-control bg-fill text-label-2 transition-opacity active:opacity-75"
+                                  className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-fill text-label-2 transition-opacity active:opacity-75"
                                   title="Edit desain stiker"
                                 >
                                   <Edit className="h-4 w-4" />
@@ -1587,7 +1587,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteDevice(dev.id)}
-                                  className="inline-flex h-11 w-11 items-center justify-center rounded-control bg-negative/10 text-negative transition-opacity active:opacity-75"
+                                  className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-negative/10 text-negative transition-opacity active:opacity-75"
                                   title="Hapus unit"
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -1616,7 +1616,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       {showScanner && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" role="dialog" aria-modal="true">
           <div className="absolute inset-0 bg-black/55 backdrop-blur-md" onClick={stopScanning} />
-          <div className="relative z-10 w-full max-w-md overflow-hidden rounded-card bg-surface shadow-float ring-1 ring-edge animate-in zoom-in-95 duration-200">
+          <div className="relative z-10 w-full max-w-md overflow-hidden rounded-sheet apple-sheet border border-white/50 dark:border-white/[0.12] shadow-float ring-1 ring-edge animate-in zoom-in-95 duration-200">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-sep p-4 sm:p-5">
               <div className="flex items-center gap-2 text-left">
@@ -1656,7 +1656,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                 Posisikan QR code di dalam kotak untuk memindai secara otomatis.
               </p>
               <div className="flex gap-2.5">
-                <label className="inline-flex min-h-[44px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-control bg-fill px-4 text-subhead font-medium text-label ring-1 ring-edge transition-opacity active:opacity-75">
+                <label className="inline-flex min-h-[48px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-full bg-fill px-4 text-subhead font-medium text-label ring-1 ring-edge transition-opacity active:opacity-75">
                   <Upload className="h-4 w-4 text-tint" />
                   Unggah file QR
                   <input type="file" accept="image/*" onChange={handleUploadScanFile} className="hidden" />
@@ -1672,7 +1672,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                 <AlertCircle className="mb-3 h-12 w-12 text-negative" />
                 <p className="mb-4 text-callout font-semibold text-label">{scanningError}</p>
                 <div className="flex w-full flex-col gap-2.5">
-                  <label className="inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center gap-2 rounded-control bg-fill px-4 text-subhead font-medium text-label ring-1 ring-edge transition-opacity active:opacity-75">
+                  <label className="inline-flex min-h-[48px] w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-fill px-4 text-subhead font-medium text-label ring-1 ring-edge transition-opacity active:opacity-75">
                     <Upload className="h-4 w-4 text-tint" />
                     Unggah file QR
                     <input type="file" accept="image/*" onChange={handleUploadScanFile} className="hidden" />
@@ -1692,7 +1692,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       {updatingDevice && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" role="dialog" aria-modal="true">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setUpdatingDevice(null)} />
-          <div className="relative z-10 max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-card bg-surface/95 p-5 shadow-float ring-1 ring-edge backdrop-blur-xl animate-in zoom-in-95 duration-200 sm:p-6">
+          <div className="relative z-10 max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-sheet apple-sheet border border-white/50 dark:border-white/[0.12] p-5 shadow-float ring-1 ring-edge animate-in zoom-in-95 duration-200 sm:p-6">
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-fill" />
 
             <h3 className="text-center text-title3 font-bold text-label">
@@ -2053,7 +2053,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       {isGeneratingPdf && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" role="dialog" aria-modal="true">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          <div className="relative z-10 flex w-full max-w-sm flex-col items-center rounded-card bg-surface p-6 text-center shadow-float ring-1 ring-edge animate-in zoom-in-95 duration-200 sm:p-8">
+          <div className="relative z-10 flex w-full max-w-sm flex-col items-center rounded-sheet apple-sheet border border-white/50 dark:border-white/[0.12] p-6 text-center shadow-float ring-1 ring-edge animate-in zoom-in-95 duration-200 sm:p-8">
             {/* PDF Icon */}
             <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-tile bg-tint/10 text-tint">
               <QrCode className="h-7 w-7 animate-pulse" />

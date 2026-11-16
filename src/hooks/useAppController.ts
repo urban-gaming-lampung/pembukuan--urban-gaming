@@ -95,7 +95,7 @@ export default function useAppController() {
 
   // ===== PROFILE & BG STATE =====
   const [userProfilePic, setUserProfilePic] = useState<string | null>(null);
-  const [userProfileColor, setUserProfileColor] = useState<string>("#3b82f6");
+  const [userProfileColor, setUserProfileColor] = useState<string>("#0088FF");
   const [customBgDark, setCustomBgDark] = useState<string | null>(() => {
     try { return localStorage.getItem('custom_bg_dark'); } catch(e) { return null; }
   });
@@ -886,9 +886,9 @@ export default function useAppController() {
               const el = document.getElementById(targetId);
               if (el) {
                   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  el.classList.add("ring-2", "ring-red-500", "ring-offset-2", "transition-all", "duration-500", "rounded-2xl");
+                  el.classList.add("ring-2", "ring-negative", "ring-offset-2", "transition-all", "duration-500", "rounded-card");
                   setTimeout(() => {
-                      el.classList.remove("ring-2", "ring-red-500", "ring-offset-2");
+                      el.classList.remove("ring-2", "ring-negative", "ring-offset-2");
                   }, 2500);
               }
           }, 100);

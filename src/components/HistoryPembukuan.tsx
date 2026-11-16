@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { doc, updateDoc } from "firebase/firestore";
 import { CalendarDays, ChevronDown, Pencil, Trash2, X } from "lucide-react";
 import { db } from "../lib/firebase";
@@ -7,7 +8,7 @@ import { rupiah } from "../lib/format";
 import { totalPemasukanHarian } from "../lib/keuangan";
 import { mingguKe } from "../lib/laporan";
 import KonfirmasiAkun from "./KonfirmasiAkun";
-import { Amount, Button, Card, Pill, SectionHeader } from "../ui";
+import { AKSEN_TILE, AlertDialog, Amount, Button, Card, Pill, SectionHeader } from "../ui";
 
 type Props = {
   items: HistoryItem[];
@@ -21,6 +22,7 @@ type Props = {
 export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = false }: Props) {
   // Pembukuan yang akan dihapus (menunggu konfirmasi password akun)
   const [hapusTarget, setHapusTarget] = useState<HistoryItem | null>(null);
+  const [hapusCatatanTarget, setHapusCatatanTarget] = useState<HistoryItem | null>(null);
 
   // Row Action State (Edit/Delete Popup)
   const [activeAction, setActiveAction] = useState<{
@@ -105,11 +107,11 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
   };
 
   // --- UDS TABLE TOKENS ---
-  const thStyle = "px-2.5 py-3 text-caption2 uppercase tracking-[0.04em] font-semibold text-label-2 bg-surface-2 border-b border-sep text-left sticky top-0 z-10 whitespace-nowrap";
+  const thStyle = "apple-bar px-2.5 py-2.5 text-caption2 uppercase tracking-[0.05em] font-semibold text-label-2 border-b border-sep text-left sticky top-0 z-10 whitespace-nowrap";
   const thAksiStyle = `${thStyle} sticky right-0 z-[20] border-l border-sep text-center`;
   const tdStyle = "px-2.5 py-2.5 text-footnote font-medium text-label border-b border-sep align-middle whitespace-nowrap tabular-nums";
-  const tdAksiStyle = "px-2.5 py-2.5 text-center sticky right-0 bg-surface group-hover:bg-fill transition-colors duration-150 border-b border-l border-sep align-middle z-[5]";
-  const trHover = "hover:bg-fill/60 transition-colors duration-150 group";
+  const tdAksiStyle = "px-2.5 py-2.5 text-center sticky right-0 bg-surface/90 backdrop-blur-md group-hover:bg-fill transition-colors duration-150 border-b border-l border-sep align-middle z-[5]";
+  const trHover = "hover:bg-fill/45 transition-colors duration-150 group";
 
   // --- HANDLERS FOR POPUPS ---
   const triggerEdit = (item: HistoryItem) => {
@@ -136,12 +138,15 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
   return (
     <>
       <Card
+        variant="hero"
+        accent="blue"
         title="History pembukuan"
+        subtitle={sortedItems.length > 0 ? `${sortedItems.length} hari tercatat` : "Rekap riwayat harian"}
         icon={<CalendarDays />}
         iconColor="blue"
         accessory={
           sortedItems.length > 0 ? (
-            <Button variant="tinted" size="sm" onClick={toggleAllMobile} className="md:hidden">
+            <Button variant="gray" size="sm" onClick={toggleAllMobile} className="md:hidden">
               {semuaTerbuka ? "Tutup semua" : "Buka semua"}
             </Button>
           ) : undefined
@@ -149,25 +154,25 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
       >
 
         {/* DESKTOP TABLE */}
-        <div className="hidden md:block w-full rounded-tile border border-sep overflow-hidden bg-surface">
+        <div className="hidden md:block w-full rounded-tile border border-sep overflow-hidden apple-tile">
           <div className="overflow-x-auto max-h-[600px]">
             <table className="w-full border-collapse">
               <thead>
                 <tr>
-                  <th className={thStyle}>Tanggal</th>
-                  <th className={thStyle}>Hari</th>
-                  <th className={thStyle}>Harian</th>
-                  <th className={thStyle}>Jajanan</th>
-                  <th className={thStyle}>Usaha</th>
-                  <th className={thStyle}>Sewa PS</th>
+                  <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Tanggal</th>
+                  <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Hari</th>
+                  <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Harian</th>
+                  <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Jajanan</th>
+                  <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Usaha</th>
+                  <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Sewa PS</th>
                   {isOwner && (
                     <>
-                      <th className={thStyle}>Total</th>
-                      <th className={thStyle}><span className="text-positive">Cash</span></th>
-                      <th className={thStyle}><span className="text-tint">TF</span></th>
+                      <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Total</th>
+                      <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}><span className="text-positive">Cash</span></th>
+                      <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}><span className="text-tint">TF</span></th>
                     </>
                   )}
-                  <th className={thAksiStyle}>Aksi</th>
+                  <th className={thAksiStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -210,7 +215,7 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
                 )}
 
                 {sortedItems.length > 0 && (
-                  <tr className="bg-surface-2 font-semibold sticky bottom-0 border-t border-sep z-[30]">
+                  <tr className="apple-bar font-semibold sticky bottom-0 border-t border-sep z-[30]">
                     <td colSpan={2} className="px-2.5 py-3 text-caption2 uppercase tracking-[0.04em] text-label-2 text-right whitespace-nowrap">Grand Total</td>
                     <td className={tdStyle}>{rupiah(subtotal.harian)}</td>
                     <td className={tdStyle}>{rupiah(subtotal.jajanan)}</td>
@@ -223,7 +228,7 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
                         <td className={`${tdStyle} font-bold text-tint`}>{rupiah(subtotal.transfer)}</td>
                       </>
                     )}
-                    <td className="sticky right-0 bg-surface-2 border-l border-sep z-[35]"></td>
+                    <td className="sticky right-0 apple-bar border-l border-sep z-[35]"></td>
                   </tr>
                 )}
               </tbody>
@@ -234,7 +239,7 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
         {/* MOBILE VIEW */}
         <div className="md:hidden flex flex-col gap-3">
           {sortedItems.length === 0 ? (
-            <div className="p-8 text-center text-subhead text-label-2 rounded-tile bg-surface-2">
+            <div className="p-8 text-center text-subhead text-label-2 rounded-tile apple-tile">
               Tidak ada data untuk periode ini.
             </div>
           ) : (
@@ -242,7 +247,7 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
               const isWeekExpanded = expandedWeeks.includes(g.week);
 
               return (
-                <div key={`week-${g.week}`} className="rounded-tile p-3.5 bg-surface-2 transition-all">
+                <div key={`week-${g.week}`} className="rounded-tile p-3.5 sm:p-4 apple-tile transition-all">
                   <button
                     type="button"
                     className={`w-full min-h-[44px] flex justify-between items-center text-left active:opacity-70 transition-all ${isWeekExpanded ? 'mb-3 pb-3 border-b border-sep' : ''}`}
@@ -268,7 +273,7 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
                   {isWeekExpanded && (
                     <div className="flex flex-col gap-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
                       {g.items.length === 0 ? (
-                        <div className="text-center py-4 text-caption font-semibold text-label-2 bg-surface/60 rounded-field border border-dashed border-sep">
+                        <div className="text-center py-4 text-caption font-semibold text-label-2 apple-tile rounded-field border border-dashed border-sep">
                           Tidak ada pemasukan di minggu ini
                         </div>
                       ) : (
@@ -276,7 +281,7 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
                           const grand = totalPemasukanHarian(h);
                           const isItemExpanded = expandedMobile.includes(h.id);
                           return (
-                            <div key={h.id} className="bg-surface rounded-field p-3.5 ring-1 ring-edge">
+                            <div key={h.id} className="apple-tile rounded-field p-3.5 ring-1 ring-edge">
                               <button
                                 type="button"
                                 className={`w-full min-h-[44px] flex justify-between items-center text-left active:opacity-70 transition-opacity ${isItemExpanded ? 'border-b border-sep pb-3 mb-3' : ''}`}
@@ -355,19 +360,14 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
               {itemsWithNotes.map((h) => (
                 <div
                   key={`note-${h.id}`}
-                  className="relative p-3.5 rounded-tile bg-surface-2 flex flex-col gap-2 group/note"
+                  className="relative p-3.5 rounded-tile apple-tile flex flex-col gap-2 group/note"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <Pill tone="neutral">{h.tanggal}</Pill>
                     {isOwner && (
                       <button
                         type="button"
-                        onClick={async () => {
-                          if (!confirm(`Hapus catatan tanggal ${h.tanggal}?`)) return;
-                          try {
-                            await updateDoc(doc(db, "history_pembukuan", h.id), { catatan: "" });
-                          } catch (e) { console.error(e); }
-                        }}
+                        onClick={() => setHapusCatatanTarget(h)}
                         className="w-8 h-8 flex items-center justify-center rounded-full bg-fill hover:bg-negative/15 text-label-3 hover:text-negative transition-all md:opacity-0 md:group-hover/note:opacity-100 focus:opacity-100 active:scale-90 shrink-0"
                         title="Hapus catatan"
                         aria-label={`Hapus catatan ${h.tanggal}`}
@@ -388,15 +388,15 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
       </Card>
 
       {/* MODAL: ACTION CONFIRMATION (EDIT / DELETE) */}
-      {activeAction && (
+      {activeAction && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[1000] flex items-end sm:items-center justify-center p-4 sm:p-6 font-sans">
           <div
             className="absolute inset-0 bg-black/50 backdrop-blur-[4px] transition-all duration-300"
             onClick={() => setActiveAction(null)}
           />
 
-          <div className="relative w-full max-w-sm transform overflow-hidden rounded-card bg-surface/95 backdrop-blur-xl shadow-float ring-1 ring-edge transition-all animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
-            <div className="flex flex-col items-center pt-7 px-6 pb-5 text-center">
+          <div className="relative w-full max-w-sm transform overflow-hidden rounded-sheet apple-sheet p-3.5 border border-white/65 dark:border-white/[0.14] shadow-float ring-1 ring-black/10 dark:ring-white/10 transition-all animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
+            <div className="flex flex-col items-center px-2.5 pt-3.5 pb-4 text-center">
               <div className={`mb-4 flex h-14 w-14 items-center justify-center rounded-full ${activeAction.type === 'delete'
                   ? 'bg-negative/10 text-negative'
                   : 'bg-tint/10 text-tint'
@@ -414,7 +414,7 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
                   : "Data ini akan dimuat kembali ke form utama untuk dilanjutkan atau diubah."}
               </p>
 
-              <div className="w-full bg-surface-2 rounded-tile p-3.5 border border-sep">
+              <div className="w-full apple-tile rounded-tile p-3.5 border border-sep">
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-caption font-semibold uppercase text-label-2">{activeAction.data.hari}</span>
                   <span className="text-caption font-semibold text-label tabular-nums">{activeAction.data.tanggal}</span>
@@ -426,27 +426,28 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
               </div>
             </div>
 
-            <div className="grid grid-cols-2 divide-x divide-sep border-t border-sep">
+            <div className="grid grid-cols-2 gap-2.5">
               <button
                 type="button"
                 onClick={() => setActiveAction(null)}
-                className="min-h-[48px] px-4 py-3 text-callout font-medium text-label-2 hover:bg-fill active:bg-fill transition-colors"
+                className="min-h-[48px] w-full rounded-full bg-fill px-4 py-3 text-subhead font-medium text-label hover:brightness-95 dark:hover:brightness-115 active:opacity-75 transition-all"
               >
                 Batal
               </button>
               <button
                 type="button"
                 onClick={confirmAction}
-                className={`min-h-[48px] px-4 py-3 text-callout font-semibold hover:bg-fill active:bg-fill transition-colors ${activeAction.type === 'delete'
-                    ? 'text-negative'
-                    : 'text-tint'
+                className={`min-h-[48px] w-full rounded-full px-4 py-3 text-subhead font-semibold active:opacity-75 transition-all ${activeAction.type === 'delete'
+                    ? 'bg-negative/[0.13] text-negative dark:bg-negative/[0.22] hover:bg-negative/[0.20]'
+                    : 'bg-action text-action-label shadow-sm hover:opacity-85'
                   }`}
               >
                 {activeAction.type === 'delete' ? 'Hapus' : 'Lanjutkan'}
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Konfirmasi password akun sebelum menghapus */}
@@ -460,6 +461,37 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
           onBerhasil={() => { onDelete?.(hapusTarget.id); setHapusTarget(null); }}
         />
       )}
+
+      <AlertDialog
+        open={!!hapusCatatanTarget}
+        onClose={() => setHapusCatatanTarget(null)}
+        zClassName="z-[1000]"
+        icon={<Trash2 />}
+        iconColor="red"
+        title="Hapus Catatan Ini?"
+        description={
+          hapusCatatanTarget
+            ? `Catatan tanggal ${hapusCatatanTarget.tanggal} akan dihapus dari riwayat pembukuan.`
+            : undefined
+        }
+        actions={[
+          { label: "Batal", role: "cancel", onClick: () => setHapusCatatanTarget(null) },
+          {
+            label: "Hapus",
+            role: "destructive",
+            onClick: async () => {
+              const target = hapusCatatanTarget;
+              setHapusCatatanTarget(null);
+              if (!target) return;
+              try {
+                await updateDoc(doc(db, "history_pembukuan", target.id), { catatan: "" });
+              } catch (e) {
+                console.error(e);
+              }
+            },
+          },
+        ]}
+      />
     </>
   );
 }

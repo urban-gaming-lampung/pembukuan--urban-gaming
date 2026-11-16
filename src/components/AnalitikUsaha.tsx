@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from "recharts";
 import {
   Receipt, TrendingUp, TrendingDown, X, AlertTriangle, Users, Clock, Ban, Loader2, BadgePercent, Store, Trash2, Coins, Image as ImageIcon, Handshake, ChevronRight,
@@ -552,7 +553,7 @@ export default function AnalitikUsaha(props: FilterProps) {
             </Card>
 
             {/* Jam ramai */}
-            <Card className="flex flex-col" title="Jam ramai" icon={<Clock />} iconColor="orange" accessory={jamRamai ? <>Puncak <b className="font-semibold text-label">{jamRamai.label}.00</b></> : null}>
+            <Card className="flex flex-col" bodyClassName="flex-1 flex flex-col" title="Jam ramai" icon={<Clock />} iconColor="orange" accessory={jamRamai ? <>Puncak <b className="font-semibold text-label">{jamRamai.label}.00</b></> : null}>
               <div className="-ml-2 min-h-[150px] flex-1">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={jam} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barCategoryGap="18%">
@@ -677,10 +678,12 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
     }
   };
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-[260] flex items-end sm:items-center justify-center font-sans">
-      <div className="absolute inset-0 bg-black/55" onClick={onClose} />
-      <div className="relative w-full sm:max-w-md bg-canvas rounded-t-card sm:rounded-card max-h-[92vh] flex flex-col overflow-hidden shadow-float ring-1 ring-edge">
+      <div className="absolute inset-0 bg-black/45 dark:bg-black/70 backdrop-blur-[8px]" onClick={onClose} />
+      <div className="relative w-full sm:max-w-md apple-sheet-grouped border border-white/50 dark:border-white/[0.12] rounded-t-sheet sm:rounded-[32px] max-h-[92vh] flex flex-col overflow-hidden shadow-float ring-1 ring-edge">
         <div className="flex justify-center pt-2 sm:hidden"><div className="w-9 h-[5px] rounded-full bg-sep" /></div>
         <div className="px-4 pt-2 pb-3 flex items-center gap-3">
           <div className="flex-1 min-w-0">
@@ -701,7 +704,7 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
             </Notice>
           )}
           {live.buktiTransfer && (
-            <a href={live.buktiTransfer} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-card bg-surface ring-1 ring-edge p-3 active:opacity-80">
+            <a href={live.buktiTransfer} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-card apple-card ring-1 ring-edge shadow-card p-3 active:opacity-80">
               <img src={live.buktiTransfer} alt="Bukti transfer" className="w-14 h-14 rounded-field object-cover bg-fill shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="text-subhead font-semibold text-label">Bukti transfer</div>
@@ -722,7 +725,7 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
             <NotaPreview sale={live} />
           </div>
         </div>
-        <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] bg-surface border-t border-sep space-y-2">
+        <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] apple-bar border-t border-sep space-y-2">
           {(!live.batal || batalPakaiDp) && <NotaActionButtons sale={live} actions={actions} />}
           <div className={`grid gap-2 ${live.batal ? "grid-cols-1" : "grid-cols-[1fr_auto]"}`}>
             {!live.batal && (
@@ -738,6 +741,7 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

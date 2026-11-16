@@ -111,18 +111,18 @@ const RincianHarian: React.FC<{
                   recalcHarga(rowIndex, nextRow);
                 }}
               >
-                <option value="">Pilih</option>
+                <option value="" className="bg-surface text-label">Pilih</option>
                 {psOptions.length > 0 ? (
                   psOptions.map((ps) => (
-                    <option key={ps} value={ps}>
+                    <option key={ps} value={ps} className="bg-surface text-label">
                       {ps}
                     </option>
                   ))
                 ) : (
-                  <option disabled>List Kosong</option>
+                  <option disabled className="bg-surface text-label-3">List Kosong</option>
                 )}
               </select>
-              <ChevronDown className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400 pointer-events-none opacity-60" />
+              <ChevronDown className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-label-3 pointer-events-none" />
             </div>
           );
         }

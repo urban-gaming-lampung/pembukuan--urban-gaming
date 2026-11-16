@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Plus, Minus, X, ChevronRight, Camera, Package, Sparkles, Trash2, Loader2, AlertTriangle, Link2Off, History, ArrowLeftRight } from "lucide-react";
+import { Plus, Minus, X, ChevronRight, Camera, Package, Sparkles, Trash2, Loader2, AlertTriangle, Link2Off, History, ArrowLeftRight } from "lucide-react";
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
-import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { toLocalYmd } from "../lib/dateLocal";
 import { getMinStok, removeJualanItem, statusOf, StokLog, useMinStok, useStokLog, kunciStok } from "../lib/stokJualan";
 import { Kondisi, kondisiProduk, kondisiStok, PILIH_SAAT_CHECKOUT, produkSubKategori, stokBeririsan, StokRef, SubKategoriJualan, syncProdukKeStok } from "../lib/posSales";
@@ -11,11 +10,12 @@ import {
   hapusBarangJualan, KATEGORI_PENGELUARAN_STOK, koreksiJumlahStok, kurangiStokMasukSalahInput, ModalMap, pratinjauOtomatis, ProdukJualan, rencanaKurangiStokMasuk,
   simpanBarangJualan, StokMasuk, uploadFotoProduk, useModalProduk, useProdukJualan, useStokMasuk,
 } from "../lib/barangJualan";
-import StokMasukSheet, { digits, fmtDigits, Toggle } from "./StokMasukSheet";
+import StokMasukSheet, { digits, fmtDigits } from "./StokMasukSheet";
 import { refAda, StokRefSelect } from "./StokRefSelect";
 import { rupiah } from "../lib/format";
 import { TukarTambah, useTukarTambah } from "../lib/tukarTambah";
 import { DaftarKonfirmasiTukar, KonfirmasiTukarSheet } from "./KonfirmasiTukarSheet";
+import { AlertDialog, Button, Card, EmptyState, Eyebrow, Footnote, Notice, Pill, SearchField, Sheet, Toggle } from "../ui";
 
 const SUBS: { key: SubKategoriJualan; label: string }[] = [
   { key: "Unit PS", label: "Unit PS" },
@@ -53,15 +53,15 @@ function stokView(r: StokRef | null | undefined, cats: StokKategori[], data: Dat
 }
 
 const StokPill: React.FC<{ v: StokView }> = ({ v }) => {
-  if (v.tone === "none") return <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-zinc-400"><Link2Off className="w-3.5 h-3.5" />Tanpa stok</span>;
-  if (v.tone === "belum") return <span className="px-2 py-0.5 rounded-full text-[11.5px] font-semibold bg-zinc-100 text-zinc-500 dark:bg-white/10 dark:text-zinc-400">Stok ?</span>;
-  const c = v.tone === "habis" ? "bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-400" : v.tone === "menipis" ? "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400" : "bg-zinc-100 text-zinc-700 dark:bg-white/10 dark:text-zinc-200";
-  return <span className={`px-2 py-0.5 rounded-full text-[11.5px] font-semibold tabular-nums ${c}`}>{v.n === 0 ? "Habis" : `Stok ${v.n}`}</span>;
+  if (v.tone === "none") return <Pill tone="neutral" icon={<Link2Off className="w-3 h-3" />}>Tanpa stok</Pill>;
+  if (v.tone === "belum") return <Pill tone="neutral">Stok ?</Pill>;
+  const tone = v.tone === "habis" ? "negative" : v.tone === "menipis" ? "warning" : "neutral";
+  return <Pill tone={tone} className="tabular-nums">{v.n === 0 ? "Habis" : `Stok ${v.n}`}</Pill>;
 };
 
 const Thumb: React.FC<{ url?: string; size?: number }> = ({ url, size = 44 }) => (
-  <div className="shrink-0 rounded-[12px] bg-zinc-100 dark:bg-white/10 overflow-hidden flex items-center justify-center" style={{ width: size, height: size }}>
-    {url ? <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => (e.currentTarget.style.display = "none")} /> : <Package className="w-5 h-5 text-zinc-400" />}
+  <div className="shrink-0 rounded-field bg-fill border border-sep overflow-hidden flex items-center justify-center" style={{ width: size, height: size }}>
+    {url ? <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => (e.currentTarget.style.display = "none")} /> : <Package className="w-5 h-5 text-label-3" />}
   </div>
 );
 
@@ -179,26 +179,44 @@ export default function InputStokJualan() {
     { key: "yatim", label: "Stok tanpa produk", n: yatim.length, warn: yatim.length > 0 },
   ];
 
-  const hapusYatim = async (r: StokRef) => {
-    const n = Math.max(0, Math.round(Number(data?.[r.kategori]?.[r.item]?.jumlah) || 0));
-    if (!confirm(`Hapus "${r.item}" dari stok ${r.kategori}?${n > 0 ? `\nMasih tercatat ${n} barang.` : ""}\nRiwayatnya tetap tersimpan.`)) return;
-    try { await removeJualanItem(r.kategori, r.item); showToast("Barang dihapus dari stok"); }
-    catch (e: any) { alert("Gagal menghapus: " + (e?.message || e)); }
+  const [yatimTarget, setYatimTarget] = useState<StokRef | null>(null);
+  const [yatimBusy, setYatimBusy] = useState(false);
+
+  const hapusYatim = (r: StokRef) => setYatimTarget(r);
+  const konfirmasiHapusYatim = async () => {
+    if (!yatimTarget) return;
+    setYatimBusy(true);
+    try {
+      await removeJualanItem(yatimTarget.kategori, yatimTarget.item);
+      showToast("Barang dihapus dari stok");
+      setYatimTarget(null);
+    } catch (e: any) {
+      showToast("Gagal menghapus: " + (e?.message || e));
+    } finally {
+      setYatimBusy(false);
+    }
   };
 
   return (
     <div className="space-y-4">
       {/* Ringkasan seluruh barang jualan (baru + seken) */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-2.5">
         {[
           { l: "Barang", v: String(semuaProduk.length), on: undefined },
           { l: "Nilai stok", v: rpShort(nilaiStok), on: undefined },
           { l: "Tanpa modal", v: String(tanpaModalSemua.length), on: tanpaModalSemua.length ? lihatTanpaModal : undefined, warn: tanpaModalSemua.length > 0 },
         ].map((x) => (
-          <button key={x.l} type="button" onClick={x.on} disabled={!x.on}
-            className="rounded-[18px] bg-white dark:bg-[#1c1c1e] border border-zinc-200/70 dark:border-white/5 px-3 py-3 text-left disabled:cursor-default">
-            <div className={`text-[17px] font-bold tabular-nums tracking-tight leading-none ${x.warn ? "text-amber-600 dark:text-amber-400" : "text-zinc-900 dark:text-white"}`}>{x.v}</div>
-            <div className="text-[11.5px] text-zinc-500 mt-1.5">{x.l}</div>
+          <button
+            key={x.l}
+            type="button"
+            onClick={x.on}
+            disabled={!x.on}
+            className={`rounded-tile apple-card ring-1 ring-edge shadow-card px-3.5 py-3 text-left transition-all disabled:cursor-default ${
+              x.on ? "apple-tile-interactive active:scale-[0.98]" : ""
+            }`}
+          >
+            <div className={`text-headline font-bold tabular-nums leading-none ${x.warn ? "text-warning" : "text-label"}`}>{x.v}</div>
+            <div className="text-caption text-label-2 mt-1.5">{x.l}</div>
           </button>
         ))}
       </div>
@@ -207,52 +225,67 @@ export default function InputStokJualan() {
       <KondisiSwitch value={kondisi} onChange={(k) => { setKondisi(k); setFilter("semua"); }} counts={kondisiCount} />
 
       {syncInfo && (
-        <div className="rounded-[18px] bg-blue-50 dark:bg-blue-500/10 px-4 py-3 flex items-start gap-3">
-          <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-          <p className="flex-1 text-[13px] leading-snug text-blue-900 dark:text-blue-100">
-            Sinkron otomatis selesai: {syncInfo.linked} produk dihubungkan ke stok yang sudah ada{syncInfo.created ? `, ${syncInfo.created} barang baru ditambahkan ke stok (jumlahnya belum dihitung)` : ""}.
-          </p>
-          <button type="button" onClick={() => setSyncInfo(null)} aria-label="Tutup" className="text-blue-700/60 dark:text-blue-300/60"><X className="w-4 h-4" /></button>
-        </div>
+        <Notice tone="info">
+          <div className="flex items-start gap-2.5">
+            <Sparkles className="w-4 h-4 shrink-0 mt-0.5" />
+            <p className="flex-1 text-footnote leading-snug">
+              Sinkron otomatis selesai: {syncInfo.linked} produk dihubungkan ke stok yang sudah ada{syncInfo.created ? `, ${syncInfo.created} barang baru ditambahkan ke stok (jumlahnya belum dihitung)` : ""}.
+            </p>
+            <button type="button" onClick={() => setSyncInfo(null)} aria-label="Tutup" className="text-tint/70 hover:text-tint shrink-0">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </Notice>
       )}
 
       {menunggu.length > 0 && filter !== "konfirmasi" && (
-        <button type="button" onClick={() => setFilter("konfirmasi")}
-          className="w-full rounded-[18px] bg-blue-50 dark:bg-blue-500/10 px-4 py-3 flex items-center gap-3 text-left active:opacity-70">
-          <ArrowLeftRight className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-          <p className="flex-1 text-[13px] leading-snug text-blue-900 dark:text-blue-100">
+        <button
+          type="button"
+          onClick={() => setFilter("konfirmasi")}
+          className="w-full rounded-tile bg-tint/10 border border-tint/20 px-4 py-3 flex items-center gap-3 text-left transition-opacity active:opacity-75"
+        >
+          <ArrowLeftRight className="w-4 h-4 text-tint shrink-0" />
+          <p className="flex-1 text-footnote leading-snug text-label">
             <b className="font-semibold">{menunggu.length} barang tukar tambah</b> menunggu konfirmasi stok
           </p>
-          <ChevronRight className="w-4 h-4 text-blue-700/60 dark:text-blue-300/60 shrink-0" />
+          <ChevronRight className="w-4 h-4 text-tint/70 shrink-0" />
         </button>
       )}
 
       {/* Cari + tambah */}
       <div className="flex items-center gap-2">
-        <div className="flex-1 min-w-0 flex items-center gap-2 h-11 px-3.5 rounded-[14px] bg-zinc-200/60 dark:bg-white/10">
-          <Search className="w-4 h-4 text-zinc-400 shrink-0" />
-          <input value={cari} onChange={(e) => setCari(e.target.value)} placeholder="Cari barang jualan" className="flex-1 min-w-0 bg-transparent text-[15px] focus:outline-none text-zinc-900 dark:text-white placeholder:text-zinc-400" />
-          {cari && <button type="button" onClick={() => setCari("")} aria-label="Hapus pencarian"><X className="w-4 h-4 text-zinc-400" /></button>}
-        </div>
-        <button type="button" onClick={() => setEditor({ produk: null, kondisi })}
-          className="h-11 pl-3 pr-4 rounded-[14px] bg-blue-600 text-white text-[15px] font-semibold flex items-center gap-1.5 active:opacity-80 shrink-0">
-          <Plus className="w-[18px] h-[18px]" />Barang
-        </button>
+        <SearchField value={cari} onChange={setCari} placeholder="Cari barang jualan" className="flex-1 min-w-0" />
+        <Button variant="filled" size="md" icon={<Plus className="w-4 h-4" />} onClick={() => setEditor({ produk: null, kondisi })} className="shrink-0">
+          Barang
+        </Button>
       </div>
 
       {/* Filter */}
       <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: "none" }}>
-        {chips.map((c) => (
-          <button key={c.key} type="button" onClick={() => setFilter(c.key)}
-            className={`shrink-0 h-9 px-3.5 rounded-full text-[13px] font-semibold transition-colors ${filter === c.key ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900" : "bg-white dark:bg-[#1c1c1e] text-zinc-600 dark:text-zinc-300 border border-zinc-200/70 dark:border-white/5"}`}>
-            {c.label}
-            {typeof c.n === "number" && <span className={`ml-1.5 ${filter === c.key ? "opacity-60" : c.warn ? "text-amber-600 dark:text-amber-400" : "text-zinc-400"}`}>{c.n}</span>}
-          </button>
-        ))}
+        {chips.map((c) => {
+          const aktif = filter === c.key;
+          return (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => setFilter(c.key)}
+              className={`shrink-0 h-9 px-3.5 rounded-full text-footnote font-semibold border transition-colors ${
+                aktif
+                  ? "bg-action text-action-label border-action"
+                  : "bg-surface text-label-2 hover:text-label border-sep"
+              }`}
+            >
+              {c.label}
+              {typeof c.n === "number" && (
+                <span className={`ml-1.5 tabular-nums ${aktif ? "opacity-70" : c.warn ? "text-warning font-bold" : "text-label-3"}`}>{c.n}</span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {!loaded ? (
-        <div className="py-16 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-zinc-400" /></div>
+        <div className="py-16 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-label-3" /></div>
       ) : filter === "konfirmasi" ? (
         <DaftarKonfirmasiTukar
           list={menunggu.filter((t) => !q || `${t.nama} ${t.sn} ${t.noNota}`.toLowerCase().includes(q))}
@@ -261,72 +294,116 @@ export default function InputStokJualan() {
         />
       ) : filter === "yatim" ? (
         <section>
-          <p className="px-1 pb-2 text-[12.5px] text-zinc-500 leading-snug">Barang ini ada di stok tapi belum dijual di POS. Jadikan produk supaya punya harga & muncul di kasir, atau hapus bila sudah tidak dipakai.</p>
-          <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] border border-zinc-200/70 dark:border-white/5 overflow-hidden divide-y divide-zinc-100 dark:divide-white/5">
-            {yatimShown.length === 0 && <div className="py-10 text-center text-[14px] text-zinc-500">Semua barang stok sudah punya produk 👍</div>}
-            {yatimShown.map((r) => (
-              <div key={kunciStok(r)} className="px-4 py-3">
-                <div className="flex items-start gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[15px] font-semibold text-zinc-900 dark:text-white leading-snug">{r.item}</div>
-                    <div className="text-[12px] text-zinc-500">{r.kategori}</div>
+          <Footnote className="px-1 pb-2">Barang ini ada di stok tapi belum dijual di POS. Jadikan produk supaya punya harga &amp; muncul di kasir, atau hapus bila sudah tidak dipakai.</Footnote>
+          <Card flush>
+            {yatimShown.length === 0 ? (
+              <EmptyState title="Semua barang stok sudah punya produk 👍" />
+            ) : (
+              <div className="divide-y divide-sep">
+                {yatimShown.map((r) => (
+                  <div key={kunciStok(r)} className="px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-subhead font-semibold text-label leading-snug">{r.item}</div>
+                        <div className="text-caption text-label-2">{r.kategori}</div>
+                      </div>
+                      <StokPill v={stokView(r, cats, data, minMap)} />
+                    </div>
+                    <div className="flex items-center gap-2 mt-2.5">
+                      <Button
+                        variant="tinted"
+                        size="sm"
+                        onClick={() => setEditor({ produk: null, nama: r.item, stokRef: r, sub: subDariKategori(r.kategori, r.item), kondisi: kondisiStok(r.kategori, r.item, semuaProduk) })}
+                      >
+                        Jadikan produk
+                      </Button>
+                      <Button variant="destructive" size="sm" icon={<Trash2 className="w-3.5 h-3.5" />} onClick={() => hapusYatim(r)}>
+                        Hapus
+                      </Button>
+                    </div>
                   </div>
-                  <StokPill v={stokView(r, cats, data, minMap)} />
-                </div>
-                <div className="flex items-center gap-2 mt-2">
-                  <button type="button" onClick={() => setEditor({ produk: null, nama: r.item, stokRef: r, sub: subDariKategori(r.kategori, r.item), kondisi: kondisiStok(r.kategori, r.item, semuaProduk) })}
-                    className="h-8 px-3.5 rounded-full bg-blue-50 dark:bg-blue-500/15 text-blue-600 dark:text-blue-300 text-[13px] font-semibold">Jadikan produk</button>
-                  <button type="button" onClick={() => hapusYatim(r)} className="h-8 px-3 rounded-full text-[13px] font-medium text-red-600 dark:text-red-400 flex items-center gap-1"><Trash2 className="w-3.5 h-3.5" />Hapus</button>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+          </Card>
         </section>
       ) : list.length === 0 ? (
-        <div className="py-14 text-center">
-          <Package className="w-8 h-8 mx-auto text-zinc-300 dark:text-zinc-600" />
-          <p className="mt-2 text-[14px] text-zinc-500">{q ? "Tidak ditemukan." : filter === "tanpaModal" ? "Semua barang sudah punya harga modal 👍" : "Belum ada barang."}</p>
-        </div>
+        <EmptyState
+          icon={<Package />}
+          title={q ? "Tidak ditemukan." : filter === "tanpaModal" ? "Semua barang sudah punya harga modal 👍" : "Belum ada barang."}
+        />
       ) : (
         grouped.map((g) => (
           <section key={g.key || "list"}>
-            {g.key && <h3 className="px-4 pb-1.5 text-[12px] font-semibold uppercase tracking-wide text-zinc-500">{g.key}</h3>}
-            <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] border border-zinc-200/70 dark:border-white/5 overflow-hidden divide-y divide-zinc-100 dark:divide-white/5">
-              {g.items.map((p) => {
-                const m = modalOf(p.id);
-                const untung = m !== null ? p.price - m : null;
-                return (
-                  <button key={p.id} type="button" onClick={() => setEditor({ produk: p })} className="w-full flex items-center gap-3 px-3.5 py-3 text-left active:bg-zinc-50 dark:active:bg-white/5">
-                    <Thumb url={p.imageUrl} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[15px] font-semibold text-zinc-900 dark:text-white leading-snug line-clamp-2">{p.name}</div>
-                      <div className="text-[12.5px] text-zinc-500 mt-0.5 flex flex-wrap gap-x-1.5 tabular-nums">
-                        {!p.price ? <span className="font-bold text-violet-600 dark:text-violet-400">BONUS · Rp 0</span> : <span>{rupiah(p.price)}</span>}
-                        {!p.price ? (
-                          m !== null ? <span>· biaya {rupiah(m)}</span> : <span className="text-amber-600 dark:text-amber-400">· modal belum diisi</span>
-                        ) : m !== null ? (
-                          <>
-                            <span>· modal {rupiah(m)}</span>
-                            <span className={untung! >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600"}>· {untung! >= 0 ? "+" : ""}{p.price > 0 ? Math.round((untung! / p.price) * 100) : 0}%</span>
-                          </>
-                        ) : (
-                          <span className="text-amber-600 dark:text-amber-400">· modal belum diisi</span>
-                        )}
+            {g.key && (
+              <div className="px-2 pb-1.5">
+                <Eyebrow>{g.key}</Eyebrow>
+              </div>
+            )}
+            <Card flush>
+              <div className="divide-y divide-sep">
+                {g.items.map((p) => {
+                  const m = modalOf(p.id);
+                  const untung = m !== null ? p.price - m : null;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setEditor({ produk: p })}
+                      className="w-full flex items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-fill/40 active:bg-fill/70"
+                    >
+                      <Thumb url={p.imageUrl} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-subhead font-semibold text-label leading-snug line-clamp-2">{p.name}</div>
+                        <div className="text-footnote text-label-2 mt-0.5 flex flex-wrap gap-x-1.5 tabular-nums">
+                          {!p.price ? <span className="font-bold text-tint">BONUS · Rp 0</span> : <span>{rupiah(p.price)}</span>}
+                          {!p.price ? (
+                            m !== null ? <span>· biaya {rupiah(m)}</span> : <span className="text-warning">· modal belum diisi</span>
+                          ) : m !== null ? (
+                            <>
+                              <span>· modal {rupiah(m)}</span>
+                              <span className={untung! >= 0 ? "text-positive" : "text-negative"}>· {untung! >= 0 ? "+" : ""}{p.price > 0 ? Math.round((untung! / p.price) * 100) : 0}%</span>
+                            </>
+                          ) : (
+                            <span className="text-warning">· modal belum diisi</span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <StokPill v={stokView(p.stokRef, cats, data, minMap)} />
-                    <ChevronRight className="w-4 h-4 text-zinc-300 dark:text-zinc-600 shrink-0" />
-                  </button>
-                );
-              })}
-            </div>
+                      <StokPill v={stokView(p.stokRef, cats, data, minMap)} />
+                      <ChevronRight className="w-4 h-4 text-label-3 shrink-0" />
+                    </button>
+                  );
+                })}
+              </div>
+            </Card>
           </section>
         ))
       )}
 
-      <p className="px-1 text-[12px] text-zinc-400 leading-snug">
-        Ini satu-satunya tempat menambah & mengubah barang jualan. POS hanya menjual, menu Stok hanya menghitung jumlah. Harga modal hanya terlihat oleh owner & super admin.
-      </p>
+      <Footnote className="px-1">
+        Ini satu-satunya tempat menambah &amp; mengubah barang jualan. POS hanya menjual, menu Stok hanya menghitung jumlah. Harga modal hanya terlihat oleh owner &amp; super admin.
+      </Footnote>
+
+      <AlertDialog
+        open={!!yatimTarget}
+        onClose={() => !yatimBusy && setYatimTarget(null)}
+        title={`Hapus "${yatimTarget?.item ?? ""}"?`}
+        description={
+          yatimTarget
+            ? (() => {
+                const n = Math.max(0, Math.round(Number(data?.[yatimTarget.kategori]?.[yatimTarget.item]?.jumlah) || 0));
+                return `Akan dihapus dari stok ${yatimTarget.kategori}.${n > 0 ? ` Masih tercatat ${n} barang.` : ""} Riwayatnya tetap tersimpan.`;
+              })()
+            : undefined
+        }
+        icon={<Trash2 />}
+        iconColor="red"
+        dismissible={!yatimBusy}
+        actions={[
+          { label: "Batal", role: "cancel", onClick: () => setYatimTarget(null), disabled: yatimBusy },
+          { label: yatimBusy ? "Menghapus..." : "Hapus", role: "destructive", onClick: konfirmasiHapusYatim, disabled: yatimBusy },
+        ]}
+      />
 
       {editor && (
         <BarangJualanSheet
@@ -354,7 +431,7 @@ export default function InputStokJualan() {
       )}
 
       {toast && (
-        <div className="fixed left-1/2 -translate-x-1/2 bottom-[calc(24px+env(safe-area-inset-bottom))] z-[400] px-4 py-2.5 rounded-full bg-zinc-900/90 dark:bg-white/90 text-white dark:text-zinc-900 text-[14px] font-medium shadow-lg backdrop-blur max-w-[90vw] text-center">
+        <div className="fixed left-1/2 -translate-x-1/2 bottom-[calc(24px+env(safe-area-inset-bottom))] z-[400] px-4 py-2.5 rounded-full bg-action text-action-label text-subhead font-medium shadow-float max-w-[90vw] text-center">
           {toast}
         </div>
       )}
@@ -375,7 +452,6 @@ const BarangJualanSheet: React.FC<{
   onClose: () => void;
   onDone: (msg: string) => void;
 }> = ({ init, products, modalMap, cats, data, minMap, onClose, onDone }) => {
-  useBodyScrollLock(true);
   const p = init.produk;
   const modalAwal = p ? modalMap[p.id]?.hargaModal ?? null : null;
   const [nama, setNama] = useState(p?.name || init.nama || "");
@@ -394,6 +470,7 @@ const BarangJualanSheet: React.FC<{
   const [catat, setCatat] = useState(true);
   const [varian, setVarian] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirmHapusOpen, setConfirmHapusOpen] = useState(false);
   const [err, setErr] = useState("");
   const [info, setInfo] = useState("");
   // Koreksi jumlah (hitung fisik): satu barang stok, atau satu varian bila "pilih varian saat checkout"
@@ -501,49 +578,68 @@ const BarangJualanSheet: React.FC<{
     }
   };
 
-  const hapus = async () => {
+  const hapus = () => {
     if (!p) return;
-    if (!confirm(`Hapus "${p.name}" dari daftar jualan?\nProduk hilang dari POS. Riwayat penjualan & laporan laba tetap tersimpan.`)) return;
+    setConfirmHapusOpen(true);
+  };
+
+  const konfirmasiHapus = async () => {
+    if (!p) return;
     setSaving(true);
     try {
       await hapusBarangJualan(p, products, (r) => data?.[r.kategori]?.[r.item]?.jumlah);
+      setConfirmHapusOpen(false);
       onDone("Barang dihapus");
     } catch (e: any) {
       setErr(e?.message || String(e));
       setSaving(false);
+      setConfirmHapusOpen(false);
     }
   };
 
-  const field = "w-full h-12 px-4 rounded-[14px] bg-zinc-100 dark:bg-white/10 text-[16px] text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40";
-  const label = "block text-[13px] font-medium text-zinc-500 mb-1.5 px-1";
+  const field = "w-full h-11 px-3.5 rounded-field bg-fill text-[16px] sm:text-subhead font-medium text-label placeholder:text-label-3 focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35";
+  const label = "block text-footnote font-medium text-label-2 mb-1.5 px-0.5";
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={() => !saving && onClose()} />
-      <div className="relative w-full sm:max-w-md bg-[#f2f2f7] dark:bg-black rounded-t-[22px] sm:rounded-[22px] h-[94vh] sm:h-[88vh] flex flex-col overflow-hidden">
-        <div className="flex justify-center pt-2"><div className="w-9 h-[5px] rounded-full bg-zinc-300 dark:bg-zinc-700" /></div>
-        <div className="px-4 pt-1 pb-2 flex items-center justify-between">
-          <button type="button" onClick={onClose} disabled={saving} className="text-[16px] text-blue-600 dark:text-blue-400 disabled:opacity-40 min-w-[56px] text-left">Batal</button>
-          <h3 className="text-[16px] font-semibold text-zinc-900 dark:text-white">{p ? "Edit Barang" : "Barang Baru"}</h3>
-          <button type="button" onClick={simpan} disabled={saving} className="text-[16px] font-semibold text-blue-600 dark:text-blue-400 disabled:opacity-40 min-w-[56px] text-right">
-            {saving ? <Loader2 className="w-5 h-5 animate-spin ml-auto" /> : "Simpan"}
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 pb-6 space-y-5">
+    <>
+      <Sheet
+        open
+        onClose={() => { if (!saving && !editMasuk && !confirmHapusOpen) onClose(); }}
+        title={p ? "Edit Barang" : "Barang Baru"}
+        size="md"
+        headerLeft={
+          <Button variant="plain" size="sm" onClick={onClose} disabled={saving}>
+            Batal
+          </Button>
+        }
+        headerRight={
+          <Button variant="plain" size="sm" onClick={simpan} disabled={saving} loading={saving} className="font-semibold">
+            Simpan
+          </Button>
+        }
+      >
+        <div className="space-y-5 pb-4">
           {/* Foto + nama */}
-          <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] p-4 flex gap-4 items-start">
-            <label className="relative w-[84px] h-[84px] rounded-[18px] bg-zinc-100 dark:bg-white/10 overflow-hidden flex items-center justify-center cursor-pointer shrink-0">
-              {fotoPreview ? <img src={fotoPreview} alt="" className="w-full h-full object-cover" /> : <Camera className="w-6 h-6 text-zinc-400" />}
-              <span className="absolute bottom-0 inset-x-0 bg-black/45 text-white text-[10.5px] font-medium text-center py-0.5">{fotoPreview ? "Ganti" : "Foto"}</span>
-              <input type="file" accept="image/*" className="hidden" onChange={(e) => pilihFoto(e.target.files?.[0] || null)} />
-            </label>
-            <div className="flex-1 min-w-0">
-              <span className={label}>Nama barang</span>
-              <textarea value={nama} onChange={(e) => setNama(e.target.value.toUpperCase())} rows={2} placeholder="CONTOH: STIK PS4 BARU - HITAM" autoCapitalize="characters"
-                className="w-full px-3 py-2 rounded-[12px] bg-zinc-100 dark:bg-white/10 text-[16px] leading-snug text-zinc-900 dark:text-white placeholder:text-zinc-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/40" />
+          <Card>
+            <div className="flex gap-4 items-start">
+              <label className="relative w-[84px] h-[84px] rounded-tile bg-fill border border-sep overflow-hidden flex items-center justify-center cursor-pointer shrink-0">
+                {fotoPreview ? <img src={fotoPreview} alt="" className="w-full h-full object-cover" /> : <Camera className="w-6 h-6 text-label-3" />}
+                <span className="absolute bottom-0 inset-x-0 bg-black/55 text-white text-caption2 font-medium text-center py-0.5">{fotoPreview ? "Ganti" : "Foto"}</span>
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => pilihFoto(e.target.files?.[0] || null)} />
+              </label>
+              <div className="flex-1 min-w-0">
+                <span className={label}>Nama barang</span>
+                <textarea
+                  value={nama}
+                  onChange={(e) => setNama(e.target.value.toUpperCase())}
+                  rows={2}
+                  placeholder="CONTOH: STIK PS4 BARU - HITAM"
+                  autoCapitalize="characters"
+                  className="w-full px-3 py-2 rounded-field bg-fill text-[16px] sm:text-subhead leading-snug text-label placeholder:text-label-3 resize-none focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"
+                />
+              </div>
             </div>
-          </div>
+          </Card>
 
           {/* Kondisi */}
           <div>
@@ -556,8 +652,16 @@ const BarangJualanSheet: React.FC<{
             <span className={label}>Kategori di kasir</span>
             <div className="flex gap-1.5 overflow-x-auto -mx-4 px-4" style={{ scrollbarWidth: "none" }}>
               {SUBS.map((s) => (
-                <button key={s.key} type="button" onClick={() => { setSub(s.key); setSubManual(true); }}
-                  className={`shrink-0 h-9 px-3.5 rounded-full text-[14px] font-medium ${sub === s.key ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900" : "bg-white dark:bg-[#1c1c1e] text-zinc-700 dark:text-zinc-300"}`}>
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => { setSub(s.key); setSubManual(true); }}
+                  className={`shrink-0 h-9 px-3.5 rounded-full text-footnote font-semibold border transition-colors ${
+                    sub === s.key
+                      ? "bg-action text-action-label border-action"
+                      : "bg-surface text-label-2 hover:text-label border-sep"
+                  }`}
+                >
                   {s.label}
                 </button>
               ))}
@@ -565,274 +669,343 @@ const BarangJualanSheet: React.FC<{
           </div>
 
           {/* Harga */}
-          <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] p-4 space-y-3">
-            {/* Barang bonus / paket (Rp 0) */}
-            <button
-              type="button"
-              role="switch"
-              aria-checked={bonus}
-              onClick={() => setJual(bonus ? "" : "0")}
-              className="w-full flex items-center gap-3 text-left"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="text-[15px] font-semibold text-zinc-900 dark:text-white">Barang bonus</div>
-                <div className="text-[12.5px] text-zinc-500 leading-snug">Rp 0 di kasir & nota, mis. stik bonus pembelian PS. Stok tetap berkurang.</div>
+          <Card>
+            <div className="space-y-3">
+              {/* Barang bonus / paket (Rp 0) */}
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setJual(bonus ? "" : "0")}>
+                  <div className="text-subhead font-semibold text-label">Barang bonus</div>
+                  <div className="text-caption text-label-2 leading-snug">Rp 0 di kasir &amp; nota, mis. stik bonus pembelian PS. Stok tetap berkurang.</div>
+                </div>
+                <Toggle on={bonus} onChange={(on) => setJual(on ? "0" : "")} label="Barang bonus" />
               </div>
-              <span className={`w-12 h-7 rounded-full transition-colors flex items-center px-[3px] shrink-0 ${bonus ? "bg-violet-500" : "bg-zinc-300 dark:bg-zinc-600"}`}>
-                <span className={`w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform ${bonus ? "translate-x-[20px]" : "translate-x-0"}`} />
-              </span>
-            </button>
-            <div className="h-px bg-zinc-100 dark:bg-white/5" />
-            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
-              <div>
-                <span className={label}>Harga jual</span>
-                {bonus ? (
-                  <div className="h-12 px-4 rounded-[14px] bg-violet-50 dark:bg-violet-500/10 flex items-center text-[15px] font-black tracking-wide text-violet-700 dark:text-violet-300">BONUS · Rp 0</div>
-                ) : (
+              <div className="h-px bg-sep" />
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
+                <div>
+                  <span className={label}>Harga jual</span>
+                  {bonus ? (
+                    <div className="h-11 px-3.5 rounded-field bg-tint/10 flex items-center text-subhead font-bold tracking-wide text-tint">BONUS · Rp 0</div>
+                  ) : (
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-subhead text-label-3">Rp</span>
+                      <input inputMode="numeric" value={fmtDigits(jual)} onChange={(e) => setJual(digits(e.target.value))} placeholder="0" className={`${field} pl-10 tabular-nums`} />
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <span className={label}>Harga modal</span>
                   <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[15px] text-zinc-400">Rp</span>
-                    <input inputMode="numeric" value={fmtDigits(jual)} onChange={(e) => setJual(digits(e.target.value))} placeholder="0" className={`${field} pl-10 tabular-nums`} />
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-subhead text-label-3">Rp</span>
+                    <input inputMode="numeric" value={fmtDigits(modal)} onChange={(e) => setModal(digits(e.target.value))} placeholder="0" className={`${field} pl-10 tabular-nums`} />
                   </div>
-                )}
-              </div>
-              <div>
-                <span className={label}>Harga modal</span>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[15px] text-zinc-400">Rp</span>
-                  <input inputMode="numeric" value={fmtDigits(modal)} onChange={(e) => setModal(digits(e.target.value))} placeholder="0" className={`${field} pl-10 tabular-nums`} />
                 </div>
               </div>
+              {untung !== null ? (
+                <div className={`flex items-center justify-between rounded-field px-3 py-2 text-footnote ${untung >= 0 ? "bg-positive/10 text-positive" : "bg-negative/10 text-negative"}`}>
+                  <span>{untung >= 0 ? "Untung per barang" : "Rugi per barang"}</span>
+                  <span className="font-semibold tabular-nums">{rupiah(Math.abs(untung))} · {Math.round((untung / jualN) * 100)}%</span>
+                </div>
+              ) : bonus ? (
+                <Footnote className="px-0.5 leading-snug">
+                  {modalN !== null && modalN > 0
+                    ? <>Biaya bonus <b className="text-label">{rupiah(modalN)}</b> per barang ikut dihitung sebagai modal, jadi laba penjualan PS di Analitik Usaha tetap akurat.</>
+                    : <>Isi harga modal stik supaya biaya bonus ikut mengurangi laba di Analitik Usaha.</>}
+                </Footnote>
+              ) : (
+                <Footnote className="px-0.5">Isi harga modal supaya laba &amp; margin terhitung di Analitik Usaha. Harga modal tidak tampil di kasir.</Footnote>
+              )}
             </div>
-            {untung !== null ? (
-              <div className={`flex items-center justify-between rounded-[12px] px-3 py-2 text-[13.5px] ${untung >= 0 ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400" : "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400"}`}>
-                <span>{untung >= 0 ? "Untung per barang" : "Rugi per barang"}</span>
-                <span className="font-semibold tabular-nums">{rupiah(Math.abs(untung))} · {Math.round((untung / jualN) * 100)}%</span>
-              </div>
-            ) : bonus ? (
-              <p className="text-[12.5px] text-zinc-500 px-1 leading-snug">
-                {modalN !== null && modalN > 0
-                  ? <>Biaya bonus <b className="text-zinc-700 dark:text-zinc-200">{rupiah(modalN)}</b> per barang ikut dihitung sebagai modal, jadi laba penjualan PS di Analitik Usaha tetap akurat.</>
-                  : <>Isi harga modal stik supaya biaya bonus ikut mengurangi laba di Analitik Usaha.</>}
-              </p>
-            ) : (
-              <p className="text-[12.5px] text-zinc-500 px-1">Isi harga modal supaya laba & margin terhitung di Analitik Usaha. Harga modal tidak tampil di kasir.</p>
-            )}
-          </div>
+          </Card>
 
           {/* Barang stok */}
-          <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[13px] font-medium text-zinc-500 px-1">Hitungan stok</span>
-              <StokPill v={sv} />
-            </div>
-            <StokRefSelect allowAuto value={ref} onChange={setRef} categories={cats} data={data}
-              className="w-full h-12 px-3 rounded-[14px] bg-zinc-100 dark:bg-white/10 text-[14px] text-zinc-900 dark:text-white" />
-            {ref === undefined && preview && (
-              <p className="text-[12.5px] text-zinc-500 px-1 leading-snug">
-                {preview.baru ? <>Akan dibuat barang stok baru: <b className="text-zinc-700 dark:text-zinc-200">{preview.ref.kategori} › {preview.ref.item}</b></> : <>Akan memakai stok: <b className="text-zinc-700 dark:text-zinc-200">{preview.ref.kategori} › {preview.ref.item === PILIH_SAAT_CHECKOUT ? "pilih varian saat checkout" : preview.ref.item}</b></>}
-              </p>
-            )}
-            {dipakaiLain.length > 0 && (
-              <p className="text-[12.5px] text-zinc-500 px-1 leading-snug">Stok ini dipakai bersama: {dipakaiLain.map((x) => x.name).join(", ")}</p>
-            )}
-            {ref === null && <p className="text-[12.5px] text-amber-600 dark:text-amber-400 px-1">Stok tidak akan berkurang saat barang ini terjual.</p>}
-            {efektif && /\b(BARU|SEKEN)\b/.test(efektif.kategori) && !efektif.kategori.includes(kondisiB) && (
-              <p className="flex items-start gap-1.5 text-[12.5px] text-amber-600 dark:text-amber-400 px-1">
-                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                Kondisi {kondisiB === "SEKEN" ? "Seken" : "Baru"}, tapi stoknya dihitung di {efektif.kategori}. Pilih barang stok yang sesuai{ref !== undefined ? " atau pilih ✨ Otomatis" : ""}.
-              </p>
-            )}
+          <Card>
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-footnote font-medium text-label-2 px-0.5">Hitungan stok</span>
+                <StokPill v={sv} />
+              </div>
+              <StokRefSelect
+                allowAuto
+                value={ref}
+                onChange={setRef}
+                categories={cats}
+                data={data}
+                className="w-full h-11 px-3 rounded-field bg-fill text-[16px] sm:text-subhead text-label focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"
+              />
+              {ref === undefined && preview && (
+                <Footnote className="px-0.5 leading-snug">
+                  {preview.baru
+                    ? <>Akan dibuat barang stok baru: <b className="text-label">{preview.ref.kategori} › {preview.ref.item}</b></>
+                    : <>Akan memakai stok: <b className="text-label">{preview.ref.kategori} › {preview.ref.item === PILIH_SAAT_CHECKOUT ? "pilih varian saat checkout" : preview.ref.item}</b></>}
+                </Footnote>
+              )}
+              {dipakaiLain.length > 0 && (
+                <Footnote className="px-0.5 leading-snug">Stok ini dipakai bersama: {dipakaiLain.map((x) => x.name).join(", ")}</Footnote>
+              )}
+              {ref === null && <p className="text-caption text-warning px-0.5">Stok tidak akan berkurang saat barang ini terjual.</p>}
+              {efektif && /\b(BARU|SEKEN)\b/.test(efektif.kategori) && !efektif.kategori.includes(kondisiB) && (
+                <p className="flex items-start gap-1.5 text-caption text-warning px-0.5">
+                  <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  Kondisi {kondisiB === "SEKEN" ? "Seken" : "Baru"}, tapi stoknya dihitung di {efektif.kategori}. Pilih barang stok yang sesuai{ref !== undefined ? " atau pilih ✨ Otomatis" : ""}.
+                </p>
+              )}
 
-            {bisaUbahJumlah && (
-              <div className="pt-1">
-                {perVarian && <div className="px-1 pb-1.5 text-[12.5px] font-medium text-zinc-500">Stok per varian</div>}
-                <div className={perVarian ? "rounded-[14px] bg-zinc-50 dark:bg-white/5 px-3 divide-y divide-zinc-200/70 dark:divide-white/10" : ""}>
-                  {barisJumlah.map((it) => {
-                    const n = jumlahDi(it);
-                    if (ubah?.item === it) {
-                      return (
-                        <div key={it} className={`flex items-center gap-2 ${perVarian ? "py-2" : ""}`}>
-                          {perVarian && <span className="max-w-[28%] shrink-0 truncate text-[14px] font-medium text-zinc-900 dark:text-white">{it}</span>}
-                          <input autoFocus inputMode="numeric" aria-label={`Jumlah ${it}`} value={ubah.nilai} onChange={(e) => setUbah({ item: it, nilai: digits(e.target.value) })}
-                            className={`flex-1 min-w-0 h-11 px-3.5 rounded-[12px] ${perVarian ? "bg-white" : "bg-zinc-100"} dark:bg-white/10 text-[16px] tabular-nums text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40`} />
-                          <button type="button" onClick={() => setUbah(null)} className="h-11 px-2 text-[14px] text-zinc-500 shrink-0">Batal</button>
-                          <button type="button" disabled={busyStok === "jumlah" || tanyaAlasan} onClick={() => simpanJumlah()} className="h-11 px-4 rounded-[12px] bg-blue-600 text-white text-[14px] font-semibold disabled:opacity-50 shrink-0">
-                            {busyStok === "jumlah" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Simpan"}
-                          </button>
+              {bisaUbahJumlah && (
+                <div className="pt-1">
+                  {perVarian && <div className="px-0.5 pb-1.5 text-footnote font-medium text-label-2">Stok per varian</div>}
+                  <div className={perVarian ? "rounded-field apple-tile border border-sep px-3 divide-y divide-sep" : ""}>
+                    {barisJumlah.map((it) => {
+                      const n = jumlahDi(it);
+                      if (ubah?.item === it) {
+                        return (
+                          <div key={it} className={`flex items-center gap-2 ${perVarian ? "py-2" : ""}`}>
+                            {perVarian && <span className="max-w-[28%] shrink-0 truncate text-subhead font-medium text-label">{it}</span>}
+                            <input
+                              autoFocus
+                              inputMode="numeric"
+                              aria-label={`Jumlah ${it}`}
+                              value={ubah.nilai}
+                              onChange={(e) => setUbah({ item: it, nilai: digits(e.target.value) })}
+                              className={`flex-1 min-w-0 h-11 px-3.5 rounded-field ${perVarian ? "bg-surface border border-sep" : "bg-fill"} text-[16px] sm:text-subhead tabular-nums text-label focus:outline-none focus:ring-2 focus:ring-tint/35`}
+                            />
+                            <Button variant="gray" size="sm" onClick={() => setUbah(null)} className="shrink-0">Batal</Button>
+                            <Button variant="filled" size="sm" disabled={busyStok === "jumlah" || tanyaAlasan} loading={busyStok === "jumlah"} onClick={() => simpanJumlah()} className="shrink-0">
+                              Simpan
+                            </Button>
+                          </div>
+                        );
+                      }
+                      return perVarian ? (
+                        <div key={it} className="flex items-center gap-3 py-2.5">
+                          <span className="flex-1 min-w-0 truncate text-subhead text-label">{it}</span>
+                          <span className={`text-subhead font-semibold tabular-nums ${n > 0 ? "text-label" : "text-label-3"}`}>{n}</span>
+                          <Button variant="plain" size="sm" onClick={() => setUbah({ item: it, nilai: String(n) })} className="shrink-0">Ubah</Button>
+                        </div>
+                      ) : (
+                        <div key={it} className="flex items-center justify-between gap-3 px-0.5">
+                          <span className="text-subhead text-label-2">Jumlah sekarang <b className="tabular-nums text-label">{n}</b></span>
+                          <Button variant="plain" size="sm" onClick={() => setUbah({ item: it, nilai: String(n) })}>Ubah jumlah</Button>
                         </div>
                       );
-                    }
-                    return perVarian ? (
-                      <div key={it} className="flex items-center gap-3 py-2.5">
-                        <span className="flex-1 min-w-0 truncate text-[14.5px] text-zinc-900 dark:text-white">{it}</span>
-                        <span className={`text-[15px] font-semibold tabular-nums ${n > 0 ? "text-zinc-900 dark:text-white" : "text-zinc-400"}`}>{n}</span>
-                        <button type="button" onClick={() => setUbah({ item: it, nilai: String(n) })} className="text-[14px] font-medium text-blue-600 dark:text-blue-400 shrink-0">Ubah</button>
-                      </div>
-                    ) : (
-                      <div key={it} className="flex items-center justify-between gap-3 px-1">
-                        <span className="text-[14px] text-zinc-700 dark:text-zinc-200">Jumlah sekarang <b className="tabular-nums">{n}</b></span>
-                        <button type="button" onClick={() => setUbah({ item: it, nilai: String(n) })} className="text-[14px] font-medium text-blue-600 dark:text-blue-400">Ubah jumlah</button>
-                      </div>
-                    );
-                  })}
-                </div>
-                {ubah !== null && tanyaAlasan && rencanaSalah && (
-                  <div className="mt-2 rounded-[14px] bg-zinc-50 dark:bg-white/5 p-3 space-y-2">
-                    <div className="px-0.5 text-[13.5px] font-semibold text-zinc-900 dark:text-white">Stok {ubah.item} berkurang {kurangUbah}. Kenapa?</div>
-                    <button type="button" disabled={busyStok === "jumlah"} onClick={() => simpanJumlah("salah")}
-                      className="w-full text-left rounded-[12px] bg-white dark:bg-white/10 px-3.5 py-3 active:opacity-70 disabled:opacity-50">
-                      <div className="text-[14.5px] font-semibold text-zinc-900 dark:text-white">Salah input stok masuk</div>
-                      <div className="text-[12.5px] text-zinc-500 leading-snug">
-                        Mis. barang yang sama tercatat dua kali. Catatan stok masuk terbaru{rencanaSalah.rupiah ? <> & pengeluaran <b className="text-red-600 dark:text-red-400">−{rupiah(rencanaSalah.rupiah)}</b></> : ""} ikut dikurangi.
-                      </div>
-                    </button>
-                    <button type="button" disabled={busyStok === "jumlah"} onClick={() => simpanJumlah("hilang")}
-                      className="w-full text-left rounded-[12px] bg-white dark:bg-white/10 px-3.5 py-3 active:opacity-70 disabled:opacity-50">
-                      <div className="text-[14.5px] font-semibold text-zinc-900 dark:text-white">Hilang, rusak, atau terpakai</div>
-                      <div className="text-[12.5px] text-zinc-500 leading-snug">Barangnya memang dibeli. Pengeluaran tetap, hanya jumlah stok yang dikoreksi.</div>
-                    </button>
-                    {busyStok === "jumlah" && <div className="flex justify-center py-1"><Loader2 className="w-4 h-4 animate-spin text-zinc-400" /></div>}
+                    })}
                   </div>
-                )}
-                {ubah !== null && !tanyaAlasan && <p className="mt-1.5 px-1 text-[12px] text-zinc-500">Samakan dengan hitungan fisik. Barang baru dibeli? Pakai “Stok masuk” supaya pengeluarannya tercatat.</p>}
-              </div>
-            )}
-
-          </div>
-
-          {/* Stok masuk */}
-          {ref !== null && (
-            <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] p-4 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-[15px] font-semibold text-zinc-900 dark:text-white">Stok masuk</div>
-                  <div className="text-[12.5px] text-zinc-500">Barang baru datang / dibeli</div>
-                </div>
-                <div className="flex items-center gap-1 bg-zinc-100 dark:bg-white/10 rounded-full p-1">
-                  <button type="button" aria-label="Kurangi" onClick={() => setQty((n) => Math.max(0, n - 1))} className="w-9 h-9 rounded-full flex items-center justify-center text-zinc-700 dark:text-zinc-200 active:bg-white dark:active:bg-white/10"><Minus className="w-4 h-4" /></button>
-                  <input inputMode="numeric" value={qty || ""} onChange={(e) => setQty(Math.min(9999, Number(digits(e.target.value) || 0)))} placeholder="0" className="w-10 bg-transparent text-center text-[17px] font-semibold tabular-nums text-zinc-900 dark:text-white focus:outline-none" />
-                  <button type="button" aria-label="Tambah" onClick={() => setQty((n) => Math.min(9999, n + 1))} className="w-9 h-9 rounded-full flex items-center justify-center text-zinc-700 dark:text-zinc-200 active:bg-white dark:active:bg-white/10"><Plus className="w-4 h-4" /></button>
-                </div>
-              </div>
-              {qty > 0 && (
-                <div className="space-y-3 pt-1">
-                  {varianList.length > 0 && (
-                    <select value={varian} onChange={(e) => setVarian(e.target.value)} className={`${field} text-[15px] ${varian ? "" : "ring-1 ring-amber-300"}`}>
-                      <option value="">Pilih varian…</option>
-                      {varianList.map((v) => <option key={v} value={v}>{v} (sisa {Math.max(0, Math.round(Number(data?.[efektif!.kategori]?.[v]?.jumlah) || 0))})</option>)}
-                    </select>
+                  {ubah !== null && tanyaAlasan && rencanaSalah && (
+                    <div className="mt-2 rounded-field apple-tile border border-sep p-3 space-y-2">
+                      <div className="px-0.5 text-footnote font-semibold text-label">Stok {ubah.item} berkurang {kurangUbah}. Kenapa?</div>
+                      <button
+                        type="button"
+                        disabled={busyStok === "jumlah"}
+                        onClick={() => simpanJumlah("salah")}
+                        className="w-full text-left rounded-field bg-surface border border-sep px-3.5 py-3 active:opacity-75 disabled:opacity-50"
+                      >
+                        <div className="text-subhead font-semibold text-label">Salah input stok masuk</div>
+                        <div className="text-caption text-label-2 leading-snug mt-0.5">
+                          Mis. barang yang sama tercatat dua kali. Catatan stok masuk terbaru{rencanaSalah.rupiah ? <> &amp; pengeluaran <b className="text-negative">−{rupiah(rencanaSalah.rupiah)}</b></> : ""} ikut dikurangi.
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busyStok === "jumlah"}
+                        onClick={() => simpanJumlah("hilang")}
+                        className="w-full text-left rounded-field bg-surface border border-sep px-3.5 py-3 active:opacity-75 disabled:opacity-50"
+                      >
+                        <div className="text-subhead font-semibold text-label">Hilang, rusak, atau terpakai</div>
+                        <div className="text-caption text-label-2 leading-snug mt-0.5">Barangnya memang dibeli. Pengeluaran tetap, hanya jumlah stok yang dikoreksi.</div>
+                      </button>
+                      {busyStok === "jumlah" && <div className="flex justify-center py-1"><Loader2 className="w-4 h-4 animate-spin text-label-3" /></div>}
+                    </div>
                   )}
-                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
-                    <div>
-                      <span className={label}>Modal / barang</span>
-                      <div className="relative">
-                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[15px] text-zinc-400">Rp</span>
-                        <input inputMode="numeric" value={fmtDigits(modalMasuk === "" ? String(modalN ?? "") : modalMasuk)} onChange={(e) => setModalMasuk(digits(e.target.value))} placeholder="0" className={`${field} pl-10 tabular-nums`} />
-                      </div>
-                    </div>
-                    <div>
-                      <span className={label}>Tanggal beli</span>
-                      <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value || toLocalYmd())} className={`${field} text-[15px]`} />
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between gap-3 pt-1">
-                    <div className="min-w-0">
-                      <div className="text-[15px] text-zinc-900 dark:text-white">Catat ke Pengeluaran</div>
-                      <div className="text-[12.5px] text-zinc-500">Kategori “{KATEGORI_PENGELUARAN_STOK}” · {rupiah(modalMasukN * qty)}</div>
-                    </div>
-                    <Toggle on={catat} onChange={setCatat} label="Catat ke pengeluaran" />
-                  </div>
+                  {ubah !== null && !tanyaAlasan && (
+                    <Footnote className="mt-1.5 px-0.5">Samakan dengan hitungan fisik. Barang baru dibeli? Pakai “Stok masuk” supaya pengeluarannya tercatat.</Footnote>
+                  )}
                 </div>
               )}
             </div>
+          </Card>
+
+          {/* Stok masuk */}
+          {ref !== null && (
+            <Card>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-subhead font-semibold text-label">Stok masuk</div>
+                    <div className="text-caption text-label-2">Barang baru datang / dibeli</div>
+                  </div>
+                  <div className="flex items-center gap-1 bg-fill rounded-full p-1">
+                    <button
+                      type="button"
+                      aria-label="Kurangi"
+                      onClick={() => setQty((n) => Math.max(0, n - 1))}
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-label hover:bg-surface/60 active:bg-surface transition-colors"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <input
+                      inputMode="numeric"
+                      value={qty || ""}
+                      onChange={(e) => setQty(Math.min(9999, Number(digits(e.target.value) || 0)))}
+                      placeholder="0"
+                      className="w-10 bg-transparent text-center text-headline font-semibold tabular-nums text-label focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      aria-label="Tambah"
+                      onClick={() => setQty((n) => Math.min(9999, n + 1))}
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-label hover:bg-surface/60 active:bg-surface transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                {qty > 0 && (
+                  <div className="space-y-3 pt-1">
+                    {varianList.length > 0 && (
+                      <select
+                        value={varian}
+                        onChange={(e) => setVarian(e.target.value)}
+                        className={`${field} ${varian ? "" : "ring-1 ring-warning"}`}
+                      >
+                        <option value="">Pilih varian…</option>
+                        {varianList.map((v) => <option key={v} value={v}>{v} (sisa {Math.max(0, Math.round(Number(data?.[efektif!.kategori]?.[v]?.jumlah) || 0))})</option>)}
+                      </select>
+                    )}
+                    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
+                      <div>
+                        <span className={label}>Modal / barang</span>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-subhead text-label-3">Rp</span>
+                          <input inputMode="numeric" value={fmtDigits(modalMasuk === "" ? String(modalN ?? "") : modalMasuk)} onChange={(e) => setModalMasuk(digits(e.target.value))} placeholder="0" className={`${field} pl-10 tabular-nums`} />
+                        </div>
+                      </div>
+                      <div>
+                        <span className={label}>Tanggal beli</span>
+                        <input type="date" value={tanggal} onChange={(e) => setTanggal(e.target.value || toLocalYmd())} className={`${field} custom-date-input tabular-nums`} />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 pt-1">
+                      <div className="min-w-0">
+                        <div className="text-subhead text-label">Catat ke Pengeluaran</div>
+                        <div className="text-caption text-label-2">Kategori “{KATEGORI_PENGELUARAN_STOK}” · {rupiah(modalMasukN * qty)}</div>
+                      </div>
+                      <Toggle on={catat} onChange={setCatat} label="Catat ke pengeluaran" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
           )}
 
           {/* Riwayat stok masuk */}
           {p && (
-            <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] p-4">
-              <div className="flex items-center justify-between mb-1">
-                <span className="flex items-center gap-1.5 text-[15px] font-semibold text-zinc-900 dark:text-white"><History className="w-4 h-4 text-zinc-400" />Riwayat stok masuk</span>
-                {riwayatMasuk.length > 0 && <span className="text-[12.5px] text-zinc-500 tabular-nums">{riwayatMasuk.reduce((s, r) => s + r.qty, 0)} barang · {riwayatMasuk.length}×</span>}
-              </div>
-              {riwayatMasuk.length === 0 && masukLain.length === 0 && <p className="py-2 text-[13px] text-zinc-500">Belum ada stok masuk.</p>}
-              <div className="divide-y divide-zinc-100 dark:divide-white/5">
+            <Card
+              title="Riwayat stok masuk"
+              icon={<History className="w-4 h-4" />}
+              iconColor="gray"
+              accessory={
+                riwayatMasuk.length > 0 ? (
+                  <span className="text-caption text-label-2 tabular-nums">
+                    {riwayatMasuk.reduce((s, r) => s + r.qty, 0)} barang · {riwayatMasuk.length}×
+                  </span>
+                ) : undefined
+              }
+            >
+              {riwayatMasuk.length === 0 && masukLain.length === 0 && (
+                <Footnote className="py-1">Belum ada stok masuk.</Footnote>
+              )}
+              <div className="divide-y divide-sep">
                 {(semuaRiwayat ? riwayatMasuk : riwayatMasuk.slice(0, 5)).map((r) => {
                   const [y, m, d] = r.tanggal.split("-").map(Number);
                   const tgl = y ? new Date(y, m - 1, d) : new Date(r.ts);
                   return (
                     <button key={r.id} type="button" onClick={() => setEditMasuk(r)} className="w-full flex items-center gap-3 py-2.5 text-left active:opacity-70">
-                      <div className="w-11 shrink-0 rounded-[10px] bg-zinc-100 dark:bg-white/10 py-1 text-center leading-none">
-                        <div className="text-[16px] font-semibold tabular-nums text-zinc-900 dark:text-white">{tgl.getDate()}</div>
-                        <div className="text-[10.5px] text-zinc-500 mt-0.5">{tgl.toLocaleDateString("id-ID", { month: "short" })}</div>
+                      <div className="w-11 shrink-0 rounded-control bg-surface-2 border border-sep py-1.5 text-center leading-none">
+                        <div className="text-subhead font-semibold tabular-nums text-label">{tgl.getDate()}</div>
+                        <div className="text-caption2 text-label-2 mt-0.5">{tgl.toLocaleDateString("id-ID", { month: "short" })}</div>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[14.5px] text-zinc-900 dark:text-white"><b className="text-emerald-600 dark:text-emerald-400 tabular-nums">+{r.qty}</b> {r.item}</div>
-                        <div className="text-[12px] text-zinc-500 truncate">
+                        <div className="text-subhead text-label"><b className="text-positive tabular-nums">+{r.qty}</b> {r.item}</div>
+                        <div className="text-caption text-label-2 truncate">
                           {r.modalSatuan > 0 ? `${rupiah(r.modalSatuan)}/pcs · total ${rupiah(r.modalSatuan * r.qty)}` : "Tanpa harga modal"}
                           {r.catatPengeluaran ? " · masuk pengeluaran" : ""}
                           {r.sumber === "TUKAR_TAMBAH" ? ` · tukar tambah ${r.noNota || ""}` : ""}
                         </div>
                         {r.produkId !== p.id && (
-                          <div className="text-[11.5px] text-amber-600 dark:text-amber-400 truncate">
+                          <div className="text-caption2 text-warning truncate">
                             dari {r.produkNama || "produk lain"}{products.some((x) => x.id === r.produkId) ? "" : " · produk sudah dihapus"}
                           </div>
                         )}
                       </div>
-                      <ChevronRight className="w-4 h-4 text-zinc-300 dark:text-zinc-600 shrink-0" />
+                      <ChevronRight className="w-4 h-4 text-label-3 shrink-0" />
                     </button>
                   );
                 })}
                 {masukLain.map((l) => (
-                  <div key={l.id} className="flex items-center gap-3 py-2.5 opacity-70">
-                    <div className="w-11 shrink-0 rounded-[10px] bg-zinc-100 dark:bg-white/10 py-1 text-center leading-none">
-                      <div className="text-[16px] font-semibold tabular-nums text-zinc-900 dark:text-white">{new Date(l.ts).getDate()}</div>
-                      <div className="text-[10.5px] text-zinc-500 mt-0.5">{new Date(l.ts).toLocaleDateString("id-ID", { month: "short" })}</div>
+                  <div key={l.id} className="flex items-center gap-3 py-2.5 opacity-75">
+                    <div className="w-11 shrink-0 rounded-control bg-surface-2 border border-sep py-1.5 text-center leading-none">
+                      <div className="text-subhead font-semibold tabular-nums text-label">{new Date(l.ts).getDate()}</div>
+                      <div className="text-caption2 text-label-2 mt-0.5">{new Date(l.ts).toLocaleDateString("id-ID", { month: "short" })}</div>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[14.5px] text-zinc-900 dark:text-white"><b className="tabular-nums">+{l.delta}</b> {l.item}</div>
-                      <div className="text-[12px] text-zinc-500 truncate">Dari menu Stok{l.catatan ? ` · ${l.catatan}` : ""}</div>
+                      <div className="text-subhead text-label"><b className="tabular-nums">+{l.delta}</b> {l.item}</div>
+                      <div className="text-caption text-label-2 truncate">Dari menu Stok{l.catatan ? ` · ${l.catatan}` : ""}</div>
                     </div>
                   </div>
                 ))}
               </div>
               {riwayatMasuk.length > 5 && (
-                <button type="button" onClick={() => setSemuaRiwayat((v) => !v)} className="mt-1 text-[14px] font-medium text-blue-600 dark:text-blue-400">
-                  {semuaRiwayat ? "Tampilkan lebih sedikit" : `Tampilkan semua (${riwayatMasuk.length})`}
-                </button>
+                <div className="pt-1">
+                  <Button variant="plain" size="sm" onClick={() => setSemuaRiwayat((v) => !v)}>
+                    {semuaRiwayat ? "Tampilkan lebih sedikit" : `Tampilkan semua (${riwayatMasuk.length})`}
+                  </Button>
+                </div>
               )}
-              {riwayatMasuk.length > 0 && <p className="mt-1 text-[12px] text-zinc-400">Ketuk untuk mengubah jumlah, modal, tanggal, atau menghapus. Stok & pengeluaran ikut menyesuaikan.</p>}
-            </div>
+              {riwayatMasuk.length > 0 && (
+                <Footnote className="mt-1">Ketuk untuk mengubah jumlah, modal, tanggal, atau menghapus. Stok &amp; pengeluaran ikut menyesuaikan.</Footnote>
+              )}
+            </Card>
           )}
 
-          {info && (
-            <div className="rounded-[14px] bg-emerald-50 dark:bg-emerald-500/10 px-3.5 py-3 text-[13.5px] text-emerald-700 dark:text-emerald-400">{info}</div>
-          )}
-          {err && (
-            <div className="flex items-start gap-2 rounded-[14px] bg-red-50 dark:bg-red-500/10 px-3.5 py-3 text-[13.5px] text-red-600 dark:text-red-400">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />{err}
-            </div>
-          )}
+          {info && <Notice tone="info">{info}</Notice>}
+          {err && <Notice tone="negative">{err}</Notice>}
 
-          <button type="button" onClick={simpan} disabled={saving}
-            className="w-full h-[52px] rounded-[16px] bg-blue-600 text-white text-[17px] font-semibold disabled:opacity-50 active:opacity-80 flex items-center justify-center gap-2">
-            {saving && <Loader2 className="w-5 h-5 animate-spin" />}{p ? "Simpan perubahan" : "Tambah barang"}
-          </button>
-          {editMasuk && p && (
-            <StokMasukSheet
-              rec={editMasuk}
-              produkNama={editMasuk.produkId === p.id ? nama.trim() || p.name : editMasuk.produkNama}
-              produkDihapus={!products.some((x) => x.id === editMasuk.produkId)}
-              onClose={() => setEditMasuk(null)}
-              onDone={(m) => { setEditMasuk(null); setErr(""); setInfo(m); }}
-            />
-          )}
-          {p && (
-            <button type="button" onClick={hapus} disabled={saving} className="w-full h-11 text-[15px] text-red-600 dark:text-red-400 disabled:opacity-40">
-              Hapus barang
-            </button>
-          )}
+          <div className="space-y-2 pt-1">
+            <Button variant="filled" size="lg" block loading={saving} disabled={saving} onClick={simpan}>
+              {p ? "Simpan perubahan" : "Tambah barang"}
+            </Button>
+            {p && (
+              <Button variant="destructive" size="md" block disabled={saving} onClick={hapus}>
+                Hapus barang
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
-    </div>
+      </Sheet>
+
+      {editMasuk && p && (
+        <StokMasukSheet
+          rec={editMasuk}
+          produkNama={editMasuk.produkId === p.id ? nama.trim() || p.name : editMasuk.produkNama}
+          produkDihapus={!products.some((x) => x.id === editMasuk.produkId)}
+          onClose={() => setEditMasuk(null)}
+          onDone={(m) => { setEditMasuk(null); setErr(""); setInfo(m); }}
+        />
+      )}
+
+      <AlertDialog
+        open={confirmHapusOpen}
+        onClose={() => !saving && setConfirmHapusOpen(false)}
+        title={`Hapus "${p?.name ?? ""}"?`}
+        description="Produk akan hilang dari daftar jualan & POS. Riwayat penjualan & laporan laba tetap tersimpan."
+        icon={<Trash2 />}
+        iconColor="red"
+        dismissible={!saving}
+        zClassName="z-[320]"
+        actions={[
+          { label: "Batal", role: "cancel", onClick: () => setConfirmHapusOpen(false), disabled: saving },
+          { label: saving ? "Menghapus..." : "Hapus", role: "destructive", onClick: konfirmasiHapus, disabled: saving },
+        ]}
+      />
+    </>
   );
 };

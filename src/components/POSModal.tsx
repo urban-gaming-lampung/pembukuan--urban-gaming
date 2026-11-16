@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { X, ShoppingCart, Plus, Minus, Trash2, PlusCircle, Sparkles, Pencil, Search, Receipt, Clock, AlertTriangle } from "lucide-react";
+import { X, ShoppingCart, Plus, Minus, Trash2, PlusCircle, Sparkles, Pencil, Receipt, Clock, AlertTriangle } from "lucide-react";
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, setDoc, deleteDoc, deleteField } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage, listGameDb } from "../lib/firebase";
+import { Button, Card, EmptyState, Eyebrow, IconBadge, Notice, Pill, SearchField, Sheet } from "../ui";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue } from "../hooks/useStokData";
@@ -13,6 +14,7 @@ import { dipesanDari, hapusStokOtomatisBilaYatim, hariKeJatuhTempo, Kondisi, kon
 import KondisiSwitch from "./KondisiSwitch";
 import { getMinStok, renameJualanItem, statusOf, useMinStok, kunciStok } from "../lib/stokJualan";
 import { rupiah } from "../lib/format";
+import { resolveProductThumb } from "../lib/servisThumbnails";
 
 const qrisImg = new URL("/images/QRIS.jpeg", import.meta.url).href;
 
@@ -215,12 +217,8 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "TRANSFER">("CASH");
   const [showQrisModal, setShowQrisModal] = useState(false);
 
-  // Lock body scroll on active modals/popups
+  // Lock body scroll on main POS modal (nested sheets handle their own locks)
   useBodyScrollLock(open);
-  useBodyScrollLock(openAddProduct);
-  useBodyScrollLock(openEditProduct);
-  useBodyScrollLock(openMobileCart);
-  useBodyScrollLock(showQrisModal);
 
   // Real-time Firestore sync for products
   useEffect(() => {
@@ -644,146 +642,326 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
     return result.sort((a, b) => a.name.localeCompare(b.name));
   }, [products, games, activeSub, activeJualanSub, activeKondisi, activeIsiGameSub, searchQuery]);
 
+  const totalCartQty = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  const renderCartItems = (mobile: boolean) =>
+    cart.map((item) => (
+      <div
+        key={item.id}
+        className={`flex items-center justify-between rounded-tile apple-card ring-1 ring-edge animate-in fade-in duration-200 ${
+          mobile ? "p-3.5" : "p-3"
+        }`}
+      >
+        <div className="flex-1 min-w-0 pr-2">
+          <div className={`font-semibold text-label truncate ${mobile ? "text-subhead" : "text-footnote"}`}>
+            {item.name}
+          </div>
+          {item.category === "ISI GAME" && item.platform && (
+            <div className="text-caption2 font-semibold text-label-2 mt-0.5">{item.platform}</div>
+          )}
+          <div className="text-caption text-label-2 font-mono tabular-nums mt-0.5">
+            {!item.price && item.category === "JUALAN" && (
+              <span className="font-sans font-bold text-accent mr-1">BONUS</span>
+            )}
+            {rupiah(item.price)} x {item.quantity}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => removeFromCart(item.id)}
+            aria-label={`Kurangi ${item.name}`}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label-2 hover:text-label active:scale-90 transition-all"
+          >
+            <Minus size={14} />
+          </button>
+          <span className="w-5 text-center font-bold text-footnote text-label font-mono tabular-nums">
+            {item.quantity}
+          </span>
+          <button
+            type="button"
+            onClick={() => addToCart(item)}
+            aria-label={`Tambah ${item.name}`}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label-2 hover:text-label active:scale-90 transition-all"
+          >
+            <Plus size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={() => removeAllFromCart(item.id)}
+            aria-label={`Hapus ${item.name}`}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-negative/10 text-negative hover:bg-negative/15 active:scale-90 transition-all ml-1"
+            title="Hapus item"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      </div>
+    ));
+
+  const renderCartFooter = (withClearAction: boolean) => (
+    <div className="space-y-3">
+      {withClearAction && cart.length > 0 && (
+        <div className="flex justify-end -mt-1">
+          <button
+            type="button"
+            onClick={clearCart}
+            className="text-caption font-semibold text-negative hover:underline inline-flex items-center gap-1 active:scale-95"
+          >
+            <Trash2 size={12} />
+            Bersihkan keranjang
+          </button>
+        </div>
+      )}
+
+      {/* Metode Pembayaran */}
+      <div className="space-y-2">
+        <Eyebrow>Metode Pembayaran</Eyebrow>
+        <div className="grid grid-cols-2 gap-1 p-1 rounded-full apple-segmented">
+          {(["CASH", "TRANSFER"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setPaymentMethod(m)}
+              className={`min-h-[38px] rounded-full text-footnote font-semibold inline-flex items-center justify-center gap-1.5 transition-all ${
+                paymentMethod === m
+                  ? "apple-segmented-thumb text-label"
+                  : "text-label-2 hover:text-label hover:bg-white/30 dark:hover:bg-white/[0.05]"
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  paymentMethod === m ? (m === "CASH" ? "bg-positive" : "bg-tint") : "bg-label-4"
+                }`}
+                aria-hidden
+              />
+              {m === "CASH" ? "Cash / Tunai" : "Transfer"}
+            </button>
+          ))}
+        </div>
+        <Button variant="gray" size="md" block onClick={() => setShowQrisModal(true)}>
+          Tampilkan QRIS
+        </Button>
+      </div>
+
+      {/* Ringkasan Subtotal, Diskon Promo, & Total */}
+      {discountAmount > 0 ? (
+        <div className="space-y-1.5 pt-1">
+          <div className="flex items-center justify-between text-footnote text-label-2 font-medium">
+            <span>Subtotal</span>
+            <span className="font-mono tabular-nums">{rupiah(subtotal)}</span>
+          </div>
+          <div className="flex items-center justify-between text-footnote text-positive font-semibold">
+            <span className="flex items-center gap-1.5">
+              <span>Diskon Promo</span>
+              <Pill tone="positive">{discountPercent}% OFF</Pill>
+            </span>
+            <span className="font-mono tabular-nums">-{rupiah(discountAmount)}</span>
+          </div>
+          <div className="flex items-end justify-between pt-2 border-t border-sep">
+            <span className="text-caption font-semibold uppercase tracking-[0.04em] text-label-2">
+              Total Bayar
+            </span>
+            <span className="text-title2 font-bold text-label font-mono tabular-nums tracking-tight">
+              {rupiah(total)}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {qualifyingCount > 0 && nextRule && (
+            <Notice tone="warning">
+              <div className="flex items-center justify-between gap-2 text-caption">
+                <span>Tambah {gamesNeededForNext} game {promosConfig.targetPlatforms.join("/")}</span>
+                <span className="font-bold shrink-0">Diskon {nextRule.percent}%</span>
+              </div>
+            </Notice>
+          )}
+          <div className="flex items-end justify-between">
+            <span className="text-caption font-semibold uppercase tracking-[0.04em] text-label-2">
+              Total Harga
+            </span>
+            <span className="text-title2 font-bold text-label font-mono tabular-nums tracking-tight">
+              {rupiah(total)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      <Button
+        variant="filled"
+        size="lg"
+        block
+        disabled={cart.length === 0}
+        icon={<Receipt />}
+        onClick={() => setOpenCheckout(true)}
+      >
+        Selesaikan & Cetak Nota
+      </Button>
+    </div>
+  );
+
+  const inputCls =
+    "w-full h-11 px-3.5 rounded-field bg-fill text-[16px] sm:text-footnote font-medium text-label placeholder:text-label-3 focus:outline-none focus:bg-surface dark:focus:bg-[#2C2C2E] focus:ring-2 focus:ring-tint/35 transition-all";
+  const labelCls = "text-caption font-semibold uppercase tracking-[0.04em] text-label-2 block mb-1";
+
   return (
-    <div className={`fixed inset-0 z-[100] items-center justify-center bg-black/40 backdrop-blur-md transition-opacity duration-300 font-sans ${open ? "flex" : "hidden"}`}>
-      
-      {/* ============================================================
-          MAIN CONTAINER (Full-Screen iOS Style)
-          ============================================================ */}
-      <div className="relative w-full h-full bg-zinc-50 dark:bg-[#1C1C1E] overflow-hidden flex flex-col animate-in fade-in duration-300">
-        
-        {/* Top iOS Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200/50 dark:border-white/5 bg-white/70 dark:bg-[#1C1C1E]/70 backdrop-blur-xl z-20 shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-black/10 dark:bg-white/20 text-black dark:text-white flex items-center justify-center">
-              <ShoppingCart size={18} />
-            </div>
-            <h2 className="text-lg font-black tracking-tight text-zinc-900 dark:text-white uppercase">
-              <span className="sm:hidden">Kasir POS</span>
-              <span className="hidden sm:inline">Point of Sales (Kasir)</span>
+    <div
+      className={`fixed inset-0 z-[100] items-center justify-center bg-black/45 backdrop-blur-md transition-opacity duration-300 font-sans ${
+        open ? "flex" : "hidden"
+      }`}
+    >
+      {/* MAIN CONTAINER (Full-Screen Apple Split-View) */}
+      <div className="relative w-full h-full apple-canvas text-label overflow-hidden flex flex-col animate-in fade-in duration-300">
+        {/* Top Translucent Header */}
+        <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-sep apple-bar z-20 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <IconBadge color="gray" variant="solid">
+              <ShoppingCart />
+            </IconBadge>
+            <h2 className="text-headline sm:text-title3 text-label tracking-tight">
+              <span className="sm:hidden">Kasir URBAN</span>
+              <span className="hidden sm:inline">Kasir URBAN · Point of Sales</span>
             </h2>
           </div>
           <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setOpenDp(true)}
-            aria-label={`Belum lunas, ${notaDp.length} nota DP`}
-            className="h-8 pl-2.5 pr-3 flex items-center gap-1.5 rounded-full bg-zinc-200/60 dark:bg-zinc-800 hover:bg-zinc-300/60 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-[12px] font-bold active:scale-95 transition-all"
-          >
-            <Clock size={14} />
-            Belum Lunas
-            {notaDp.length > 0 && (
-              <span className={`min-w-[18px] h-[18px] px-1 rounded-full text-white text-[10.5px] font-black flex items-center justify-center ${dpLewat ? "bg-red-600" : "bg-amber-500"}`}>{notaDp.length}</span>
-            )}
-          </button>
-          <button 
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-zinc-200/60 dark:bg-zinc-800 hover:bg-zinc-300/60 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 active:scale-90 transition-all"
-            aria-label="Tutup POS"
-          >
-            <X size={18} />
-          </button>
+            <button
+              type="button"
+              onClick={() => setOpenDp(true)}
+              aria-label={`Belum lunas, ${notaDp.length} nota DP`}
+              className="min-h-[36px] pl-3 pr-3 flex items-center gap-1.5 rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label text-footnote font-semibold active:scale-95 transition-all"
+            >
+              <Clock size={14} className="text-label-2" />
+              Belum Lunas
+              {notaDp.length > 0 && (
+                <span
+                  className={`min-w-[20px] h-5 px-1.5 rounded-full text-white text-caption2 font-bold flex items-center justify-center tabular-nums ${
+                    dpLewat ? "bg-negative" : "bg-warning"
+                  }`}
+                >
+                  {notaDp.length}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label-2 hover:text-label active:scale-90 transition-all"
+              aria-label="Tutup POS"
+            >
+              <X size={18} />
+            </button>
           </div>
         </div>
 
         {/* Content Body */}
         <div className="flex-1 overflow-hidden flex flex-col md:flex-row min-h-0">
-          
-          {/* ============================================================
-              LEFT / TOP NAVIGATION (Sidebar/Bar)
-              ============================================================ */}
-          {/* Mobile sub-menu bar (Horizontal at the top) */}
-          <div className="md:hidden p-4 bg-white/50 dark:bg-black/10 border-b border-zinc-200/60 dark:border-white/5 shrink-0">
-            <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-[14px] gap-1 overflow-x-auto no-scrollbar">
+          {/* Mobile sub-menu bar */}
+          <div className="md:hidden p-3.5 apple-bar border-b border-sep shrink-0">
+            <div className="flex apple-segmented p-1 rounded-full gap-1 overflow-x-auto no-scrollbar">
               {(["JUALAN", "ISI GAME", "SERVIS"] as const).map((sub) => {
-                const hasCategoryUpdate = sub === "ISI GAME"
-                  ? games.some(g => catalogChanges[g.id] !== undefined)
-                  : products.some(p => p.category === sub && catalogChanges[p.id] !== undefined);
+                const hasCategoryUpdate =
+                  sub === "ISI GAME"
+                    ? games.some((g) => catalogChanges[g.id] !== undefined)
+                    : products.some((p) => p.category === sub && catalogChanges[p.id] !== undefined);
 
                 return (
                   <button
                     key={sub}
+                    type="button"
                     onClick={() => setActiveSub(sub)}
-                    className={`flex-1 min-w-[75px] py-2.5 text-[11px] font-bold rounded-[10px] tracking-wide transition-all relative ${
+                    className={`flex-1 min-w-[75px] min-h-[38px] text-caption font-semibold rounded-full tracking-wide transition-all relative ${
                       activeSub === sub
-                        ? "bg-white dark:bg-[#2C2C2E] text-black dark:text-white shadow-sm ring-1 ring-black/5"
-                        : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700"
+                        ? "apple-segmented-thumb text-label"
+                        : "text-label-2 hover:text-label hover:bg-white/30 dark:hover:bg-white/[0.05]"
                     }`}
                   >
                     <span className="flex items-center justify-center gap-1">
                       <span>{sub}</span>
                       {hasCategoryUpdate && (
-                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+                        <span className="w-2 h-2 rounded-full bg-negative animate-pulse shrink-0" />
                       )}
                     </span>
                   </button>
                 );
               })}
             </div>
-            
-            {/* Barang jualan hanya lewat Owner › Input › Atur Stok */}
+
             {isSuperAdminOrOwner && activeSub === "JUALAN" && (
-              <p className="mt-3 text-[12px] leading-snug text-zinc-500 dark:text-zinc-400">
-                Tambah & ubah barang jualan (harga, modal, stok) di <b className="text-zinc-700 dark:text-zinc-200">Owner › Input › Atur Stok</b>.
+              <p className="mt-2.5 text-caption leading-snug text-label-2">
+                Tambah & ubah barang jualan (harga, modal, stok) di{" "}
+                <b className="text-label">Dashboard › Input › Atur Stok</b>.
               </p>
             )}
-            {/* Add product button for Super Admin on Mobile */}
             {isSuperAdminOrOwner && activeSub === "SERVIS" && (
               <div className="mt-3 flex gap-2">
-                <button 
-                  onClick={() => { setNewProdCategory("SERVIS"); setOpenAddProduct(true); }}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black shadow-md shadow-black/25 dark:shadow-white/10 active:scale-95 transition-all"
+                <Button
+                  variant="filled"
+                  size="md"
+                  className="flex-1"
+                  icon={<PlusCircle />}
+                  onClick={() => {
+                    setNewProdCategory("SERVIS");
+                    setOpenAddProduct(true);
+                  }}
                 >
-                  <PlusCircle size={14} />
                   Tambah Produk
-                </button>
+                </Button>
                 {products.length === 0 && (
-                  <button 
+                  <Button
+                    variant="gray"
+                    size="md"
+                    className="flex-1"
+                    icon={<Sparkles />}
                     onClick={handleInitializeDefaults}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-bold text-xs active:scale-95 transition-all"
                   >
-                    <Sparkles size={14} />
                     Inisialisasi Awal
-                  </button>
+                  </Button>
                 )}
               </div>
             )}
           </div>
 
-          {/* Desktop sub-menu sidebar (Vertical on the left) */}
-          <div className="hidden md:flex flex-col w-56 border-r border-zinc-200/50 dark:border-white/5 bg-zinc-50/40 dark:bg-[#1C1C1E]/40 p-4 shrink-0 justify-between">
+          {/* Desktop macOS Source-List Sidebar */}
+          <div className="hidden md:flex flex-col w-56 border-r border-sep bg-surface/50 p-3.5 shrink-0 justify-between">
             <div className="space-y-1.5">
-              <span className="text-[10px] font-black tracking-widest text-zinc-400 dark:text-zinc-500 uppercase px-3">
-                KATEGORI POS
-              </span>
+              <div className="px-2.5 pb-1">
+                <Eyebrow>Kategori POS</Eyebrow>
+              </div>
               {(["JUALAN", "ISI GAME", "SERVIS"] as const).map((sub) => {
-                const count = sub === "ISI GAME" 
-                  ? games.length 
-                  : products.filter(p => p.category === sub).length;
-                  
-                const hasCategoryUpdate = sub === "ISI GAME"
-                  ? games.some(g => catalogChanges[g.id] !== undefined)
-                  : products.some(p => p.category === sub && catalogChanges[p.id] !== undefined);
+                const count =
+                  sub === "ISI GAME" ? games.length : products.filter((p) => p.category === sub).length;
+
+                const hasCategoryUpdate =
+                  sub === "ISI GAME"
+                    ? games.some((g) => catalogChanges[g.id] !== undefined)
+                    : products.some((p) => p.category === sub && catalogChanges[p.id] !== undefined);
+
+                const active = activeSub === sub;
 
                 return (
                   <button
                     key={sub}
+                    type="button"
                     onClick={() => setActiveSub(sub)}
-                    className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl font-bold text-sm tracking-wide transition-all ${
-                      activeSub === sub
-                        ? "bg-black dark:bg-white text-white dark:text-black shadow-md shadow-black/10 dark:shadow-white/5"
-                        : "text-zinc-600 hover:bg-zinc-200/50 dark:text-zinc-400 dark:hover:bg-zinc-800/50"
+                    className={`w-full min-h-[44px] flex items-center justify-between px-3.5 py-2.5 rounded-tile font-semibold text-footnote tracking-wide transition-all ${
+                      active
+                        ? "bg-action text-action-label shadow-sm"
+                        : "text-label-2 hover:bg-fill/70 hover:text-label"
                     }`}
                   >
                     <span className="flex items-center gap-1.5">
                       {sub}
                       {hasCategoryUpdate && (
-                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+                        <span className="w-2 h-2 rounded-full bg-negative animate-pulse shrink-0" />
                       )}
                     </span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
-                      activeSub === sub ? "bg-white/20 text-white" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-500"
-                    }`}>
+                    <span
+                      className={`text-caption2 px-2 py-0.5 rounded-full font-bold tabular-nums ${
+                        active ? "bg-action-label/20 text-action-label" : "bg-fill text-label-2"
+                      }`}
+                    >
                       {count}
                     </span>
                   </button>
@@ -791,151 +969,152 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               })}
             </div>
 
-            {/* Bottom Section in Desktop Sidebar */}
-            <div className="space-y-2 pt-4 border-t border-zinc-200/50 dark:border-white/5">
+            <div className="space-y-2 pt-3 border-t border-sep">
               {isSuperAdminOrOwner && products.length === 0 && (
-                <button
+                <Button
+                  variant="gray"
+                  size="md"
+                  block
+                  icon={<Sparkles />}
                   onClick={handleInitializeDefaults}
-                  className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-bold text-xs active:scale-95 transition-all"
                 >
-                  <Sparkles size={13} />
                   Inisialisasi Produk
-                </button>
+                </Button>
               )}
               {isSuperAdminOrOwner && activeSub === "SERVIS" && (
-                <button
-                  onClick={() => { setNewProdCategory("SERVIS"); setOpenAddProduct(true); }}
-                  className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black shadow-md shadow-black/25 dark:shadow-white/10 active:scale-95 transition-all"
+                <Button
+                  variant="filled"
+                  size="md"
+                  block
+                  icon={<PlusCircle />}
+                  onClick={() => {
+                    setNewProdCategory("SERVIS");
+                    setOpenAddProduct(true);
+                  }}
                 >
-                  <PlusCircle size={14} />
                   Tambah Produk
-                </button>
+                </Button>
               )}
             </div>
           </div>
 
-          {/* ============================================================
-              CENTER: CATALOG GRID VIEW
-              ============================================================ */}
+          {/* CENTER: CATALOG GRID VIEW */}
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-            {/* Desktop Add Product Header */}
             {isSuperAdminOrOwner && (
-              <div className="hidden md:flex items-center justify-between px-6 py-4 border-b border-zinc-200/50 dark:border-white/5 bg-white/30 dark:bg-black/10 shrink-0">
-                <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
+              <div className="hidden md:flex items-center justify-between px-6 py-3.5 border-b border-sep bg-surface/40 shrink-0">
+                <span className="text-caption font-medium text-label-2">
                   Katalog {activeSub} &mdash; Klik item untuk menambahkan ke keranjang
                 </span>
                 {activeSub === "SERVIS" && products.length > 0 && (
-                  <button
-                    onClick={() => { setNewProdCategory("SERVIS"); setOpenAddProduct(true); }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700 font-bold text-xs transition-all active:scale-95"
+                  <Button
+                    variant="gray"
+                    size="sm"
+                    icon={<PlusCircle />}
+                    onClick={() => {
+                      setNewProdCategory("SERVIS");
+                      setOpenAddProduct(true);
+                    }}
                   >
-                    <PlusCircle size={13} />
                     Tambah Produk Baru
-                  </button>
+                  </Button>
                 )}
               </div>
             )}
 
             {/* Search Bar */}
-            <div className="px-4 py-2.5 md:px-6 md:py-3 border-b border-zinc-200/50 dark:border-white/5 bg-white dark:bg-black/10 shrink-0">
-              <div className="relative flex items-center">
-                <Search size={16} className="absolute left-3.5 text-zinc-400 dark:text-zinc-500 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Cari produk..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-9 py-2 bg-zinc-100 dark:bg-zinc-800/60 text-xs md:text-sm text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 border border-transparent rounded-xl outline-none focus:bg-white focus:border-zinc-300 dark:focus:bg-[#2C2C2E] dark:focus:border-zinc-700 transition-all"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery("")}
-                    className="absolute right-3 w-5 h-5 flex items-center justify-center rounded-full bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-500 dark:text-zinc-400 active:scale-90 transition-all"
-                  >
-                    <X size={10} />
-                  </button>
-                )}
-              </div>
+            <div className="px-4 py-2.5 md:px-6 md:py-3 border-b border-sep bg-surface/60 shrink-0">
+              <SearchField value={searchQuery} onChange={setSearchQuery} placeholder="Cari produk..." />
             </div>
 
             {/* Sub-Category Pills for JUALAN */}
             {activeSub === "JUALAN" && (
-              <div className="px-4 pt-3 border-b border-zinc-200/50 dark:border-white/5 bg-zinc-50/50 dark:bg-black/10 shrink-0">
-              {/* Halaman Barang Baru / Seken */}
-              <KondisiSwitch
-                size="sm"
-                value={activeKondisi}
-                onChange={setActiveKondisi}
-                counts={{
-                  BARU: products.filter((p) => p.category === "JUALAN" && kondisiProduk(p) === "BARU").length,
-                  SEKEN: products.filter((p) => p.category === "JUALAN" && kondisiProduk(p) === "SEKEN").length,
-                }}
-              />
-              <div className="py-3 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                {(["Unit PS", "Stik", "Hardisk", "Aksesoris", "BD"] as const).map((subJualan) => {
-                  const count = jualanSubCount(activeKondisi, subJualan);
-                  if (count === 0 && activeJualanSub !== subJualan) return null; // sembunyikan sub-kategori kosong
-                  
-                  const hasSubUpdate = products.some(p => p.category === "JUALAN" && kondisiProduk(p) === activeKondisi && getSubCategory(p) === subJualan && catalogChanges[p.id] !== undefined);
+              <div className="px-4 pt-3 border-b border-sep bg-surface/40 shrink-0">
+                <KondisiSwitch
+                  size="sm"
+                  value={activeKondisi}
+                  onChange={setActiveKondisi}
+                  counts={{
+                    BARU: products.filter((p) => p.category === "JUALAN" && kondisiProduk(p) === "BARU").length,
+                    SEKEN: products.filter((p) => p.category === "JUALAN" && kondisiProduk(p) === "SEKEN").length,
+                  }}
+                />
+                <div className="py-3 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                  {(["Unit PS", "Stik", "Hardisk", "Aksesoris", "BD"] as const).map((subJualan) => {
+                    const count = jualanSubCount(activeKondisi, subJualan);
+                    if (count === 0 && activeJualanSub !== subJualan) return null;
 
-                  return (
-                    <button
-                      key={subJualan}
-                      onClick={() => setActiveJualanSub(subJualan)}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap active:scale-95 transition-all relative ${
-                        activeJualanSub === subJualan
-                          ? "bg-black dark:bg-white text-white dark:text-black shadow-sm"
-                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 border border-zinc-200/50 dark:border-white/5"
-                      }`}
-                    >
-                      <span className="flex items-center gap-1">
-                        {subJualan}
-                        {hasSubUpdate && (
-                          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
-                        )}
-                      </span>
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
-                        activeJualanSub === subJualan
-                          ? "bg-white/20 dark:bg-black/10 text-white dark:text-black"
-                          : "bg-zinc-100 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500"
-                      }`}>
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+                    const hasSubUpdate = products.some(
+                      (p) =>
+                        p.category === "JUALAN" &&
+                        kondisiProduk(p) === activeKondisi &&
+                        getSubCategory(p) === subJualan &&
+                        catalogChanges[p.id] !== undefined
+                    );
+                    const active = activeJualanSub === subJualan;
+
+                    return (
+                      <button
+                        key={subJualan}
+                        type="button"
+                        onClick={() => setActiveJualanSub(subJualan)}
+                        className={`flex items-center gap-1.5 px-3 min-h-[34px] rounded-full text-caption font-semibold whitespace-nowrap active:scale-95 transition-all relative ${
+                          active
+                            ? "bg-action text-action-label shadow-sm"
+                            : "bg-surface text-label-2 ring-1 ring-edge hover:text-label"
+                        }`}
+                      >
+                        <span className="flex items-center gap-1">
+                          {subJualan}
+                          {hasSubUpdate && (
+                            <span className="w-2 h-2 rounded-full bg-negative animate-pulse shrink-0" />
+                          )}
+                        </span>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold tabular-nums ${
+                            active ? "bg-action-label/20 text-action-label" : "bg-fill text-label-3"
+                          }`}
+                        >
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
             {/* Sub-Category Pills for ISI GAME */}
             {activeSub === "ISI GAME" && (
-              <div className="px-4 py-3 border-b border-zinc-200/50 dark:border-white/5 bg-zinc-50/50 dark:bg-black/10 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+              <div className="px-4 py-3 border-b border-sep bg-surface/40 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
                 {(["PS3 CFW/HEN", "PS4 HEN", "PS5 HEN", "Switch CFW", "PC"] as const).map((subIsiGame) => {
-                  const count = games.filter(g => g.platform === subIsiGame).length;
-                  const hasSubUpdate = games.some(g => g.platform === subIsiGame && catalogChanges[g.id] !== undefined);
+                  const count = games.filter((g) => g.platform === subIsiGame).length;
+                  const hasSubUpdate = games.some(
+                    (g) => g.platform === subIsiGame && catalogChanges[g.id] !== undefined
+                  );
+                  const active = activeIsiGameSub === subIsiGame;
 
                   return (
                     <button
                       key={subIsiGame}
+                      type="button"
                       onClick={() => setActiveIsiGameSub(subIsiGame)}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap active:scale-95 transition-all relative ${
-                        activeIsiGameSub === subIsiGame
-                          ? "bg-black dark:bg-white text-white dark:text-black shadow-sm"
-                          : "bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700/50 border border-zinc-200/50 dark:border-white/5"
+                      className={`flex items-center gap-1.5 px-3 min-h-[34px] rounded-full text-caption font-semibold whitespace-nowrap active:scale-95 transition-all relative ${
+                        active
+                          ? "bg-action text-action-label shadow-sm"
+                          : "bg-surface text-label-2 ring-1 ring-edge hover:text-label"
                       }`}
                     >
                       <span className="flex items-center gap-1">
                         {subIsiGame}
                         {hasSubUpdate && (
-                          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+                          <span className="w-2 h-2 rounded-full bg-negative animate-pulse shrink-0" />
                         )}
                       </span>
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-black ${
-                        activeIsiGameSub === subIsiGame
-                          ? "bg-white/20 dark:bg-black/10 text-white dark:text-black"
-                          : "bg-zinc-100 dark:bg-zinc-900 text-zinc-400 dark:text-zinc-500"
-                      }`}>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold tabular-nums ${
+                          active ? "bg-action-label/20 text-action-label" : "bg-fill text-label-3"
+                        }`}
+                      >
                         {count}
                       </span>
                     </button>
@@ -947,71 +1126,81 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             {/* Catalog Scrollbox */}
             <div className="flex-1 overflow-y-auto p-4 md:p-6 no-scrollbar">
               {filteredProducts.length === 0 ? (
-                <div className="h-64 flex flex-col items-center justify-center text-center">
-                  <div className="w-16 h-16 rounded-full bg-zinc-200/50 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 dark:text-zinc-600 mb-3">
-                    <ShoppingCart size={28} />
-                  </div>
-                  <h3 className="font-bold text-sm text-zinc-800 dark:text-zinc-200">
-                    Katalog Kosong
-                  </h3>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-[240px]">
-                    {activeSub === "JUALAN" ? `Belum ada barang ${activeKondisi === "SEKEN" ? "seken" : "baru"} di kategori ini.` : `Belum ada produk di kategori ${activeSub}.`}
-                    {isSuperAdminOrOwner && (activeSub === "JUALAN" ? " Tambahkan lewat Owner › Input › Atur Stok." : " Klik tombol di bawah untuk menambahkan produk.")}
+                <EmptyState icon={<ShoppingCart />} title="Katalog Kosong" className="my-6">
+                  <p>
+                    {activeSub === "JUALAN"
+                      ? `Belum ada barang ${activeKondisi === "SEKEN" ? "seken" : "baru"} di kategori ini.`
+                      : `Belum ada produk di kategori ${activeSub}.`}
+                    {isSuperAdminOrOwner &&
+                      (activeSub === "JUALAN"
+                        ? " Tambahkan lewat Dashboard › Input › Atur Stok."
+                        : " Klik tombol di bawah untuk menambahkan produk.")}
                   </p>
                   {isSuperAdminOrOwner && activeSub === "SERVIS" && (
-                    <button
-                      onClick={() => { setNewProdCategory("SERVIS"); setOpenAddProduct(true); }}
-                      className="mt-4 px-4 py-2 text-xs font-bold bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-black rounded-lg active:scale-95 shadow-md shadow-black/20 dark:shadow-white/5"
-                    >
-                      Tambah Produk Pertama
-                    </button>
+                    <div className="mt-4 flex justify-center">
+                      <Button
+                        variant="filled"
+                        size="sm"
+                        icon={<PlusCircle />}
+                        onClick={() => {
+                          setNewProdCategory("SERVIS");
+                          setOpenAddProduct(true);
+                        }}
+                      >
+                        Tambah Produk Pertama
+                      </Button>
+                    </div>
                   )}
-                </div>
+                </EmptyState>
               ) : (
-                <>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-3 pb-24 md:pb-6">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 md:gap-3 pb-24 md:pb-6">
                   {filteredProducts.map((p) => {
-                    const cartItem = cart.find(item => item.id === p.id);
+                    const cartItem = cart.find((item) => item.id === p.id);
                     const qty = cartItem?.quantity || 0;
                     const changeType = catalogChanges[p.id];
+                    const thumbSrc = resolveProductThumb(p);
 
                     return (
                       <div
                         key={p.id}
                         onClick={() => addToCart(p)}
-                        className={`group relative overflow-hidden rounded-[16px] bg-white dark:bg-[#2C2C2E] border hover:border-black/50 dark:hover:border-white/50 hover:shadow-md active:scale-[0.98] transition-all cursor-pointer flex flex-col ${
-                          qty > 0 
-                            ? "border-black/50 dark:border-white/5 ring-1 ring-black/20 dark:ring-white/20" 
-                            : "border-zinc-200/60 dark:border-white/5"
+                        className={`group relative overflow-hidden rounded-tile apple-card shadow-card transition-all cursor-pointer flex flex-col active:scale-[0.98] ${
+                          qty > 0 ? "ring-2 ring-action" : "ring-1 ring-edge hover:ring-label-3"
                         }`}
                       >
                         {/* Selected Indicator Badge (Bottom Right) */}
                         {qty > 0 && (
-                          <div className="absolute bottom-1.5 right-1.5 z-10 w-5 h-5 rounded-full bg-black dark:bg-white text-white dark:text-black font-black text-[10px] flex items-center justify-center shadow-md animate-in zoom-in-50 duration-200">
+                          <div className="absolute bottom-2 right-2 z-10 min-w-[22px] h-[22px] px-1 rounded-full bg-action text-action-label font-bold text-[11px] tabular-nums flex items-center justify-center shadow-md animate-in zoom-in-50 duration-200">
                             {qty}
                           </div>
                         )}
 
-                        {/* Super Admin Edit Product Button (Right) */}
+                        {/* Super Admin Edit Product Button (Top Right) */}
                         {isSuperAdminOrOwner && p.category !== "ISI GAME" && p.category !== "JUALAN" && (
                           <button
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleEditClick(p);
                             }}
-                            className="absolute top-1.5 right-1.5 z-10 w-6 h-6 rounded-full bg-white/80 dark:bg-black/60 backdrop-blur-md text-zinc-700 dark:text-zinc-300 hover:text-black dark:hover:text-white flex items-center justify-center shadow-md border border-zinc-200/50 dark:border-white/10 active:scale-90 transition-all"
+                            className="absolute top-1.5 right-1.5 z-10 w-7 h-7 rounded-full bg-surface/85 backdrop-blur-md text-label-2 hover:text-label flex items-center justify-center shadow-sm ring-1 ring-edge active:scale-90 transition-all"
                             title="Edit Produk"
+                            aria-label={`Edit ${p.name}`}
                           >
-                            <Pencil size={11} />
+                            <Pencil size={12} />
                           </button>
                         )}
 
                         {/* Product Image */}
-                        <div className={`w-full bg-zinc-100 dark:bg-black/20 flex items-center justify-center overflow-hidden shrink-0 relative ${p.category === "ISI GAME" ? "aspect-[3/4]" : "aspect-square"}`}>
-                          {p.imageUrl ? (
+                        <div
+                          className={`w-full bg-fill flex items-center justify-center overflow-hidden shrink-0 relative ${
+                            p.category === "ISI GAME" ? "aspect-[3/4]" : "aspect-square"
+                          }`}
+                        >
+                          {thumbSrc ? (
                             <>
                               <img
-                                src={p.imageUrl}
+                                src={thumbSrc}
                                 alt={p.name}
                                 className="w-full h-full object-cover transition-transform group-hover:scale-105"
                                 onError={(e) => {
@@ -1020,79 +1209,85 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                                   if (fallback) fallback.classList.remove("hidden");
                                 }}
                               />
-                              <div className="img-fallback hidden text-2xl text-zinc-300 dark:text-zinc-700">
-                                📦
-                              </div>
+                              <div className="img-fallback hidden text-2xl text-label-3">📦</div>
                             </>
                           ) : (
-                            <div className="text-2xl text-zinc-300 dark:text-zinc-700">
-                              📦
-                            </div>
+                            <div className="text-2xl text-label-3">📦</div>
                           )}
 
                           {/* Badge stok jualan (Bottom Left) */}
                           {(() => {
                             const b = stokBadge(p);
                             return b ? (
-                              <div className={`absolute bottom-1.5 left-1.5 z-10 px-1.5 py-0.5 rounded-md text-[9.5px] font-black shadow-sm select-none ${b.tone === "habis" ? "bg-red-600 text-white" : b.tone === "menipis" ? "bg-amber-400 text-amber-950" : b.tone === "belum" ? "bg-zinc-500/80 text-white" : "bg-black/70 text-white"}`}>
+                              <div
+                                className={`absolute bottom-1.5 left-1.5 z-10 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm select-none ${
+                                  b.tone === "habis"
+                                    ? "bg-negative text-white"
+                                    : b.tone === "menipis"
+                                      ? "bg-warning text-white"
+                                      : b.tone === "belum"
+                                        ? "bg-label-3/85 text-white"
+                                        : "bg-black/75 text-white"
+                                }`}
+                              >
                                 {b.label}
                               </div>
                             ) : null;
                           })()}
-                          {/* Catalog Update Badge (Top Left, Red color) */}
+
+                          {/* Catalog Update Badge */}
                           {changeType && (
-                            <div className="absolute top-1.5 left-1.5 z-10 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider shadow-md border border-red-500 bg-red-600 text-white select-none animate-pulse">
+                            <div className="absolute top-1.5 left-1.5 z-10 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider shadow-md bg-negative text-white select-none animate-pulse">
                               {changeType}
                             </div>
                           )}
                         </div>
 
                         {/* Card Details */}
-                        <div className="p-2 md:p-2.5 flex-1 flex flex-col justify-between gap-1 min-w-0">
-                          <div className="flex flex-col gap-0.5">
-                            <h4 className="font-bold text-[11px] md:text-xs text-zinc-900 dark:text-zinc-100 leading-snug line-clamp-2 h-8">
+                        <div className="p-2.5 flex-1 flex flex-col justify-between gap-1 min-w-0">
+                          <div className="flex flex-col gap-1">
+                            <h4 className="font-semibold text-caption text-label leading-snug line-clamp-2 min-h-[2rem]">
                               {p.name}
                             </h4>
                             {p.category === "JUALAN" && searchQuery.trim() !== "" && (
-                              <span className={`self-start text-[9px] font-extrabold px-1.5 py-0.5 rounded ${kondisiProduk(p) === "SEKEN" ? "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"}`}>
-                                {kondisiProduk(p) === "SEKEN" ? "SEKEN" : "BARU"}
-                              </span>
+                              <div>
+                                <Pill tone={kondisiProduk(p) === "SEKEN" ? "warning" : "neutral"}>
+                                  {kondisiProduk(p) === "SEKEN" ? "SEKEN" : "BARU"}
+                                </Pill>
+                              </div>
                             )}
                             {p.category === "ISI GAME" && (
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className="text-[9px] font-extrabold px-1 py-0.2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded">
-                                  {p.platform}
-                                </span>
+                              <div className="flex items-center gap-1.5">
+                                <Pill tone="neutral">{p.platform}</Pill>
                                 {p.size && (
-                                  <span className="text-[9px] font-semibold text-zinc-500 font-mono">
+                                  <span className="text-caption2 font-medium text-label-2 font-mono">
                                     {p.size}
                                   </span>
                                 )}
                               </div>
                             )}
                           </div>
-                          
+
                           <div className="flex items-center justify-between mt-1">
                             {p.category === "JUALAN" && !p.price ? (
-                              <span className="px-1.5 py-0.5 rounded-md bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 text-[10.5px] md:text-[12px] font-black tracking-wide">
-                                BONUS · Rp 0
-                              </span>
+                              <Pill color="purple">BONUS · Rp 0</Pill>
                             ) : (
-                              <span className="font-extrabold text-[12px] md:text-[14px] text-zinc-900 dark:text-zinc-100 font-mono">
+                              <span className="font-bold text-footnote text-label font-mono tabular-nums">
                                 {rupiah(p.price)}
                               </span>
                             )}
-                            
-                            {/* Decrement button if selected */}
+
                             {qty > 0 && (
                               <button
+                                type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   removeFromCart(p.id);
                                 }}
-                                className="w-5 h-5 rounded-md bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 flex items-center justify-center active:scale-90 transition-all"
+                                aria-label={`Kurangi ${p.name}`}
+                                className="w-7 h-7 rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label-2 hover:text-label flex items-center justify-center active:scale-90 transition-all"
                               >
-                                <Minus size={10} />
+                                <Minus size={12} />
                               </button>
                             )}
                           </div>
@@ -1101,23 +1296,19 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     );
                   })}
                 </div>
-                </>
               )}
             </div>
           </div>
 
-          {/* ============================================================
-              RIGHT PANEL: STATIC CART (Desktop only)
-              ============================================================ */}
-          <div className="hidden md:flex flex-col w-[380px] border-l border-zinc-200/50 dark:border-white/5 bg-white dark:bg-[#1C1C1E] shrink-0 min-h-0">
-            <div className="p-4 border-b border-zinc-200/50 dark:border-white/5 flex items-center justify-between bg-zinc-50/50 dark:bg-black/10 shrink-0">
-              <span className="font-black text-[11px] tracking-wider text-zinc-400 uppercase">
-                KERANJANG BELANJA
-              </span>
+          {/* RIGHT PANEL: STATIC CART (Desktop only) */}
+          <div className="hidden md:flex flex-col w-[380px] border-l border-sep apple-bar shrink-0 min-h-0">
+            <div className="px-4 py-3 border-b border-sep flex items-center justify-between bg-surface/60 shrink-0">
+              <Eyebrow>Keranjang Belanja</Eyebrow>
               {cart.length > 0 && (
                 <button
+                  type="button"
                   onClick={clearCart}
-                  className="text-[11px] font-bold text-red-500 hover:underline flex items-center gap-1 active:scale-95"
+                  className="text-caption font-semibold text-negative hover:underline flex items-center gap-1 active:scale-95"
                 >
                   <Trash2 size={12} />
                   Bersihkan
@@ -1125,517 +1316,187 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               )}
             </div>
 
-            {/* Cart Items List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0 no-scrollbar">
+            <div className="flex-1 overflow-y-auto p-3.5 space-y-2 min-h-0 no-scrollbar bg-canvas/50">
               {cart.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center text-zinc-400 dark:text-zinc-600 py-12">
-                  <ShoppingCart size={32} className="mb-2 opacity-50" />
-                  <span className="text-xs font-semibold">Keranjang masih kosong</span>
-                  <span className="text-[10px] text-zinc-500 dark:text-zinc-500 mt-0.5">Pilih produk dari katalog di kiri</span>
-                </div>
+                <EmptyState icon={<ShoppingCart />} title="Keranjang masih kosong" className="my-8">
+                  Pilih produk dari katalog di kiri
+                </EmptyState>
               ) : (
-                cart.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/30 border border-zinc-200/30 dark:border-white/5 animate-in fade-in slide-in-from-bottom-2 duration-200"
-                  >
-                    <div className="flex-1 min-w-0 pr-2">
-                      <div className="font-bold text-[13px] text-zinc-900 dark:text-white truncate">
-                        {item.name}
-                      </div>
-                      {item.category === "ISI GAME" && item.platform && (
-                        <div className="text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 mt-0.5">
-                          {item.platform}
-                        </div>
-                      )}
-                      <div className="text-[11px] text-zinc-500 font-mono mt-0.5">
-                        {!item.price && item.category === "JUALAN" ? <span className="font-sans font-black text-violet-600 dark:text-violet-400 mr-1">BONUS</span> : null}
-                        {rupiah(item.price)} x {item.quantity}
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        onClick={() => removeFromCart(item.id)}
-                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 active:scale-90 transition-all"
-                      >
-                        <Minus size={13} />
-                      </button>
-                      <span className="w-5 text-center font-bold text-xs text-zinc-800 dark:text-white font-mono">
-                        {item.quantity}
-                      </span>
-                      <button
-                        onClick={() => addToCart(item)}
-                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 active:scale-90 transition-all"
-                      >
-                        <Plus size={13} />
-                      </button>
-                      
-                      <button
-                        onClick={() => removeAllFromCart(item.id)}
-                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-500/10 text-red-500 hover:bg-red-100 dark:hover:bg-red-500/20 active:scale-90 transition-all ml-1.5"
-                        title="Hapus item"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-                ))
+                renderCartItems(false)
               )}
             </div>
 
-            {/* Cart Summary Bottom Panel */}
-            <div className="p-4 bg-zinc-50 dark:bg-[#2C2C2E]/80 border-t border-zinc-200 dark:border-white/5 shrink-0 space-y-3">
-              {/* Metode Pembayaran */}
-              <div className="space-y-2">
-                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">
-                  Metode Pembayaran
-                </span>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => setPaymentMethod("CASH")}
-                    className={`py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${
-                      paymentMethod === "CASH"
-                        ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20"
-                        : "bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700"
-                    }`}
-                  >
-                    CASH / TUNAI
-                  </button>
-                  <button
-                    onClick={() => setPaymentMethod("TRANSFER")}
-                    className={`py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${
-                      paymentMethod === "TRANSFER"
-                        ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20"
-                        : "bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700"
-                    }`}
-                  >
-                    TRANSFER
-                  </button>
-                </div>
-                {/* Tampilkan QRIS Button */}
-                <button
-                  onClick={() => setShowQrisModal(true)}
-                  className="w-full mt-2 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-sm bg-black hover:bg-zinc-800 text-white border border-transparent dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-900 dark:border-transparent"
-                >
-                  Tampilkan QRIS
-                </button>
-              </div>
-
-              {/* Ringkasan Subtotal, Diskon Promo, & Total */}
-              {discountAmount > 0 ? (
-                <div className="space-y-1.5 pt-1">
-                  <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 font-medium">
-                    <span>Subtotal</span>
-                    <span className="font-mono">{rupiah(subtotal)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-bold">
-                    <span className="flex items-center gap-1.5">
-                      <span>Diskon Promo</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 font-black">
-                        {discountPercent}% OFF
-                      </span>
-                    </span>
-                    <span className="font-mono">-{rupiah(discountAmount)}</span>
-                  </div>
-                  <div className="flex items-end justify-between pt-1 border-t border-zinc-200/80 dark:border-white/10">
-                    <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                      TOTAL BAYAR
-                    </span>
-                    <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono tracking-tighter">
-                      {rupiah(total)}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {qualifyingCount > 0 && nextRule && (
-                    <div className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1.5 rounded-xl font-medium flex items-center justify-between">
-                      <span>💡 Tambah {gamesNeededForNext} game {promosConfig.targetPlatforms.join('/')}</span>
-                      <span className="font-bold text-amber-600 dark:text-amber-300">Diskon {nextRule.percent}%</span>
-                    </div>
-                  )}
-                  <div className="flex items-end justify-between">
-                    <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
-                      TOTAL HARGA
-                    </span>
-                    <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono tracking-tighter">
-                      {rupiah(total)}
-                    </span>
-                  </div>
-                </div>
-              )}
-              
-              <div>
-                <button
-                  disabled={cart.length === 0}
-                  onClick={() => setOpenCheckout(true)}
-                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-black text-[13px] active:scale-95 transition-all shadow-md shadow-red-600/20"
-                >
-                  <Receipt size={16} />
-                  Selesaikan & Cetak Nota
-                </button>
-              </div>
-            </div>
+            <div className="p-4 bg-surface border-t border-sep shrink-0">{renderCartFooter(false)}</div>
           </div>
         </div>
 
-        {/* ============================================================
-            FLOATING ACTIONS PANEL (Mobile only)
-            ============================================================ */}
+        {/* FLOATING ACTIONS PANEL (Mobile only) */}
         {cart.length > 0 && (
-          <div className="md:hidden fixed bottom-5 left-0 right-0 px-4 z-40 animate-in slide-in-from-bottom-5 duration-300">
+          <div className="md:hidden fixed bottom-[max(18px,env(safe-area-inset-bottom))] left-0 right-0 px-4 z-40 animate-in slide-in-from-bottom-5 duration-300">
             <button
+              type="button"
               onClick={() => setOpenMobileCart(true)}
-              className="w-full flex items-center justify-between px-5 py-4 rounded-[20px] bg-black dark:bg-white text-white dark:text-black font-bold shadow-xl shadow-black/30 dark:shadow-white/10 active:scale-[0.98] transition-all"
+              className="w-full flex items-center justify-between px-5 min-h-[54px] rounded-card bg-action text-action-label font-semibold shadow-card active:scale-[0.98] transition-all"
             >
               <div className="flex items-center gap-2.5">
                 <div className="relative">
                   <ShoppingCart size={18} />
-                  <span className="absolute -top-1.5 -right-1.5 bg-white dark:bg-zinc-900 text-black dark:text-white font-black text-[9px] w-4.5 h-4.5 rounded-full flex items-center justify-center shadow-sm">
-                    {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                  <span className="absolute -top-1.5 -right-2 bg-action-label text-action font-bold text-[10px] min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center shadow-sm tabular-nums">
+                    {totalCartQty}
                   </span>
                 </div>
-                <span className="text-[13px] tracking-wide font-black">LIHAT KERANJANG</span>
+                <span className="text-footnote font-bold tracking-wide">LIHAT KERANJANG</span>
               </div>
-              <span className="text-[16px] font-extrabold font-mono">
-                {rupiah(total)} &rarr;
-              </span>
+              <span className="text-headline font-bold font-mono tabular-nums">{rupiah(total)} →</span>
             </button>
           </div>
         )}
-
       </div>
 
-      {/* ============================================================
-          MOBILE CART MODAL OVERLAY (Full-Screen)
-          ============================================================ */}
-      {openMobileCart && (
-        <div className="md:hidden fixed inset-0 z-[150] flex items-center justify-center bg-black/40 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="w-full h-full bg-zinc-50 dark:bg-[#1C1C1E] flex flex-col">
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200/50 dark:border-white/5 bg-white dark:bg-[#1C1C1E] shrink-0">
-              <div className="flex items-center gap-2">
-                <ShoppingCart size={18} className="text-black dark:text-white" />
-                <h3 className="font-black text-sm text-zinc-900 dark:text-white uppercase">
-                  Keranjang Belanja
-                </h3>
-              </div>
-              <button
-                onClick={() => setOpenMobileCart(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-zinc-200/60 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-bold"
-              >
-                <X size={16} />
-              </button>
+      {/* MOBILE CART SHEET */}
+      <div className="md:hidden">
+        <Sheet
+          open={openMobileCart}
+          onClose={() => setOpenMobileCart(false)}
+          title="Keranjang Belanja"
+          subtitle={`${totalCartQty} item · ${rupiah(total)}`}
+          icon={<ShoppingCart />}
+          iconColor="gray"
+          size="md"
+          variant="grouped"
+          zClassName="z-[150]"
+          footer={renderCartFooter(true)}
+        >
+          {cart.length === 0 ? (
+            <EmptyState icon={<ShoppingCart />} title="Keranjang masih kosong">
+              Pilih produk dari katalog terlebih dahulu
+            </EmptyState>
+          ) : (
+            <div className="space-y-2">{renderCartItems(true)}</div>
+          )}
+        </Sheet>
+      </div>
+
+      {/* TAMBAH PRODUK SHEET (Super Admin only) */}
+      <Sheet
+        open={openAddProduct && isSuperAdminOrOwner}
+        onClose={() => setOpenAddProduct(false)}
+        title="Tambah Produk Baru"
+        subtitle="Produk baru akan tersimpan ke database & muncul di katalog POS"
+        icon={<PlusCircle />}
+        iconColor="gray"
+        size="sm"
+        variant="grouped"
+        zClassName="z-[200]"
+      >
+        <form onSubmit={handleAddProductSubmit} className="space-y-3">
+          <Card bodyClassName="space-y-3.5">
+            <div>
+              <label className={labelCls}>Nama Barang</label>
+              <input
+                type="text"
+                required
+                placeholder="Contoh: Kabel HDMI 2 Meter"
+                value={newProdName}
+                onChange={(e) => setNewProdName(e.target.value)}
+                className={inputCls}
+              />
             </div>
 
-            {/* List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-2.5 no-scrollbar">
-              {cart.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between p-3.5 rounded-2xl bg-white dark:bg-zinc-800/40 border border-zinc-200/50 dark:border-white/5"
-                >
-                  <div className="flex-1 min-w-0 pr-2">
-                    <div className="font-bold text-sm text-zinc-900 dark:text-white truncate">
-                      {item.name}
-                    </div>
-                    {item.category === "ISI GAME" && item.platform && (
-                      <div className="text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 mt-0.5">
-                        {item.platform}
-                      </div>
-                    )}
-                    <div className="text-[12px] text-zinc-500 font-mono mt-0.5">
-                      {!item.price && item.category === "JUALAN" ? <span className="font-sans font-black text-violet-600 dark:text-violet-400 mr-1">BONUS</span> : null}
-                      {rupiah(item.price)} x {item.quantity}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => removeFromCart(item.id)}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 active:scale-90 transition-all"
-                    >
-                      <Minus size={14} />
-                    </button>
-                    <span className="w-5 text-center font-bold text-xs text-zinc-800 dark:text-white font-mono">
-                      {item.quantity}
-                    </span>
-                    <button
-                      onClick={() => addToCart(item)}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 active:scale-90 transition-all"
-                    >
-                      <Plus size={14} />
-                    </button>
-                    <button
-                      onClick={() => removeAllFromCart(item.id)}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 dark:bg-red-500/10 text-red-500 ml-1"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Bottom Section */}
-            <div className="p-5 bg-white dark:bg-[#2C2C2E]/80 border-t border-zinc-200/50 dark:border-white/5 shrink-0 space-y-3">
-              {/* Metode Pembayaran */}
-              <div className="space-y-2">
-                <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">
-                  Metode Pembayaran
-                </span>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => setPaymentMethod("CASH")}
-                    className={`py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${
-                      paymentMethod === "CASH"
-                        ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20"
-                        : "bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700"
-                    }`}
-                  >
-                    CASH / TUNAI
-                  </button>
-                  <button
-                    onClick={() => setPaymentMethod("TRANSFER")}
-                    className={`py-2 rounded-xl text-xs font-bold transition-all active:scale-95 ${
-                      paymentMethod === "TRANSFER"
-                        ? "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-600/20"
-                        : "bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700"
-                    }`}
-                  >
-                    TRANSFER
-                  </button>
-                </div>
-                {/* Tampilkan QRIS Button */}
-                <button
-                  onClick={() => setShowQrisModal(true)}
-                  className="w-full mt-2 py-2 rounded-xl text-xs font-bold transition-all active:scale-95 shadow-sm bg-black hover:bg-zinc-800 text-white border border-transparent dark:bg-white dark:hover:bg-zinc-100 dark:text-zinc-900 dark:border-transparent"
-                >
-                  Tampilkan QRIS
-                </button>
-              </div>
-
-              {/* Ringkasan Subtotal, Diskon Promo, & Total Mobile */}
-              {discountAmount > 0 ? (
-                <div className="space-y-1.5 pt-1">
-                  <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 font-medium">
-                    <span>Subtotal</span>
-                    <span className="font-mono">{rupiah(subtotal)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-bold">
-                    <span className="flex items-center gap-1.5">
-                      <span>Diskon Promo</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 font-black">
-                        {discountPercent}% OFF
-                      </span>
-                    </span>
-                    <span className="font-mono">-{rupiah(discountAmount)}</span>
-                  </div>
-                  <div className="flex items-end justify-between pt-1 border-t border-zinc-200/80 dark:border-white/10">
-                    <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
-                      TOTAL BAYAR
-                    </span>
-                    <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono">
-                      {rupiah(total)}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {qualifyingCount > 0 && nextRule && (
-                    <div className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1.5 rounded-xl font-medium flex items-center justify-between">
-                      <span>💡 Tambah {gamesNeededForNext} game {promosConfig.targetPlatforms.join('/')}</span>
-                      <span className="font-bold text-amber-600 dark:text-amber-300">Diskon {nextRule.percent}%</span>
-                    </div>
-                  )}
-                  <div className="flex items-end justify-between">
-                    <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
-                      TOTAL HARGA
-                    </span>
-                    <span className="text-2xl font-black text-zinc-900 dark:text-white font-mono">
-                      {rupiah(total)}
-                    </span>
-                  </div>
+            <div>
+              <label className={labelCls}>Harga (Rupiah)</label>
+              <input
+                type="number"
+                required
+                min="0"
+                placeholder="Contoh: 35000"
+                value={newProdPrice}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setNewProdPrice(val === "" ? "" : Number(val));
+                }}
+                className={`${inputCls} font-mono tabular-nums`}
+              />
+              {newProdPrice !== "" && newProdPrice >= 0 && (
+                <div className="text-caption font-semibold text-label-2 font-mono mt-1">
+                  Preview: {rupiah(Number(newProdPrice))}
                 </div>
               )}
-              <div className="pb-4">
-                <button
-                  disabled={cart.length === 0}
-                  onClick={() => setOpenCheckout(true)}
-                  className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-black text-[13px] active:scale-95 transition-all shadow-md shadow-red-600/20"
-                >
-                  <Receipt size={16} />
-                  Selesaikan & Cetak Nota
-                </button>
-              </div>
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* ============================================================
-          TAMBAH PRODUK OVERLAY FORM (Super Admin only)
-          ============================================================ */}
-      {openAddProduct && isSuperAdminOrOwner && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative w-full max-w-[380px] overflow-hidden rounded-[28px] bg-white dark:bg-zinc-900 p-6 shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-in zoom-in-95 duration-200">
-            <button
-              onClick={() => setOpenAddProduct(false)}
-              className="absolute top-4 right-4 w-7 h-7 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-white flex items-center justify-center active:scale-90 transition-all"
-            >
-              <X size={14} />
-            </button>
-
-            <form onSubmit={handleAddProductSubmit} className="space-y-4">
-              <div>
-                <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase tracking-tight">
-                  Tambah Produk Baru
-                </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  Produk baru akan tersimpan ke database & muncul di katalog POS
-                </p>
-              </div>
-
-              {/* Nama Barang */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
-                  Nama Barang
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Kabel HDMI 2 Meter"
-                  value={newProdName}
-                  onChange={(e) => setNewProdName(e.target.value)}
-                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
-                />
-              </div>
-
-              {/* Harga */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
-                  Harga (Rupiah)
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  placeholder="Contoh: 35000"
-                  value={newProdPrice}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setNewProdPrice(val === "" ? "" : Number(val));
-                  }}
-                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold font-mono text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
-                />
-                {newProdPrice !== "" && newProdPrice >= 0 && (
-                  <div className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 font-mono pl-1">
-                    Preview: {rupiah(Number(newProdPrice))}
-                  </div>
-                )}
-              </div>
-
-              {/* Kategori */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
-                  Kategori
-                </label>
-                <select
-                  value={newProdCategory}
-                  onChange={(e) => setNewProdCategory(e.target.value as any)}
-                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
-                >
-                  <option value="SERVIS">SERVIS (Jasa Service Stik / Konsol)</option>
-                </select>
-              </div>
-
-              {/* Barang stok yang dipotong saat nota dibuat */}
-              {newProdCategory === "SERVIS" && (
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
-                    Barang Stok (dipotong saat nota dicetak)
-                  </label>
-                  <StokRefSelect
-                    value={newProdStokRef}
-                    onChange={setNewProdStokRef}
-                    categories={stokCats}
-                    data={stokData}
-                    className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-3 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
-                  />
-                </div>
-              )}
-
-              {/* Upload Foto */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
-                  Foto Produk (Maks 2MB)
-                </label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setNewProdImage(e.target.files?.[0] ?? null)}
-                  className="w-full text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 dark:file:bg-zinc-800 file:text-zinc-700 dark:file:text-zinc-200 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-700 cursor-pointer"
-                />
-              </div>
-
-              {/* Submit */}
-              <button
-                type="submit"
-                disabled={isUploading}
-                className="w-full py-3.5 bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 disabled:opacity-50 text-white dark:text-black font-bold text-xs rounded-xl shadow-md shadow-black/25 dark:shadow-white/10 active:scale-95 transition-all flex items-center justify-center gap-1.5"
+            <div>
+              <label className={labelCls}>Kategori</label>
+              <select
+                value={newProdCategory}
+                onChange={(e) => setNewProdCategory(e.target.value as any)}
+                className={inputCls}
               >
-                {isUploading ? "Mengunggah..." : "Simpan Produk"}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-      {/* ============================================================
-          EDIT PRODUK OVERLAY FORM (Super Admin only)
-          ============================================================ */}
-      {openEditProduct && isSuperAdminOrOwner && selectedProductForEdit && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative w-full max-w-[380px] overflow-hidden rounded-[28px] bg-white dark:bg-zinc-900 p-6 shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-in zoom-in-95 duration-200">
-            <button
-              onClick={() => {
-                setOpenEditProduct(false);
-                setSelectedProductForEdit(null);
-              }}
-              className="absolute top-4 right-4 w-7 h-7 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-white flex items-center justify-center active:scale-90 transition-all"
-            >
-              <X size={14} />
-            </button>
+                <option value="SERVIS">SERVIS (Jasa Service Stik / Konsol)</option>
+              </select>
+            </div>
 
-            <form onSubmit={handleEditProductSubmit} className="space-y-4">
+            {newProdCategory === "SERVIS" && (
               <div>
-                <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase tracking-tight">
-                  Edit Produk
-                </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  Ubah data produk atau hapus produk dari database
-                </p>
+                <label className={labelCls}>Barang Stok (dipotong saat nota dicetak)</label>
+                <StokRefSelect
+                  value={newProdStokRef}
+                  onChange={setNewProdStokRef}
+                  categories={stokCats}
+                  data={stokData}
+                  className={inputCls}
+                />
               </div>
+            )}
 
-              {/* Nama Barang */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
-                  Nama Barang
-                </label>
+            <div>
+              <label className={labelCls}>Foto Produk (Maks 2MB)</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setNewProdImage(e.target.files?.[0] ?? null)}
+                className="w-full text-caption text-label-2 file:mr-3 file:py-2 file:px-3.5 file:rounded-field file:border-0 file:text-caption file:font-semibold file:bg-fill file:text-label hover:file:brightness-95 cursor-pointer"
+              />
+            </div>
+          </Card>
+
+          <Button type="submit" variant="filled" size="lg" block loading={isUploading}>
+            {isUploading ? "Mengunggah..." : "Simpan Produk"}
+          </Button>
+        </form>
+      </Sheet>
+
+      {/* EDIT PRODUK SHEET (Super Admin only) */}
+      <Sheet
+        open={!!(openEditProduct && isSuperAdminOrOwner && selectedProductForEdit)}
+        onClose={() => {
+          setOpenEditProduct(false);
+          setSelectedProductForEdit(null);
+        }}
+        title="Edit Produk"
+        subtitle="Ubah data produk atau hapus produk dari database"
+        icon={<Pencil />}
+        iconColor="gray"
+        size="sm"
+        variant="grouped"
+        zClassName="z-[200]"
+      >
+        {selectedProductForEdit && (
+          <form onSubmit={handleEditProductSubmit} className="space-y-3">
+            <Card bodyClassName="space-y-3.5">
+              <div>
+                <label className={labelCls}>Nama Barang</label>
                 <input
                   type="text"
                   required
                   placeholder="Contoh: Kabel HDMI 2 Meter"
                   value={editProdName}
                   onChange={(e) => setEditProdName(e.target.value)}
-                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
+                  className={inputCls}
                 />
               </div>
 
-              {/* Harga */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
-                  Harga (Rupiah)
-                </label>
+              <div>
+                <label className={labelCls}>Harga (Rupiah)</label>
                 <input
                   type="number"
                   required
@@ -1646,130 +1507,103 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     const val = e.target.value;
                     setEditProdPrice(val === "" ? "" : Number(val));
                   }}
-                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold font-mono text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
+                  className={`${inputCls} font-mono tabular-nums`}
                 />
                 {editProdPrice !== "" && editProdPrice >= 0 && (
-                  <div className="text-[11px] font-bold text-zinc-800 dark:text-zinc-200 font-mono pl-1">
+                  <div className="text-caption font-semibold text-label-2 font-mono mt-1">
                     Preview: {rupiah(Number(editProdPrice))}
                   </div>
                 )}
               </div>
 
-              {/* Kategori */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
-                  Kategori
-                </label>
+              <div>
+                <label className={labelCls}>Kategori</label>
                 <select
                   value={editProdCategory}
                   onChange={(e) => setEditProdCategory(e.target.value as any)}
-                  className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-4 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
+                  className={inputCls}
                 >
-                  {editProdCategory === "RENTAL" && <option value="RENTAL">RENTAL (lama — tidak tampil di POS)</option>}
+                  {editProdCategory === "RENTAL" && (
+                    <option value="RENTAL">RENTAL (lama — tidak tampil di POS)</option>
+                  )}
                   <option value="SERVIS">SERVIS (Jasa Service Stik / Konsol)</option>
                 </select>
               </div>
 
-              {/* Barang stok yang dipotong saat nota dibuat */}
               {editProdCategory === "SERVIS" && (
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
-                    Barang Stok (dipotong saat nota dicetak)
-                  </label>
+                <div>
+                  <label className={labelCls}>Barang Stok (dipotong saat nota dicetak)</label>
                   <StokRefSelect
                     value={editProdStokRef}
                     onChange={setEditProdStokRef}
                     categories={stokCats}
                     data={stokData}
-                    className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/50 dark:border-white/5 rounded-xl px-3 py-3 text-xs font-bold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-black/50 dark:focus:ring-white/50 transition-all shadow-sm"
+                    className={inputCls}
                   />
                 </div>
               )}
 
-              {/* Upload Foto Baru */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest ml-1">
-                  Foto Baru (Opsional, Maks 2MB)
-                </label>
+              <div>
+                <label className={labelCls}>Foto Baru (Opsional, Maks 2MB)</label>
                 <input
                   type="file"
                   accept="image/*"
                   onChange={(e) => setEditProdImage(e.target.files?.[0] ?? null)}
-                  className="w-full text-xs text-zinc-500 dark:text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-zinc-100 dark:file:bg-zinc-800 file:text-zinc-700 dark:file:text-zinc-200 hover:file:bg-zinc-200 dark:hover:file:bg-zinc-700 cursor-pointer"
+                  className="w-full text-caption text-label-2 file:mr-3 file:py-2 file:px-3.5 file:rounded-field file:border-0 file:text-caption file:font-semibold file:bg-fill file:text-label hover:file:brightness-95 cursor-pointer"
                 />
                 {editProdImageUrl && !editProdImage && (
-                  <div className="mt-2 text-[10px] text-zinc-500 flex items-center gap-1.5">
+                  <div className="mt-2 text-caption text-label-2 flex items-center gap-1.5">
                     <span className="font-semibold">Foto saat ini:</span>
-                    <a href={editProdImageUrl} target="_blank" rel="noreferrer" className="text-black dark:text-white underline truncate max-w-[200px]">
+                    <a
+                      href={editProdImageUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-tint hover:underline truncate max-w-[200px]"
+                    >
                       Lihat Foto
                     </a>
                   </div>
                 )}
               </div>
+            </Card>
 
-              {/* Submit & Delete Buttons */}
-              <div className="space-y-2 pt-2">
-                <button
-                  type="submit"
-                  disabled={isUploading}
-                  className="w-full py-3.5 bg-black hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-200 disabled:opacity-50 text-white dark:text-black font-bold text-xs rounded-xl shadow-md shadow-black/25 dark:shadow-white/10 active:scale-95 transition-all flex items-center justify-center gap-1.5"
-                >
-                  {isUploading ? "Mengunggah..." : "Simpan Perubahan"}
-                </button>
-                
-                <button
-                  type="button"
-                  disabled={isUploading}
-                  onClick={() => handleDeleteProduct(selectedProductForEdit.id)}
-                  className="w-full py-3.5 bg-red-100 hover:bg-red-200 dark:bg-red-500/10 dark:hover:bg-red-500/20 disabled:opacity-50 text-red-600 dark:text-red-400 font-bold text-xs rounded-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-transparent dark:border-red-500/20"
-                >
-                  Hapus Produk
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ============================================================
-          QRIS POPUP MODAL
-          ============================================================ */}
-      {showQrisModal && (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="relative w-full max-w-[450px] overflow-hidden rounded-[28px] bg-white dark:bg-zinc-900 p-6 shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-in zoom-in-95 duration-200 flex flex-col items-center">
-            <button
-              onClick={() => setShowQrisModal(false)}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-white flex items-center justify-center active:scale-90 transition-all"
-            >
-              <X size={16} />
-            </button>
-            
-            <div className="text-center w-full mt-2">
-              <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase tracking-tight">
-                QRIS Pembayaran
-              </h3>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 mb-4">
-                Scan kode QRIS di bawah ini untuk melakukan pembayaran transfer
-              </p>
+            <div className="space-y-2">
+              <Button type="submit" variant="filled" size="lg" block loading={isUploading}>
+                {isUploading ? "Mengunggah..." : "Simpan Perubahan"}
+              </Button>
+              <Button
+                variant="destructive"
+                size="lg"
+                block
+                disabled={isUploading}
+                onClick={() => handleDeleteProduct(selectedProductForEdit.id)}
+              >
+                Hapus Produk
+              </Button>
             </div>
+          </form>
+        )}
+      </Sheet>
 
-            <div className="w-full bg-white rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-700 shadow-md">
-              <img
-                src={qrisImg}
-                alt="QRIS"
-                className="w-full h-auto object-contain block"
-              />
-            </div>
-            
-            <button
-              onClick={() => setShowQrisModal(false)}
-              className="w-full mt-5 py-3 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white font-bold text-xs rounded-xl active:scale-95 transition-all"
-            >
-              Tutup
-            </button>
-          </div>
+      {/* QRIS POPUP SHEET */}
+      <Sheet
+        open={showQrisModal}
+        onClose={() => setShowQrisModal(false)}
+        title="QRIS Pembayaran"
+        subtitle="Scan kode QRIS di bawah ini untuk pembayaran transfer"
+        size="sm"
+        variant="grouped"
+        zClassName="z-[250]"
+        footer={
+          <Button variant="filled" size="lg" block onClick={() => setShowQrisModal(false)}>
+            Tutup
+          </Button>
+        }
+      >
+        <div className="w-full bg-white rounded-tile overflow-hidden ring-1 ring-edge shadow-card">
+          <img src={qrisImg} alt="QRIS" className="w-full h-auto object-contain block" />
         </div>
-      )}
+      </Sheet>
 
       <PosCheckoutSheet
         open={openCheckout}
@@ -1802,12 +1636,22 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
         hitungDiskon={(items) => calculatePOSDiscount(items, promosConfig)}
       />
 
-      <NotaDpSheet open={openDp} onClose={() => setOpenDp(false)} list={notaDp} isOwner={isSuperAdminOrOwner} kasirNama={adminName} data={stokData} />
+      <NotaDpSheet
+        open={openDp}
+        onClose={() => setOpenDp(false)}
+        list={notaDp}
+        isOwner={isSuperAdminOrOwner}
+        kasirNama={adminName}
+        data={stokData}
+      />
 
       {/* Peringatan stok dipesan DP */}
       {toast && (
-        <div role="status" className="fixed left-1/2 -translate-x-1/2 bottom-[max(96px,calc(env(safe-area-inset-bottom)+88px))] z-[240] w-[calc(100%-32px)] max-w-sm flex items-start gap-2 rounded-2xl bg-zinc-900/95 dark:bg-white/95 text-white dark:text-zinc-900 px-3.5 py-3 text-[12.5px] font-semibold leading-snug shadow-2xl backdrop-blur animate-in fade-in slide-in-from-bottom-2">
-          <AlertTriangle className="w-4 h-4 shrink-0 mt-px text-amber-400 dark:text-amber-600" />
+        <div
+          role="status"
+          className="fixed left-1/2 -translate-x-1/2 bottom-[max(96px,calc(env(safe-area-inset-bottom)+88px))] z-[240] w-[calc(100%-32px)] max-w-sm flex items-start gap-2 rounded-card bg-action text-action-label px-4 py-3 text-footnote font-semibold leading-snug shadow-card backdrop-blur animate-in fade-in slide-in-from-bottom-2"
+        >
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-px text-warning" />
           <span>{toast}</span>
         </div>
       )}

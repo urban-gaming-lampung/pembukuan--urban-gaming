@@ -4,6 +4,7 @@
  * lalu dikonfirmasi owner di Atur Stok › Konfirmasi stok. Aturan: src/lib/tukarTambah.ts.
  */
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ArrowLeftRight, Camera, ChevronRight, Loader2, Plus, Trash2, X } from "lucide-react";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import type { TukarTambahInput } from "../lib/posSales";
@@ -30,7 +31,7 @@ export const KartuTukarTambah: React.FC<{
   onTambah: () => void;
   onUbah: (key: string) => void;
 }> = ({ daftar, onTambah, onUbah }) => (
-  <div className="rounded-card bg-surface p-3.5">
+  <div className="rounded-card apple-card ring-1 ring-edge shadow-card p-3.5">
     <div className="flex items-center justify-between">
       <div className="text-caption font-semibold uppercase tracking-[0.04em] text-label-2">Tukar tambah</div>
       <ArrowLeftRight className="w-4 h-4 text-label-3" />
@@ -161,10 +162,12 @@ export const TukarTambahSheet: React.FC<{
 
   const labelUang = mode === "PEMBELI" ? "Uang tambah dari pembeli" : mode === "URBAN" ? "Uang dari URBAN ke pembeli" : "Nilai barang pembeli";
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-[260] flex items-end sm:items-center justify-center font-sans">
-      <div className="absolute inset-0 bg-black/45" onClick={onClose} />
-      <div className="relative w-full sm:max-w-md bg-canvas rounded-t-card sm:rounded-card max-h-[92vh] flex flex-col overflow-hidden shadow-float">
+      <div className="absolute inset-0 bg-black/45 dark:bg-black/70 backdrop-blur-[8px]" onClick={onClose} />
+      <div className="relative w-full sm:max-w-md apple-sheet-grouped border border-white/50 dark:border-white/[0.12] rounded-t-sheet sm:rounded-[32px] max-h-[92vh] flex flex-col overflow-hidden shadow-float">
         <div className="flex justify-center pt-2 sm:hidden"><div className="w-9 h-[5px] rounded-full bg-sep" /></div>
         <div className="px-4 pt-2 pb-3 flex items-center gap-3">
           <div className="flex-1 min-w-0">
@@ -175,13 +178,13 @@ export const TukarTambahSheet: React.FC<{
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-3">
-          <div className="rounded-card bg-surface p-3.5 space-y-3">
+          <div className="rounded-card apple-card ring-1 ring-edge shadow-card p-3.5 space-y-3">
             <Field label="Nama barang" hint={sub ? <>Terdeteksi <b className="font-semibold text-label">{LABEL_SUB[sub] || sub}</b> · produk & stok dicocokkan saat konfirmasi</> : "Contoh: SWITCH 1 OLED, PS4 SLIM 500GB"}>
               <input value={nama} onChange={(e) => { setNama(e.target.value); setError(""); }} placeholder="Nama & tipe barang" autoComplete="off" autoCapitalize="characters" className={`${inputCls} uppercase placeholder-shown:normal-case`} />
             </Field>
           </div>
 
-          <div className="rounded-card bg-surface p-3.5 space-y-3">
+          <div className="rounded-card apple-card ring-1 ring-edge shadow-card p-3.5 space-y-3">
             <SubTabs<Mode>
               size="sm"
               value={mode}
@@ -207,7 +210,7 @@ export const TukarTambahSheet: React.FC<{
             {nilaiSalah && <p className="text-caption font-semibold text-negative">Uang tambah tidak boleh melebihi harga barang yang dijual — pilih URBAN tambah bila URBAN yang membayar.</p>}
           </div>
 
-          <div className="rounded-card bg-surface p-3.5 space-y-3">
+          <div className="rounded-card apple-card ring-1 ring-edge shadow-card p-3.5 space-y-3">
             <Field label="Nomor seri (SN)">
               <input value={sn} onChange={(e) => { setSn(e.target.value.toUpperCase()); setError(""); }} placeholder="Lihat label di bawah / belakang unit" autoComplete="off" autoCapitalize="characters" spellCheck={false} className={`${inputCls} font-mono placeholder:font-sans`} />
             </Field>
@@ -223,7 +226,7 @@ export const TukarTambahSheet: React.FC<{
           <Notice>Barang masuk antrean <b className="font-semibold">Atur Stok › Konfirmasi stok</b>. Owner menentukan harga jualnya; stok bertambah setelah dikonfirmasi.</Notice>
         </div>
 
-        <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] bg-surface border-t border-sep space-y-2">
+        <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] apple-bar border-t border-sep space-y-2">
           {error && <div className="text-footnote font-semibold text-negative bg-negative/10 rounded-field px-3 py-2">{error}</div>}
           <div className="flex gap-2">
             {onHapus && <Button variant="destructive" size="lg" onClick={onHapus} aria-label="Hapus barang ini" icon={<Trash2 />} className="w-[52px] px-0" />}
@@ -231,6 +234,7 @@ export const TukarTambahSheet: React.FC<{
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

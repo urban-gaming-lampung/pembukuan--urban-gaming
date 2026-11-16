@@ -1,7 +1,7 @@
 import React from "react";
 import { ChevronRight, Scale, TrendingDown, TrendingUp } from "lucide-react";
 import { rpShort, rupiah, rupiahTanda } from "../lib/format";
-import { nadaAngka, PILL_NADA, TEKS_NADA, type Nada } from "./tokens";
+import { AKSEN_TILE, nadaAngka, PILL_NADA, TEKS_NADA, type Nada, type WarnaIkon } from "./tokens";
 
 /**
  * ANGKA & DATA — nominal, tile ringkasan, pill status, batang proporsi.
@@ -63,9 +63,21 @@ export const Dot: React.FC<{ color: string; className?: string }> = ({ color, cl
   <span aria-hidden className={cx("inline-block h-2 w-2 shrink-0 rounded-full", className)} style={{ background: color }} />
 );
 
-/** Pill kecil berwarna lembut. */
-export const Pill: React.FC<{ tone?: Nada; icon?: React.ReactNode; children: React.ReactNode; className?: string }> = ({ tone = "neutral", icon, children, className }) => (
-  <span className={cx("inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-[3px] text-caption2 font-semibold [&>svg]:h-3 [&>svg]:w-3", PILL_NADA[tone], className)}>
+/** Pill kecil berwarna lembut (`tone` untuk status makna, `color` untuk identitas kategori). */
+export const Pill: React.FC<{
+  tone?: Nada;
+  color?: WarnaIkon;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}> = ({ tone = "neutral", color, icon, children, className }) => (
+  <span
+    className={cx(
+      "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-[3px] text-caption2 font-semibold [&>svg]:h-3 [&>svg]:w-3",
+      color ? AKSEN_TILE[color].pill : PILL_NADA[tone],
+      className
+    )}
+  >
     {icon}
     {children}
   </span>
@@ -87,36 +99,77 @@ export const StatusPill: React.FC<{ net: number; className?: string }> = ({ net,
 };
 
 /**
- * Tile ringkasan di dalam kartu (latar abu lembut, sudut 14px).
- * Bisa diketuk (onClick) — tampil panah kecil di kanan atas.
+ * Tile ringkasan di dalam kartu (sudut 16px — frosted glass nested pane).
+ * - Tanpa `accent`: latar kaca netral `.apple-tile` (selaras dengan Input).
+ * - Dengan `accent` (`blue`, `teal`, `orange`, dll.): latar tinted lembut ala Apple Health + backdrop blur + lencana ikon berwarna, angka tetap kontras tinggi.
+ * - `progress` (0..1): bar kemajuan tipis di dasar tile.
  */
 export const StatTile: React.FC<{
   label: React.ReactNode;
   dot?: string;
   icon?: React.ReactNode;
+  accent?: WarnaIkon;
+  badge?: React.ReactNode;
   value: React.ReactNode;
   sub?: React.ReactNode;
+  progress?: number;
   onClick?: () => void;
   ariaLabel?: string;
   className?: string;
-}> = ({ label, dot, icon, value, sub, onClick, ariaLabel, className }) => {
+}> = ({ label, dot, icon, accent, badge, value, sub, progress, onClick, ariaLabel, className }) => {
+  const gaya = accent ? AKSEN_TILE[accent] : undefined;
   const isi = (
     <>
       <div className="flex items-center justify-between gap-2">
-        <span className="flex min-w-0 items-center gap-1.5 text-caption font-medium text-label-2 [&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0">
+        <span className="flex min-w-0 items-center gap-1.5 text-caption font-semibold text-label-2">
           {dot && <Dot color={dot} />}
-          {icon}
-          <span className="truncate">{label}</span>
+          {icon &&
+            (gaya ? (
+              <span aria-hidden className={cx("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] [&>svg]:h-3 [&>svg]:w-3", gaya.iconBg, gaya.iconText)}>
+                {icon}
+              </span>
+            ) : (
+              <span aria-hidden className="inline-flex shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">
+                {icon}
+              </span>
+            ))}
+          <span className={cx("truncate", gaya && accent !== "gray" && "font-semibold")}>{label}</span>
         </span>
-        {onClick && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-label-3" aria-hidden />}
+        <span className="flex shrink-0 items-center gap-1">
+          {badge}
+          {onClick && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-label-3" aria-hidden />}
+        </span>
       </div>
-      <div className="mt-1 min-w-0 leading-tight">{value}</div>
-      {sub && <div className="mt-0.5 truncate text-caption text-label-2">{sub}</div>}
+      <div className="mt-2 min-w-0 leading-tight">{value}</div>
+      {sub && <div className="mt-1 truncate text-caption text-label-2">{sub}</div>}
+      {progress !== undefined && (
+        <div className="mt-2.5 h-1 w-full overflow-hidden rounded-full bg-fill">
+          <div
+            className="h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none"
+            style={{ width: `${Math.max(progress > 0 ? 4 : 0, Math.min(100, progress * 100))}%`, background: gaya ? gaya.bar : "#0088FF" }}
+          />
+        </div>
+      )}
     </>
   );
-  const base = cx("min-w-0 rounded-tile bg-surface-2 px-3.5 py-3 text-left", className);
+  const base = cx(
+    "min-w-0 rounded-tile px-3.5 sm:px-4 py-3 sm:py-3.5 text-left transition-all duration-200",
+    gaya ? gaya.bg : cx("apple-tile ring-1 ring-black/[0.03] dark:ring-white/[0.03]", onClick && "apple-tile-interactive"),
+    className
+  );
   return onClick ? (
-    <button type="button" onClick={onClick} aria-label={ariaLabel} className={cx(base, "transition-transform active:scale-[0.98]")}>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      className={cx(
+        base,
+        gaya
+          ? "hover:brightness-[0.97] dark:hover:brightness-110 active:scale-[0.98]"
+          : "active:scale-[0.98]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint"
+      )}
+    >
       {isi}
     </button>
   ) : (
@@ -155,7 +208,10 @@ export const BarRow: React.FC<{
         </span>
       </div>
       <div className={cx("mt-1.5 h-1.5 overflow-hidden rounded-full bg-fill", rank !== undefined && "ml-6")}>
-        <div className="h-full rounded-full" style={{ width: `${Math.max(2, Math.min(100, fraction * 100))}%`, background: color }} />
+        <div
+          className="h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none"
+          style={{ width: `${Math.max(2, Math.min(100, fraction * 100))}%`, background: color }}
+        />
       </div>
       {sub && <div className={cx("mt-1 truncate text-caption text-label-2", rank !== undefined && "ml-6")}>{sub}</div>}
     </>
@@ -172,7 +228,10 @@ export const BarRow: React.FC<{
 /** Bar kemajuan (utilisasi, rasio). `marker` = garis target 0..1. */
 export const Meter: React.FC<{ fraction: number; color: string; marker?: number; className?: string; label?: string }> = ({ fraction, color, marker, className, label }) => (
   <div className={cx("relative h-2 rounded-full bg-fill", className)} role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fraction * 100)}>
-    <div className="h-full rounded-full" style={{ width: `${Math.max(fraction > 0 ? 2 : 0, Math.min(100, fraction * 100))}%`, background: color }} />
+    <div
+      className="h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none"
+      style={{ width: `${Math.max(fraction > 0 ? 2 : 0, Math.min(100, fraction * 100))}%`, background: color }}
+    />
     {marker !== undefined && <span aria-hidden className="absolute -top-1 -bottom-1 w-[2px] rounded-full bg-label/60" style={{ left: `calc(${Math.min(100, marker * 100)}% - 1px)` }} />}
   </div>
 );

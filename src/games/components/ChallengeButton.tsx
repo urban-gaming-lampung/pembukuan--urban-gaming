@@ -1,5 +1,6 @@
 import React from 'react';
 import { Gamepad2, Lock } from 'lucide-react';
+import { AKSEN_TILE, IconBadge, kartu } from '../../ui';
 
 interface ChallengeButtonProps {
   isAbsenDone: boolean;
@@ -16,35 +17,50 @@ export default function ChallengeButton({
   activeGameName,
   onClick,
 }: ChallengeButtonProps) {
-
   if (isAbsenDone) {
     return (
       <button
+        type="button"
         onClick={onClick}
-        className="group relative flex w-full items-center justify-between overflow-hidden rounded-3xl border border-emerald-400/20 bg-gradient-to-r from-emerald-500 to-green-600 dark:from-emerald-600 dark:to-green-700 p-5 text-white shadow-lg shadow-green-500/20 transition-all duration-200 hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] font-sans"
+        className={`group relative flex w-full items-center justify-between gap-3 overflow-hidden p-4 sm:p-5 text-left font-sans transition-all duration-200 hover:scale-[1.005] active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint/40 ${kartu}`}
         aria-label="Buka Tantangan Game Bulan Ini"
       >
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{ background: AKSEN_TILE.teal.glow }}
+        />
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/40 via-transparent to-transparent dark:from-white/[0.04]"
+        />
         {/* Shimmer animation effect */}
-        <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/10 to-transparent z-10" />
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -translate-x-full group-hover:animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/25 dark:via-white/[0.06] to-transparent z-10"
+        />
 
-        <div className="flex items-center gap-4 relative z-20">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-white backdrop-blur-md shadow-inner">
-            <Gamepad2 className="h-6 w-6 animate-pulse" />
-          </div>
-          <div className="flex flex-col text-left">
-            <span className="font-pixel text-[10px] tracking-wider text-green-100 uppercase opacity-90">
+        <div className="relative z-20 flex min-w-0 items-center gap-3.5">
+          <IconBadge
+            color="teal"
+            className="h-11 w-11 sm:h-12 sm:w-12 rounded-tile [&>svg]:h-5 [&>svg]:w-5"
+          >
+            <Gamepad2 />
+          </IconBadge>
+          <div className="flex min-w-0 flex-col">
+            <span className={`font-pixel text-[9px] sm:text-[10px] tracking-wider uppercase ${AKSEN_TILE.teal.iconText}`}>
               CHALLENGE BULAN INI
             </span>
-            <span className="text-lg font-black tracking-tight mt-0.5 capitalize leading-tight">
+            <span className="text-headline sm:text-title3 font-bold tracking-tight text-label capitalize leading-tight mt-0.5 truncate">
               {activeGameName || 'Loading game...'}
             </span>
           </div>
         </div>
 
-        <div className="flex h-8 items-center gap-1.5 justify-center rounded-xl bg-white/20 px-3 text-xs font-bold backdrop-blur-md relative z-20">
+        <span className="relative z-20 inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-action text-action-label px-4 text-caption font-semibold shadow-sm transition-transform group-hover:scale-[1.02]">
           <span>Mainkan</span>
           <Gamepad2 className="h-3.5 w-3.5" />
-        </div>
+        </span>
       </button>
     );
   }
@@ -52,28 +68,32 @@ export default function ChallengeButton({
   // Disabled state (Employee has not checked-in yet)
   return (
     <div
-      className="relative flex w-full items-center justify-between rounded-3xl border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/50 p-5 text-zinc-400 dark:text-zinc-500 cursor-not-allowed select-none font-sans"
+      className={`relative flex w-full items-center justify-between gap-3 overflow-hidden p-4 sm:p-5 opacity-80 cursor-not-allowed select-none font-sans ${kartu}`}
       aria-disabled="true"
       title="Absen masuk dulu untuk unlock"
     >
-      <div className="flex items-center gap-4">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-600">
-          <Lock className="h-5 w-5" />
-        </div>
-        <div className="flex flex-col text-left">
-          <span className="font-pixel text-[9px] tracking-wider text-zinc-400 dark:text-zinc-600 uppercase">
+      <div className="flex min-w-0 items-center gap-3.5">
+        <IconBadge
+          color="gray"
+          variant="tinted"
+          className="h-11 w-11 sm:h-12 sm:w-12 rounded-tile [&>svg]:h-5 [&>svg]:w-5"
+        >
+          <Lock />
+        </IconBadge>
+        <div className="flex min-w-0 flex-col">
+          <span className="font-pixel text-[9px] tracking-wider text-label-3 uppercase">
             CHALLENGE TERKUNCI
           </span>
-          <span className="text-[14px] font-bold tracking-tight mt-1 text-zinc-500 dark:text-zinc-400 leading-tight">
+          <span className="text-subhead font-semibold tracking-tight mt-0.5 text-label-2 leading-tight truncate">
             Absen masuk dulu untuk unlock
           </span>
         </div>
       </div>
 
-      <div className="flex h-8 items-center gap-1.5 justify-center rounded-xl bg-zinc-200 dark:bg-zinc-800 px-3 text-[11px] font-bold text-zinc-400 dark:text-zinc-600">
+      <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-fill ring-1 ring-edge px-3 text-caption2 font-semibold text-label-3">
         <span>Terkunci</span>
         <Lock className="h-3 w-3" />
-      </div>
+      </span>
     </div>
   );
 }

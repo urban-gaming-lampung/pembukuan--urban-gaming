@@ -1,5 +1,5 @@
 import { useMemo, Suspense, lazy } from "react";
-import Header from "./components/Header";
+import Header, { getColorForEmail } from "./components/Header";
 import Input from "./components/Input";
 import RincianHarian from "./components/RincianHarian";
 import RincianJajanan from "./components/RincianJajanan";
@@ -15,7 +15,7 @@ import GeminiReportGenerator from "./components/GeminiReportGenerator";
 import Reminder from "./components/Reminder";
 import PdfExporter from "./components/PdfExporter";
 import Pengaturan from "./components/Pengaturan";
-import EditRincian from "./components/EditRincian"; 
+import EditRincian from "./components/EditRincian";
 import { sewaItemHint } from "./lib/priceLists";
 import HalamanStok from "./components/HalamanStok";
 import PageOwner from "./components/PageOwner";
@@ -28,10 +28,22 @@ import Login from "./components/Login";
 import versionData from "./version.json";
 import ChallengeButton from "./games/components/ChallengeButton";
 import AdminNotes from "./components/AdminNotes";
-import { Package, AlertCircle, Bot } from "lucide-react";
+import {
+  Activity,
+  AlertCircle,
+  AlertTriangle,
+  BookOpen,
+  Bot,
+  CheckCircle2,
+  Info,
+  LayoutDashboard,
+  Package,
+  Save,
+  User,
+} from "lucide-react";
 import { GAME_NAMES_ID } from "./games/constants";
 import useAppController from "./hooks/useAppController";
-import SubTabs from "./components/common/SubTabs";
+import { AlertDialog, AppShell, Button, IconBadge, type NavItem, type NavSection, SubTabs } from "./ui";
 import { petaWaPenyewa } from "./lib/pengingatSewa";
 import PeringatanSewaHabis from "./components/PeringatanSewaHabis";
 import { totalPemasukanHarian } from "./lib/keuangan";
@@ -204,10 +216,31 @@ export default function App() {
   // Saran isi cepat No. WA penyewa dari riwayat sewa (nama penyewa -> WA terakhir)
   const waPenyewaTerakhir = useMemo(() => petaWaPenyewa(history), [history]);
 
+  const navItems = useMemo<NavItem[]>(() => {
+    const items: NavItem[] = [];
+    if (!isSuperAdminOrOwner) {
+      items.push({ key: "MONITORING", label: "Monitoring", shortLabel: "Monitoring", icon: <Activity />, color: "teal" });
+    } else {
+      items.push({ key: "PAGE OWNER", label: "Dashboard", shortLabel: "Dashboard", icon: <LayoutDashboard />, color: "indigo" });
+    }
+    items.push({ key: "USAHA RENTAL", label: "Pembukuan", shortLabel: "Pembukuan", icon: <BookOpen />, color: "blue" });
+    if (!isSuperAdminOrOwner) {
+      items.push({ key: "UPDATE STOK", label: "Update Stok", shortLabel: "Stok", icon: <Package />, color: "orange" });
+    }
+    return items;
+  }, [isSuperAdminOrOwner]);
+
+  const sidebarSections = useMemo<NavSection[]>(
+    () => [{ title: "Menu Utama", items: navItems }],
+    [navItems]
+  );
+
+  const activeNavLabel = navItems.find((n) => n.key === activeTab)?.label ?? "Pembukuan Digital";
+
   if (authLoading || (user && !userProfileLoaded && !isDeactivated)) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${dark ? 'bg-[#1C1C1E]' : 'bg-canvas'}`}>
-         <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent flex items-center justify-center rounded-full animate-spin"></div>
+      <div className="min-h-screen flex items-center justify-center apple-canvas">
+        <div className="w-10 h-10 border-4 border-tint border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -216,106 +249,120 @@ export default function App() {
     return <Login deactivatedError={isDeactivated ? "Email atau Password salah." : ""} />;
   }
 
+  const namaPendek = user?.email?.split("@")[0] || "User";
+
   return (
     <>
-      <PdfExporter 
-        ref={pdfRef} rootRef={rootRef} dark={dark} 
-        kualitasGambar={kualitasGambar} data={exportData}
+      <PdfExporter
+        ref={pdfRef}
+        rootRef={rootRef}
+        dark={dark}
+        kualitasGambar={kualitasGambar}
+        data={exportData}
         stokData={appStokData.stokState}
         masterCategories={appStokData.masterCategories}
         onStartExport={() => setIsExportingPDF(true)}
         onEndExport={() => setIsExportingPDF(false)}
       />
-      
-      <div 
-         ref={rootRef} 
-         className={`relative min-h-screen ${dark ? '' : 'bg-canvas'}`}
-      >
-        {/* Fixed background layer — Safari-compatible (no bg-fixed) */}
+
+      <div ref={rootRef} className={`relative min-h-screen text-label ${dark ? "bg-black" : "apple-canvas"}`}>
+        {/* Background dark mode: tampil apa adanya tanpa frosted, hanya UI card yang frosted */}
         {dark && (
-          <div 
-            className="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat"
-            style={{ backgroundImage: customBgDark ? `url(${customBgDark})` : "url('/images/bg_dark.jpg')" }}
-            aria-hidden="true"
-          />
-        )}
-        {dark && <div className="fixed inset-0 bg-black/70 pointer-events-none z-0" />}
-        
-        <div className="relative z-10 text-zinc-900 dark:text-zinc-100">
-          <Header
-              rootRef={rootRef} tanggal={tanggal}
-              onSharePDF={handleShareCheck}
-              onOpenSettings={() => setOpenSettings(true)}
-              onOpenScan={handleOpenScan}
-              onOpenPOS={() => setOpenPOS(true)}
-              onOpenGallery={() => setOpenGallery(true)}
-              isSuperAdminOrOwner={isSuperAdminOrOwner}
-              hasData={hasData} mandatoryFilled={mandatoryFilled}
-              isEditing={!!editingId}
-              hasUnsavedChanges={currentFormSignature !== savedSignature}
-              onSaveEdit={updatePencatatan} onAddData={addPencatatan} 
-              onCancelEdit={() => window.location.reload()}
-              userEmail={user?.email}
-              userProfilePic={userProfilePic || undefined}
-              activeUsers={activeUsers}
-              hasPOSUpdate={hasPOSUpdate}
+          <>
+            <div
+              className="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat pointer-events-none"
+              style={{
+                backgroundImage: `url("${customBgDark || `${import.meta.env.BASE_URL}images/bg_dark.jpg`}")`,
+              }}
+              aria-hidden="true"
             />
-          
-          <main className="mx-auto max-w-6xl px-4 md:px-8 pb-24 space-y-6" style={{ paddingTop: 'calc(var(--app-header-height, 200px) + 16px)' }}>
-            {/* TABS PENGATURAN HALAMAN */}
-            <div className="flex w-full mb-8 bg-zinc-100/80 dark:bg-[#1C1C1E]/80 p-1 rounded-[14px] ring-1 ring-zinc-200/50 dark:ring-white/5 backdrop-blur-sm relative z-30 gap-1">
-              {!isSuperAdminOrOwner && (
-                <button
-                  onClick={() => setActiveTab("MONITORING")}
-                  className={`flex-1 py-2.5 text-[13px] sm:text-sm font-bold tracking-wide rounded-[10px] transition-all duration-300 flex justify-center items-center ${
-                    activeTab === "MONITORING"
-                      ? "bg-white dark:bg-[#2C2C2E] text-teal-600 dark:text-teal-400 shadow-sm ring-1 ring-black/5 dark:ring-white/10"
-                      : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/5"
-                  }`}
-                  style={activeTab === "MONITORING" && userProfileColor ? { color: userProfileColor } : undefined}
-                >
-                  MONITORING
-                </button>
-              )}
-              {isSuperAdminOrOwner && (
-                <button
-                  onClick={() => setActiveTab("PAGE OWNER")}
-                  className={`flex-1 py-2.5 text-[13px] sm:text-sm font-bold tracking-wide rounded-[10px] transition-all duration-300 flex justify-center items-center ${
-                    activeTab === "PAGE OWNER"
-                      ? "bg-white dark:bg-[#2C2C2E] text-purple-600 dark:text-purple-400 shadow-sm ring-1 ring-black/5 dark:ring-white/10"
-                      : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/5"
-                  }`}
-                  style={activeTab === "PAGE OWNER" && userProfileColor ? { color: userProfileColor } : undefined}
-                >
-                  PAGE OWNER
-                </button>
-              )}
-              <button
-                onClick={() => setActiveTab("USAHA RENTAL")}
-                className={`flex-1 py-2.5 text-[13px] sm:text-sm font-bold tracking-wide rounded-[10px] transition-all duration-300 flex justify-center items-center ${
-                  activeTab === "USAHA RENTAL"
-                    ? "bg-white dark:bg-[#2C2C2E] text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-black/5 dark:ring-white/10"
-                    : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/5"
-                }`}
-                style={activeTab === "USAHA RENTAL" && userProfileColor ? { color: userProfileColor } : undefined}
-              >
-                USAHA RENTAL
-              </button>
-              {/* Super admin memakai Page Owner › STOK; tab ini khusus admin */}
-              {!isSuperAdminOrOwner && (
-              <button
-                onClick={() => setActiveTab("UPDATE STOK")}
-                className={`flex-1 py-2.5 text-[13px] sm:text-sm font-bold tracking-wide rounded-[10px] transition-all duration-300 flex justify-center items-center ${
-                  activeTab === "UPDATE STOK"
-                    ? "bg-white dark:bg-[#2C2C2E] text-orange-600 dark:text-orange-400 shadow-sm ring-1 ring-black/5 dark:ring-white/10"
-                    : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-black/5 dark:hover:bg-white/5"
-                }`}
-                style={activeTab === "UPDATE STOK" && userProfileColor ? { color: userProfileColor } : undefined}
-              >
-                UPDATE STOK
-              </button>
-              )}
-            </div>
+            <div className="fixed inset-0 bg-black/60 pointer-events-none z-0" aria-hidden="true" />
+          </>
+        )}
+
+        <div className="relative z-10">
+          <AppShell
+            activeKey={activeTab}
+            onSelectKey={(k) => setActiveTab(k as typeof activeTab)}
+            sidebarSections={sidebarSections}
+            mobileTabs={navItems}
+            sidebarHeader={
+              <div className="flex items-center gap-3 p-2.5 rounded-tile bg-fill/60 border border-sep">
+                <div className="w-10 h-10 rounded-full bg-surface-elevated ring-1 ring-edge overflow-hidden flex items-center justify-center shrink-0">
+                  {userProfilePic ? (
+                    <img src={userProfilePic} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="w-4 h-4 text-label-2" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-subhead font-semibold text-label truncate">Hi, {namaPendek}</div>
+                  <div className="text-caption2 text-label-2 truncate">URBAN Gaming · Pembukuan</div>
+                </div>
+              </div>
+            }
+            sidebarFooter={
+              <div className="space-y-2.5">
+                {activeUsers && activeUsers.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="text-caption2 font-semibold uppercase tracking-wider text-label-3 px-0.5">
+                      User Aktif (Live)
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {activeUsers.map((u) => {
+                        const customStyle = u.profileColor ? { backgroundColor: u.profileColor } : undefined;
+                        const defaultCls = u.profileColor ? "" : getColorForEmail(u.email);
+                        return (
+                          <span
+                            key={u.uid}
+                            style={customStyle}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold text-white uppercase tracking-wide ${defaultCls}`}
+                            title={`Sedang aktif di tab: ${u.tab}`}
+                          >
+                            <span className="max-w-[110px] truncate">
+                              {u.email === user?.email ? "Saya" : u.email.split("@")[0]}
+                            </span>
+                            {u.tab === "UPDATE STOK" && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shrink-0" />
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-center justify-between text-caption2 font-mono text-label-3 px-0.5">
+                  <span>URBAN PS</span>
+                  <span>V{versionData.version}</span>
+                </div>
+              </div>
+            }
+            topBar={
+              <Header
+                rootRef={rootRef}
+                tanggal={tanggal}
+                sectionTitle={activeNavLabel}
+                onSharePDF={handleShareCheck}
+                onOpenSettings={() => setOpenSettings(true)}
+                onOpenScan={handleOpenScan}
+                onOpenPOS={() => setOpenPOS(true)}
+                onOpenGallery={() => setOpenGallery(true)}
+                isSuperAdminOrOwner={isSuperAdminOrOwner}
+                hasData={hasData}
+                mandatoryFilled={mandatoryFilled}
+                isEditing={!!editingId}
+                hasUnsavedChanges={currentFormSignature !== savedSignature}
+                onSaveEdit={updatePencatatan}
+                onAddData={addPencatatan}
+                onCancelEdit={() => window.location.reload()}
+                userEmail={user?.email}
+                userProfilePic={userProfilePic || undefined}
+                activeUsers={activeUsers}
+                hasPOSUpdate={hasPOSUpdate}
+              />
+            }
+            floatingTopBar
+          >
 
             {activeTab === "PAGE OWNER" && isSuperAdminOrOwner ? (
               <PageOwner
@@ -374,7 +421,7 @@ export default function App() {
             ) : activeTab === "UPDATE STOK" && !isSuperAdminOrOwner ? (
               <HalamanStok isOwner={false} tampilJajanan={rincianVisibility.jajanan !== false} />
             ) : (
-              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out fill-mode-both">
+              <div className="space-y-5 sm:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out fill-mode-both">
                 <div id="section-input">
               <Input
                 tanggal={tanggal} setTanggal={setTanggal} hari={hari} setHari={setHari}
@@ -418,7 +465,7 @@ export default function App() {
               />
             </div>
             
-            <div id="section-rincian" className="space-y-6">
+            <div id="section-rincian" className="space-y-5 sm:space-y-6">
               <ChallengeButton
                 isAbsenDone={absenPagi !== "" || isSuperAdminOrOwner}
                 activeGameName={gameConfig ? (GAME_NAMES_ID[gameConfig.activeGame] || gameConfig.activeGame) : ""}
@@ -434,7 +481,7 @@ export default function App() {
               {rincianVisibility.jasaAks !== false && <RincianJasaAksesoris rows={rowsJasaAks} setRows={setRowsJasaAks} blank={{ ...blankJasaAks }} hargaItems={hargaJasaAks} isMobileTable={isMobileTable} barisNota={barisNotaJasa} notaBarang={notaBarangHari} salesNota={salesNotaHari} />}
               {rincianVisibility.sewa !== false && <RincianSewa rows={rowsSewa} setRows={setRowsSewa} blank={newBlankSewa()} hargaItems={hargaSewa} userEmail={user?.email} isMobileTable={isMobileTable} tanggal={tanggal} waTerakhir={waPenyewaTerakhir} />}
             </div>
-            <div className="space-y-6">
+            <div className="space-y-5 sm:space-y-6">
               {rincianVisibility.pengeluaran !== false && <div id="section-pengeluaran">
                  <RincianPengeluaran 
                     rows={rowsPengeluaran} setRows={setRowsPengeluaran} 
@@ -453,7 +500,7 @@ export default function App() {
               </div>}
             </div>
             
-            <div id="section-rekap" className="pt-2">
+            <div id="section-rekap">
               <RekapPemasukan
                 totalHarian={totalHarian} totalJajanan={totalJajanan}
                 totalJasaAks={totalJasaAks} totalSewa={totalSewa}
@@ -471,7 +518,7 @@ export default function App() {
               />
             )}
             
-            <div id="section-history" className="pt-2">
+            <div id="section-history">
               <HistoryPembukuan
                 items={filteredHistory}
                 onEdit={editHistoryItem} onDelete={deleteHistoryItem}
@@ -485,8 +532,8 @@ export default function App() {
               </div>
             )}
             <Footer />
-          </main>
-          
+          </AppShell>
+
           <EditRincian
             isOpen={!!openEditRincian}
             title={getTitle(openEditRincian)}
@@ -543,68 +590,67 @@ export default function App() {
             adminName={user?.email ? user.email.split('@')[0] : "Super Admin"}
           />
 
-          {/* === POPUPS: APPLE UI STYLE === */}
-          {triggeredAssistants.length > 0 && (
-            <div className="fixed inset-0 z-[501] flex items-center justify-center p-6 font-sans">
-              <div className="absolute inset-0 bg-black/70 backdrop-blur-[6px] pointer-events-auto" />
-              <div className="relative w-full max-w-[320px] overflow-hidden rounded-[24px] bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-xl shadow-2xl ring-1 ring-black/10 dark:ring-white/10 animate-in zoom-in-90 duration-300">
-                <div className="p-6 text-center flex flex-col items-center w-full">
-                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-cyan-100 text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-400 ring-4 ring-cyan-500/10">
-                     <Bot className="w-8 h-8 animate-bounce" />
-                  </div>
-                  <h3 className="text-[19px] font-black text-zinc-900 dark:text-white mb-2 leading-tight tracking-tight">Rekomendasi Asisten</h3>
-                  <p className="text-[13px] leading-relaxed text-zinc-600 dark:text-zinc-400 mb-4">
-                    Hari ini tanggal <strong className="text-zinc-900 dark:text-white">{triggeredAssistants[0].tanggal}</strong>, asisten mendeteksi jadwal pengeluaran rutin Anda:
+          {/* === POPUPS: UDS APPLE HIG === */}
+          <AlertDialog
+            open={triggeredAssistants.length > 0}
+            onClose={() => {}}
+            dismissible={false}
+            zClassName="z-[501]"
+            icon={<Bot />}
+            iconColor="cyan"
+            title="Rekomendasi Asisten"
+            description={
+              triggeredAssistants[0] ? (
+                <div className="space-y-3">
+                  <p>
+                    Hari ini tanggal <strong className="font-semibold text-label">{triggeredAssistants[0].tanggal}</strong>, asisten mendeteksi jadwal pengeluaran rutin Anda:
                   </p>
-                  <div className="w-full bg-zinc-50 dark:bg-zinc-800/40 p-4 rounded-2xl text-left border border-zinc-200/50 dark:border-white/5 space-y-1">
-                    <div className="font-bold text-[15px] text-zinc-900 dark:text-white leading-tight">
+                  <div className="w-full rounded-tile bg-fill border border-sep p-3.5 text-left space-y-1">
+                    <div className="font-semibold text-subhead text-label leading-tight">
                       {triggeredAssistants[0].nama_pengeluaran}
                     </div>
-                    <div className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                    <div className="text-caption2 font-semibold text-label-3 uppercase tracking-wider">
                       Kategori: {triggeredAssistants[0].kategori || "Lainnya"}
                     </div>
                     {triggeredAssistants[0].nominal ? (
-                      <div className="text-[16px] font-black text-cyan-600 dark:text-cyan-400 pt-1">
+                      <div className="text-callout font-bold text-tint tabular-nums pt-0.5">
                         {rupiah(Number(triggeredAssistants[0].nominal))}
                       </div>
                     ) : null}
                   </div>
                 </div>
-                <div className="flex border-t border-gray-200/50 dark:border-white/10 divide-x divide-gray-200/50 dark:divide-white/10">
-                  <button 
-                    onClick={() => handleDismissAssistant(triggeredAssistants[0].id)} 
-                    className="flex-1 py-4 text-[14px] font-bold text-zinc-500 dark:text-zinc-400 bg-white/50 dark:bg-black/20 hover:bg-zinc-50 dark:hover:bg-white/5 transition-colors"
-                  >
-                    LEWATI
-                  </button>
-                  <button 
-                    onClick={() => handleRunAssistant(triggeredAssistants[0])} 
-                    className="flex-1 py-4 text-[14px] font-bold text-cyan-600 dark:text-cyan-400 bg-white/50 dark:bg-black/20 hover:bg-cyan-50 dark:hover:bg-cyan-500/10 transition-colors"
-                  >
-                    SIMPAN
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+              ) : null
+            }
+            actions={
+              triggeredAssistants[0]
+                ? [
+                    {
+                      label: "Lewati",
+                      role: "cancel",
+                      onClick: () => handleDismissAssistant(triggeredAssistants[0].id),
+                    },
+                    {
+                      label: "Simpan",
+                      role: "primary",
+                      onClick: () => handleRunAssistant(triggeredAssistants[0]),
+                    },
+                  ]
+                : []
+            }
+          />
 
-          {showUnsavedAlert && (
-            <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 font-sans">
-              <div className="absolute inset-0 bg-black/20 dark:bg-black/50 backdrop-blur-[2px] transition-opacity" onClick={() => setShowUnsavedAlert(false)} />
-              <div className="relative w-full max-w-[280px] sm:max-w-[320px] overflow-hidden rounded-[20px] bg-white/90 dark:bg-[#1C1C1E]/95 backdrop-blur-xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-in zoom-in-95 duration-200">
-                <div className="p-6 text-center">
-                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400">
-                     <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/><line x1="12" y1="17" x2="12" y2="17"/></svg>
-                  </div>
-                  <h3 className="text-[17px] font-semibold text-zinc-900 dark:text-white mb-1">Data Belum Disimpan</h3>
-                  <p className="text-[13px] leading-relaxed text-zinc-500 dark:text-zinc-400">Anda memiliki perubahan yang belum disimpan. Mohon simpan data terlebih dahulu sebelum membagikan PDF.</p>
-                </div>
-                <div className="grid grid-cols-1 border-t border-gray-300/30 dark:border-white/10">
-                  <button onClick={() => setShowUnsavedAlert(false)} className="w-full py-3.5 text-[15px] font-semibold text-blue-500 hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors active:bg-zinc-200 dark:active:bg-white/10">Oke, Mengerti</button>
-                </div>
-              </div>
-            </div>
-          )}
+          <AlertDialog
+            open={showUnsavedAlert}
+            onClose={() => setShowUnsavedAlert(false)}
+            zClassName="z-[300]"
+            icon={<Save />}
+            iconColor="orange"
+            title="Data Belum Disimpan"
+            description="Anda memiliki perubahan yang belum disimpan. Mohon simpan data terlebih dahulu sebelum membagikan PDF."
+            actions={[
+              { label: "Oke, Mengerti", role: "primary", onClick: () => setShowUnsavedAlert(false) },
+            ]}
+          />
 
           <PeringatanSewaHabis
             items={unverifiedRentals}
@@ -614,57 +660,53 @@ export default function App() {
             onPengingat={handleCatatPengingat}
           />
 
-          {paymentVerifyPrompt && (
-            <div className="fixed inset-0 z-[501] flex items-center justify-center p-6 font-sans">
-              <div className="absolute inset-0 bg-black/70 backdrop-blur-[6px] pointer-events-auto" />
-              <div className="relative w-full max-w-[320px] overflow-hidden rounded-[24px] bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-xl shadow-2xl ring-1 ring-black/10 dark:ring-white/10 animate-in zoom-in-90 duration-300">
-                <div className="p-6 text-center flex flex-col items-center">
-                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 ring-4 ring-orange-500/10">
-                     <AlertCircle className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-[19px] font-black text-zinc-900 dark:text-white mb-2 leading-tight tracking-tight">Status Pembayaran?</h3>
-                  <p className="text-[14px] leading-relaxed text-zinc-600 dark:text-zinc-400 mb-4">
-                    Penyewa <strong className="text-blue-600 dark:text-blue-400">{paymentVerifyPrompt.namaPenyewa}</strong> sebelumnya ditandai <strong className="text-red-500">BELUM BAYAR</strong>. Apakah penyewa sudah bayar?
-                  </p>
-                </div>
-                <div className="flex border-t border-gray-200/50 dark:border-white/10 divide-x divide-gray-200/50 dark:divide-white/10">
-                  <button 
-                    onClick={handlePaymentVerifyNo} 
-                    className="flex-1 py-4 text-[14px] font-bold text-red-600 dark:text-red-400 bg-white/50 dark:bg-black/20 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
-                  >
-                    TIDAK
-                  </button>
-                  <button 
-                    onClick={handlePaymentVerifyYes} 
-                    className="flex-1 py-4 text-[14px] font-bold text-emerald-600 dark:text-emerald-500 bg-white/50 dark:bg-black/20 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
-                  >
-                    YA
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          <AlertDialog
+            open={!!paymentVerifyPrompt}
+            onClose={() => {}}
+            dismissible={false}
+            zClassName="z-[501]"
+            icon={<AlertCircle />}
+            iconColor="orange"
+            title="Status Pembayaran?"
+            description={
+              paymentVerifyPrompt ? (
+                <>
+                  Penyewa <strong className="font-semibold text-label">{paymentVerifyPrompt.namaPenyewa}</strong> sebelumnya ditandai{" "}
+                  <strong className="font-semibold text-negative">BELUM BAYAR</strong>. Apakah penyewa sudah bayar?
+                </>
+              ) : null
+            }
+            actions={[
+              { label: "Tidak", role: "destructive", onClick: handlePaymentVerifyNo },
+              { label: "Ya", role: "primary", onClick: handlePaymentVerifyYes },
+            ]}
+          />
 
           {showStokConfirmation && (
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[400] w-[90%] max-w-[400px] animate-in slide-in-from-bottom-10 fade-in duration-300">
-              <div className="bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-xl rounded-[24px] p-5 shadow-2xl ring-1 ring-black/5 dark:ring-white/10 flex flex-col items-center text-center gap-4">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400">
-                  <Package className="w-6 h-6" />
-                </div>
-                <p className="text-[15px] font-bold text-zinc-900 dark:text-white leading-snug">
-                  TOLONG DI CEK LAGI STOK NYA,<br/>APAKAH UPDATE STOK SUDAH SESUAI?
+            <div className="fixed bottom-[calc(86px+env(safe-area-inset-bottom))] md:bottom-6 left-1/2 -translate-x-1/2 z-[400] w-[92%] max-w-[380px] animate-in slide-in-from-bottom-6 fade-in duration-200">
+              <div className="apple-glass rounded-sheet p-5 shadow-float ring-1 ring-black/10 dark:ring-white/15 flex flex-col items-center text-center gap-3.5">
+                <IconBadge color="orange" variant="tinted" className="h-12 w-12 rounded-full [&>svg]:h-6 [&>svg]:w-6">
+                  <Package />
+                </IconBadge>
+                <p className="text-subhead font-semibold text-label leading-snug">
+                  Tolong dicek lagi stoknya, apakah update stok sudah sesuai?
                 </p>
-                <div className="flex gap-3 w-full mt-1">
-                  <button
+                <div className="flex gap-2.5 w-full">
+                  <Button
+                    variant="gray"
+                    size="md"
+                    className="flex-1"
                     onClick={() => {
                       setShowStokConfirmation(false);
                       setShowRecheckAlert(true);
                     }}
-                    className="flex-1 py-3 text-[14px] font-bold text-zinc-600 dark:text-zinc-300 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded-xl transition-colors"
                   >
-                    TIDAK
-                  </button>
-                  <button
+                    Tidak
+                  </Button>
+                  <Button
+                    variant="filled"
+                    size="md"
+                    className="flex-1"
                     onClick={() => {
                       setShowStokConfirmation(false);
                       setActiveTab("USAHA RENTAL");
@@ -672,92 +714,69 @@ export default function App() {
                         pdfRef.current?.share();
                       }, 300);
                     }}
-                    className="flex-1 py-3 text-[14px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors shadow-md shadow-blue-500/20"
                   >
-                    YA
-                  </button>
+                    Ya
+                  </Button>
                 </div>
               </div>
             </div>
           )}
 
-          {showRecheckAlert && (
-            <div className="fixed inset-0 z-[500] flex items-center justify-center p-6 font-sans">
-              <div className="absolute inset-0 bg-black/20 dark:bg-black/50 backdrop-blur-[2px] transition-opacity" onClick={() => setShowRecheckAlert(false)} />
-              <div className="relative w-full max-w-[280px] sm:max-w-[320px] overflow-hidden rounded-[20px] bg-white/90 dark:bg-[#1C1C1E]/95 backdrop-blur-xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-in zoom-in-95 duration-200">
-                <div className="p-6 text-center">
-                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
-                     <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                  </div>
-                  <h3 className="text-[17px] font-semibold text-zinc-900 dark:text-white mb-1">Silakan Di Cek Lagi</h3>
-                  <p className="text-[13px] leading-relaxed text-zinc-500 dark:text-zinc-400">Pastikan stok barang Anda sudah diperbarui dengan benar sebelum menghasilkan Laporan PDF.</p>
-                </div>
-                <div className="grid grid-cols-1 border-t border-gray-300/30 dark:border-white/10">
-                  <button onClick={() => setShowRecheckAlert(false)} className="w-full py-3.5 text-[15px] font-semibold text-blue-500 hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors active:bg-zinc-200 dark:active:bg-white/10">Baik</button>
-                </div>
-              </div>
-            </div>
-          )}
+          <AlertDialog
+            open={showRecheckAlert}
+            onClose={() => setShowRecheckAlert(false)}
+            zClassName="z-[500]"
+            icon={<Info />}
+            iconColor="blue"
+            title="Silakan Dicek Lagi"
+            description="Pastikan stok barang Anda sudah diperbarui dengan benar sebelum menghasilkan Laporan PDF."
+            actions={[
+              { label: "Baik", role: "primary", onClick: () => setShowRecheckAlert(false) },
+            ]}
+          />
 
-          {validationAlert && (
-            <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 font-sans">
-              <div className="absolute inset-0 bg-black/20 dark:bg-black/50 backdrop-blur-[2px] transition-opacity" onClick={() => setValidationAlert(null)} />
-              <div className="relative w-full max-w-[280px] sm:max-w-[320px] overflow-hidden rounded-[20px] bg-white/90 dark:bg-[#1C1C1E]/95 backdrop-blur-xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-in zoom-in-95 duration-200">
-                <div className="p-6 text-center">
-                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400">
-                     <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                  </div>
-                  <h3 className="text-[17px] font-semibold text-zinc-900 dark:text-white mb-1">{validationAlert.title}</h3>
-                  <p className="text-[13px] leading-relaxed text-zinc-500 dark:text-zinc-400">
-                    {validationAlert.message}
-                  </p>
-                </div>
-                <div className="grid grid-cols-1 border-t border-gray-300/30 dark:border-white/10">
-                  <button onClick={() => setValidationAlert(null)} className="w-full py-3.5 text-[15px] font-semibold text-red-500 hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors active:bg-zinc-200 dark:active:bg-white/10">Siap, Dicek</button>
-                </div>
-              </div>
-            </div>
-          )}
+          <AlertDialog
+            open={!!validationAlert}
+            onClose={() => setValidationAlert(null)}
+            zClassName="z-[300]"
+            icon={<AlertCircle />}
+            iconColor="red"
+            title={validationAlert?.title ?? ""}
+            description={validationAlert?.message}
+            actions={[
+              { label: "Siap, Dicek", role: "primary", onClick: () => setValidationAlert(null) },
+            ]}
+          />
 
-          {showSuccessAlert && (
-            <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 font-sans">
-              <div className="absolute inset-0 bg-black/20 dark:bg-black/50 backdrop-blur-[2px] transition-opacity" onClick={() => setShowSuccessAlert(false)} />
-              <div className="relative w-full max-w-[280px] sm:max-w-[320px] overflow-hidden rounded-[20px] bg-white/90 dark:bg-[#1C1C1E]/95 backdrop-blur-xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-in zoom-in-95 duration-200">
-                <div className="p-6 text-center">
-                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400">
-                     <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                  </div>
-                  <h3 className="text-[17px] font-semibold text-zinc-900 dark:text-white mb-1">Berhasil</h3>
-                  <p className="text-[13px] leading-relaxed text-zinc-500 dark:text-zinc-400">{successMessage}</p>
-                </div>
-                <div className="grid grid-cols-1 border-t border-gray-300/30 dark:border-white/10">
-                  <button onClick={() => setShowSuccessAlert(false)} className="w-full py-3.5 text-[15px] font-semibold text-green-500 hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors active:bg-zinc-200 dark:active:bg-white/10">Tutup</button>
-                </div>
-              </div>
-            </div>
-          )}
+          <AlertDialog
+            open={showSuccessAlert}
+            onClose={() => setShowSuccessAlert(false)}
+            zClassName="z-[300]"
+            icon={<CheckCircle2 />}
+            iconColor="green"
+            title="Berhasil"
+            description={successMessage}
+            actions={[
+              { label: "Tutup", role: "primary", onClick: () => setShowSuccessAlert(false) },
+            ]}
+          />
 
-          {showDuplicateDateAlert && (
-            <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 font-sans">
-              <div className="absolute inset-0 bg-black/20 dark:bg-black/50 backdrop-blur-[2px] transition-opacity" onClick={() => setShowDuplicateDateAlert(false)} />
-              <div className="relative w-full max-w-[280px] sm:max-w-[320px] overflow-hidden rounded-[20px] bg-white/90 dark:bg-[#1C1C1E]/95 backdrop-blur-xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-in zoom-in-95 duration-200">
-                <div className="p-6 text-center">
-                  <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400">
-                     <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                  </div>
-                  <h3 className="text-[17px] font-semibold text-zinc-900 dark:text-white mb-1">Tanggal Sudah Terdaftar</h3>
-                  <p className="text-[13px] leading-relaxed text-zinc-500 dark:text-zinc-400">Data pembukuan untuk tanggal {tanggal} sudah ada di history. Pilih tanggal lain atau edit data lama di tabel history di bawah.</p>
-                </div>
-                <div className="grid grid-cols-1 border-t border-gray-300/30 dark:border-white/10">
-                  <button onClick={() => setShowDuplicateDateAlert(false)} className="w-full py-3.5 text-[15px] font-semibold text-blue-500 hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors active:bg-zinc-200 dark:active:bg-white/10">Oke, Mengerti</button>
-                </div>
-              </div>
-            </div>
-          )}
+          <AlertDialog
+            open={showDuplicateDateAlert}
+            onClose={() => setShowDuplicateDateAlert(false)}
+            zClassName="z-[300]"
+            icon={<AlertTriangle />}
+            iconColor="red"
+            title="Tanggal Sudah Terdaftar"
+            description={`Data pembukuan untuk tanggal ${tanggal} sudah ada di history. Pilih tanggal lain atau edit data lama di tabel history di bawah.`}
+            actions={[
+              { label: "Oke, Mengerti", role: "primary", onClick: () => setShowDuplicateDateAlert(false) },
+            ]}
+          />
 
-          {/* APP VERSION INDICATOR */}
-          <div className="fixed bottom-4 right-4 z-40 bg-zinc-950/70 text-zinc-400 text-[10px] font-mono px-2 py-1 rounded-md pointer-events-none tracking-wider">
-             BUILD V{versionData.version}
+          {/* APP VERSION INDICATOR MOBILE */}
+          <div className="md:hidden fixed bottom-[calc(84px+env(safe-area-inset-bottom))] right-3 z-30 text-caption2 font-mono text-label-3 pointer-events-none">
+            V{versionData.version}
           </div>
 
           <LiveCursors users={activeUsers} currentUserEmail={user?.email || ""} />

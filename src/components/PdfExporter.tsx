@@ -1,4 +1,5 @@
 import React, { forwardRef, useImperativeHandle, useRef, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { 
@@ -96,8 +97,8 @@ const AppleChart = ({ history }: { history: HistoryItem[] }) => {
                 const isToday = i === chartData.length - 1;
                 return (
                     <g key={i}>
-                        <rect x={x} y={y} width={barWidth} height={barHeight} rx="6" fill={isToday ? "#2563eb" : "#e4e4e7"} />
-                        <text x={x + barWidth / 2} y={y - 8} textAnchor="middle" fontSize="14" fontWeight="bold" fill={isToday ? "#2563eb" : "#71717a"}>{rpShort(d.value)}</text>
+                        <rect x={x} y={y} width={barWidth} height={barHeight} rx="6" fill={isToday ? "#0088FF" : "#E5E5EA"} />
+                        <text x={x + barWidth / 2} y={y - 8} textAnchor="middle" fontSize="14" fontWeight="bold" fill={isToday ? "#0088FF" : "#8E8E93"}>{rpShort(d.value)}</text>
                         <text x={x + barWidth / 2} y={height} textAnchor="middle" fontSize="12" fontWeight="500" fill="#a1a1aa">{d.label}</text>
                     </g>
                 );
@@ -128,11 +129,11 @@ const AppleReportTemplate = forwardRef<HTMLDivElement, { data: Props['data'] }>(
         </div>
         <div className="p-6 bg-zinc-50 rounded-2xl border border-zinc-100">
           <p className="text-zinc-500 text-sm font-semibold uppercase tracking-wider mb-1">Cash</p>
-          <p className="text-3xl font-bold text-emerald-600">{rupiah(data.totalCash)}</p>
+          <p className="text-3xl font-bold text-[#008932]">{rupiah(data.totalCash)}</p>
         </div>
         <div className="p-6 bg-zinc-50 rounded-2xl border border-zinc-100">
           <p className="text-zinc-500 text-sm font-semibold uppercase tracking-wider mb-1">Transfer / QRIS</p>
-          <p className="text-3xl font-bold text-blue-600">{rupiah(data.totalTransfer)}</p>
+          <p className="text-3xl font-bold text-[#0088FF]">{rupiah(data.totalTransfer)}</p>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-8 mb-8 text-sm text-zinc-600 border-b border-zinc-100 pb-6">
@@ -167,7 +168,7 @@ const AppleReportTemplate = forwardRef<HTMLDivElement, { data: Props['data'] }>(
              <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-zinc-400 border-b border-zinc-100">
-                    <th className="pb-2 font-normal">Tanggal</th><th className="pb-2 font-normal">Hari</th><th className="pb-2 text-right font-normal">Total</th><th className="pb-2 text-right font-normal text-emerald-500">Cash</th><th className="pb-2 text-right font-normal text-violet-500">TF</th>
+                    <th className="pb-2 font-normal">Tanggal</th><th className="pb-2 font-normal">Hari</th><th className="pb-2 text-right font-normal">Total</th><th className="pb-2 text-right font-normal text-[#008932]">Cash</th><th className="pb-2 text-right font-normal text-[#CB30E0]">TF</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-50">
@@ -441,40 +442,36 @@ const PdfExporter = forwardRef<PdfExporterHandle, Props>(function PdfExporter({ 
         <AppleReportTemplate ref={appleReportRef} data={data} />
       </div>
       
-      {isGenerating && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+      {isGenerating && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" role="dialog" aria-modal="true">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative w-full max-w-sm bg-white dark:bg-[#1C1C1E] rounded-[28px] p-8 shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200 ring-1 ring-black/5 dark:ring-white/10">
-             
-             {/* Animasi Ikon PDF */}
-             <div className="w-16 h-16 mb-6 relative flex items-center justify-center bg-blue-50 dark:bg-blue-500/10 rounded-2xl">
-                <svg className="w-8 h-8 text-blue-600 dark:text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/>
-                </svg>
-             </div>
-             
-             <h3 className="text-[19px] font-bold text-zinc-900 dark:text-white mb-2">Memproses PDF</h3>
-             <p className="text-[14px] font-medium text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-[260px] mx-auto mb-6 h-10 flex items-center justify-center">
-                 {loadingText}
-             </p>
+          <div className="relative w-full max-w-sm apple-glass rounded-card p-7 shadow-float flex flex-col items-center text-center animate-in zoom-in-95 duration-200 ring-1 ring-black/10 dark:ring-white/15">
+            <div className="w-14 h-14 mb-5 flex items-center justify-center rounded-tile bg-tint/15 text-tint">
+              <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/>
+              </svg>
+            </div>
 
-             {/* Progress Bar Container */}
-             <div className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-full h-3.5 mb-2 overflow-hidden shadow-inner ring-1 ring-inset ring-black/5 dark:ring-white/5 p-0.5 relative">
-                <div 
-                   className="bg-blue-600 dark:bg-blue-500 h-full rounded-full transition-all duration-300 ease-out relative overflow-hidden" 
-                   style={{ width: `${progress}%` }}
-                >
-                    <div className="absolute top-0 right-0 bottom-0 left-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]"></div>
-                </div>
-             </div>
-             
-             {/* Percentage Text */}
-             <div className="text-[13px] font-bold text-blue-600 dark:text-blue-400 font-mono tracking-wider">
-                 {progress}%
-             </div>
-             
+            <h3 className="text-title3 font-bold text-label mb-1.5">Memproses PDF</h3>
+            <p className="text-footnote font-medium text-label-2 leading-relaxed max-w-[260px] mx-auto mb-5 min-h-[40px] flex items-center justify-center">
+              {loadingText}
+            </p>
+
+            <div className="w-full bg-fill rounded-full h-3 mb-2 overflow-hidden ring-1 ring-inset ring-edge p-0.5 relative">
+              <div
+                className="bg-tint h-full rounded-full transition-all duration-300 ease-out relative overflow-hidden"
+                style={{ width: `${progress}%` }}
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]" />
+              </div>
+            </div>
+
+            <div className="text-caption font-bold text-tint font-mono tabular-nums tracking-wider">
+              {progress}%
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

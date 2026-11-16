@@ -1,5 +1,6 @@
 import { mergeSalaryEdits, runSalaryTransaction } from "../lib/salaryPersistence";
 import React, { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { collection, doc, onSnapshot, setDoc, deleteDoc, getDocs, serverTimestamp } from "firebase/firestore";
 import { db, firebaseConfig } from "../lib/firebase";
 import { initializeApp, getApps } from "firebase/app";
@@ -174,7 +175,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         role: newRole,
         status: "aktif",
         createdAt: serverTimestamp(),
-        profileColor: "#3b82f6",
+        profileColor: "#0088FF",
         photoUrl: null
       });
 
@@ -489,7 +490,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
          if (u.status === "nonaktif") return; // Akun yang dicoret tidak dimasukkan
          const k = u.id.toLowerCase().trim();
          if (k.includes("fauzanazim56")) return;
-         mergedMap.set(k, { email: u.id, photoUrl: u.photoUrl || null, profileColor: u.profileColor || "#3b82f6", loginsCount: 0, records: [], cutoffDay: getEmployeeCutoff(u.id) });
+         mergedMap.set(k, { email: u.id, photoUrl: u.photoUrl || null, profileColor: u.profileColor || "#0088FF", loginsCount: 0, records: [], cutoffDay: getEmployeeCutoff(u.id) });
       }
     });
 
@@ -752,7 +753,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
         const up = usersProfile.find(u => u.id?.toLowerCase().trim() === p.email?.toLowerCase().trim());
         if (up) {
             p.photoUrl = up.photoUrl || p.photoUrl || null;
-            p.profileColor = up.profileColor || p.profileColor || "#3b82f6";
+            p.profileColor = up.profileColor || p.profileColor || "#0088FF";
         }
         p.cutoffDay = getEmployeeCutoff(p.email);
         if (!p.records) p.records = [];
@@ -957,7 +958,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
              name: email.split("@")[0],
              total,
              photoUrl: profile?.photoUrl || null,
-             profileColor: profile?.profileColor || "#3b82f6"
+             profileColor: profile?.profileColor || "#0088FF"
          };
      }).sort((a, b) => b.total - a.total);
   }, [history, ongkirStart, ongkirEnd, usersProfile, isUsersLoaded]);
@@ -1235,7 +1236,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                 { l: "Libur", v: hitungStatus("libur"), t: "neutral" as const },
                 { l: "Belum", v: hitungStatus("belum"), t: hitungStatus("belum") ? ("warning" as const) : ("neutral" as const) },
               ].map((x) => (
-                <div key={x.l} className="rounded-tile bg-surface-2 px-2 py-2.5 text-center">
+                <div key={x.l} className="rounded-tile apple-tile px-2 py-2.5 text-center">
                   <TileValue tone={x.v ? x.t : "neutral"}>{x.v}</TileValue>
                   <div className="text-caption text-label-2">{x.l}</div>
                 </div>
@@ -1330,7 +1331,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                   role="tab"
                   aria-selected={aktif}
                   onClick={() => setFilterPegawaiAbsen(x.id)}
-                  className={`h-9 shrink-0 rounded-full px-4 text-footnote font-semibold capitalize transition-colors ${aktif ? "bg-label text-surface" : "bg-surface text-label ring-1 ring-edge"}`}
+                  className={`h-9 shrink-0 rounded-full px-4 text-footnote font-semibold capitalize transition-colors ${aktif ? "bg-action text-action-label shadow-sm" : "apple-card text-label hover:bg-white/40 dark:hover:bg-white/[0.08]"}`}
                 >
                   {x.label}
                 </button>
@@ -1361,7 +1362,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                   {buka && (
                     <div className="space-y-3 border-t border-sep p-4">
                       {monthlySummary && monthlySummary.size > 0 && (
-                        <div className="overflow-hidden rounded-tile bg-surface-2">
+                        <div className="overflow-hidden rounded-tile apple-tile">
                           <div className="grid grid-cols-[minmax(0,1fr)_repeat(3,3.25rem)] gap-1 px-3.5 py-2 text-caption font-medium text-label-2">
                             <span>Pegawai</span><span className="text-center">Pagi</span><span className="text-center">Sore</span><span className="text-center">Libur</span>
                           </div>
@@ -1598,15 +1599,15 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
               </Button>
             </form>
           </Card>
-          <Footnote>Super Admin bisa membuka Page Owner & Pengaturan. Akun pemilik (owner@gmail.com) dilindungi dan tidak bisa dihapus. Menghapus akun tidak menghapus riwayat gaji.</Footnote>
+          <Footnote>Super Admin bisa membuka Dashboard & Pengaturan. Akun pemilik (owner@gmail.com) dilindungi dan tidak bisa dihapus. Menghapus akun tidak menghapus riwayat gaji.</Footnote>
         </>
       )}
 
       {/* POPUP FOTO BUKTI */}
-      {photoPopup && (
+      {photoPopup && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 font-sans">
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setPhotoPopup(null)} />
-          <div className="relative w-full max-w-sm bg-surface rounded-card overflow-hidden shadow-float ring-1 ring-edge animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+          <div className="relative w-full max-w-sm apple-sheet rounded-sheet border border-white/50 dark:border-white/[0.12] overflow-hidden shadow-float ring-1 ring-edge animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
             <button
               type="button"
               aria-label="Tutup"
@@ -1645,7 +1646,8 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
               </>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>
@@ -1740,7 +1742,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
     const currentCycle = getAbsenCycleInfo(todayStr, empCutoff);
 
     return (
-        <fieldset disabled={isSaving} className={`min-w-0 rounded-card bg-surface p-4 shadow-card flex flex-col gap-3 transition-all ${
+        <fieldset disabled={isSaving} className={`min-w-0 rounded-card apple-card p-4 sm:p-5 shadow-card flex flex-col gap-3 transition-all ${
             isChanged ? 'ring-2 ring-warning/50' : 'ring-1 ring-edge'
         }`}>
 
@@ -1780,7 +1782,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
             )}
 
             {/* Cutoff Setting & Siklus Badge Row */}
-            <div className="flex items-center justify-between gap-2 rounded-tile bg-surface-2 px-3.5 py-2.5">
+            <div className="flex items-center justify-between gap-2 rounded-tile apple-tile px-3.5 py-2.5">
                 <div className="flex items-center gap-2 min-w-0">
                     <CalendarDays className="w-4 h-4 text-tint shrink-0" />
                     <div className="flex flex-col min-w-0">
@@ -1814,7 +1816,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
             {/* List Gaji with internal scrolling if too long */}
             <div className="flex flex-col gap-2 w-full">
                 {records.length === 0 && (
-                    <div className="flex-1 flex items-center justify-center rounded-tile bg-surface-2 py-8 text-footnote text-label-2">
+                    <div className="flex-1 flex items-center justify-center rounded-tile apple-tile py-8 text-footnote text-label-2">
                         Belum ada riwayat gaji.
                     </div>
                 )}
@@ -1822,7 +1824,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                     const isExpanded = expandedRecordId === r.id;
                     const totalBersih = gajiBersih(r);
                     return (
-                        <div key={r.id} className="overflow-hidden rounded-tile bg-surface-2 transition-colors w-full">
+                        <div key={r.id} className="overflow-hidden rounded-tile apple-tile transition-colors w-full">
                             <div 
                                 className="flex items-center justify-between gap-3 px-3.5 py-3 cursor-pointer active:bg-fill transition-colors select-none" 
                                 onClick={() => setExpandedRecordId(isExpanded ? null : r.id)}
@@ -1845,7 +1847,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                         <label className="mb-1.5 block text-footnote font-medium text-label-2">Bulan & Tahun</label>
                                         <input type="text" value={r.bulanTahun} onChange={e => handleUpdateRecord(r.id, { bulanTahun: e.target.value })} placeholder="MM/YY" className="w-full bg-surface rounded-control px-3 py-2 text-[16px] border-0 font-bold text-tint outline-none focus:ring-2 focus:ring-tint/40" />
                                       </div>
-                                      <button type="button" onClick={() => handleDeleteRecord(r.id)} className="h-11 w-11 flex items-center justify-center shrink-0 bg-negative/10 text-negative rounded-control hover:bg-negative/20 transition-colors" title="Hapus Gaji Ini" aria-label="Hapus gaji ini">
+                                      <button type="button" onClick={() => handleDeleteRecord(r.id)} className="h-11 w-11 flex items-center justify-center shrink-0 bg-negative/10 text-negative rounded-full hover:bg-negative/20 transition-colors" title="Hapus Gaji Ini" aria-label="Hapus gaji ini">
                                          <Trash2 size={16} />
                                       </button>
                                    </div>
@@ -1861,7 +1863,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                               <button type="button" onClick={() => {
                                                   const newTb = [...(r.gajiTambahan || []), { id: `tb_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, nominal: 0, ket: "Tambahan", status: "belum" }];
                                                   handleUpdateRecord(r.id, { gajiTambahan: newTb });
-                                              }} className="min-h-[32px] text-caption2 font-bold text-positive flex items-center gap-1 bg-positive/10 hover:bg-positive/15 px-2.5 py-1 rounded-control transition-colors">
+                                              }} className="min-h-[32px] text-caption2 font-bold text-positive flex items-center gap-1 bg-positive/10 hover:bg-positive/15 px-3 py-1 rounded-full transition-colors">
                                                 <Plus size={12} strokeWidth={3} /> Tambah
                                               </button>
                                        </div>
@@ -1881,21 +1883,21 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                                   <button type="button" onClick={() => {
                                                       const newTb = r.gajiTambahan.filter((_: any, idx: number) => idx !== i);
                                                       handleUpdateRecord(r.id, { gajiTambahan: newTb });
-                                                  }} className="h-11 w-11 flex items-center justify-center shrink-0 bg-negative/10 text-negative rounded-control hover:bg-negative/20 transition-colors" aria-label="Hapus tambahan">
+                                                  }} className="h-11 w-11 flex items-center justify-center shrink-0 bg-negative/10 text-negative rounded-full hover:bg-negative/20 transition-colors" aria-label="Hapus tambahan">
                                                       <Trash2 size={15} />
                                                   </button>
                                               </div>
-                                              <div className="flex bg-fill p-1 rounded-control gap-1">
+                                              <div className="flex apple-segmented p-1 rounded-full gap-1">
                                                   <button type="button" onClick={() => {
                                                       const newTb = [...r.gajiTambahan];
                                                       newTb[i] = { ...newTb[i], status: 'belum' };
                                                       handleUpdateRecord(r.id, { gajiTambahan: newTb });
-                                                  }} className={`flex-1 min-h-[36px] py-1.5 text-caption2 font-bold rounded-icon transition-colors ${tb.status !== 'sudah' ? 'bg-surface text-warning shadow-sm ring-1 ring-warning/25' : 'text-label-2 hover:text-label'}`}>Belum Dibayar</button>
+                                                  }} className={`flex-1 min-h-[36px] py-1.5 text-caption2 font-bold rounded-full transition-all ${tb.status !== 'sudah' ? 'apple-segmented-thumb text-warning !ring-1 !ring-warning/30' : 'text-label-2 hover:text-label'}`}>Belum Dibayar</button>
                                                   <button type="button" onClick={() => {
                                                       const newTb = [...r.gajiTambahan];
                                                       newTb[i] = { ...newTb[i], status: 'sudah' };
                                                       handleUpdateRecord(r.id, { gajiTambahan: newTb });
-                                                  }} className={`flex-1 min-h-[36px] py-1.5 text-caption2 font-bold rounded-icon transition-colors ${tb.status === 'sudah' ? 'bg-surface text-positive shadow-sm ring-1 ring-positive/25' : 'text-label-2 hover:text-label'}`}>Sudah Dibayar</button>
+                                                  }} className={`flex-1 min-h-[36px] py-1.5 text-caption2 font-bold rounded-full transition-all ${tb.status === 'sudah' ? 'apple-segmented-thumb text-positive !ring-1 !ring-positive/30' : 'text-label-2 hover:text-label'}`}>Sudah Dibayar</button>
                                               </div>
                                           </div>
                                        ))}
@@ -1945,7 +1947,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                                <button type="button" onClick={() => {
                                                    const newPg = [...(r.gajiPengurangan || []), { id: `pg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, nominal: 0, ket: "Pengurangan", isDibatalkan: false }];
                                                    handleUpdateRecord(r.id, { gajiPengurangan: newPg });
-                                               }} className="min-h-[32px] text-caption2 font-bold text-negative flex items-center gap-1 bg-negative/10 hover:bg-negative/15 px-2.5 py-1 rounded-control transition-colors">
+                                               }} className="min-h-[32px] text-caption2 font-bold text-negative flex items-center gap-1 bg-negative/10 hover:bg-negative/15 px-3 py-1 rounded-full transition-colors">
                                                  <Plus size={12} strokeWidth={3} /> Tambah
                                                </button>
                                        </div>
@@ -2007,7 +2009,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                                       </span>
                                                     )}
                                                     {pg.photoUrl && (
-                                                      <a href={pg.photoUrl} target="_blank" rel="noreferrer" className="h-9 w-9 flex items-center justify-center shrink-0 bg-tint/10 text-tint rounded-control hover:bg-tint/20 transition-colors" title="Lihat Foto Bukti Telat">
+                                                      <a href={pg.photoUrl} target="_blank" rel="noreferrer" className="h-9 w-9 flex items-center justify-center shrink-0 bg-tint/10 text-tint rounded-full hover:bg-tint/20 transition-colors" title="Lihat Foto Bukti Telat">
                                                           <Camera size={14} />
                                                       </a>
                                                     )}
@@ -2021,7 +2023,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                                               newPg[i] = { ...newPg[i], isDibatalkan: false };
                                                               handleUpdateRecord(r.id, { gajiPengurangan: newPg });
                                                             }} 
-                                                            className="h-9 px-3 flex items-center justify-center gap-1.5 shrink-0 bg-positive/10 text-positive rounded-control hover:bg-positive/20 transition-colors text-caption2 font-bold" 
+                                                            className="h-9 px-3.5 flex items-center justify-center gap-1.5 shrink-0 bg-positive/10 text-positive rounded-full hover:bg-positive/20 transition-colors text-caption2 font-bold" 
                                                             title="Lepas Coretan (Aktifkan Kembali Pemotongan)"
                                                           >
                                                               <RotateCcw size={12} /> Undo Coret
@@ -2042,7 +2044,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                                                 }
                                                               }
                                                             }} 
-                                                            className="h-9 px-3 flex items-center justify-center gap-1.5 shrink-0 bg-negative/10 text-negative rounded-control hover:bg-negative/20 transition-colors text-caption2 font-bold" 
+                                                            className="h-9 px-3.5 flex items-center justify-center gap-1.5 shrink-0 bg-negative/10 text-negative rounded-full hover:bg-negative/20 transition-colors text-caption2 font-bold" 
                                                             title={pg._isAutoSistem ? "Coret Pengurangan Otomatis (Bisa di-Undo)" : "Hapus Pengurangan"}
                                                           >
                                                               <Trash2 size={12} /> {pg._isAutoSistem ? "Coret" : "Hapus"}
@@ -2057,7 +2059,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                                                 handleUpdateRecord(r.id, { gajiPengurangan: newPg });
                                                               }
                                                             }} 
-                                                            className="h-9 w-9 flex items-center justify-center shrink-0 bg-fill text-label-2 hover:text-negative rounded-control transition-colors" 
+                                                            className="h-9 w-9 flex items-center justify-center shrink-0 bg-fill text-label-2 hover:text-negative rounded-full transition-colors" 
                                                             title="Hapus Permanen Baris Manual"
                                                           >
                                                               <Trash2 size={12} />

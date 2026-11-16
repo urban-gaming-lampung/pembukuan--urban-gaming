@@ -1,8 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { rupiah, toInt } from "../lib/format";
-import Section from "./common/Section";
-import { Amount, Button, IconBadge, Pill } from "../ui";
+import { AKSEN_TILE, AlertDialog, Amount, Button, Card, Pill } from "../ui";
 import type { WarnaIkon } from "../ui/tokens";
 import {
   Clock,
@@ -65,33 +64,31 @@ function fieldKind(key: string) {
 
 
 function getThemeColors(title: string): {
-  color: string;
   iconColor: WarnaIkon;
   icon: React.ReactNode;
-  borderFocus: string;
 } {
   const t = (title || "").toLowerCase();
 
   if (t.includes("jajanan")) {
-    return { color: "#F1A41D", iconColor: "orange", icon: <Coffee size={17} />, borderFocus: "focus:ring-[#F1A41D]/25 focus:border-[#F1A41D]" };
+    return { iconColor: "orange", icon: <Coffee size={17} /> };
   }
   if (t.includes("harian")) {
-    return { color: "#25BE8D", iconColor: "teal", icon: <Gamepad2 size={17} />, borderFocus: "focus:ring-[#25BE8D]/25 focus:border-[#25BE8D]" };
+    return { iconColor: "teal", icon: <Gamepad2 size={17} /> };
   }
   if (t.includes("sewa")) {
-    return { color: "#0EA5E8", iconColor: "blue", icon: <CalendarCheck2 size={17} />, borderFocus: "focus:ring-[#0EA5E8]/25 focus:border-[#0EA5E8]" };
+    return { iconColor: "blue", icon: <CalendarCheck2 size={17} /> };
   }
   if (t.includes("jasa") || t.includes("aksesoris") || t.includes("usaha")) {
-    return { color: "#ED4343", iconColor: "red", icon: <Wrench size={17} />, borderFocus: "focus:ring-[#ED4343]/25 focus:border-[#ED4343]" };
+    return { iconColor: "red", icon: <Wrench size={17} /> };
   }
   if (t.includes("pengeluaran")) {
-    return { color: "#E11D48", iconColor: "red", icon: <Wallet size={17} />, borderFocus: "focus:ring-[#E11D48]/25 focus:border-[#E11D48]" };
+    return { iconColor: "red", icon: <Wallet size={17} /> };
   }
   if (t.includes("setoran")) {
-    return { color: "#0D9488", iconColor: "teal", icon: <Wallet size={17} />, borderFocus: "focus:ring-[#0D9488]/25 focus:border-[#0D9488]" };
+    return { iconColor: "teal", icon: <Wallet size={17} /> };
   }
 
-  return { color: "#71717A", iconColor: "gray", icon: <Receipt size={17} />, borderFocus: "focus:ring-tint/20 focus:border-tint/50" };
+  return { iconColor: "gray", icon: <Receipt size={17} /> };
 }
 
 function parseBayar(val: any): Set<string> {
@@ -148,7 +145,7 @@ const SwipeableRow = ({ isMobile, className, style, children, onSwipe, disabled 
 
   return (
     <tr
-      className={`${className} ${isSwiping ? "!bg-red-500/20 dark:!bg-red-500/30 !ring-red-500/50" : ""}`}
+      className={`${className} ${isSwiping ? "!bg-[#FF383C]/20 dark:!bg-[#FF4245]/30 !ring-[#FF383C]/50" : ""}`}
       style={{
         ...style,
         ...(swipeX !== 0 ? { transform: `translateX(${swipeX}px)` } : {}),
@@ -175,6 +172,8 @@ interface UploadTransferProofProps {
 export const UploadTransferProof: React.FC<UploadTransferProofProps> = ({ value, onChange, disabled }) => {
   const [uploading, setUploading] = React.useState(false);
   const [showPreview, setShowPreview] = React.useState(false);
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const [uploadAlert, setUploadAlert] = React.useState("");
 
   React.useEffect(() => {
     if (!showPreview) return;
@@ -190,7 +189,7 @@ export const UploadTransferProof: React.FC<UploadTransferProofProps> = ({ value,
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      alert("Format berkas harus berupa gambar (JPEG/PNG/dsb)!");
+      setUploadAlert("Format berkas harus berupa gambar (JPEG/PNG/WEBP).");
       return;
     }
 
@@ -259,17 +258,59 @@ export const UploadTransferProof: React.FC<UploadTransferProofProps> = ({ value,
       onChange(downloadUrl);
     } catch (err) {
       console.error("Upload error:", err);
-      alert("Gagal mengunggah bukti transfer ❌");
+      setUploadAlert("Gagal mengunggah bukti transfer. Silakan coba lagi.");
     } finally {
       setUploading(false);
     }
   };
 
+  const dialogPortal = (uploadAlert || confirmDelete)
+    ? createPortal(
+        <>
+          <AlertDialog
+            open={!!uploadAlert}
+            onClose={() => setUploadAlert("")}
+            zClassName="z-[10000]"
+            icon={<AlertCircle />}
+            iconColor="red"
+            title="Upload Gagal"
+            description={uploadAlert}
+            actions={[{ label: "Mengerti", role: "primary", onClick: () => setUploadAlert("") }]}
+          />
+          <AlertDialog
+            open={confirmDelete}
+            onClose={() => setConfirmDelete(false)}
+            zClassName="z-[10000]"
+            icon={<Trash2 />}
+            iconColor="red"
+            title="Hapus Bukti Transfer?"
+            description="Lampiran foto bukti transfer ini akan dihapus dari baris."
+            actions={[
+              { label: "Batal", role: "cancel", onClick: () => setConfirmDelete(false) },
+              {
+                label: "Hapus",
+                role: "destructive",
+                onClick: () => {
+                  onChange("");
+                  setConfirmDelete(false);
+                  setShowPreview(false);
+                },
+              },
+            ]}
+          />
+        </>,
+        document.body
+      )
+    : null;
+
   if (uploading) {
     return (
-      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-500 flex-shrink-0 shadow-sm animate-pulse">
-        <Loader2 className="h-4 w-4 animate-spin" />
-      </div>
+      <>
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-tint/10 text-tint flex-shrink-0 shadow-sm animate-pulse">
+          <Loader2 className="h-4 w-4 animate-spin" />
+        </div>
+        {dialogPortal}
+      </>
     );
   }
 
@@ -291,14 +332,14 @@ export const UploadTransferProof: React.FC<UploadTransferProofProps> = ({ value,
 
         {showPreview && createPortal(
           <div
-            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-[2px] p-4"
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-[3px] p-4"
             onClick={() => setShowPreview(false)}
           >
             <div
               role="dialog"
               aria-modal="true"
               aria-label="Pratinjau Bukti Transfer"
-              className="relative w-full max-w-md bg-surface text-label p-4 rounded-card ring-1 ring-edge shadow-float flex flex-col items-center"
+              className="relative w-full max-w-md apple-sheet text-label p-4 rounded-sheet border border-white/50 dark:border-white/[0.12] ring-1 ring-edge shadow-float flex flex-col items-center"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="w-full flex justify-between items-center mb-3 pb-2.5 border-b border-sep">
@@ -307,13 +348,13 @@ export const UploadTransferProof: React.FC<UploadTransferProofProps> = ({ value,
                   type="button"
                   onClick={() => setShowPreview(false)}
                   aria-label="Tutup pratinjau"
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-fill text-label-2 hover:text-label transition"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-fill text-label-2 hover:text-label transition"
                 >
-                  <X size={18} />
+                  <X size={16} />
                 </button>
               </div>
 
-              <div className="w-full flex items-center justify-center rounded-tile bg-canvas p-2 ring-1 ring-edge">
+              <div className="w-full flex items-center justify-center rounded-tile apple-tile p-2 ring-1 ring-edge">
                 <img
                   src={value}
                   alt="Bukti Transfer"
@@ -326,7 +367,7 @@ export const UploadTransferProof: React.FC<UploadTransferProofProps> = ({ value,
                   href={value}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-1 h-11 px-4 text-center bg-tint/10 dark:bg-tint/15 text-tint text-subhead font-semibold rounded-field transition active:opacity-75 flex items-center justify-center gap-1.5"
+                  className="flex-1 h-11 px-4 text-center bg-action text-action-label text-subhead font-semibold rounded-field transition hover:opacity-85 active:opacity-75 flex items-center justify-center gap-1.5"
                 >
                   <ExternalLink size={15} />
                   Buka Penuh
@@ -337,12 +378,7 @@ export const UploadTransferProof: React.FC<UploadTransferProofProps> = ({ value,
                     size="md"
                     className="flex-1"
                     icon={<Trash2 size={15} />}
-                    onClick={() => {
-                      if (confirm("Hapus bukti transfer ini?")) {
-                        onChange("");
-                        setShowPreview(false);
-                      }
-                    }}
+                    onClick={() => setConfirmDelete(true)}
                   >
                     Hapus Bukti
                   </Button>
@@ -352,24 +388,28 @@ export const UploadTransferProof: React.FC<UploadTransferProofProps> = ({ value,
           </div>,
           document.body
         )}
+        {dialogPortal}
       </>
     );
   }
 
   return (
-    <label
-      className={`flex h-9 w-9 items-center justify-center rounded-full bg-tint/10 text-tint hover:bg-tint/15 dark:bg-tint/15 active:scale-95 transition cursor-pointer shrink-0 ${disabled ? "opacity-40 cursor-not-allowed pointer-events-none" : ""}`}
-      title="Upload Bukti Transfer"
-    >
-      <input
-        type="file"
-        accept="image/*"
-        className="hidden"
-        disabled={disabled}
-        onChange={handleFileChange}
-      />
-      <Camera size={17} />
-    </label>
+    <>
+      <label
+        className={`flex h-9 w-9 items-center justify-center rounded-full bg-tint/10 text-tint hover:bg-tint/15 dark:bg-tint/15 active:scale-95 transition cursor-pointer shrink-0 ${disabled ? "opacity-40 cursor-not-allowed pointer-events-none" : ""}`}
+        title="Upload Bukti Transfer"
+      >
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          disabled={disabled}
+          onChange={handleFileChange}
+        />
+        <Camera size={17} />
+      </label>
+      {dialogPortal}
+    </>
   );
 };
 
@@ -395,6 +435,21 @@ export type BarisTerkunci = {
   renderNo?: () => React.ReactNode;
 };
 
+export type ExtraColumnDef<T> = {
+  header: string;
+  center?: boolean;
+  mobileLabel?: string;
+  render: (args: {
+    row: T;
+    rowIndex: number;
+    locked: boolean;
+    isMobile: boolean;
+    inputBase: string;
+    onKeyNav: (e: React.KeyboardEvent<any>) => void;
+    updateRow: (idx: number, patch: Partial<T>) => void;
+  }) => React.ReactNode;
+};
+
 export default function TableEditor<T extends AnyRow>(props: {
   title: string;
   columns: string[];
@@ -411,10 +466,36 @@ export default function TableEditor<T extends AnyRow>(props: {
   extraTotal?: number;
   /** Konten di antara judul dan tabel (mis. baris terkunci dari POS). */
   slotAtas?: React.ReactNode;
+  /** Konten di bawah tabel (mis. ringkasan ongkir mode kartu). */
+  slotBawahTable?: React.ReactNode;
+  /** Footer tabel opsional (<tfoot>) untuk mode tabel klasik. */
+  tableFooter?: React.ReactNode;
   /** Tombol kecil di kolom No. / kepala kartu (klik tidak membuka-tutup kartu). */
   renderNo?: (row: T, rowIndex: number) => React.ReactNode;
   /** Baris otomatis hanya-baca di bagian atas tabel (totalnya lewat extraTotal). */
   barisTerkunci?: BarisTerkunci[];
+  /** Override subtitle kartu (mis. info ongkir atau rumus kalkulasi setoran). */
+  subtitle?: string;
+  /** Label nominal total di kanan atas (bawaan Total / Total Keluar). */
+  totalLabel?: string;
+  /** Placeholder per key field pada `blank`. */
+  placeholders?: Record<string, string>;
+  /** Menandai baris yang terkunci / otomatis (tidak bisa diubah atau dihapus). */
+  isRowLocked?: (row: T, rowIndex: number) => boolean;
+  /** Tetap izinkan upload bukti transfer meski baris terkunci (mis. auto-ongkir). */
+  allowProofOnLocked?: boolean;
+  /** Sembunyikan kolom Cash & Transfer standar (mis. Setoran pakai kolom khusus). */
+  hidePayColumns?: boolean;
+  /** Kolom tambahan sebelum Aksi (mis. "Sudah di TF?"). */
+  extraColumns?: ExtraColumnDef<T>[];
+  /** Sembunyikan kolom & tombol Reset/Hapus per baris. */
+  hideRowActions?: boolean;
+  /** Tampilkan tombol + Tambah Baris (bawaan true). */
+  showAddRow?: boolean;
+  /** Tampilkan tombol Reset tabel di pojok kiri bawah (bawaan true). */
+  showReset?: boolean;
+  /** Custom reset handler (mis. pertahankan baris otomatis saat reset). */
+  onResetRows?: () => void;
 }) {
   const {
     title,
@@ -430,8 +511,21 @@ export default function TableEditor<T extends AnyRow>(props: {
     isMobileTable = true,
     extraTotal = 0,
     slotAtas,
+    slotBawahTable,
+    tableFooter,
     renderNo,
     barisTerkunci = [],
+    subtitle: subtitleProp,
+    totalLabel: totalLabelProp,
+    placeholders,
+    isRowLocked,
+    allowProofOnLocked = false,
+    hidePayColumns = false,
+    extraColumns = [],
+    hideRowActions = false,
+    showAddRow = true,
+    showReset = true,
+    onResetRows,
   } = props;
 
   const isMobile = isMobileTable; // Card mode for all screen sizes if 'Baru'
@@ -446,8 +540,35 @@ export default function TableEditor<T extends AnyRow>(props: {
 
   const wrapRef = React.useRef<HTMLDivElement>(null);
   const [showPayErrors, setShowPayErrors] = React.useState(false);
-  const [showResetConfirm, setShowResetConfirm] = React.useState(false);
+  const [showPayAlert, setShowPayAlert] = React.useState(false);
+  const [resetConfirm, setResetConfirm] = React.useState<{ type: "table" } | { type: "row"; index: number } | null>(null);
   const [expandedRows, setExpandedRows] = React.useState<number[]>([]);
+
+  const catAccent = AKSEN_TILE[theme.iconColor];
+
+  const filledRowsCount = React.useMemo(() => {
+    return rows.filter((r) => {
+      if (getHarga(r) > 0) return true;
+      return Object.keys(blank).some((k) => {
+        if (k.startsWith("_") || k === "harga" || k === "bayar" || k === "buktiTransfer") return false;
+        const val = String((r as any)[k] ?? "").trim();
+        const base = String((blank as any)[k] ?? "").trim();
+        return val !== "" && val !== base;
+      });
+    }).length;
+  }, [rows, blank, getHarga]);
+
+  const subtitleText = React.useMemo(
+    () =>
+      subtitleProp ??
+      ([
+        filledRowsCount > 0 ? `${filledRowsCount} transaksi terisi` : "Belum ada transaksi",
+        barisTerkunci.length > 0 ? `${barisTerkunci.length} POS` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ")),
+    [subtitleProp, filledRowsCount, barisTerkunci.length]
+  );
 
   const isAlwaysExpanded = title.toLowerCase().includes("pengeluaran") || title.toLowerCase().includes("setoran");
 
@@ -464,12 +585,12 @@ export default function TableEditor<T extends AnyRow>(props: {
     );
   };
 
-  // Header Table (berwarna per kategori agar mudah dibaca & dibedakan)
-  const thBase = `px-3 py-3 text-[12px] font-bold uppercase tracking-[0.05em] text-white whitespace-nowrap sticky top-0 z-10 border-b border-black/10`;
+  // Header Table frosted glass + garis aksen kategori halus
+  const thBase = `apple-bar px-3 py-3 text-caption font-semibold uppercase tracking-[0.05em] text-label-2 whitespace-nowrap sticky top-0 z-10 border-b border-sep`;
 
-  const inputBase = `w-full min-h-[40px] px-2.5 rounded-control bg-transparent border border-transparent
+  const inputBase = `w-full min-h-[44px] px-3 rounded-control bg-transparent border border-transparent
     hover:border-sep focus:bg-surface focus:border-tint/40
-    focus:outline-none focus:ring-2 ${theme.borderFocus}
+    focus:outline-none focus:ring-2 focus:ring-tint/25
     transition-all duration-150 text-[16px] sm:text-subhead text-label placeholder:text-label-3`;
 
   React.useEffect(() => {
@@ -486,6 +607,11 @@ export default function TableEditor<T extends AnyRow>(props: {
   }, [rows.length, actualMinRows, blank, setRows]);
 
   const handleReset = () => {
+    if (onResetRows) {
+      onResetRows();
+      setExpandedRows([]);
+      return;
+    }
     const resetRows = Array.from({ length: actualMinRows }, () => ({ ...blank }));
     setRows(resetRows);
   };
@@ -501,14 +627,16 @@ export default function TableEditor<T extends AnyRow>(props: {
   );
 
   const invalidPayRows = React.useMemo(() => {
+    if (hidePayColumns) return [];
     const out: number[] = [];
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i] as any;
+      if (isRowLocked?.(row, i)) continue;
       if (!isHargaKeluar(row)) continue;
       if (parseBayar(row.bayar).size === 0) out.push(i);
     }
     return out;
-  }, [rows, isHargaKeluar]);
+  }, [rows, isHargaKeluar, hidePayColumns, isRowLocked]);
 
   React.useEffect(() => {
     if (invalidPayRows.length > 0) setShowPayErrors(true);
@@ -554,7 +682,7 @@ export default function TableEditor<T extends AnyRow>(props: {
   const onAddRow = () => {
     if (invalidPayRows.length > 0) {
       setShowPayErrors(true);
-      alert("Mohon lengkapi metode pembayaran pada baris yang ditandai.");
+      setShowPayAlert(true);
       return;
     }
     setRows((prev) => [...prev, { ...(blank as any) }]);
@@ -562,9 +690,12 @@ export default function TableEditor<T extends AnyRow>(props: {
 
   const onDeleteRow = (rowIndex: number) => {
     setRows((prev) => {
-      if (prev.length <= (actualMinRows || 1)) {
-        // If at minimum, just reset instead of removing
-        return prev.map((row, idx) => idx === rowIndex ? ({ ...blank } as T) : row);
+      const targetRow = prev[rowIndex];
+      if (targetRow && isRowLocked?.(targetRow, rowIndex)) return prev;
+      const unlockedCount = prev.filter((row, idx) => !isRowLocked?.(row, idx)).length;
+      if (unlockedCount <= (actualMinRows || 1)) {
+        // Jika tinggal minimum baris manual, reset nilainya alih-alih menghapus semua
+        return prev.map((row, idx) => (idx === rowIndex ? ({ ...blank } as T) : row));
       }
       return prev.filter((_, idx) => idx !== rowIndex);
     });
@@ -595,21 +726,18 @@ export default function TableEditor<T extends AnyRow>(props: {
   }, [getHarga]);
 
   return (
-    <Section>
-      <div className="flex flex-col gap-4">
-        {/* Header Section — UDS: IconBadge + judul netral + total netral */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <IconBadge color={theme.iconColor} size="md">
-              {theme.icon}
-            </IconBadge>
-            <h2 className="text-headline text-label truncate">
-              {title}
-            </h2>
-          </div>
+    <>
+      <Card
+        variant="hero"
+        accent={theme.iconColor}
+        icon={theme.icon}
+        iconColor={theme.iconColor}
+        title={title}
+        subtitle={subtitleText}
+        accessory={
           <div className="text-right shrink-0">
             <div className="text-[11px] font-semibold uppercase tracking-[0.04em] text-label-2">
-              {props.title.toLowerCase().includes("pengeluaran") ? "Total Keluar" : "Total"}
+              {totalLabelProp ?? (props.title.toLowerCase().includes("pengeluaran") ? "Total Keluar" : "Total")}
             </div>
             <Amount
               value={total}
@@ -619,468 +747,572 @@ export default function TableEditor<T extends AnyRow>(props: {
               className="font-bold whitespace-nowrap"
             />
           </div>
-        </div>
+        }
+      >
+        <div className="flex flex-col gap-4 sm:gap-5">
+          {slotAtas}
 
-        {slotAtas}
-
-        {/* Table Wrapper controlled entirely by isMobile state */}
-        <div className={`relative overflow-hidden ${isMobile ? "bg-transparent" : "rounded-tile border border-sep bg-surface"}`}>
-          <div ref={wrapRef} className="overflow-x-auto overflow-y-visible" style={{ maxHeight: "70vh" }}>
-            <table className="min-w-full text-subhead">
-              <thead className={isMobile ? "hidden" : "table-header-group"}>
-                <tr>
-                  {columns.map((c, i) => {
-                    const lower = c.toLowerCase();
-                    const centered = i === 0 || lower === "cash" || lower === "transfer";
-                    return (
-                      <th
-                        key={i}
-                        className={`${thBase} ${centered ? "text-center" : "text-left"}`}
-                        style={{ backgroundColor: theme.color }}
-                      >
-                        {c}
-                      </th>
-                    );
-                  })}
-                  <th className={`${thBase} text-center`} style={{ backgroundColor: theme.color }}>Aksi</th>
-                </tr>
-              </thead>
-
-              <tbody className={isMobile ? "flex flex-col gap-3" : "table-row-group divide-y divide-sep"}>
-                {/* Baris otomatis (terkunci) */}
-                {barisTerkunci.map((b) => {
-                  const cash = parseBayar(b.bayar).has("Cash");
-                  const tf = parseBayar(b.bayar).has("Transfer");
-                  const kolom = Object.keys(blank).filter((k) => k !== "bayar" && !k.startsWith("_"));
-                  if (isMobile) {
-                    return (
-                      <tr key={b.key} className="flex flex-col rounded-tile ring-1 ring-edge overflow-hidden bg-surface">
-                        <td
-                          className="flex justify-between items-center gap-3 px-4 py-3 text-white select-none"
-                          style={{ backgroundColor: theme.color }}
+          {/* Table Wrapper controlled entirely by isMobile state */}
+          <div className={`relative overflow-hidden ${isMobile ? "bg-transparent" : "rounded-tile border border-sep apple-tile"}`}>
+            <div ref={wrapRef} className="overflow-x-auto overflow-y-visible" style={{ maxHeight: "70vh" }}>
+              <table className="min-w-full text-subhead">
+                <thead className={isMobile ? "hidden" : "table-header-group"}>
+                  <tr>
+                    {columns.map((c, i) => {
+                      const lower = c.toLowerCase();
+                      const centered = i === 0 || lower === "cash" || lower === "transfer";
+                      return (
+                        <th
+                          key={i}
+                          className={`${thBase} ${centered ? "text-center" : "text-left"}`}
+                          style={{ boxShadow: `inset 0 -2px 0 ${catAccent.bar}55` }}
                         >
-                          <div className="flex flex-col gap-1 min-w-0 flex-1">
-                            <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                              <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-white shrink-0">
-                                <Lock size={10} />{b.label}
-                              </span>
-                              {b.renderNo?.()}
-                              {b.info && <span className="text-caption font-mono text-white/85 truncate">{b.info}</span>}
+                          {c}
+                        </th>
+                      );
+                    })}
+                    {extraColumns.map((ec, idx) => (
+                      <th
+                        key={`extra-h-${idx}`}
+                        className={`${thBase} ${ec.center ? "text-center" : "text-left"}`}
+                        style={{ boxShadow: `inset 0 -2px 0 ${catAccent.bar}55` }}
+                      >
+                        {ec.header}
+                      </th>
+                    ))}
+                    {!hideRowActions && (
+                      <th
+                        className={`${thBase} text-center`}
+                        style={{ boxShadow: `inset 0 -2px 0 ${catAccent.bar}55` }}
+                      >
+                        Aksi
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+
+                <tbody className={isMobile ? "flex flex-col gap-3" : "table-row-group divide-y divide-sep"}>
+                  {/* Baris otomatis (terkunci) */}
+                  {barisTerkunci.map((b) => {
+                    const cash = parseBayar(b.bayar).has("Cash");
+                    const tf = parseBayar(b.bayar).has("Transfer");
+                    const kolom = Object.keys(blank).filter((k) => k !== "bayar" && !k.startsWith("_"));
+                    if (isMobile) {
+                      return (
+                        <tr key={b.key} className="flex flex-col rounded-tile ring-1 ring-edge overflow-hidden apple-tile">
+                          <td
+                            className={`flex justify-between items-center gap-3 px-4 py-3 ${catAccent.bg} !ring-0 border-b border-sep text-label select-none`}
+                          >
+                            <div className="flex flex-col gap-1 min-w-0 flex-1">
+                              <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wide shrink-0 ${catAccent.pill}`}>
+                                  <Lock size={10} />{b.label}
+                                </span>
+                                {b.renderNo?.()}
+                                {b.info && <span className="text-caption font-mono text-label-2 truncate">{b.info}</span>}
+                              </div>
+                              <span className="text-subhead font-semibold leading-snug truncate text-label">{b.ringkasan}</span>
                             </div>
-                            <span className="text-subhead font-semibold leading-snug truncate text-white">{b.ringkasan}</span>
+                            <span className="flex shrink-0 items-center justify-center w-8 h-8 rounded-full bg-fill text-label-2" title="Otomatis — tidak bisa diubah di sini">
+                              <Lock size={14} />
+                            </span>
+                          </td>
+                          <td className="flex items-center justify-between gap-3 px-4 py-3 bg-transparent">
+                            <div className="min-w-0 flex-1 text-footnote leading-snug text-label-2">{b.detail}</div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Pill tone={tf ? "tint" : "positive"}>
+                                {tf ? "TF / QRIS" : "Cash"}
+                              </Pill>
+                              {tf && b.buktiTransfer && (
+                                <UploadTransferProof value={b.buktiTransfer} onChange={() => {}} disabled />
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return (
+                      <tr key={b.key} className="table-row bg-fill/40 hover:bg-fill/60 transition-colors">
+                        <td className="table-cell w-[56px] text-center px-1.5 py-2 align-middle" title="Otomatis — tidak bisa diubah di sini">
+                          <div className="flex flex-col items-center justify-center gap-1 text-label-2">
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold tracking-wider uppercase">
+                              <Lock size={10} />{b.label}
+                            </span>
+                            {b.renderNo?.()}
                           </div>
-                          <span className="flex shrink-0 items-center justify-center w-9 h-9 rounded-full bg-black/15 text-white/95" title="Otomatis — tidak bisa diubah di sini">
-                            <Lock size={14} />
+                        </td>
+                        {kolom.map((k) => (
+                          <td key={k} className="table-cell px-2 py-2 align-middle">
+                            <div className="min-h-[36px] px-1.5 flex items-center text-subhead text-label">{b.nilai[k] ?? "-"}</div>
+                          </td>
+                        ))}
+                        <td className="table-cell w-[80px] text-center align-middle px-2 py-2">
+                          <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${cash ? "bg-positive text-white" : "bg-fill text-label-3"}`} aria-label={cash ? "Cash" : "Bukan cash"}>
+                            {cash ? <Check size={18} strokeWidth={2.8} /> : <Circle size={18} strokeWidth={2} />}
                           </span>
                         </td>
-                        <td className="flex items-center justify-between gap-3 px-4 py-3 bg-surface">
-                          <div className="min-w-0 flex-1 text-footnote leading-snug text-label-2">{b.detail}</div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <Pill tone={tf ? "tint" : "positive"}>
-                              {tf ? "TF / QRIS" : "Cash"}
-                            </Pill>
+                        <td className="table-cell min-w-[100px] text-center align-middle px-2 py-2">
+                          <div className="flex items-center justify-center gap-2">
+                            <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full shrink-0 ${tf ? "bg-tint text-white" : "bg-fill text-label-3"}`} aria-label={tf ? "Transfer" : "Bukan transfer"}>
+                              {tf ? <Check size={18} strokeWidth={2.8} /> : <Circle size={18} strokeWidth={2} />}
+                            </span>
                             {tf && b.buktiTransfer && (
                               <UploadTransferProof value={b.buktiTransfer} onChange={() => {}} disabled />
                             )}
                           </div>
                         </td>
+                        <td className="table-cell text-center align-middle px-2 py-2">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-fill px-2.5 py-1 text-caption font-medium text-label-2 whitespace-nowrap">
+                            <Lock size={11} />Otomatis
+                          </span>
+                        </td>
                       </tr>
                     );
-                  }
-                  return (
-                    <tr key={b.key} className="table-row bg-surface-2/60 dark:bg-white/[0.02]">
-                      <td className="table-cell w-[56px] text-center px-1.5 py-2 align-middle" title="Otomatis — tidak bisa diubah di sini">
-                        <div className="flex flex-col items-center justify-center gap-1 text-label-2">
-                          <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold tracking-wider uppercase">
-                            <Lock size={10} />{b.label}
-                          </span>
-                          {b.renderNo?.()}
-                        </div>
-                      </td>
-                      {kolom.map((k) => (
-                        <td key={k} className="table-cell px-2 py-2 align-middle">
-                          <div className="min-h-[36px] px-1.5 flex items-center text-subhead text-label">{b.nilai[k] ?? "-"}</div>
-                        </td>
-                      ))}
-                      <td className="table-cell w-[80px] text-center align-middle px-2 py-2">
-                        <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${cash ? "bg-positive text-white" : "bg-fill text-label-3"}`} aria-label={cash ? "Cash" : "Bukan cash"}>
-                          {cash ? <Check size={18} strokeWidth={2.8} /> : <Circle size={18} strokeWidth={2} />}
-                        </span>
-                      </td>
-                      <td className="table-cell min-w-[100px] text-center align-middle px-2 py-2">
-                        <div className="flex items-center justify-center gap-2">
-                          <span className={`inline-flex h-9 w-9 items-center justify-center rounded-full shrink-0 ${tf ? "bg-tint text-white" : "bg-fill text-label-3"}`} aria-label={tf ? "Transfer" : "Bukan transfer"}>
-                            {tf ? <Check size={18} strokeWidth={2.8} /> : <Circle size={18} strokeWidth={2} />}
-                          </span>
-                          {tf && b.buktiTransfer && (
-                            <UploadTransferProof value={b.buktiTransfer} onChange={() => {}} disabled />
-                          )}
-                        </div>
-                      </td>
-                      <td className="table-cell text-center align-middle px-2 py-2">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-fill px-2.5 py-1 text-caption font-medium text-label-2 whitespace-nowrap">
-                          <Lock size={11} />Otomatis
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {rows.map((r, i) => {
-                  const rowAny = r as any;
-                  const hargaKeluar = isHargaKeluar(rowAny);
-                  const bayarSet = parseBayar(rowAny.bayar);
-                  const payInvalid = hargaKeluar && bayarSet.size === 0 && showPayErrors;
+                  })}
+                  {rows.map((r, i) => {
+                    const rowAny = r as any;
+                    const locked = !!isRowLocked?.(r, i);
+                    const hargaKeluar = isHargaKeluar(rowAny);
+                    const bayarSet = parseBayar(rowAny.bayar);
+                    const payInvalid = !hidePayColumns && !locked && hargaKeluar && bayarSet.size === 0 && showPayErrors;
 
-                  const summary = getSmartSummary(rowAny);
-                  const hasData = summary !== "";
-                  const expanded = isExpanded(i);
-                  const isCollapsedEmpty = !expanded && !hasData;
+                    const summary = getSmartSummary(rowAny);
+                    const hasData = summary !== "";
+                    const canResetRow = hasData || bayarSet.size > 0 || !!rowAny.buktiTransfer;
+                    const expanded = isExpanded(i);
+                    const isCollapsedEmpty = !expanded && !hasData;
 
-                  const cardClass = `flex flex-col rounded-tile ring-1 overflow-hidden transition-all duration-200 ${
-                    payInvalid ? "ring-negative/50 bg-negative/5" :
-                    isCollapsedEmpty ? "bg-surface-2/60 ring-edge opacity-80" :
-                    "bg-surface ring-edge"
-                  }`;
-                  const rowClass = `table-row group transition-colors hover:bg-surface-2/60 ${payInvalid ? "bg-negative/5" : ""}`;
+                    const cardClass = `flex flex-col rounded-tile ring-1 overflow-hidden transition-all duration-200 ${
+                      payInvalid ? "ring-negative/50 bg-negative/[0.06] backdrop-blur-xl" :
+                      locked ? `${AKSEN_TILE.purple.bg} ring-edge` :
+                      isCollapsedEmpty ? "apple-tile ring-edge opacity-80" :
+                      "apple-tile ring-edge"
+                    }`;
+                    const rowClass = `table-row group transition-colors ${
+                      payInvalid ? "bg-negative/[0.06] hover:bg-negative/[0.09]" :
+                      locked ? "bg-[#CB30E0]/[0.05] hover:bg-[#CB30E0]/[0.08]" :
+                      "hover:bg-fill/40"
+                    }`;
 
-                  return (
-                    <SwipeableRow
-                      key={i}
-                      isMobile={isMobile}
-                      disabled={!hasData}
-                      onSwipe={() => onDeleteRow(i)}
-                      className={isMobile ? cardClass : rowClass}
-                      style={{ borderBottom: isMobile ? 'none' : '' }}
-                    >
-                      {/* CARD HEADER OR NO. ROW */}
-                      <td
-                        onClick={() => { if (isMobile && !isAlwaysExpanded) toggleExpand(i) }}
-                        className={isMobile
-                          ? `flex justify-between items-center px-4 py-3 ${!isAlwaysExpanded ? 'cursor-pointer active:opacity-90' : ''} ${isCollapsedEmpty ? 'bg-surface-2/60 text-label-2' : 'text-white'} transition-colors select-none`
-                          : `table-cell w-[56px] text-center px-1.5 py-1.5 align-middle relative`
-                        }
-                        style={isMobile && !isCollapsedEmpty ? { backgroundColor: theme.color } : undefined}
+                    return (
+                      <SwipeableRow
+                        key={rowAny._autoOngkirKey || i}
+                        isMobile={isMobile}
+                        disabled={!hasData || locked}
+                        onSwipe={() => onDeleteRow(i)}
+                        className={isMobile ? cardClass : rowClass}
+                        style={{ borderBottom: isMobile ? 'none' : '' }}
                       >
-                         {isMobile ? (
-                            <div className="flex flex-col gap-1 w-full max-w-[85%]">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wider uppercase ${isCollapsedEmpty ? "bg-fill text-label-2" : "bg-white/20 text-white"}`}>
-                                  Baris {i + 1}
-                                </span>
-                                {renderNo && (
-                                  <span className="contents" onClick={(e) => e.stopPropagation()}>
-                                    {renderNo(r, i)}
+                        {/* CARD HEADER OR NO. ROW */}
+                        <td
+                          onClick={() => { if (isMobile && !isAlwaysExpanded) toggleExpand(i) }}
+                          className={isMobile
+                            ? `flex justify-between items-center px-4 py-3 ${!isAlwaysExpanded ? 'cursor-pointer active:opacity-90' : ''} ${locked ? `${AKSEN_TILE.purple.bg} !ring-0 border-b border-[#CB30E0]/20 text-label` : isCollapsedEmpty ? 'bg-transparent text-label-2' : `${catAccent.bg} !ring-0 border-b border-sep text-label`} transition-colors select-none`
+                            : `table-cell w-[56px] text-center px-1.5 py-1.5 align-middle relative`
+                          }
+                        >
+                           {isMobile ? (
+                              <div className="flex flex-col gap-1 w-full max-w-[85%]">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wider uppercase ${locked ? AKSEN_TILE.purple.pill : isCollapsedEmpty ? "bg-fill text-label-2" : catAccent.pill}`}>
+                                    Baris {i + 1}
                                   </span>
-                                )}
+                                  {renderNo && (
+                                    <span className="contents" onClick={(e) => e.stopPropagation()}>
+                                      {renderNo(r, i)}
+                                    </span>
+                                  )}
+                                  {!expanded && hasData && (
+                                     <span className="flex items-center justify-center rounded-full bg-positive/15 text-positive p-1">
+                                        <Check size={12} strokeWidth={2.8} />
+                                     </span>
+                                  )}
+                                </div>
                                 {!expanded && hasData && (
-                                   <span className="flex items-center justify-center rounded-full bg-white/25 text-white p-1">
-                                      <Check size={12} strokeWidth={2.8} />
-                                   </span>
+                                  <span className="text-subhead font-semibold leading-snug line-clamp-1 truncate mt-0.5 text-label">{summary}</span>
+                                )}
+                                {isCollapsedEmpty && (
+                                  <span className="text-footnote leading-snug mt-0.5 text-label-3">Kosong — ketuk untuk mengisi</span>
                                 )}
                               </div>
-                              {!expanded && hasData && (
-                                <span className="text-subhead font-semibold leading-snug line-clamp-1 truncate mt-0.5 text-white">{summary}</span>
-                              )}
-                              {isCollapsedEmpty && (
-                                <span className="text-footnote leading-snug mt-0.5 text-label-2">Kosong — ketuk untuk mengisi</span>
-                              )}
-                            </div>
-                         ) : (
-                            <div className="flex flex-col justify-center items-center gap-1 h-full">
-                               <span className="font-mono text-footnote font-semibold text-label-2">{i + 1}</span>
-                               {renderNo?.(r, i)}
-                            </div>
-                         )}
+                           ) : (
+                              <div className="flex flex-col justify-center items-center gap-1 h-full">
+                                 <span className="font-mono text-footnote font-semibold text-label-2">{i + 1}</span>
+                                 {renderNo?.(r, i)}
+                              </div>
+                           )}
 
-                         {isMobile && !isAlwaysExpanded && (
-                            <div className={`flex shrink-0 items-center justify-center w-9 h-9 rounded-full ${isCollapsedEmpty ? "bg-fill text-label-2" : "bg-black/15 text-white"}`}>
-                               {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                            </div>
-                         )}
+                           {isMobile && !isAlwaysExpanded && (
+                              <div className="flex shrink-0 items-center justify-center w-8 h-8 rounded-full bg-fill text-label-2">
+                                 {expanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+                              </div>
+                           )}
 
-                         {payInvalid && !isMobile && <AlertCircle size={16} className="text-negative animate-pulse absolute left-1 top-1/2 -translate-y-1/2" />}
-                      </td>
+                           {payInvalid && !isMobile && <AlertCircle size={16} className="text-negative animate-pulse absolute left-1 top-1/2 -translate-y-1/2" />}
+                        </td>
 
-                      {expanded && (
-                         <>
-                            {Object.keys(blank)
-                              .filter((k) => k !== "bayar" && !k.startsWith("_"))
-                              .map((k, idx) => {
-                                const kind = fieldKind(k);
-                                const value = (r as any)[k] ?? "";
-                                
-                                const rawLabel = columns[idx + 1] || k.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                        {expanded && (
+                           <>
+                              {Object.keys(blank)
+                                .filter((k) => k !== "bayar" && k !== "buktiTransfer" && !k.startsWith("_"))
+                                .map((k, idx) => {
+                                  const kind = fieldKind(k);
+                                  const value = (r as any)[k] ?? "";
+                                  
+                                  const rawLabel = columns[idx + 1] || k.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
 
-                                const tdWrapper = (content: React.ReactNode, addClass = "") => {
-                                   if (!isMobile) {
-                                      return (
-                                        <td key={k} className={`table-cell px-2 py-1.5 align-middle ${addClass}`}>
+                                  const tdWrapper = (content: React.ReactNode, addClass = "") => {
+                                     if (!isMobile) {
+                                        return (
+                                          <td key={k} className={`table-cell px-2 py-1.5 align-middle ${addClass}`}>
+                                            <div className="w-full relative">{content}</div>
+                                          </td>
+                                        )
+                                     }
+                                     return (
+                                       <td key={k} className={`flex flex-col px-4 py-2.5 border-b border-sep ${addClass}`}>
+                                          <span className="block text-caption2 font-semibold text-label-2 uppercase tracking-[0.04em] mb-1">
+                                             {rawLabel}
+                                          </span>
                                           <div className="w-full relative">{content}</div>
-                                        </td>
-                                      )
-                                   }
-                                   return (
-                                     <td key={k} className={`flex flex-col px-4 py-3 border-b border-sep ${addClass}`}>
-                                        <span className="block text-caption font-semibold text-label-2 uppercase tracking-[0.04em] mb-1">
-                                           {rawLabel}
-                                        </span>
-                                        <div className="w-full relative">{content}</div>
-                                     </td>
-                                   )
-                                };
+                                       </td>
+                                     )
+                                  };
 
-                                const overridden = renderCell?.({
-                                  keyName: k,
-                                  kind,
-                                  value,
-                                  row: r,
-                                  rowIndex: i,
-                                  inputBase,
-                                  onKeyNav,
-                                  updateRow,
-                                });
+                                  const overridden = renderCell?.({
+                                    keyName: k,
+                                    kind,
+                                    value,
+                                    row: r,
+                                    rowIndex: i,
+                                    inputBase,
+                                    onKeyNav,
+                                    updateRow,
+                                  });
 
-                                if (overridden !== undefined) return tdWrapper(overridden);
+                                  if (overridden !== undefined) return tdWrapper(overridden);
 
-                                if (k === "harga") {
-                                  return tdWrapper(
-                                      <div className="relative">
-                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-caption text-label-3 font-semibold select-none pointer-events-none">Rp</span>
+                                  if (k === "harga") {
+                                    return tdWrapper(
+                                        <div className="relative">
+                                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-caption text-label-3 font-semibold select-none pointer-events-none">Rp</span>
+                                          <input
+                                            data-fieldid={`table-${title.replace(/\s+/g,'-')}-${i}-${k}`}
+                                            inputMode="numeric"
+                                            readOnly={locked}
+                                            className={`${inputBase} pl-9 font-mono font-medium text-label placeholder:text-label-3 ${locked ? "opacity-75 cursor-not-allowed" : ""}`}
+                                            value={rowAny.harga ?? ""}
+                                            onChange={(e) => { if (!locked) updateRow(i, { harga: toInt(e.target.value) } as any); }}
+                                            onKeyDown={onKeyNav}
+                                            placeholder="0"
+                                          />
+                                        </div>,
+                                        !isMobile ? "w-[136px] lg:w-[156px]" : ""
+                                    );
+                                  }
+
+                                  if (kind === "time") {
+                                    return tdWrapper(
+                                        <div className="relative flex items-center">
+                                          <input
+                                            data-fieldid={`table-${title.replace(/\s+/g,'-')}-${i}-${k}`}
+                                            type="time"
+                                            readOnly={locked}
+                                            className={`${inputBase} font-mono ${locked ? "opacity-75 cursor-not-allowed" : ""}`}
+                                            value={value}
+                                            onChange={(e) => { if (!locked) updateRow(i, { [k]: e.target.value } as any); }}
+                                            onKeyDown={onKeyNav}
+                                          />
+                                          {!value && <Clock className="absolute right-3 h-4 w-4 text-label-3 pointer-events-none" />}
+                                        </div>
+                                    );
+                                  }
+                                  
+                                  if (kind === "number") {
+                                    return tdWrapper(
                                         <input
                                           data-fieldid={`table-${title.replace(/\s+/g,'-')}-${i}-${k}`}
-                                          inputMode="numeric"
-                                          className={`${inputBase} pl-9 font-mono font-medium text-label placeholder:text-label-3`}
-                                          value={rowAny.harga ?? ""}
-                                          onChange={(e) => updateRow(i, { harga: toInt(e.target.value) } as any)}
-                                          onKeyDown={onKeyNav}
-                                          placeholder="0"
-                                        />
-                                      </div>,
-                                      !isMobile ? "w-[124px] lg:w-[144px]" : ""
-                                  );
-                                }
-
-                                if (kind === "time") {
-                                  return tdWrapper(
-                                      <div className="relative flex items-center">
-                                        <input
-                                          data-fieldid={`table-${title.replace(/\s+/g,'-')}-${i}-${k}`}
-                                          type="time"
-                                          className={`${inputBase} font-mono`}
+                                          type="number" inputMode="numeric" pattern="[0-9]*"
+                                          min={0}
+                                          readOnly={locked}
+                                          className={`${inputBase} font-mono ${locked ? "opacity-75 cursor-not-allowed" : ""}`}
                                           value={value}
-                                          onChange={(e) => updateRow(i, { [k]: e.target.value } as any)}
+                                          onChange={(e) => { if (!locked) updateRow(i, { [k]: e.target.value } as any); }}
                                           onKeyDown={onKeyNav}
+                                          placeholder={placeholders?.[k] ?? "0"}
                                         />
-                                        {!value && <Clock className="absolute right-3 h-4 w-4 text-label-3 pointer-events-none" />}
-                                      </div>
-                                  );
-                                }
-                                
-                                if (kind === "number") {
+                                    );
+                                  }
+                                  
                                   return tdWrapper(
                                       <input
                                         data-fieldid={`table-${title.replace(/\s+/g,'-')}-${i}-${k}`}
-                                        type="number" inputMode="numeric" pattern="[0-9]*"
-                                        min={0}
-                                        className={`${inputBase} font-mono`}
+                                        readOnly={locked}
+                                        className={`${inputBase} ${locked ? "opacity-75 cursor-not-allowed" : ""}`}
                                         value={value}
-                                        onChange={(e) => updateRow(i, { [k]: e.target.value } as any)}
+                                        onChange={(e) => { if (!locked) updateRow(i, { [k]: e.target.value } as any); }}
                                         onKeyDown={onKeyNav}
-                                        placeholder="0"
+                                        placeholder={placeholders?.[k] ?? k.replace(/_/g, " ")}
                                       />
                                   );
-                                }
-                                
-                                return tdWrapper(
-                                    <input
-                                      data-fieldid={`table-${title.replace(/\s+/g,'-')}-${i}-${k}`}
-                                      className={inputBase}
-                                      value={value}
-                                      onChange={(e) => updateRow(i, { [k]: e.target.value } as any)}
-                                      onKeyDown={onKeyNav}
-                                      placeholder={k.replace(/_/g, " ")}
-                                    />
-                                );
-                            })}
-                            
-                            {/* Cash Toggle */}
-                            <td className={isMobile ? `flex justify-between items-center px-4 py-3 border-b border-sep` : `table-cell w-[80px] text-center align-middle px-2 py-1.5`}>
-                               {isMobile && <span className="text-caption font-semibold text-label-2 uppercase tracking-[0.04em]">Metode Cash</span>}
-                               <button
-                                 type="button"
-                                 disabled={rowAny.isPaid === "TIDAK"}
-                                 onClick={() => {
-                                   if (rowAny.isPaid === "TIDAK") return;
-                                   const nextVal = bayarSet.has("Cash") ? "" : "Cash";
-                                   const patch: any = { bayar: nextVal };
-                                   if (rowAny.jenisPS === "Hanya Ongkir") {
-                                     patch._bayarOngkir = nextVal;
-                                   }
-                                   updateRow(i, patch as any);
-                                 }}
-                                 className={`inline-flex items-center justify-center transition active:scale-95 ${
-                                   isMobile
-                                    ? `h-11 min-w-[92px] px-3 rounded-field font-semibold text-subhead ${rowAny.isPaid === "TIDAK" ? "bg-fill text-label-3 opacity-50 cursor-not-allowed" : bayarSet.has("Cash") ? "bg-positive text-white" : "bg-fill text-label-2"}`
-                                    : `h-9 w-9 rounded-full ${rowAny.isPaid === "TIDAK" ? "bg-fill text-label-3 opacity-50 cursor-not-allowed" : bayarSet.has("Cash") ? "bg-positive text-white" : "bg-fill text-label-3 hover:text-label-2"}`
-                                 }`}
-                               >
-                                 {bayarSet.has("Cash") ? (
-                                   isMobile ? "Cash" : <Check size={18} strokeWidth={2.8} />
-                                 ) : (
-                                   isMobile ? "Pilih" : <Circle size={18} strokeWidth={2} />
-                                 )}
-                               </button>
-                            </td>
+                              })}
+                              
+                              {!hidePayColumns && (
+                                <>
+                                  {/* Cash Toggle */}
+                                  <td className={isMobile ? `flex justify-between items-center px-4 py-2.5 border-b border-sep` : `table-cell w-[80px] text-center align-middle px-2 py-1.5`}>
+                                     {isMobile && <span className="text-caption2 font-semibold text-label-2 uppercase tracking-[0.04em]">Metode Cash</span>}
+                                     <button
+                                       type="button"
+                                       disabled={locked || rowAny.isPaid === "TIDAK"}
+                                       onClick={() => {
+                                         if (locked || rowAny.isPaid === "TIDAK") return;
+                                         const nextVal = bayarSet.has("Cash") ? "" : "Cash";
+                                         const patch: any = { bayar: nextVal };
+                                         if (rowAny.jenisPS === "Hanya Ongkir") {
+                                           patch._bayarOngkir = nextVal;
+                                         }
+                                         updateRow(i, patch as any);
+                                       }}
+                                       className={`inline-flex items-center justify-center transition active:scale-95 ${
+                                         isMobile
+                                          ? `h-10 min-w-[92px] px-3 rounded-field font-semibold text-subhead ${locked || rowAny.isPaid === "TIDAK" ? (bayarSet.has("Cash") ? "bg-positive/85 text-white opacity-90 cursor-not-allowed" : "bg-fill text-label-3 opacity-50 cursor-not-allowed") : bayarSet.has("Cash") ? "bg-positive text-white shadow-xs" : "bg-fill text-label-2"}`
+                                          : `h-9 w-9 rounded-full ${locked || rowAny.isPaid === "TIDAK" ? (bayarSet.has("Cash") ? "bg-positive/85 text-white opacity-90 cursor-not-allowed" : "bg-fill text-label-3 opacity-50 cursor-not-allowed") : bayarSet.has("Cash") ? "bg-positive text-white" : "bg-fill text-label-3 hover:text-label-2"}`
+                                       }`}
+                                     >
+                                       {bayarSet.has("Cash") ? (
+                                         isMobile ? "Cash" : <Check size={18} strokeWidth={2.8} />
+                                       ) : (
+                                         isMobile ? "Pilih" : <Circle size={18} strokeWidth={2} />
+                                       )}
+                                     </button>
+                                  </td>
 
-                            {/* Transfer Toggle */}
-                            <td className={isMobile ? `flex justify-between items-center px-4 py-3 bg-surface-2/40` : `table-cell min-w-[100px] text-center align-middle px-2 py-1.5`}>
-                               {isMobile && <span className="text-caption font-semibold text-label-2 uppercase tracking-[0.04em] shrink-0">Metode TF / QRIS</span>}
-                               <div className={`flex items-center gap-2 ${isMobile ? "justify-end" : "justify-center w-full"}`}>
-                                 <button
-                                   type="button"
-                                   disabled={rowAny.isPaid === "TIDAK"}
-                                   onClick={() => {
-                                     if (rowAny.isPaid === "TIDAK") return;
-                                     const nextVal = bayarSet.has("Transfer") ? "" : "Transfer";
-                                     const patch: any = {
-                                       bayar: nextVal,
-                                       ...(nextVal === "" ? { buktiTransfer: "" } : {})
-                                     };
-                                     if (rowAny.jenisPS === "Hanya Ongkir") {
-                                       patch._bayarOngkir = nextVal;
-                                     }
-                                     updateRow(i, patch as any);
-                                   }}
-                                   className={`inline-flex items-center justify-center transition active:scale-95 ${
-                                     isMobile
-                                      ? `h-11 min-w-[92px] px-3 rounded-field font-semibold text-subhead ${rowAny.isPaid === "TIDAK" ? "bg-fill text-label-3 opacity-50 cursor-not-allowed" : bayarSet.has("Transfer") ? "bg-tint text-white" : "bg-fill text-label-2"}`
-                                      : `h-9 w-9 rounded-full ${rowAny.isPaid === "TIDAK" ? "bg-fill text-label-3 opacity-50 cursor-not-allowed" : bayarSet.has("Transfer") ? "bg-tint text-white" : "bg-fill text-label-3 hover:text-label-2"}`
-                                   }`}
-                                 >
-                                   {bayarSet.has("Transfer") ? (
-                                     isMobile ? "TF / QRIS" : <Check size={18} strokeWidth={2.8} />
-                                   ) : (
-                                     isMobile ? "Pilih" : <Circle size={18} strokeWidth={2} />
-                                   )}
-                                 </button>
-                                 {bayarSet.has("Transfer") && (
-                                   <UploadTransferProof
-                                     value={rowAny.buktiTransfer}
-                                     onChange={(url) => updateRow(i, { buktiTransfer: url } as any)}
-                                   />
-                                 )}
-                               </div>
-                            </td>
+                                  {/* Transfer Toggle */}
+                                  <td className={isMobile ? `flex justify-between items-center px-4 py-2.5 ${hideRowActions && extraColumns.length === 0 ? "bg-transparent" : "border-b border-sep bg-transparent"}` : `table-cell min-w-[100px] text-center align-middle px-2 py-1.5`}>
+                                     {isMobile && <span className="text-caption2 font-semibold text-label-2 uppercase tracking-[0.04em] shrink-0">Metode TF / QRIS</span>}
+                                     <div className={`flex items-center gap-2 ${isMobile ? "justify-end" : "justify-center w-full"}`}>
+                                       <button
+                                         type="button"
+                                         disabled={locked || rowAny.isPaid === "TIDAK"}
+                                         onClick={() => {
+                                           if (locked || rowAny.isPaid === "TIDAK") return;
+                                           const nextVal = bayarSet.has("Transfer") ? "" : "Transfer";
+                                           const patch: any = {
+                                             bayar: nextVal,
+                                             ...(nextVal === "" ? { buktiTransfer: "" } : {})
+                                           };
+                                           if (rowAny.jenisPS === "Hanya Ongkir") {
+                                             patch._bayarOngkir = nextVal;
+                                           }
+                                           updateRow(i, patch as any);
+                                         }}
+                                         className={`inline-flex items-center justify-center transition active:scale-95 ${
+                                           isMobile
+                                            ? `h-10 min-w-[92px] px-3 rounded-field font-semibold text-subhead ${locked || rowAny.isPaid === "TIDAK" ? (bayarSet.has("Transfer") ? "bg-tint/85 text-white opacity-90 cursor-not-allowed" : "bg-fill text-label-3 opacity-50 cursor-not-allowed") : bayarSet.has("Transfer") ? "bg-tint text-white shadow-xs" : "bg-fill text-label-2"}`
+                                            : `h-9 w-9 rounded-full ${locked || rowAny.isPaid === "TIDAK" ? (bayarSet.has("Transfer") ? "bg-tint/85 text-white opacity-90 cursor-not-allowed" : "bg-fill text-label-3 opacity-50 cursor-not-allowed") : bayarSet.has("Transfer") ? "bg-tint text-white" : "bg-fill text-label-3 hover:text-label-2"}`
+                                         }`}
+                                       >
+                                         {bayarSet.has("Transfer") ? (
+                                           isMobile ? "TF / QRIS" : <Check size={18} strokeWidth={2.8} />
+                                         ) : (
+                                           isMobile ? "Pilih" : <Circle size={18} strokeWidth={2} />
+                                         )}
+                                       </button>
+                                       {bayarSet.has("Transfer") && (
+                                         <UploadTransferProof
+                                           value={rowAny.buktiTransfer}
+                                           onChange={(url) => updateRow(i, { buktiTransfer: url } as any)}
+                                           disabled={locked && !allowProofOnLocked}
+                                         />
+                                       )}
+                                     </div>
+                                  </td>
+                                </>
+                              )}
 
-                            {/* Per-Row Action Buttons (Card Mode) */}
-                            {isMobile && (
-                              <td className="flex justify-center items-center gap-3 px-4 py-2.5 border-t border-sep">
-                                {hasData && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      updateRow(i, { ...blank } as any);
-                                    }}
-                                    className="flex min-h-[40px] items-center gap-1.5 text-caption font-semibold text-label-2 hover:text-warning transition-colors active:scale-95 px-3 rounded-field hover:bg-warning/10"
-                                  >
-                                    <RotateCcw size={13} />
-                                    Reset
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDeleteRow(i);
-                                  }}
-                                  className="flex min-h-[40px] items-center gap-1.5 text-caption font-semibold text-label-2 hover:text-negative transition-colors active:scale-95 px-3 rounded-field hover:bg-negative/10"
+                              {extraColumns.map((ec, idx) => (
+                                <td
+                                  key={`extra-c-${idx}`}
+                                  className={
+                                    isMobile
+                                      ? `flex justify-between items-center px-4 py-2.5 ${idx < extraColumns.length - 1 || !hideRowActions ? "border-b border-sep" : "bg-transparent"}`
+                                      : `table-cell ${ec.center ? "text-center" : ""} align-middle px-2 py-1.5`
+                                  }
                                 >
-                                  <Trash2 size={13} />
-                                  Hapus Baris
-                                </button>
-                              </td>
-                            )}
+                                  {isMobile && (
+                                    <span className="text-caption2 font-semibold text-label-2 uppercase tracking-[0.04em] shrink-0">
+                                      {ec.mobileLabel ?? ec.header}
+                                    </span>
+                                  )}
+                                  {ec.render({ row: r, rowIndex: i, locked, isMobile, inputBase, onKeyNav, updateRow })}
+                                </td>
+                              ))}
 
-                            {/* Per-Row Action Buttons (Classic Mode) */}
-                            {!isMobile && (
-                              <td className="table-cell text-center align-middle px-2 py-1.5">
-                                <div className="flex items-center justify-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => updateRow(i, { ...blank } as any)}
-                                    className="flex items-center justify-center w-8 h-8 rounded-control bg-fill text-label-2 hover:bg-warning/15 hover:text-warning active:scale-90 transition"
-                                    title="Reset baris ini"
-                                  >
-                                    <RotateCcw size={14} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => onDeleteRow(i)}
-                                    className="flex items-center justify-center w-8 h-8 rounded-control bg-fill text-label-2 hover:bg-negative/15 hover:text-negative active:scale-90 transition"
-                                    title="Hapus baris ini"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </div>
-                              </td>
-                            )}
-                      </>
-                      )}
-                    </SwipeableRow>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                              {/* Per-Row Action Buttons (Card Mode) */}
+                              {isMobile && !hideRowActions && (
+                                <td className="flex justify-center items-center gap-3 px-4 py-2 border-t border-sep">
+                                  {locked ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-fill px-2.5 py-1 text-caption font-medium text-label-2 whitespace-nowrap">
+                                      <Lock size={11} />Otomatis
+                                    </span>
+                                  ) : (
+                                    <>
+                                      {canResetRow && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setResetConfirm({ type: "row", index: i });
+                                          }}
+                                          className="flex min-h-[38px] items-center gap-1.5 text-caption font-semibold text-label-2 hover:text-negative transition-colors active:scale-95 px-3.5 rounded-full hover:bg-negative/10"
+                                        >
+                                          <RotateCcw size={13} />
+                                          Reset
+                                        </button>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onDeleteRow(i);
+                                        }}
+                                        className="flex min-h-[38px] items-center gap-1.5 text-caption font-semibold text-label-2 hover:text-negative transition-colors active:scale-95 px-3.5 rounded-full hover:bg-negative/10"
+                                      >
+                                        <Trash2 size={13} />
+                                        Hapus Baris
+                                      </button>
+                                    </>
+                                  )}
+                                </td>
+                              )}
 
-        {/* Action Bar — UDS: reset kiri, tambah baris kanan */}
-        <div className="flex w-full items-center justify-between gap-3">
-          {showResetConfirm ? (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-footnote font-semibold text-label-2">Reset tabel?</span>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => {
-                  handleReset();
-                  setShowResetConfirm(false);
-                }}
-              >
-                Ya, Reset
-              </Button>
-              <Button
-                variant="gray"
-                size="sm"
-                onClick={() => setShowResetConfirm(false)}
-              >
-                Batal
-              </Button>
+                              {/* Per-Row Action Buttons (Classic Mode) */}
+                              {!isMobile && !hideRowActions && (
+                                <td className="table-cell text-center align-middle px-2 py-1.5">
+                                  {locked ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-fill px-2.5 py-1 text-caption font-medium text-label-2 whitespace-nowrap">
+                                      <Lock size={11} />Otomatis
+                                    </span>
+                                  ) : (
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        type="button"
+                                        disabled={!canResetRow}
+                                        onClick={() => setResetConfirm({ type: "row", index: i })}
+                                        className="flex items-center justify-center w-8 h-8 rounded-full bg-fill text-label-2 hover:bg-negative/10 hover:text-negative active:scale-90 transition disabled:opacity-35 disabled:pointer-events-none"
+                                        title="Reset baris ini"
+                                        aria-label={`Reset baris ${i + 1}`}
+                                      >
+                                        <RotateCcw size={14} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => onDeleteRow(i)}
+                                        className="flex items-center justify-center w-8 h-8 rounded-full bg-fill text-label-2 hover:bg-negative/15 hover:text-negative active:scale-90 transition"
+                                        title="Hapus baris ini"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                              )}
+                        </>
+                        )}
+                      </SwipeableRow>
+                    );
+                  })}
+                </tbody>
+                {!isMobile && tableFooter}
+              </table>
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => { onClear?.(); setShowResetConfirm(true); }}
-              className="flex items-center justify-center w-11 h-11 rounded-full bg-fill text-label-2 hover:text-label active:scale-95 transition"
-              title="Reset / Clear Tabel"
-              aria-label="Reset tabel"
-            >
-              <RotateCcw size={17} />
-            </button>
-          )}
+          </div>
 
-          <Button
-            variant="filled"
-            size="md"
-            icon={<Plus size={16} />}
-            onClick={onAddRow}
-            className="rounded-full"
-          >
-            Tambah Baris
-          </Button>
+          {slotBawahTable}
+
+          {/* Action Bar — UDS SSOT: tombol Reset kiri (AlertDialog), Tambah Baris kanan */}
+          {(showReset || showAddRow) && (
+            <div className="flex w-full items-center justify-between gap-3 pt-1">
+              {showReset ? (
+                <Button
+                  variant="gray"
+                  size="md"
+                  icon={<RotateCcw />}
+                  onClick={() => setResetConfirm({ type: "table" })}
+                  title="Reset Semua Baris"
+                  aria-label={`Reset ${title}`}
+                >
+                  Reset
+                </Button>
+              ) : (
+                <div />
+              )}
+
+              {showAddRow && (
+                <Button
+                  variant="filled"
+                  size="md"
+                  icon={<Plus size={17} />}
+                  onClick={onAddRow}
+                  className="rounded-full"
+                >
+                  Tambah Baris
+                </Button>
+              )}
+            </div>
+          )}
         </div>
-      </div>
-    </Section>
+      </Card>
+
+      <AlertDialog
+        open={showPayAlert}
+        onClose={() => setShowPayAlert(false)}
+        zClassName="z-[700]"
+        icon={<AlertCircle />}
+        iconColor="red"
+        title="Metode Pembayaran Belum Lengkap"
+        description="Mohon pilih metode pembayaran (Cash atau Transfer) pada baris yang ditandai terlebih dahulu sebelum menambah baris baru."
+        actions={[
+          { label: "Mengerti", role: "primary", onClick: () => setShowPayAlert(false) },
+        ]}
+      />
+
+      <AlertDialog
+        open={!!resetConfirm}
+        onClose={() => setResetConfirm(null)}
+        zClassName="z-[700]"
+        icon={<RotateCcw />}
+        iconColor="red"
+        title={
+          resetConfirm?.type === "row"
+            ? `Reset Baris No. ${resetConfirm.index + 1}?`
+            : "Reset Semua Baris?"
+        }
+        description={
+          resetConfirm?.type === "row"
+            ? `Seluruh isian pada baris no. ${resetConfirm.index + 1} akan dikosongkan ke nilai awal.`
+            : `Seluruh isian pada ${title} akan dikosongkan ke baris awal. Tindakan ini tidak dapat dibatalkan.`
+        }
+        actions={[
+          { label: "Batal", role: "cancel", onClick: () => setResetConfirm(null) },
+          {
+            label: "Reset",
+            role: "destructive",
+            onClick: () => {
+              const current = resetConfirm;
+              setResetConfirm(null);
+              if (!current) return;
+              if (current.type === "row") {
+                updateRow(current.index, { ...blank } as any);
+              } else {
+                onClear?.();
+                handleReset();
+              }
+            },
+          },
+        ]}
+      />
+    </>
   );
 }

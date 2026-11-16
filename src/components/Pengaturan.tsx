@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { collection, addDoc, deleteDoc, onSnapshot, query, doc, updateDoc, where } from "firebase/firestore";
 import { db } from "../lib/firebase";
@@ -32,7 +32,8 @@ import {
   ChevronDown,
   Download,
   Pencil,
-  ChevronRight
+  ChevronRight,
+  AlertTriangle
 } from "lucide-react";
 // import SopPdf from "../SOP/SOP_SewaPS_URBAN.pdf";
 import versionData from "../version.json";
@@ -42,6 +43,20 @@ import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr } from "../lib
 import { toLocalYmd } from "../lib/dateLocal";
 import { ongkirPengantarTersimpan } from "../lib/sewa";
 import { toInt, rupiah } from "../lib/format";
+import {
+  AlertDialog,
+  Button,
+  EmptyState,
+  Footnote,
+  IconBadge,
+  ListGroup,
+  ListRow,
+  Notice,
+  Pill,
+  SectionHeader,
+  Toggle,
+} from "../ui";
+import type { WarnaIkon } from "../ui";
 
 interface Price {
   label: string;
@@ -147,32 +162,25 @@ const compressImage = (file: File, maxWidth: number, maxHeight: number, quality:
   });
 };
 
-// --- Apple Design Components ---
+// --- Apple Design Components (backed by URBAN Design System) ---
 const IOSGroup = ({ children, title, className = "" }: { children: React.ReactNode; title?: string; className?: string }) => (
-  <div className={`mb-6 ${className}`}>
-    {title && (
-      <div className="px-4 pb-2 text-[13px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-        {title}
-      </div>
-    )}
-    <div className="overflow-hidden rounded-[18px] border border-zinc-200/60 bg-white/80 dark:border-zinc-700/50 dark:bg-zinc-800/60 shadow-sm backdrop-blur-md">
-      {children}
-    </div>
+  <div className={`mb-5 ${className}`}>
+    {title && <SectionHeader title={title} className="pt-0" />}
+    <ListGroup>{children}</ListGroup>
   </div>
 );
 
 const IOSRow = ({
   icon,
-  iconColor,
+  iconColor = "gray",
   label,
   value,
   onClick,
-  isLast,
-  chevron = true,
+  chevron,
   destructive = false,
 }: {
   icon?: React.ReactNode;
-  iconColor?: string;
+  iconColor?: WarnaIkon;
   label: string;
   value?: React.ReactNode;
   onClick?: () => void;
@@ -180,33 +188,15 @@ const IOSRow = ({
   chevron?: boolean;
   destructive?: boolean;
 }) => (
-  <button
+  <ListRow
+    icon={icon}
+    iconColor={iconColor}
+    title={label}
+    value={value}
     onClick={onClick}
-    disabled={!onClick}
-    className={`w-full flex items-center justify-between gap-3 px-4 py-3.5 transition-colors ${onClick ? "active:bg-zinc-100 dark:active:bg-zinc-700/50 cursor-pointer" : "cursor-default"
-      } ${!isLast ? "border-b border-zinc-100 dark:border-zinc-700/50" : ""}`}
-  >
-    <div className="flex items-center gap-3 min-w-0">
-      {icon && (
-        <div
-          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] shadow-sm text-white ${iconColor || "bg-zinc-500"
-            }`}
-        >
-          {icon}
-        </div>
-      )}
-      <span
-        className={`text-[16px] font-medium truncate ${destructive ? "text-red-500" : "text-zinc-900 dark:text-zinc-100"
-          }`}
-      >
-        {label}
-      </span>
-    </div>
-    <div className="flex items-center gap-2 shrink-0">
-      {value && <span className="text-[15px] text-zinc-500 dark:text-zinc-400">{value}</span>}
-      {chevron && onClick && <ChevronRight className="w-4 h-4 text-zinc-400 dark:text-zinc-500" />}
-    </div>
-  </button>
+    chevron={chevron}
+    destructive={destructive}
+  />
 );
 
 const SegmentedControl = <T extends string>({
@@ -218,17 +208,19 @@ const SegmentedControl = <T extends string>({
   value: T;
   onChange: (val: T) => void;
 }) => (
-  <div className="p-0.5 bg-zinc-200/50 dark:bg-zinc-700/50 rounded-lg flex relative">
+  <div className="p-[3px] apple-segmented rounded-full flex relative gap-0.5">
     {options.map((opt) => {
       const isActive = value === opt.value;
       return (
         <button
           key={opt.value}
+          type="button"
           onClick={() => onChange(opt.value)}
-          className={`flex-1 py-1.5 px-3 text-[12px] font-bold uppercase tracking-wide rounded-[6px] transition-all duration-200 flex items-center justify-center gap-1.5 ${isActive
-            ? "bg-white dark:bg-zinc-600 text-zinc-900 dark:text-white shadow-sm scale-[1.02]"
-            : "text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white"
-            }`}
+          className={`flex-1 min-h-[32px] py-1 px-3 text-caption2 font-bold uppercase tracking-wide rounded-full transition-all duration-200 flex items-center justify-center gap-1.5 ${
+            isActive
+              ? "apple-segmented-thumb text-label"
+              : "text-label-2 hover:text-label hover:bg-white/30 dark:hover:bg-white/[0.05]"
+          }`}
         >
           {opt.icon && <span className="flex items-center justify-center">{opt.icon}</span>}
           {opt.label}
@@ -244,7 +236,7 @@ const sopData = [
     id: 1,
     title: "1. Sewa di Tempat",
     content: (
-      <ul className="list-disc pl-5 space-y-2 text-[13px] text-zinc-600 dark:text-zinc-300">
+      <ul className="list-disc pl-5 space-y-2 text-footnote text-label-2">
         <li>Wajib memberikan 2 jaminan (pilih salah satu kombinasi):
           <ul className="list-disc pl-5 mt-1">
             <li>KTP + SIM</li>
@@ -253,7 +245,7 @@ const sopData = [
             <li>KTP + KTP lain</li>
           </ul>
         </li>
-        <li className="italic text-[12px]">Catatan: Nama dan alamat pada jaminan wajib sama. Jika berbeda, harus konfirmasi terlebih dahulu kepada owner.</li>
+        <li className="italic text-caption">Catatan: Nama dan alamat pada jaminan wajib sama. Jika berbeda, harus konfirmasi terlebih dahulu kepada owner.</li>
         <li>Wajib mengisi form sewa di buku.</li>
         <li>Wajib melakukan tes unit sebelum barang diserahkan.</li>
       </ul>
@@ -263,7 +255,7 @@ const sopData = [
     id: 2,
     title: "2. Sewa Antar Jemput",
     content: (
-      <ul className="list-disc pl-5 space-y-2 text-[13px] text-zinc-600 dark:text-zinc-300">
+      <ul className="list-disc pl-5 space-y-2 text-footnote text-label-2">
         <li>Wajib memberikan 2 jaminan (aturan sama seperti di atas).</li>
         <li>Wajib tes unit sebelum driver pulang. Jika tidak memungkinkan, wajib difoto bersama penyewa + unit PS.</li>
         <li>Wajib foto saat PS sedang digunakan (bukti kondisi normal).</li>
@@ -275,7 +267,7 @@ const sopData = [
     id: 3,
     title: "3. Ketentuan Jam Tanggung",
     content: (
-      <ul className="list-disc pl-5 space-y-2 text-[13px] text-zinc-600 dark:text-zinc-300">
+      <ul className="list-disc pl-5 space-y-2 text-footnote text-label-2">
         <li>Waktu mulai sewa dan pengambilan PS dimulai pukul 10.00 WIB.</li>
         <li>Sewa 12 jam tidak bisa fleksibel apabila dimulai pada jam tertentu.</li>
         <li>Khusus jam 13.00 - 21.00 disebut jam tanggung.</li>
@@ -288,15 +280,15 @@ const sopData = [
     id: 4,
     title: "4. Biaya Tambahan Per Jam",
     content: (
-      <div className="space-y-2 text-[13px] text-zinc-600 dark:text-zinc-300">
-        <div className="flex justify-between border-b border-zinc-200 dark:border-zinc-700 pb-1">
+      <div className="space-y-2 text-footnote text-label-2">
+        <div className="flex justify-between border-b border-sep pb-1 text-label">
           <span className="font-semibold">Tipe Sewa</span>
           <span className="font-semibold">Harga/Jam</span>
         </div>
-        <div className="flex justify-between"><span>PS3 Only</span><span>Rp 3.000</span></div>
-        <div className="flex justify-between"><span>PS3 + TV/Portable</span><span>Rp 4.000</span></div>
-        <div className="flex justify-between"><span>PS4 Only</span><span>Rp 5.000</span></div>
-        <div className="flex justify-between"><span>PS4 + TV/Portable</span><span>Rp 6.000</span></div>
+        <div className="flex justify-between"><span>PS3 Only</span><span className="tabular-nums">Rp 3.000</span></div>
+        <div className="flex justify-between"><span>PS3 + TV/Portable</span><span className="tabular-nums">Rp 4.000</span></div>
+        <div className="flex justify-between"><span>PS4 Only</span><span className="tabular-nums">Rp 5.000</span></div>
+        <div className="flex justify-between"><span>PS4 + TV/Portable</span><span className="tabular-nums">Rp 6.000</span></div>
       </div>
     )
   },
@@ -304,7 +296,7 @@ const sopData = [
     id: 5,
     title: "5. Denda Penyewa",
     content: (
-      <ul className="list-disc pl-5 space-y-2 text-[13px] text-zinc-600 dark:text-zinc-300">
+      <ul className="list-disc pl-5 space-y-2 text-footnote text-label-2">
         <li>Jika penyewa terlambat mengembalikan unit PS, maka akan dikenakan denda.</li>
         <li>Perhitungan denda dimulai dari waktu seharusnya PS dikembalikan.</li>
         <li>Besaran denda mengikuti tarif tambahan per jam yang tertera pada poin nomor 4.</li>
@@ -389,23 +381,41 @@ const Pengaturan: React.FC<Props> = ({
 
   // Aksi penting: dikonfirmasi password akun yang sedang login (tanpa password bersama di kode)
   const [aksiAman, setAksiAman] = useState<AksiAman | null>(null);
+  const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
+  const [deleteAsistenId, setDeleteAsistenId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [toast, setToast] = useState("");
+  const toastTimer = useRef<number | null>(null);
+  const showToast = (msg: string) => {
+    setToast(msg);
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(""), 2800);
+  };
 
   useEffect(() => {
     if (open) setMobileView("menu");
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !aksiAman && !confirmLogoutOpen && !deleteAsistenId) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, aksiAman, confirmLogoutOpen, deleteAsistenId, onClose]);
+
   const menu = useMemo(() => {
-    const allMenus = [
-      { key: "general" as const, label: "Umum", icon: <Settings size={15} />, color: "bg-zinc-500" },
-      { key: "asisten" as const, label: "Asisten", icon: <Bot size={15} />, color: "bg-cyan-500" },
-      { key: "gaji" as const, label: "Gaji Saya", icon: <Wallet size={15} />, color: "bg-emerald-500" },
-      { key: "edit" as const, label: "Edit Rincian", icon: <FileText size={15} />, color: "bg-blue-500" },
-      { key: "backup" as const, label: "Backup & Restore", icon: <Cloud size={15} />, color: "bg-green-500" },
-      { key: "export" as const, label: "Export Data", icon: <Upload size={15} />, color: "bg-orange-500" },
-      { key: "reset" as const, label: "Reset", icon: <Trash2 size={15} />, color: "bg-red-500" },
-      { key: "sop" as const, label: "Panduan", icon: <ClipboardList size={15} />, color: "bg-teal-500" },
-      { key: "info" as const, label: "Info", icon: <Info size={15} />, color: "bg-indigo-500" },
+    const allMenus: { key: TabKey; label: string; icon: React.ReactNode; color: WarnaIkon }[] = [
+      { key: "general", label: "Umum", icon: <Settings size={15} />, color: "gray" },
+      { key: "asisten", label: "Asisten", icon: <Bot size={15} />, color: "cyan" },
+      { key: "gaji", label: "Gaji Saya", icon: <Wallet size={15} />, color: "green" },
+      { key: "edit", label: "Edit Rincian", icon: <FileText size={15} />, color: "blue" },
+      { key: "backup", label: "Backup & Restore", icon: <Cloud size={15} />, color: "green" },
+      { key: "export", label: "Export Data", icon: <Upload size={15} />, color: "orange" },
+      { key: "reset", label: "Reset", icon: <Trash2 size={15} />, color: "red" },
+      { key: "sop", label: "Panduan", icon: <ClipboardList size={15} />, color: "teal" },
+      { key: "info", label: "Info", icon: <Info size={15} />, color: "indigo" },
     ];
     if (!isOwner) {
       const filtered = allMenus.filter(m => !["asisten", "edit", "backup", "export", "reset"].includes(m.key));
@@ -459,7 +469,7 @@ const Pengaturan: React.FC<Props> = ({
     }
     setFormAsisten({ nama_pengeluaran: "", kategori: "", tanggal: "1" });
     } catch (e: any) {
-      alert("Gagal menyimpan pengingat: " + (e?.message || e));
+      showToast("Gagal menyimpan pengingat: " + (e?.message || e));
     } finally {
       setIsLoading(false);
     }
@@ -473,9 +483,19 @@ const Pengaturan: React.FC<Props> = ({
     } as any);
     setEditingAsistenId(a.id);
   };
-  const handleDeleteAsisten = async (id: string) => {
-    if (!confirm("Hapus pengingat asisten ini?")) return;
-    try { await deleteDoc(doc(db, "owner_assistants", id)); } catch (e: any) { alert("Gagal menghapus: " + (e?.message || e)); }
+  const handleDeleteAsisten = (id: string) => setDeleteAsistenId(id);
+  const konfirmasiHapusAsisten = async () => {
+    if (!deleteAsistenId) return;
+    setIsLoading(true);
+    try {
+      await deleteDoc(doc(db, "owner_assistants", deleteAsistenId));
+      showToast("Pengingat asisten dihapus");
+      setDeleteAsistenId(null);
+    } catch (e: any) {
+      showToast("Gagal menghapus: " + (e?.message || e));
+    } finally {
+      setIsLoading(false);
+    }
   };
   // --- Google Drive State ---
   const [driveConnected, setDriveConnected] = useState(false);
@@ -782,12 +802,12 @@ const Pengaturan: React.FC<Props> = ({
 
   const runOrAlert = (fn?: () => void, msg?: string) => {
     if (fn) return fn();
-    alert(msg || "Fitur ini belum dihubungkan.");
+    showToast(msg || "Fitur ini belum dihubungkan.");
   };
 
   const openEditModal = (fn?: () => void, msg?: string) => {
     if (!fn) {
-      alert(msg || "Fitur edit belum dihubungkan.");
+      showToast(msg || "Fitur edit belum dihubungkan.");
       return;
     }
     fn();
@@ -826,7 +846,7 @@ const Pengaturan: React.FC<Props> = ({
         onProfilePicChange(compressedUrl);
       } catch (error) {
         console.error(error);
-        alert("Gagal memproses gambar profil.");
+        showToast("Gagal memproses gambar profil.");
       } finally {
         setIsLoading(false);
       }
@@ -842,7 +862,7 @@ const Pengaturan: React.FC<Props> = ({
         onBgDarkChange(compressedUrl);
       } catch (error) {
         console.error(error);
-        alert("Gagal memproses gambar background. (Mungkin terlalu besar)");
+        showToast("Gagal memproses gambar background. (Mungkin terlalu besar)");
       } finally {
         setIsLoading(false);
       }
@@ -852,53 +872,82 @@ const Pengaturan: React.FC<Props> = ({
   if (!open) return null;
 
   const renderContent = () => (
-    <div className="space-y-6 animate-fadeIn pb-6">
+    <div className="space-y-5 animate-fadeIn pb-6">
 
       {tab === "profile" && (
-        <div className="space-y-6">
-          <IOSGroup title="URBAN Gaming Acoount">
-            <div className="p-6 flex flex-col items-center justify-center text-center border-b border-zinc-100 dark:border-zinc-700/50">
+        <div className="space-y-5">
+          <IOSGroup title="URBAN Gaming Account">
+            <div className="p-6 flex flex-col items-center justify-center text-center">
               <div className="relative mb-4 group cursor-pointer">
-                <div 
-                  className="w-24 h-24 rounded-full overflow-hidden shadow-inner flex items-center justify-center relative border-4 transition-colors" 
-                  style={{ borderColor: userProfileColor || '#3b82f6', backgroundColor: userProfilePic ? undefined : (userProfileColor || '#3b82f6') }}
+                <div
+                  className="w-24 h-24 rounded-full overflow-hidden shadow-card flex items-center justify-center relative border-4 transition-colors"
+                  style={{ borderColor: userProfileColor || "#0088FF", backgroundColor: userProfilePic ? undefined : (userProfileColor || "#0088FF") }}
                 >
                   {userProfilePic ? (
-                    <img src={userProfilePic} className="w-full h-full object-cover" />
+                    <img src={userProfilePic} alt="Foto profil" className="w-full h-full object-cover" />
                   ) : (
                     <span className="font-bold text-white text-2xl uppercase tracking-wider select-none">
-                      {(userEmail?.split('@')[0] || "U").substring(0, 2).toUpperCase()}
+                      {(userEmail?.split("@")[0] || "U").substring(0, 2).toUpperCase()}
                     </span>
                   )}
-                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span className="text-xs text-white font-medium">Ubah</span>
+                  <div className="absolute inset-0 bg-black/45 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-caption text-white font-semibold">Ubah</span>
                   </div>
                 </div>
                 <input type="file" accept="image/*" onChange={handleProfilePhotoSelect} className="absolute inset-0 opacity-0 cursor-pointer" />
               </div>
-              <h3 className="text-xl font-bold text-zinc-900 dark:text-white mb-0.5">{userEmail?.split('@')[0] || "User"}</h3>
-              <p className="text-[13px] text-zinc-500">{userEmail}</p>
+              <h3 className="text-title3 font-bold text-label mb-0.5">{userEmail?.split("@")[0] || "User"}</h3>
+              <p className="text-footnote text-label-2">{userEmail}</p>
             </div>
           </IOSGroup>
 
           <IOSGroup title="Profil Indikator">
-            <div className="p-4 border-b border-zinc-100 dark:border-zinc-700/50">
-              <div className="text-[15px] font-medium text-zinc-900 dark:text-zinc-100 mb-1">Pilih Warna Indikator</div>
-              <div className="text-[13px] text-zinc-500 leading-relaxed mb-4">Warna prfil untuk indikator online</div>
+            <div className="p-4">
+              <div className="text-callout font-medium text-label mb-1">Pilih Warna Indikator</div>
+              <div className="text-footnote text-label-2 leading-relaxed mb-4">Warna profil untuk indikator online</div>
               <div className="flex flex-wrap gap-4 justify-center py-2">
-                {["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#64748b", "#3f3f46"].map(c => (
-                  <button key={c} onClick={() => runOrAlert(() => onProfileColorChange?.(c))} className={`shrink-0 w-8 h-8 rounded-full focus:outline-none focus:ring-4 focus:ring-white/20 transform transition-transform hover:scale-110 flex items-center justify-center shadow-lg border border-black/10 dark:border-white/10 ${userProfileColor === c ? 'scale-125 ring-2 ring-offset-2 ring-offset-zinc-100 dark:ring-offset-zinc-900 ring-zinc-500 z-10' : ''}`} style={{ backgroundColor: c }}>
-                    {userProfileColor === c && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" style={{ mixBlendMode: 'difference' }}><polyline points="20 6 9 17 4 12"></polyline></svg>}
+                {["#0088FF", "#34C759", "#FF8D28", "#FF383C", "#CB30E0", "#FF2D55", "#00C8B3", "#6155F5", "#8E8E93"].map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => runOrAlert(() => onProfileColorChange?.(c))}
+                    className={`shrink-0 w-8 h-8 rounded-full focus:outline-none focus:ring-2 focus:ring-tint/50 transform transition-transform hover:scale-110 flex items-center justify-center shadow-card border border-edge ${
+                      userProfileColor === c ? "scale-125 ring-2 ring-offset-2 ring-offset-surface ring-tint z-10" : ""
+                    }`}
+                    style={{ backgroundColor: c }}
+                  >
+                    {userProfileColor === c && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" style={{ mixBlendMode: "difference" }}>
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
                   </button>
                 ))}
 
-                <div className={`shrink-0 relative w-8 h-8 rounded-full shadow-lg border border-black/10 dark:border-white/10 flex items-center justify-center transform transition-transform hover:scale-110 ${userProfileColor && !["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#64748b", "#3f3f46"].includes(userProfileColor) ? 'scale-125 ring-2 ring-offset-2 ring-offset-zinc-100 dark:ring-offset-zinc-900 ring-zinc-500 z-10' : ''}`} title="Custom Color">
-                  <div className="absolute inset-0 bg-[conic-gradient(from_90deg,red,yellow,green,cyan,blue,magenta,red)] rounded-full opacity-90 pointer-events-none"></div>
-                  <input type="color" value={userProfileColor || "#ffffff"} onChange={(e) => runOrAlert(() => onProfileColorChange?.(e.target.value))} className="absolute inset-[-4px] w-[calc(100%+8px)] h-[calc(100%+8px)] opacity-0 cursor-pointer" />
-                  {userProfileColor && !["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#64748b", "#3f3f46"].includes(userProfileColor) ? (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="relative z-10 drop-shadow-md pointer-events-none" style={{ mixBlendMode: 'difference' }}><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <div
+                  className={`shrink-0 relative w-8 h-8 rounded-full shadow-card border border-edge flex items-center justify-center transform transition-transform hover:scale-110 ${
+                    userProfileColor && !["#0088FF", "#34C759", "#FF8D28", "#FF383C", "#CB30E0", "#FF2D55", "#00C8B3", "#6155F5", "#8E8E93"].includes(userProfileColor)
+                      ? "scale-125 ring-2 ring-offset-2 ring-offset-surface ring-tint z-10"
+                      : ""
+                  }`}
+                  title="Custom Color"
+                >
+                  <div className="absolute inset-0 bg-[conic-gradient(from_90deg,red,yellow,green,cyan,blue,magenta,red)] rounded-full opacity-90 pointer-events-none" />
+                  <input
+                    type="color"
+                    value={userProfileColor || "#ffffff"}
+                    onChange={(e) => runOrAlert(() => onProfileColorChange?.(e.target.value))}
+                    className="absolute inset-[-4px] w-[calc(100%+8px)] h-[calc(100%+8px)] opacity-0 cursor-pointer"
+                  />
+                  {userProfileColor && !["#0088FF", "#34C759", "#FF8D28", "#FF383C", "#CB30E0", "#FF2D55", "#00C8B3", "#6155F5", "#8E8E93"].includes(userProfileColor) ? (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="relative z-10 drop-shadow-md pointer-events-none" style={{ mixBlendMode: "difference" }}>
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
                   ) : (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="relative z-10 drop-shadow-md pointer-events-none"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="relative z-10 drop-shadow-md pointer-events-none">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
                   )}
                 </div>
               </div>
@@ -906,43 +955,46 @@ const Pengaturan: React.FC<Props> = ({
           </IOSGroup>
 
           <IOSGroup title="Kustomisasi Aplikasi">
-            <div className="px-4 py-3 flex items-center justify-between">
-              <div className="space-y-0.5">
-                <div className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">
-                  Ubah Background
-                </div>
-                <div className="text-[12px] text-zinc-500 leading-tight">Ubah background</div>
+            <div className="px-4 py-3.5 flex items-center justify-between gap-3">
+              <div className="space-y-0.5 min-w-0">
+                <div className="text-callout font-medium text-label">Ubah Background</div>
+                <div className="text-caption text-label-2 leading-tight">Latar belakang khusus mode gelap</div>
               </div>
-              <div className="flex gap-2 items-center">
+              <div className="flex gap-2 items-center shrink-0">
                 {customBgDark && (
-                  <button onClick={() => runOrAlert(() => onBgDarkChange && onBgDarkChange(''))} className="bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 font-medium text-[13px] px-4 py-1.5 rounded-full hover:bg-red-200 dark:hover:bg-red-500/30 transition-colors">
+                  <Button variant="destructive" size="sm" onClick={() => runOrAlert(() => onBgDarkChange && onBgDarkChange(""))}>
                     Reset
-                  </button>
+                  </Button>
                 )}
                 <div className="relative">
-                  <button className="bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-medium text-[13px] px-4 py-1.5 rounded-full hover:bg-blue-200 dark:hover:bg-blue-500/30 transition-colors pointer-events-none">
+                  <Button variant="tinted" size="sm" className="pointer-events-none">
                     Pilih File
-                  </button>
+                  </Button>
                   <input type="file" accept="image/*" onChange={handleCustomBgSelect} className="absolute inset-0 opacity-0 cursor-pointer" />
                 </div>
               </div>
             </div>
           </IOSGroup>
+
           <IOSGroup title="Otentikasi">
             <IOSRow
-              label="Keluar (Logout)" icon={<LogOut size={16} />} iconColor="bg-red-500" destructive isLast
-              onClick={() => { if (confirm("Yakin ingin keluar dari akun Admin?")) runOrAlert(onLogout); }}
+              label="Keluar (Logout)"
+              icon={<LogOut size={16} />}
+              iconColor="red"
+              destructive
+              chevron={false}
+              onClick={() => setConfirmLogoutOpen(true)}
             />
           </IOSGroup>
         </div>
       )}
 
       {tab === "gaji" && !isOwner && (
-        <div className="space-y-6">
+        <div className="space-y-5">
           <IOSGroup title="Gaji Saya">
-            <div className="p-6">
+            <div className="p-5">
               {(!gajiKu || !gajiKu.records || gajiKu.records.length === 0) ? (
-                <div className="text-center text-zinc-500 py-8 text-sm">Belum ada history data gaji untuk Anda.</div>
+                <EmptyState title="Belum ada riwayat gaji untuk Anda" />
               ) : (() => {
                 const totalPokok = gajiKu.records.reduce((acc: any, r: any) => acc + (Number(r.gajiPokok) || 0), 0);
                 const totalBonus = gajiKu.records.reduce((acc: any, r: any) => acc + (r.gajiTambahan?.reduce((sum: number, t: any) => sum + (Number(t.nominal) || 0), 0) || 0), 0);
@@ -958,33 +1010,33 @@ const Pengaturan: React.FC<Props> = ({
                         <PieChart>
                           <Pie
                             data={[
-                              { name: "Pokok", value: totalPokok, color: "#10b981" },
-                              { name: "Tambahan", value: totalBonus, color: "#3b82f6" },
-                              { name: "Total Ongkir", value: totalOngkir, color: "#8b5cf6" },
-                              { name: "Pengurangan", value: totalPotongan, color: "#ef4444" }
-                            ].filter(d => d.value > 0)}
+                              { name: "Pokok", value: totalPokok, color: "#34C759" },
+                              { name: "Tambahan", value: totalBonus, color: "#0088FF" },
+                              { name: "Total Ongkir", value: totalOngkir, color: "#CB30E0" },
+                              { name: "Pengurangan", value: totalPotongan, color: "#FF383C" }
+                            ].filter((d) => d.value > 0)}
                             innerRadius={60} outerRadius={85} paddingAngle={4}
                             dataKey="value" stroke="none"
                           >
                             {[
-                              { name: "Pokok", value: totalPokok, color: "#10b981" },
-                              { name: "Tambahan", value: totalBonus, color: "#3b82f6" },
-                              { name: "Total Ongkir", value: totalOngkir, color: "#8b5cf6" },
-                              { name: "Pengurangan", value: totalPotongan, color: "#ef4444" }
-                            ].filter(d => d.value > 0).map((e, i) => <Cell key={i} fill={e.color} />)}
+                              { name: "Pokok", value: totalPokok, color: "#34C759" },
+                              { name: "Tambahan", value: totalBonus, color: "#0088FF" },
+                              { name: "Total Ongkir", value: totalOngkir, color: "#CB30E0" },
+                              { name: "Pengurangan", value: totalPotongan, color: "#FF383C" }
+                            ].filter((d) => d.value > 0).map((e, i) => <Cell key={i} fill={e.color} />)}
                           </Pie>
                           <Tooltip formatter={(val: number) => `${rupiah(val)}`} />
                         </PieChart>
                       </ResponsiveContainer>
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none flex-col mt-1">
-                        <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest text-center">Total<br />Sepanjang Waktu</span>
-                        <span className="text-lg font-black text-emerald-500">{rupiah(totalDiterima)}</span>
+                        <span className="text-caption2 text-label-2 font-bold uppercase tracking-widest text-center">Total<br />Sepanjang Waktu</span>
+                        <span className="text-headline font-bold tabular-nums text-positive">{rupiah(totalDiterima)}</span>
                       </div>
                     </div>
 
                     {/* List Monthly Salary Records */}
-                    <div className="w-full space-y-3 pt-4 border-t border-zinc-100 dark:border-white/5">
-                      <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Riwayat Gaji Bulanan</h4>
+                    <div className="w-full space-y-2.5 pt-4 border-t border-sep">
+                      <h4 className="text-caption font-bold text-label-2 uppercase tracking-wider mb-1">Riwayat Gaji Bulanan</h4>
                       {gajiKu.records.map((r: any) => {
                         const isExpanded = gajiExpandedId === r.id;
                         const tPokok = Number(r.gajiPokok) || 0;
@@ -993,95 +1045,86 @@ const Pengaturan: React.FC<Props> = ({
                         const tBonus = tbArr.reduce((sum: number, t: any) => sum + (Number(t.nominal) || 0), 0);
                         const tOngkir = Number(r.ongkirBulanIni) || 0;
                         const tPotongan = pgArr.filter((p: any) => !p.isDibatalkan).reduce((sum: number, p: any) => sum + (Number(p.nominal) || 0), 0);
-                        const tBonusBelumDibayar = tbArr.filter((t: any) => t.status !== 'sudah').reduce((sum: number, t: any) => sum + (Number(t.nominal) || 0), 0);
+                        const tBonusBelumDibayar = tbArr.filter((t: any) => t.status !== "sudah").reduce((sum: number, t: any) => sum + (Number(t.nominal) || 0), 0);
                         const tDiterimaSemua = Math.max(0, tPokok + tBonus + tOngkir - tPotongan);
                         const tDitransfer = Math.max(0, tPokok + tBonusBelumDibayar - tPotongan);
                         return (
-                          <div key={r.id} className="bg-zinc-50 dark:bg-black rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden w-full transition-all">
-                            {/* Header Collapsed */}
-                            <div
-                              className="p-3.5 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors select-none"
+                          <div key={r.id} className="apple-tile rounded-tile border border-sep overflow-hidden w-full transition-all">
+                            <button
+                              type="button"
+                              className="w-full p-3.5 flex justify-between items-center text-left hover:bg-fill/60 active:bg-fill transition-colors"
                               onClick={() => setGajiExpandedId(isExpanded ? null : r.id)}
                             >
-                              <span className="font-bold text-[13px] text-zinc-900 dark:text-white uppercase tracking-wide">
+                              <span className="font-semibold text-subhead text-label uppercase tracking-wide">
                                 Gaji {r.bulanTahun}
                               </span>
-                              <div className="flex items-center gap-3">
-                                <span className="text-[13px] font-black text-emerald-600 dark:text-emerald-400">{rupiah(tDiterimaSemua)}</span>
-                                <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                              <div className="flex items-center gap-2.5">
+                                <span className="text-subhead font-bold tabular-nums text-positive">{rupiah(tDiterimaSemua)}</span>
+                                <ChevronDown className={`w-4 h-4 text-label-3 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
                               </div>
-                            </div>
+                            </button>
 
-                            {/* Body Expanded */}
                             {isExpanded && (
-                              <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 space-y-3 bg-white/50 dark:bg-zinc-900/50 animate-in slide-in-from-top-2 duration-200">
+                              <div className="p-4 border-t border-sep space-y-3 bg-surface animate-in slide-in-from-top-2 duration-200">
                                 <div className="flex justify-between items-center">
-                                  <span className="text-xs font-bold text-zinc-500">Gaji Pokok</span>
-                                  <span className="text-sm font-black text-zinc-900 dark:text-white">{rupiah(tPokok)}</span>
+                                  <span className="text-footnote font-semibold text-label-2">Gaji Pokok</span>
+                                  <span className="text-subhead font-bold tabular-nums text-label">{rupiah(tPokok)}</span>
                                 </div>
                                 {tbArr.map((tb: any, i: number) => Number(tb.nominal) > 0 && (
-                                  <div key={`tb-${i}`} className="flex justify-between items-center">
-                                    <div className="flex flex-col gap-0.5">
-                                      <span className="text-[12px] font-bold text-blue-500">Tambahan: +{rupiah(Number(tb.nominal))}</span>
-                                      {tb.status === 'sudah' ? (
-                                          <span className="text-[9px] font-extrabold w-fit uppercase bg-emerald-100/80 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded">SUDAH DIBAYAR</span>
-                                      ) : (
-                                          <span className="text-[9px] font-extrabold w-fit uppercase bg-amber-100/80 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded">BELUM DIBAYAR</span>
-                                      )}
+                                  <div key={`tb-${i}`} className="flex justify-between items-center gap-2">
+                                    <div className="flex flex-col gap-1">
+                                      <span className="text-footnote font-semibold tabular-nums text-tint">Tambahan: +{rupiah(Number(tb.nominal))}</span>
+                                      <Pill tone={tb.status === "sudah" ? "positive" : "warning"}>
+                                        {tb.status === "sudah" ? "SUDAH DIBAYAR" : "BELUM DIBAYAR"}
+                                      </Pill>
                                     </div>
-                                    <span className="text-right text-[11px] font-medium text-zinc-500 max-w-[140px] italic">"{tb.ket || "-"}"</span>
+                                    <span className="text-right text-caption font-medium text-label-2 max-w-[150px] italic">"{tb.ket || "-"}"</span>
                                   </div>
                                 ))}
-                                {(tOngkir > 0) && (
-                                  <div className="flex justify-between items-center flex-wrap gap-1">
-                                    <div className="flex flex-col gap-0.5">
-                                      <span className="text-[12px] font-bold text-purple-500">Total Ongkir: +{rupiah(tOngkir)}</span>
-                                      <span className="text-[9px] font-extrabold w-fit uppercase bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 px-1.5 py-0.5 rounded">Tidak masuk transfer</span>
+                                {tOngkir > 0 && (
+                                  <div className="flex justify-between items-center flex-wrap gap-2">
+                                    <div className="flex flex-col gap-1">
+                                      <span className="text-footnote font-semibold tabular-nums text-label">Total Ongkir: +{rupiah(tOngkir)}</span>
+                                      <Pill tone="neutral">Tidak masuk transfer</Pill>
                                     </div>
-                                    <span className="text-right text-[11px] font-medium text-purple-400 max-w-[140px] italic">"Otomatis dari Sistem"</span>
+                                    <span className="text-right text-caption font-medium text-label-2 max-w-[150px] italic">"Otomatis dari Sistem"</span>
                                   </div>
                                 )}
-                                 {pgArr.map((pg: any, i: number) => {
-                                   const isCanceled = Boolean(pg.isDibatalkan);
-                                   if (Number(pg.nominal) <= 0) return null;
-                                   return (
-                                     <div key={`pg-${i}`} className={`flex justify-between items-center py-1.5 ${isCanceled ? 'opacity-60' : ''}`}>
-                                       <div className="flex flex-col gap-0.5">
-                                         <div className="flex items-center gap-1.5 flex-wrap">
-                                           <span className={`text-[12px] font-bold ${isCanceled ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-red-500'}`}>
-                                             Pengurangan: -{rupiah(Number(pg.nominal))}
-                                           </span>
-                                           {pg._isAutoSistem && (
-                                             <span className="text-[8px] font-extrabold uppercase tracking-wider text-orange-500 bg-orange-50 dark:bg-orange-500/10 px-1.5 py-0.5 rounded">⚡ Auto</span>
-                                           )}
-                                           {isCanceled && (
-                                             <span className="text-[8px] font-extrabold uppercase tracking-wider text-amber-700 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-300 px-1.5 py-0.5 rounded">
-                                               Dicoret Owner (Tidak Memotong Gaji)
-                                             </span>
-                                           )}
-                                         </div>
-                                         {pg.photoUrl && (
-                                           <a href={pg.photoUrl} target="_blank" rel="noreferrer" className="text-[10px] text-blue-500 hover:underline flex items-center gap-1 mt-0.5 font-semibold">
-                                             📷 Lihat Bukti Foto
-                                           </a>
-                                         )}
-                                       </div>
-                                       <span className={`text-right text-[11px] font-medium max-w-[150px] italic ${isCanceled ? 'line-through text-zinc-400 dark:text-zinc-600' : 'text-zinc-500'}`}>
-                                         "{pg.ket || "-"}"
-                                       </span>
-                                     </div>
-                                   );
-                                 })}
+                                {pgArr.map((pg: any, i: number) => {
+                                  const isCanceled = Boolean(pg.isDibatalkan);
+                                  if (Number(pg.nominal) <= 0) return null;
+                                  return (
+                                    <div key={`pg-${i}`} className={`flex justify-between items-center gap-2 py-1 ${isCanceled ? "opacity-60" : ""}`}>
+                                      <div className="flex flex-col gap-1">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className={`text-footnote font-semibold tabular-nums ${isCanceled ? "line-through text-label-3" : "text-negative"}`}>
+                                            Pengurangan: -{rupiah(Number(pg.nominal))}
+                                          </span>
+                                          {pg._isAutoSistem && <Pill tone="warning">⚡ Auto</Pill>}
+                                          {isCanceled && <Pill tone="warning">Dicoret Owner</Pill>}
+                                        </div>
+                                        {pg.photoUrl && (
+                                          <a href={pg.photoUrl} target="_blank" rel="noreferrer" className="text-caption text-tint hover:underline flex items-center gap-1 font-semibold">
+                                            📷 Lihat Bukti Foto
+                                          </a>
+                                        )}
+                                      </div>
+                                      <span className={`text-right text-caption font-medium max-w-[150px] italic ${isCanceled ? "line-through text-label-3" : "text-label-2"}`}>
+                                        "{pg.ket || "-"}"
+                                      </span>
+                                    </div>
+                                  );
+                                })}
 
-                                <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl flex justify-between items-center">
-                                  <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600/80 dark:text-amber-400/80">Yang Harus Ditransfer</span>
-                                  <span className="text-lg font-black text-amber-600 dark:text-amber-400">{rupiah(tDitransfer)}</span>
+                                <div className="mt-3 p-3 bg-warning/10 border border-warning/25 rounded-field flex justify-between items-center">
+                                  <span className="text-caption font-bold uppercase tracking-wider text-warning">Yang Harus Ditransfer</span>
+                                  <span className="text-headline font-bold tabular-nums text-warning">{rupiah(tDitransfer)}</span>
                                 </div>
 
                                 {r.buktiTransfer && (
-                                  <div className="mt-4 pt-3 border-t border-zinc-200/50 dark:border-zinc-700/50 flex flex-col items-center">
-                                    <span className="text-[10px] font-bold text-zinc-500 mb-2 uppercase tracking-widest">Bukti Transfer</span>
-                                    <img src={r.buktiTransfer} alt="Bukti Transfer" className="rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm max-w-[200px]" />
+                                  <div className="mt-3 pt-3 border-t border-sep flex flex-col items-center">
+                                    <span className="text-caption2 font-bold text-label-2 mb-2 uppercase tracking-widest">Bukti Transfer</span>
+                                    <img src={r.buktiTransfer} alt="Bukti Transfer" className="rounded-field border border-sep shadow-card max-w-[200px]" />
                                   </div>
                                 )}
                               </div>
@@ -1101,53 +1144,55 @@ const Pengaturan: React.FC<Props> = ({
       {tab === "general" && (
         <>
           <IOSGroup title="Tampilan">
-            <div className="flex flex-col px-4 pt-5 pb-4 items-center border-b border-zinc-100 dark:border-zinc-700/50">
+            <div className="flex flex-col px-4 pt-5 pb-4 items-center border-b border-sep">
               <div className="flex justify-center gap-10 mb-2">
                 <div className="flex flex-col items-center gap-3 cursor-pointer" onClick={() => runOrAlert(() => onThemeChange?.("light"))}>
-                  <div className="w-20 h-[130px] rounded-[18px] bg-gradient-to-br from-[#cce5ff] to-[#60a5fa] p-1 shadow-md border border-black/5 dark:border-white/10">
-                    <div className="w-full h-full rounded-[14px] bg-white/40 flex flex-col p-2 gap-2 backdrop-blur-md">
-                      <div className="w-full h-4 bg-white shadow-sm rounded-md border border-black/5"></div>
-                      <div className="w-full h-6 bg-white/70 shadow-sm rounded-md flex items-center justify-center text-[10px] font-bold text-blue-900 border border-black/5">09.41</div>
+                  <div className="w-20 h-[130px] rounded-card bg-gradient-to-br from-[#3CD3FE] to-[#0088FF] p-1 shadow-card border border-edge">
+                    <div className="w-full h-full rounded-tile bg-white/45 flex flex-col p-2 gap-2 backdrop-blur-md">
+                      <div className="w-full h-4 bg-white shadow-sm rounded-md border border-black/5" />
+                      <div className="w-full h-6 bg-white/80 shadow-sm rounded-md flex items-center justify-center text-[10px] font-bold text-[#004099] border border-black/5">09.41</div>
                     </div>
                   </div>
-                  <span className="text-[15px] font-medium text-zinc-900 dark:text-zinc-100">Light</span>
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center border-2 transition-colors ${themeMode === 'light' ? 'bg-blue-500 border-blue-500' : 'border-zinc-300 dark:border-zinc-600 bg-transparent'}`}>
-                    {themeMode === 'light' && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
+                  <span className="text-subhead font-medium text-label">Light</span>
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center border-2 transition-colors ${themeMode === "light" ? "bg-tint border-tint" : "border-sep-opaque bg-transparent"}`}>
+                    {themeMode === "light" && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
                   </div>
                 </div>
 
                 <div className="flex flex-col items-center gap-3 cursor-pointer" onClick={() => runOrAlert(() => onThemeChange?.("dark"))}>
-                  <div className="w-20 h-[130px] rounded-[18px] bg-gradient-to-br from-[#1e3a8a] to-[#0f172a] p-1 shadow-md border border-black/5 dark:border-white/10">
-                    <div className="w-full h-full rounded-[14px] bg-black/40 flex flex-col p-2 gap-2 backdrop-blur-md border border-white/5">
-                      <div className="w-full h-4 bg-white/20 shadow-sm rounded-md"></div>
-                      <div className="w-full h-6 bg-white/10 shadow-sm rounded-md flex items-center justify-center text-[10px] font-bold text-blue-100">09.41</div>
+                  <div className="w-20 h-[130px] rounded-card bg-gradient-to-br from-[#0091FF] via-[#1C3B8B] to-[#090D1F] p-1 shadow-card border border-edge">
+                    <div className="w-full h-full rounded-tile bg-black/45 flex flex-col p-2 gap-2 backdrop-blur-md border border-white/10">
+                      <div className="w-full h-4 bg-white/20 shadow-sm rounded-md" />
+                      <div className="w-full h-6 bg-white/15 shadow-sm rounded-md flex items-center justify-center text-[10px] font-bold text-[#E5F0FF]">09.41</div>
                     </div>
                   </div>
-                  <span className="text-[15px] font-medium text-zinc-900 dark:text-zinc-100">Dark</span>
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center border-2 transition-colors ${themeMode === 'dark' ? 'bg-blue-500 border-blue-500' : 'border-zinc-300 dark:border-zinc-600 bg-transparent'}`}>
-                    {themeMode === 'dark' && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
+                  <span className="text-subhead font-medium text-label">Dark</span>
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center border-2 transition-colors ${themeMode === "dark" ? "bg-tint border-tint" : "border-sep-opaque bg-transparent"}`}>
+                    {themeMode === "dark" && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="px-4 py-3 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-700/50 cursor-pointer" onClick={() => runOrAlert(() => onThemeChange?.(themeMode === "auto" ? "dark" : "auto"))}>
-              <span className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">Otomatis</span>
-              <div className={`w-12 h-7 rounded-full transition-colors flex items-center px-[3px] ${themeMode === 'auto' ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}>
-                <div className={`w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform ${themeMode === 'auto' ? 'translate-x-[20px]' : 'translate-x-0'}`}></div>
+            <div className="px-4 py-3 flex items-center justify-between gap-3">
+              <div className="flex-1 min-w-0 cursor-pointer" onClick={() => runOrAlert(() => onThemeChange?.(themeMode === "auto" ? "dark" : "auto"))}>
+                <span className="text-callout font-medium text-label">Otomatis</span>
               </div>
+              <Toggle
+                on={themeMode === "auto"}
+                onChange={(v) => runOrAlert(() => onThemeChange?.(v ? "auto" : "dark"))}
+                label="Tema otomatis"
+              />
             </div>
           </IOSGroup>
 
           <IOSGroup title="Pengaturan Tabel & Kualitas">
-            <div className="px-4 py-3 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-700/50">
-              <div className="space-y-0.5">
-                <div className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">
-                  Mode Tabel Rincian
-                </div>
-                <div className="text-xs text-zinc-500">Ubah gaya tabel di layar HP</div>
+            <div className="px-4 py-3 flex items-center justify-between gap-3 border-b border-sep">
+              <div className="space-y-0.5 min-w-0">
+                <div className="text-callout font-medium text-label">Mode Tabel Rincian</div>
+                <div className="text-caption text-label-2">Ubah gaya tabel di layar HP</div>
               </div>
-              <div className="w-40">
+              <div className="w-40 shrink-0">
                 <SegmentedControl
                   value={tableMode}
                   onChange={(val) => runOrAlert(() => onTableModeChange?.(val as "Lama" | "Baru"))}
@@ -1159,16 +1204,13 @@ const Pengaturan: React.FC<Props> = ({
               </div>
             </div>
 
-            {/* Kualitas Gambar khusus Owner */}
             {isOwner && (
-              <div className="px-4 py-3 flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">
-                    Kualitas Gambar
-                  </div>
-                  <div className="text-xs text-zinc-500">Pengaruh ke ukuran file PDF</div>
+              <div className="px-4 py-3 flex items-center justify-between gap-3">
+                <div className="space-y-0.5 min-w-0">
+                  <div className="text-callout font-medium text-label">Kualitas Gambar</div>
+                  <div className="text-caption text-label-2">Pengaruh ke ukuran file PDF</div>
                 </div>
-                <div className="w-40">
+                <div className="w-40 shrink-0">
                   <SegmentedControl
                     value={kualitasGambar}
                     onChange={(val) =>
@@ -1186,19 +1228,19 @@ const Pengaturan: React.FC<Props> = ({
 
           {isOwner && (
             <IOSGroup title="Atur Ongkir (Sistem Baru)">
-              <div className="px-4 py-4 flex flex-col gap-4 border-b border-zinc-100 dark:border-zinc-700/50">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <div className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">Bagi Hasil Pegawai</div>
-                    <div className="text-xs text-zinc-500">Porsi ongkir untuk pegawai (Owner: {100 - localPegawaiPersen}%)</div>
+              <div className="px-4 py-4 flex flex-col gap-3 border-b border-sep">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="text-callout font-medium text-label">Bagi Hasil Pegawai</div>
+                    <div className="text-caption text-label-2">Porsi ongkir untuk pegawai (Owner: {100 - localPegawaiPersen}%)</div>
                   </div>
-                  <div className="text-xl font-bold text-blue-500 bg-blue-50 dark:bg-blue-500/10 px-3 py-1 rounded-lg">{localPegawaiPersen}%</div>
+                  <div className="text-headline font-bold tabular-nums text-tint dark:text-[#45ADFF] bg-tint/[0.12] dark:bg-tint/[0.22] ring-1 ring-inset ring-tint/20 px-3 py-1 rounded-full shrink-0">{localPegawaiPersen}%</div>
                 </div>
-                <div className="relative pt-2 pb-1 touch-pan-y">
-                  <input 
-                    type="range" 
-                    min="0" max="100" step="5" 
-                    value={localPegawaiPersen} 
+                <div className="relative pt-1 pb-1 touch-pan-y">
+                  <input
+                    type="range"
+                    min="0" max="100" step="5"
+                    value={localPegawaiPersen}
                     onChange={(e) => setLocalPegawaiPersen(Number(e.target.value))}
                     onMouseUp={(e) => {
                       const val = Number(e.currentTarget.value);
@@ -1212,31 +1254,36 @@ const Pengaturan: React.FC<Props> = ({
                   />
                 </div>
               </div>
-              <div
-                className="px-4 py-3 flex items-center justify-between cursor-pointer select-none"
-                onClick={() => {
-                  const nextVal = !localMasukGaji;
-                  setLocalMasukGaji(nextVal);
-                  runOrAlert(() => setOngkirConfig && setOngkirConfig({ pegawaiPersen: localPegawaiPersen, masukGaji: nextVal }));
-                }}
-              >
-                <div className="space-y-0.5">
-                  <div className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">Masuk Total Gaji</div>
-                  <div className="text-xs text-zinc-500">Otomatis tambahkan porsi pegawai ke "Gaji Yang Harus Ditransfer"</div>
+              <div className="px-4 py-3 flex items-center justify-between gap-3">
+                <div
+                  className="space-y-0.5 flex-1 min-w-0 cursor-pointer select-none"
+                  onClick={() => {
+                    const nextVal = !localMasukGaji;
+                    setLocalMasukGaji(nextVal);
+                    runOrAlert(() => setOngkirConfig && setOngkirConfig({ pegawaiPersen: localPegawaiPersen, masukGaji: nextVal }));
+                  }}
+                >
+                  <div className="text-callout font-medium text-label">Masuk Total Gaji</div>
+                  <div className="text-caption text-label-2">Otomatis tambahkan porsi pegawai ke "Gaji Yang Harus Ditransfer"</div>
                 </div>
-                <div className={`w-12 h-7 rounded-full transition-colors flex items-center px-[3px] ${localMasukGaji ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-600'}`}>
-                  <div className={`w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform ${localMasukGaji ? 'translate-x-[20px]' : 'translate-x-0'}`}></div>
-                </div>
+                <Toggle
+                  on={localMasukGaji}
+                  onChange={(nextVal) => {
+                    setLocalMasukGaji(nextVal);
+                    runOrAlert(() => setOngkirConfig && setOngkirConfig({ pegawaiPersen: localPegawaiPersen, masukGaji: nextVal }));
+                  }}
+                  label="Masuk total gaji"
+                />
               </div>
             </IOSGroup>
           )}
 
           {isOwner && (
             <IOSGroup title="Potongan Gaji Absen (Keterlambatan)">
-              <div className="px-4 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-100 dark:border-zinc-700/50">
-                <div className="space-y-0.5">
-                  <div className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">Tanggal Mulai Hitung Absensi (Cutoff)</div>
-                  <div className="text-xs text-zinc-500">Siklus 1 bulan absensi & potongan denda dihitung dari tanggal ini</div>
+              <div className="px-4 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-sep">
+                <div className="space-y-0.5 min-w-0">
+                  <div className="text-callout font-medium text-label">Tanggal Mulai Hitung Absensi (Cutoff)</div>
+                  <div className="text-caption text-label-2">Siklus 1 bulan absensi &amp; potongan denda dihitung dari tanggal ini</div>
                 </div>
                 <select
                   value={localTanggalMulaiHitung}
@@ -1251,28 +1298,28 @@ const Pengaturan: React.FC<Props> = ({
                       tanggalMulaiHitung: val
                     }));
                   }}
-                  className="bg-white dark:bg-[#2C2C2E] border border-blue-300 dark:border-blue-500/40 text-blue-600 dark:text-blue-400 font-black text-sm rounded-xl px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer self-start sm:self-auto"
+                  className="min-h-[44px] bg-fill dark:bg-white/[0.09] border border-sep text-tint dark:text-[#45ADFF] font-semibold text-[16px] sm:text-subhead rounded-field px-3 py-2 focus:outline-none focus:bg-surface dark:focus:bg-[#2C2C2E] focus:ring-2 focus:ring-tint/35 cursor-pointer self-start sm:self-auto"
                 >
-                  <option value={1}>Tgl 1 (Awal Bulan Normal)</option>
+                  <option value={1} className="bg-surface text-label">Tgl 1 (Awal Bulan Normal)</option>
                   {Array.from({ length: 30 }, (_, i) => i + 2).map((tgl) => (
-                    <option key={tgl} value={tgl}>
+                    <option key={tgl} value={tgl} className="bg-surface text-label">
                       Tanggal {tgl}
                     </option>
                   ))}
                 </select>
               </div>
-              <div className="px-4 py-4 flex flex-col gap-4 border-b border-zinc-100 dark:border-zinc-700/50">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <div className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">Nominal Denda (Rp)</div>
-                    <div className="text-xs text-zinc-500">Jumlah denda per blok waktu</div>
+              <div className="px-4 py-4 flex flex-col gap-3 border-b border-sep">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="text-callout font-medium text-label">Nominal Denda (Rp)</div>
+                    <div className="text-caption text-label-2">Jumlah denda per blok waktu</div>
                   </div>
-                  <div className="text-[15px] font-bold text-red-500 bg-red-50 dark:bg-red-500/10 px-3 py-1 rounded-lg">{rupiah(localNominalDenda)}</div>
+                  <div className="text-subhead font-bold tabular-nums text-negative bg-negative/10 px-3 py-1 rounded-control shrink-0">{rupiah(localNominalDenda)}</div>
                 </div>
-                <div className="relative pt-2 pb-1 touch-pan-y">
-                  <input 
-                    type="range" min="0" max="10000" step="500" 
-                    value={localNominalDenda} 
+                <div className="relative pt-1 pb-1 touch-pan-y">
+                  <input
+                    type="range" min="0" max="10000" step="500"
+                    value={localNominalDenda}
                     onChange={(e) => setLocalNominalDenda(Number(e.target.value))}
                     onMouseUp={(e) => {
                       const val = Number(e.currentTarget.value);
@@ -1296,18 +1343,18 @@ const Pengaturan: React.FC<Props> = ({
                   />
                 </div>
               </div>
-              <div className="px-4 py-4 flex flex-col gap-4 border-b border-zinc-100 dark:border-zinc-700/50">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <div className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">Waktu Toleransi (Menit)</div>
-                    <div className="text-xs text-zinc-500">Toleransi awal sebelum mulai didenda</div>
+              <div className="px-4 py-4 flex flex-col gap-3 border-b border-sep">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="text-callout font-medium text-label">Waktu Toleransi (Menit)</div>
+                    <div className="text-caption text-label-2">Toleransi awal sebelum mulai didenda</div>
                   </div>
-                  <div className="text-[15px] font-bold text-amber-500 bg-amber-50 dark:bg-amber-500/10 px-3 py-1 rounded-lg">{localWaktuToleransi} mnt</div>
+                  <div className="text-subhead font-bold tabular-nums text-warning bg-warning/10 px-3 py-1 rounded-control shrink-0">{localWaktuToleransi} mnt</div>
                 </div>
-                <div className="relative pt-2 pb-1 touch-pan-y">
-                  <input 
-                    type="range" min="0" max="60" step="5" 
-                    value={localWaktuToleransi} 
+                <div className="relative pt-1 pb-1 touch-pan-y">
+                  <input
+                    type="range" min="0" max="60" step="5"
+                    value={localWaktuToleransi}
                     onChange={(e) => setLocalWaktuToleransi(Number(e.target.value))}
                     onMouseUp={(e) => {
                       const val = Number(e.currentTarget.value);
@@ -1331,18 +1378,18 @@ const Pengaturan: React.FC<Props> = ({
                   />
                 </div>
               </div>
-              <div className="px-4 py-4 flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <div className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">Durasi Blok Potongan (Menit)</div>
-                    <div className="text-xs text-zinc-500">Denda dikalikan setiap kelipatan durasi ini</div>
+              <div className="px-4 py-4 flex flex-col gap-3 border-b border-sep">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="text-callout font-medium text-label">Durasi Blok Potongan (Menit)</div>
+                    <div className="text-caption text-label-2">Denda dikalikan setiap kelipatan durasi ini</div>
                   </div>
-                  <div className="text-[15px] font-bold text-blue-500 bg-blue-50 dark:bg-blue-500/10 px-3 py-1 rounded-lg">{localDurasiWaktuPotongan} mnt</div>
+                  <div className="text-subhead font-bold tabular-nums text-tint bg-tint/10 px-3 py-1 rounded-control shrink-0">{localDurasiWaktuPotongan} mnt</div>
                 </div>
-                <div className="relative pt-2 pb-1 touch-pan-y">
-                  <input 
-                    type="range" min="5" max="60" step="5" 
-                    value={localDurasiWaktuPotongan} 
+                <div className="relative pt-1 pb-1 touch-pan-y">
+                  <input
+                    type="range" min="5" max="60" step="5"
+                    value={localDurasiWaktuPotongan}
                     onChange={(e) => setLocalDurasiWaktuPotongan(Number(e.target.value))}
                     onMouseUp={(e) => {
                       const val = Number(e.currentTarget.value);
@@ -1366,16 +1413,16 @@ const Pengaturan: React.FC<Props> = ({
                   />
                 </div>
               </div>
-              <div className="px-4 py-3 border-t border-zinc-100 dark:border-zinc-700/50">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex flex-col">
-                    <span className="text-[14px] font-semibold text-zinc-900 dark:text-white">Denda Tidak Full Absen (Bolos/Lupa)</span>
-                    <span className="text-[12px] text-zinc-500 dark:text-zinc-400">Potongan gaji jika tidak absen masuk/pulang sampai tutup buku</span>
+              <div className="px-4 py-4">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-subhead font-semibold text-label">Denda Tidak Full Absen (Bolos/Lupa)</span>
+                    <span className="text-caption text-label-2">Potongan gaji jika tidak absen masuk/pulang sampai tutup buku</span>
                   </div>
-                  <div className="text-[15px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-500/10 px-3 py-1 rounded-lg">{rupiah(localDendaTidakAbsenPulang)}</div>
+                  <div className="text-subhead font-bold tabular-nums text-negative bg-negative/10 px-3 py-1 rounded-control shrink-0">{rupiah(localDendaTidakAbsenPulang)}</div>
                 </div>
-                <div className="relative pt-2 pb-6 touch-pan-y">
-                  <input 
+                <div className="relative pt-2 pb-2 touch-pan-y">
+                  <input
                     type="range" min="0" max="100000" step="5000"
                     value={localDendaTidakAbsenPulang}
                     onChange={(e) => setLocalDendaTidakAbsenPulang(Number(e.target.value))}
@@ -1399,7 +1446,7 @@ const Pengaturan: React.FC<Props> = ({
                     }}
                     className="w-full ios-slider cursor-pointer"
                   />
-                  <div className="flex justify-between mt-2 text-[10px] font-medium text-zinc-400">
+                  <div className="flex justify-between mt-2 text-caption2 font-medium text-label-3 tabular-nums">
                     <span>Rp 0</span>
                     <span>Rp 100.000</span>
                   </div>
@@ -1412,17 +1459,17 @@ const Pengaturan: React.FC<Props> = ({
 
       {tab === "edit" && (
         <>
-          <div className="px-1 mb-4 text-sm text-zinc-500 dark:text-zinc-400">
+          <Footnote className="px-1 mb-4">
             Pilih kategori untuk mengubah harga atau nama item. Perubahan tersimpan otomatis.
-          </div>
+          </Footnote>
           <IOSGroup title="Kategori Item">
-            <IOSRow label="Pemasukan Harian" value={`${sHarian.count} Item`} icon={<Gamepad2 size={16} />} iconColor="bg-blue-500" onClick={() => openEditModal(onOpenEditHarian)} />
-            <IOSRow label="Jajanan" value={`${sJajanan.count} Item`} icon={<Coffee size={16} />} iconColor="bg-orange-500" onClick={() => openEditModal(onOpenEditJajanan)} />
-            <IOSRow label="Pemasukan Usaha" value={`${sJasa.count} Item`} icon={<Wrench size={16} />} iconColor="bg-slate-500" onClick={() => openEditModal(onOpenEditJasaAks)} />
-            <IOSRow label="Sewa PS" value={`${sSewa.count} Item`} icon={<Truck size={16} />} iconColor="bg-green-500" isLast onClick={() => openEditModal(onOpenEditSewa)} />
+            <IOSRow label="Pemasukan Harian" value={`${sHarian.count} Item`} icon={<Gamepad2 size={16} />} iconColor="blue" onClick={() => openEditModal(onOpenEditHarian)} />
+            <IOSRow label="Jajanan" value={`${sJajanan.count} Item`} icon={<Coffee size={16} />} iconColor="orange" onClick={() => openEditModal(onOpenEditJajanan)} />
+            <IOSRow label="Pemasukan Usaha" value={`${sJasa.count} Item`} icon={<Wrench size={16} />} iconColor="gray" onClick={() => openEditModal(onOpenEditJasaAks)} />
+            <IOSRow label="Sewa PS" value={`${sSewa.count} Item`} icon={<Truck size={16} />} iconColor="green" onClick={() => openEditModal(onOpenEditSewa)} />
           </IOSGroup>
 
-          <IOSGroup title="Tampilkan Tabel di Usaha Rental">
+          <IOSGroup title="Tampilkan Tabel di Pembukuan">
             {([
               { key: "harian", label: "1. Pemasukan Harian" },
               { key: "jajanan", label: "2. Pemasukan Jajanan" },
@@ -1432,63 +1479,119 @@ const Pengaturan: React.FC<Props> = ({
               { key: "setoran", label: "Rincian Setoran" },
             ] as const).map((t, i, arr) => {
               const on = rincianVisibility?.[t.key] !== false;
+              const toggleVis = () => runOrAlert(onRincianVisibilityChange && (() => onRincianVisibilityChange(t.key, !on)));
               return (
-                <button
+                <div
                   key={t.key}
-                  type="button"
-                  role="switch"
-                  aria-checked={on}
-                  onClick={() => runOrAlert(onRincianVisibilityChange && (() => onRincianVisibilityChange(t.key, !on)))}
-                  className={`w-full px-4 py-3 flex items-center justify-between text-left select-none ${i < arr.length - 1 ? "border-b border-zinc-100 dark:border-zinc-700/50" : ""}`}
+                  className={`px-4 py-3 flex items-center justify-between gap-3 ${i < arr.length - 1 ? "border-b border-sep" : ""}`}
                 >
-                  <div className="space-y-0.5">
-                    <div className="text-[15px] font-medium text-zinc-900 dark:text-zinc-100">{t.label}</div>
-                    <div className="text-xs text-zinc-500">{on ? "Tampil di halaman Usaha Rental" : "Disembunyikan"}</div>
+                  <div className="space-y-0.5 flex-1 min-w-0 cursor-pointer select-none" onClick={toggleVis}>
+                    <div className="text-subhead font-medium text-label">{t.label}</div>
+                    <div className="text-caption text-label-2">{on ? "Tampil di halaman Pembukuan" : "Disembunyikan"}</div>
                   </div>
-                  <div className={`w-12 h-7 rounded-full transition-colors flex items-center px-[3px] shrink-0 ${on ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"}`}>
-                    <div className={`w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform ${on ? "translate-x-[20px]" : "translate-x-0"}`} />
-                  </div>
-                </button>
+                  <Toggle on={on} onChange={() => toggleVis()} label={`Tampilkan ${t.label}`} />
+                </div>
               );
             })}
           </IOSGroup>
-          <div className="px-1 -mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-            Tabel yang disembunyikan tidak tampil untuk semua admin. Data yang sudah terisi tetap tersimpan & ikut terhitung di rekap.
-          </div>
+          <Footnote className="px-1 -mt-2">
+            Tabel yang disembunyikan tidak tampil untuk semua admin. Data yang sudah terisi tetap tersimpan &amp; ikut terhitung di rekap.
+          </Footnote>
         </>
       )}
 
       {tab === "asisten" && (
-        <div className="space-y-6">
-          <div className="px-1 mb-2 text-sm text-zinc-500 dark:text-zinc-400">
+        <div className="space-y-5">
+          <Footnote className="px-1">
             Asisten akan mengingatkan Anda berupa Pop-up saat Anda Login setiap bulannya untuk otomatis menyimpan pengeluaran.
-          </div>
+          </Footnote>
           <IOSGroup title="Tambah Pengingat Asisten">
-            <div className="p-4 flex flex-col gap-3 bg-white/50 dark:bg-black/20">
-              <input type="text" value={formAsisten.nama_pengeluaran} onChange={e => setFormAsisten({ ...formAsisten, nama_pengeluaran: e.target.value })} placeholder="Nama Pengeluaran (misal: Tagihan Wi-Fi)" className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white" />
-              <input type="text" value={formAsisten.kategori} onChange={e => setFormAsisten({ ...formAsisten, kategori: e.target.value })} placeholder="Kategori (misal: Listrik / Air / Internet)" className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white" />
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-bold text-zinc-600 dark:text-zinc-300">Tgl Aktif:</span>
-                <input type="number" min="1" max="31" value={formAsisten.tanggal} onChange={e => setFormAsisten({ ...formAsisten, tanggal: e.target.value })} className="w-20 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm text-center text-zinc-900 dark:text-white" />
-                <input type="number" value={(formAsisten as any).nominal || ""} onChange={e => setFormAsisten({ ...formAsisten, nominal: e.target.value } as any)} placeholder="Nominal (Opsi)" className="flex-1 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-900 dark:text-white" />
+            <div className="p-4 flex flex-col gap-3">
+              <input
+                type="text"
+                value={formAsisten.nama_pengeluaran}
+                onChange={(e) => setFormAsisten({ ...formAsisten, nama_pengeluaran: e.target.value })}
+                placeholder="Nama Pengeluaran (misal: Tagihan Wi-Fi)"
+                className="w-full min-h-[44px] bg-fill border border-sep rounded-field px-3.5 py-2 text-[16px] sm:text-subhead text-label placeholder:text-label-3 focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"
+              />
+              <input
+                type="text"
+                value={formAsisten.kategori}
+                onChange={(e) => setFormAsisten({ ...formAsisten, kategori: e.target.value })}
+                placeholder="Kategori (misal: Listrik / Air / Internet)"
+                className="w-full min-h-[44px] bg-fill border border-sep rounded-field px-3.5 py-2 text-[16px] sm:text-subhead text-label placeholder:text-label-3 focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"
+              />
+              <div className="flex items-center gap-2.5">
+                <span className="text-footnote font-semibold text-label-2 shrink-0">Tgl Aktif:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={formAsisten.tanggal}
+                  onChange={(e) => setFormAsisten({ ...formAsisten, tanggal: e.target.value })}
+                  className="w-20 min-h-[44px] bg-fill border border-sep rounded-field px-3 py-2 text-[16px] sm:text-subhead text-center tabular-nums text-label focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"
+                />
+                <input
+                  type="number"
+                  value={(formAsisten as any).nominal || ""}
+                  onChange={(e) => setFormAsisten({ ...formAsisten, nominal: e.target.value } as any)}
+                  placeholder="Nominal (Opsional)"
+                  className="flex-1 min-w-0 min-h-[44px] bg-fill border border-sep rounded-field px-3.5 py-2 text-[16px] sm:text-subhead tabular-nums text-label placeholder:text-label-3 focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"
+                />
               </div>
-              <button disabled={!formAsisten.nama_pengeluaran || isLoading} onClick={handleAddAsisten} className="w-full mt-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2.5 rounded-lg disabled:opacity-50">{editingAsistenId ? "Simpan Perubahan" : "Tambahkan Asisten"}</button>
+              <Button
+                variant="filled"
+                size="lg"
+                block
+                disabled={!formAsisten.nama_pengeluaran || isLoading}
+                loading={isLoading}
+                onClick={handleAddAsisten}
+                className="mt-1"
+              >
+                {editingAsistenId ? "Simpan Perubahan" : "Tambahkan Asisten"}
+              </Button>
               {editingAsistenId && (
-                <button onClick={() => { setEditingAsistenId(null); setFormAsisten({ nama_pengeluaran: "", kategori: "", tanggal: "1" }); }} className="w-full mt-1 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-200 font-bold py-2.5 rounded-lg">Batal Edit</button>
+                <Button
+                  variant="gray"
+                  size="md"
+                  block
+                  onClick={() => { setEditingAsistenId(null); setFormAsisten({ nama_pengeluaran: "", kategori: "", tanggal: "1" }); }}
+                >
+                  Batal Edit
+                </Button>
               )}
             </div>
           </IOSGroup>
           {assistants.length > 0 && (
             <IOSGroup title="Daftar Pengingat">
               {assistants.map((a, i) => (
-                <div key={a.id} className={`flex items-center justify-between p-4 ${i !== assistants.length - 1 ? 'border-b border-zinc-100 dark:border-zinc-700/50' : ''} ${editingAsistenId === a.id ? 'bg-cyan-50 dark:bg-cyan-500/10' : ''}`}>
-                  <div>
-                    <div className="font-bold text-[14px] text-zinc-800 dark:text-white">{a.nama_pengeluaran}</div>
-                    <div className="text-[11px] font-medium text-zinc-500 uppercase">Tgl {a.tanggal} | {a.kategori}{a.nominal ? ` | ${rupiah(Number(a.nominal))}` : ''}</div>
+                <div
+                  key={a.id}
+                  className={`flex items-center justify-between gap-3 p-4 ${i !== assistants.length - 1 ? "border-b border-sep" : ""} ${editingAsistenId === a.id ? "bg-tint/10" : ""}`}
+                >
+                  <div className="min-w-0">
+                    <div className="font-semibold text-subhead text-label truncate">{a.nama_pengeluaran}</div>
+                    <div className="text-caption font-medium text-label-2 uppercase tabular-nums">
+                      Tgl {a.tanggal} | {a.kategori}{a.nominal ? ` | ${rupiah(Number(a.nominal))}` : ""}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => handleEditAsisten(a)} className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-500 active:scale-90"><Pencil size={14} /></button>
-                    <button onClick={() => handleDeleteAsisten(a.id)} className="w-8 h-8 flex items-center justify-center rounded-full bg-red-100 dark:bg-red-500/20 text-red-500 active:scale-90"><Trash2 size={14} /></button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleEditAsisten(a)}
+                      className="w-9 h-9 flex items-center justify-center rounded-full bg-tint/10 text-tint hover:bg-tint/20 active:scale-90 transition-all"
+                      aria-label={`Edit ${a.nama_pengeluaran}`}
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteAsisten(a.id)}
+                      className="w-9 h-9 flex items-center justify-center rounded-full bg-negative/10 text-negative hover:bg-negative/20 active:scale-90 transition-all"
+                      aria-label={`Hapus ${a.nama_pengeluaran}`}
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -1498,66 +1601,90 @@ const Pengaturan: React.FC<Props> = ({
       )}
 
       {tab === "backup" && (
-        <div className="space-y-6">
+        <div className="space-y-5">
           <IOSGroup title="Backup & Restore Online (Google Drive)">
-            <div className="px-4 py-3 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-700/50">
-              <div className="space-y-0.5">
-                <div className="text-[16px] font-medium text-zinc-900 dark:text-zinc-100">Koneksi Cloud</div>
-                <div className="text-xs text-zinc-500">{driveConnected ? "Sudah disetujui" : "Sinkronisasi via Google Auth"}</div>
+            <div className="px-4 py-3.5 flex items-center justify-between gap-3">
+              <div className="space-y-0.5 min-w-0">
+                <div className="text-callout font-medium text-label">Koneksi Cloud</div>
+                <div className="text-caption text-label-2">{driveConnected ? "Sudah disetujui" : "Sinkronisasi via Google Auth"}</div>
               </div>
-              <button disabled={isLoading} onClick={async () => {
-                if (!driveConnected) {
-                  setIsLoading(true);
-                  try {
-                    const { authenticateDrive } = await import("../lib/googleDrive");
-                    await authenticateDrive();
-                    setDriveConnected(true);
-                  } catch (e: any) {
-                    alert("Login Google dibatalkan atau gagal: " + (e.message || "Unknown Error"));
+              <Button
+                variant={driveConnected ? "destructive" : "filled"}
+                size="sm"
+                loading={isLoading}
+                disabled={isLoading}
+                onClick={async () => {
+                  if (!driveConnected) {
+                    setIsLoading(true);
+                    try {
+                      const { authenticateDrive } = await import("../lib/googleDrive");
+                      await authenticateDrive();
+                      setDriveConnected(true);
+                      showToast("Google Drive terhubung");
+                    } catch (e: any) {
+                      showToast("Login Google dibatalkan atau gagal: " + (e.message || "Unknown Error"));
+                    }
+                    setIsLoading(false);
+                  } else {
+                    setDriveConnected(false);
                   }
-                  setIsLoading(false);
-                } else {
-                  setDriveConnected(false);
-                }
-              }} className={`px-4 py-1.5 font-bold text-[12px] rounded-full transition-all disabled:opacity-50 ${driveConnected ? 'bg-red-100 text-red-600 dark:bg-red-500/20' : 'bg-blue-500 text-white hover:bg-blue-600'}`}>
-                {isLoading ? "Memproses..." : driveConnected ? "Putuskan" : "Hubungkan"}
-              </button>
+                }}
+              >
+                {driveConnected ? "Putuskan" : "Hubungkan"}
+              </Button>
             </div>
 
             {driveConnected && (
-              <div className="p-3 bg-zinc-50 dark:bg-black/20 flex gap-2">
-                <button onClick={async () => {
-                  setIsLoading(true);
-                  if (onBackupDrive) await onBackupDrive();
-                  setIsLoading(false);
-                }} disabled={isLoading} className="flex-1 bg-cyan-100 hover:bg-cyan-200 dark:bg-cyan-900/30 dark:hover:bg-cyan-800/40 text-cyan-700 dark:text-cyan-400 font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 transition-all">
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
-                  {isLoading ? "Mengunggah..." : "Backup ke Drive"}
-                </button>
-                <button onClick={() => setAksiAman("restoreDrive")} disabled={isLoading} className="flex-1 bg-teal-100 hover:bg-teal-200 dark:bg-teal-900/30 dark:hover:bg-teal-800/40 text-teal-700 dark:text-teal-400 font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 transition-all">
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                  {isLoading ? "Menarik..." : "Restore dari Drive"}
-                </button>
+              <div className="p-3 bg-surface-2 border-t border-sep flex gap-2">
+                <Button
+                  variant="tinted"
+                  size="md"
+                  className="flex-1"
+                  disabled={isLoading}
+                  loading={isLoading}
+                  icon={<Upload size={15} />}
+                  onClick={async () => {
+                    setIsLoading(true);
+                    if (onBackupDrive) await onBackupDrive();
+                    setIsLoading(false);
+                  }}
+                >
+                  Backup ke Drive
+                </Button>
+                <Button
+                  variant="gray"
+                  size="md"
+                  className="flex-1"
+                  disabled={isLoading}
+                  icon={<Download size={15} />}
+                  onClick={() => setAksiAman("restoreDrive")}
+                >
+                  Restore dari Drive
+                </Button>
               </div>
             )}
           </IOSGroup>
           <IOSGroup title="Pencadangan File (Lokal/Flashdisk)">
-            <IOSRow label="Backup Data ke File" icon={<Save size={16} />} iconColor="bg-blue-500" onClick={() => setAksiAman("backup")} />
-            <IOSRow label="Restore dari File" icon={<FolderOpen size={16} />} iconColor="bg-green-500" isLast onClick={() => setAksiAman("restore")} />
+            <IOSRow label="Backup Data ke File" icon={<Save size={16} />} iconColor="blue" onClick={() => setAksiAman("backup")} />
+            <IOSRow label="Restore dari File" icon={<FolderOpen size={16} />} iconColor="green" onClick={() => setAksiAman("restore")} />
           </IOSGroup>
         </div>
       )}
 
       {tab === "export" && (
         <IOSGroup title="Laporan">
-          <IOSRow label="Download Laporan CSV" icon={<FileSpreadsheet size={16} />} iconColor="bg-indigo-500" isLast onClick={() => runOrAlert(onExportCSV)} />
+          <IOSRow label="Download Laporan CSV" icon={<FileSpreadsheet size={16} />} iconColor="indigo" onClick={() => runOrAlert(onExportCSV)} />
         </IOSGroup>
       )}
 
       {tab === "reset" && (
         <IOSGroup title="Zona Bahaya">
           <IOSRow
-            label="Reset Semua Pengaturan" icon={<Trash2 size={16} />} iconColor="bg-red-500" destructive isLast
+            label="Reset Semua Pengaturan"
+            icon={<Trash2 size={16} />}
+            iconColor="red"
+            destructive
+            chevron={false}
             onClick={() => setAksiAman("reset")}
           />
         </IOSGroup>
@@ -1568,29 +1695,29 @@ const Pengaturan: React.FC<Props> = ({
           <IOSGroup title="Panduan & SOP Pembukuan">
             <div className="p-4 space-y-3">
               {/* Card 0: SOP Sewa */}
-              <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+              <div className="border border-sep rounded-tile overflow-hidden">
                 <div
-                  className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  className="p-3 apple-tile flex justify-between items-center cursor-pointer hover:bg-fill/70 transition-colors"
                   onClick={() => setSopExpanded(sopExpanded === 0 ? null : 0)}
                 >
-                  <span className="font-bold text-[14px] text-zinc-800 dark:text-zinc-100">SOP SEWA PLAYSTATION (URBAN)</span>
-                  <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${sopExpanded === 0 ? 'rotate-180' : ''}`} />
+                  <span className="font-semibold text-subhead text-label">SOP SEWA PLAYSTATION (URBAN)</span>
+                  <ChevronDown className={`w-4 h-4 text-label-3 transition-transform duration-200 ${sopExpanded === 0 ? "rotate-180" : ""}`} />
                 </div>
                 {sopExpanded === 0 && (
-                  <div className="p-4 bg-white dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-700 animate-in slide-in-from-top-2 duration-200 space-y-6">
+                  <div className="p-4 bg-surface border-t border-sep animate-in slide-in-from-top-2 duration-200 space-y-5">
                     {sopData.map((sop) => (
                       <div key={sop.id} className="space-y-2">
-                        <div className="font-bold text-[13px] text-zinc-800 dark:text-zinc-100 border-b border-zinc-100 dark:border-zinc-800 pb-1">
+                        <div className="font-semibold text-footnote text-label border-b border-sep pb-1">
                           {sop.title}
                         </div>
                         {sop.content}
                       </div>
                     ))}
-                    <div className="pt-4 flex justify-center border-t border-zinc-100 dark:border-zinc-800 mt-2">
+                    <div className="pt-3 flex justify-center border-t border-sep">
                       <a
                         href="#"
                         download="SOP_SewaPS_URBAN.pdf"
-                        className="bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-bold py-2.5 px-6 rounded-xl text-[13px] flex items-center justify-center gap-2 hover:bg-blue-200 dark:hover:bg-blue-500/30 transition-colors"
+                        className="bg-tint/10 text-tint font-semibold py-2.5 px-6 rounded-field text-footnote flex items-center justify-center gap-2 hover:bg-tint/20 transition-colors"
                       >
                         <Download size={14} />
                         Download SOP ini
@@ -1601,19 +1728,19 @@ const Pengaturan: React.FC<Props> = ({
               </div>
 
               {/* Card 1: PS3 CFW */}
-              <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+              <div className="border border-sep rounded-tile overflow-hidden">
                 <div
-                  className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  className="p-3 apple-tile flex justify-between items-center cursor-pointer hover:bg-fill/70 transition-colors"
                   onClick={() => setSopExpanded(sopExpanded === 1 ? null : 1)}
                 >
-                  <span className="font-bold text-[14px] text-zinc-800 dark:text-zinc-100">CARA ISI GAME PS3 CFW</span>
-                  <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${sopExpanded === 1 ? 'rotate-180' : ''}`} />
+                  <span className="font-semibold text-subhead text-label">CARA ISI GAME PS3 CFW</span>
+                  <ChevronDown className={`w-4 h-4 text-label-3 transition-transform duration-200 ${sopExpanded === 1 ? "rotate-180" : ""}`} />
                 </div>
                 {sopExpanded === 1 && (
-                  <div className="p-4 bg-white dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-700 animate-in slide-in-from-top-2 duration-200 space-y-4">
+                  <div className="p-4 bg-surface border-t border-sep animate-in slide-in-from-top-2 duration-200 space-y-4">
                     <div>
-                      <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase mb-1">A. Format PKG (Instal via XMB)</h4>
-                      <ul className="list-decimal pl-5 space-y-1 text-[13px] text-zinc-600 dark:text-zinc-300">
+                      <h4 className="font-bold text-caption text-tint uppercase mb-1">A. Format PKG (Instal via XMB)</h4>
+                      <ul className="list-decimal pl-5 space-y-1 text-footnote text-label-2">
                         <li>Pastikan USB Flashdisk / Hardisk Eksternal diformat ke file sistem <b>FAT32</b>.</li>
                         <li>Copy/salin file game berformat <code>.pkg</code> ke direktori terluar (root) USB Flashdisk.</li>
                         <li>Colokkan USB ke port USB PS3.</li>
@@ -1622,8 +1749,8 @@ const Pengaturan: React.FC<Props> = ({
                       </ul>
                     </div>
                     <div>
-                      <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase mb-1">B. Format Folder (Copy via MultiMan)</h4>
-                      <ul className="list-decimal pl-5 space-y-1 text-[13px] text-zinc-600 dark:text-zinc-300">
+                      <h4 className="font-bold text-caption text-tint uppercase mb-1">B. Format Folder (Copy via MultiMan)</h4>
+                      <ul className="list-decimal pl-5 space-y-1 text-footnote text-label-2">
                         <li>Siapkan USB Flashdisk / Hardisk Eksternal berisi folder game (berisi folder <code>PS3_GAME</code> di dalamnya).</li>
                         <li>Hubungkan USB ke PS3, lalu buka aplikasi <b>MultiMan</b>.</li>
                         <li>Masuk ke menu <b>mmOS (File Manager)</b> &gt; buka <b>PS3 Root</b> &gt; double click di <b>dev_usb000</b> atau <b>dev_usb001</b>.</li>
@@ -1638,23 +1765,20 @@ const Pengaturan: React.FC<Props> = ({
               </div>
 
               {/* Card 2: PS3 HEN */}
-              <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+              <div className="border border-sep rounded-tile overflow-hidden">
                 <div
-                  className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  className="p-3 apple-tile flex justify-between items-center cursor-pointer hover:bg-fill/70 transition-colors"
                   onClick={() => setSopExpanded(sopExpanded === 2 ? null : 2)}
                 >
-                  <span className="font-bold text-[14px] text-zinc-800 dark:text-zinc-100">CARA ISI GAME PS3 HEN</span>
-                  <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${sopExpanded === 2 ? 'rotate-180' : ''}`} />
+                  <span className="font-semibold text-subhead text-label">CARA ISI GAME PS3 HEN</span>
+                  <ChevronDown className={`w-4 h-4 text-label-3 transition-transform duration-200 ${sopExpanded === 2 ? "rotate-180" : ""}`} />
                 </div>
                 {sopExpanded === 2 && (
-                  <div className="p-4 bg-white dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-700 animate-in slide-in-from-top-2 duration-200 space-y-4">
-                    <div className="bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-950/40 p-3 rounded-xl flex gap-2.5">
-                      <Info className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-                      <span className="text-xs text-red-800 dark:text-red-300">
-                        <b>PENTING:</b> Sebelum melakukan instalasi game PKG atau menyalin folder via MultiMan, Anda <b>wajib mengaktifkan HEN terlebih dahulu</b>.
-                      </span>
-                    </div>
-                    <ul className="list-decimal pl-5 space-y-2 text-[13px] text-zinc-600 dark:text-zinc-300">
+                  <div className="p-4 bg-surface border-t border-sep animate-in slide-in-from-top-2 duration-200 space-y-4">
+                    <Notice tone="negative">
+                      <b>PENTING:</b> Sebelum melakukan instalasi game PKG atau menyalin folder via MultiMan, Anda <b>wajib mengaktifkan HEN terlebih dahulu</b>.
+                    </Notice>
+                    <ul className="list-decimal pl-5 space-y-2 text-footnote text-label-2">
                       <li>Di menu utama XMB PS3, navigasikan ke kolom Game, lalu pilih menu <b>Enable HEN</b>. Tunggu hingga proses exploit sukses.</li>
                       <li>Jika HEN tidak aktif, aplikasi homebrew (seperti MultiMan, WebMan, Package Manager) akan <b>hang/crash / menyebabkan PS3 mati otomatis</b>.</li>
                       <li><b>Proses Pengisian Game:</b> Setelah HEN dalam keadaan aktif, Anda dapat mengikuti metode pengisian format <b>PKG</b> maupun format <b>Folder (MultiMan)</b> yang sama persis seperti pada panduan <b>PS3 CFW</b>.</li>
@@ -1664,17 +1788,17 @@ const Pengaturan: React.FC<Props> = ({
               </div>
 
               {/* Card 3: PS4 HEN */}
-              <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+              <div className="border border-sep rounded-tile overflow-hidden">
                 <div
-                  className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  className="p-3 apple-tile flex justify-between items-center cursor-pointer hover:bg-fill/70 transition-colors"
                   onClick={() => setSopExpanded(sopExpanded === 3 ? null : 3)}
                 >
-                  <span className="font-bold text-[14px] text-zinc-800 dark:text-zinc-100">CARA ISI GAME PS4 HEN</span>
-                  <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${sopExpanded === 3 ? 'rotate-180' : ''}`} />
+                  <span className="font-semibold text-subhead text-label">CARA ISI GAME PS4 HEN</span>
+                  <ChevronDown className={`w-4 h-4 text-label-3 transition-transform duration-200 ${sopExpanded === 3 ? "rotate-180" : ""}`} />
                 </div>
                 {sopExpanded === 3 && (
-                  <div className="p-4 bg-white dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-700 animate-in slide-in-from-top-2 duration-200 space-y-4">
-                    <ul className="list-decimal pl-5 space-y-2 text-[13px] text-zinc-600 dark:text-zinc-300">
+                  <div className="p-4 bg-surface border-t border-sep animate-in slide-in-from-top-2 duration-200 space-y-4">
+                    <ul className="list-decimal pl-5 space-y-2 text-footnote text-label-2">
                       <li>Pastikan PS4 sudah dalam kondisi jailbreak/explot aktif (GoldHEN/HEN aktif di dashboard).</li>
                       <li>Siapkan USB Flashdisk / Hardisk Eksternal dengan format file sistem <b>exFAT</b> (format FAT32 tidak didukung karena file game PS4 biasanya berukuran &gt;4GB).</li>
                       <li>Copy file game berformat <code>.pkg</code> ke direktori terluar (root) USB Flashdisk.</li>
@@ -1682,7 +1806,7 @@ const Pengaturan: React.FC<Props> = ({
                       <li>Masuk ke menu <b>Settings</b> di PS4 &gt; scroll ke paling bawah dan buka menu <b>Debug Settings</b> (atau menu <b>GoldHEN</b>).</li>
                       <li>Pilih menu <b>Game</b> &gt; <b>Package Installer</b>.</li>
                       <li>Pilih file game <code>.pkg</code> yang ingin diinstal.
-                        <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-1 italic font-semibold">
+                        <div className="text-caption2 text-warning mt-1 italic font-semibold">
                           *Tips: Selalu instal file "Base Game" terlebih dahulu, diikuti dengan file "Update", kemudian file "DLC" (jika ada).
                         </div>
                       </li>
@@ -1693,33 +1817,30 @@ const Pengaturan: React.FC<Props> = ({
               </div>
 
               {/* Card 4: Hardisk External PNP PS4 */}
-              <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+              <div className="border border-sep rounded-tile overflow-hidden">
                 <div
-                  className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  className="p-3 apple-tile flex justify-between items-center cursor-pointer hover:bg-fill/70 transition-colors"
                   onClick={() => setSopExpanded(sopExpanded === 4 ? null : 4)}
                 >
-                  <span className="font-bold text-[14px] text-zinc-800 dark:text-zinc-100">CARA MEMBUAT HDD EXTERNAL PNP PS4</span>
-                  <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${sopExpanded === 4 ? 'rotate-180' : ''}`} />
+                  <span className="font-semibold text-subhead text-label">CARA MEMBUAT HDD EXTERNAL PNP PS4</span>
+                  <ChevronDown className={`w-4 h-4 text-label-3 transition-transform duration-200 ${sopExpanded === 4 ? "rotate-180" : ""}`} />
                 </div>
                 {sopExpanded === 4 && (
-                  <div className="p-4 bg-white dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-700 animate-in slide-in-from-top-2 duration-200 space-y-4">
-                    <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-950/40 p-3 rounded-xl flex gap-2.5">
-                      <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-                      <div className="text-xs text-blue-800 dark:text-blue-300">
-                        <span className="font-bold">Apa itu HDD External PNP (Plug and Play) PS4?</span>
-                        <p className="mt-1">
-                          Hardisk External PNP adalah media penyimpanan luar (USB 3.0) yang diformat khusus agar dapat langsung terdeteksi di PS4. Ada 2 tipe PNP:
-                        </p>
-                        <ul className="list-disc pl-4 mt-1.5 space-y-1">
-                          <li><b>Tipe exFAT (Untuk Installer Game):</b> Bisa dibaca di PC/Laptop dan PS4. Berguna untuk memindahkan file game <code>.pkg</code> dari PC ke PS4 untuk diinstal.</li>
-                          <li><b>Tipe Extended Storage (Untuk Langsung Main):</b> Diformat langsung oleh PS4. Game diinstal dan dimainkan langsung dari HDD eksternal ini, menghemat memori internal PS4 (tidak bisa dibaca di PC).</li>
-                        </ul>
-                      </div>
-                    </div>
-                    
+                  <div className="p-4 bg-surface border-t border-sep animate-in slide-in-from-top-2 duration-200 space-y-4">
+                    <Notice tone="info">
+                      <span className="font-bold">Apa itu HDD External PNP (Plug and Play) PS4?</span>
+                      <p className="mt-1">
+                        Hardisk External PNP adalah media penyimpanan luar (USB 3.0) yang diformat khusus agar dapat langsung terdeteksi di PS4. Ada 2 tipe PNP:
+                      </p>
+                      <ul className="list-disc pl-4 mt-1.5 space-y-1">
+                        <li><b>Tipe exFAT (Untuk Installer Game):</b> Bisa dibaca di PC/Laptop dan PS4. Berguna untuk memindahkan file game <code>.pkg</code> dari PC ke PS4 untuk diinstal.</li>
+                        <li><b>Tipe Extended Storage (Untuk Langsung Main):</b> Diformat langsung oleh PS4. Game diinstal dan dimainkan langsung dari HDD eksternal ini, menghemat memori internal PS4 (tidak bisa dibaca di PC).</li>
+                      </ul>
+                    </Notice>
+
                     <div>
-                      <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase mb-1">A. Pembuatan Tipe exFAT (Untuk Copy & Install PKG)</h4>
-                      <ul className="list-decimal pl-5 space-y-1.5 text-[13px] text-zinc-600 dark:text-zinc-300">
+                      <h4 className="font-bold text-caption text-tint uppercase mb-1">A. Pembuatan Tipe exFAT (Untuk Copy &amp; Install PKG)</h4>
+                      <ul className="list-decimal pl-5 space-y-1.5 text-footnote text-label-2">
                         <li>Hubungkan Hardisk Eksternal ke PC / Laptop Windows menggunakan port USB 3.0.</li>
                         <li>Buka <b>This PC</b> / <b>File Explorer</b> &gt; klik kanan pada drive Hardisk Eksternal tersebut, lalu pilih <b>Format...</b></li>
                         <li>Pada bagian <b>File System</b>, ubah nilainya menjadi <b>exFAT</b> (jangan pilih NTFS atau FAT32).</li>
@@ -1730,14 +1851,14 @@ const Pengaturan: React.FC<Props> = ({
                     </div>
 
                     <div>
-                      <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase mb-1">B. Pembuatan Tipe Extended Storage (Untuk Simpan & Main Langsung)</h4>
-                      <ul className="list-decimal pl-5 space-y-1.5 text-[13px] text-zinc-600 dark:text-zinc-300">
+                      <h4 className="font-bold text-caption text-tint uppercase mb-1">B. Pembuatan Tipe Extended Storage (Untuk Simpan &amp; Main Langsung)</h4>
+                      <ul className="list-decimal pl-5 space-y-1.5 text-footnote text-label-2">
                         <li>Pastikan Hardisk Eksternal mendukung minimal <b>USB 3.0</b> dengan kapasitas antara <b>250 GB - 8 TB</b>.</li>
                         <li>Hubungkan Hardisk Eksternal ke salah satu port USB di konsol PS4 Anda.</li>
                         <li>Di PS4, masuk ke menu <b>Settings</b> &gt; <b>Devices</b> &gt; <b>USB Storage Devices</b>.</li>
                         <li>Pilih nama Hardisk Eksternal Anda, lalu pilih opsi <b>Format as Extended Storage</b>.</li>
                         <li>Ikuti petunjuk di layar dan pilih <b>Next</b> lalu <b>Format</b>. Setelah selesai, hardisk Anda akan menjadi penyimpanan default baru untuk instalasi game.</li>
-                        <li><span className="font-semibold text-amber-600 dark:text-amber-400">*Catatan:</span> Ketika Anda menginstal game <code>.pkg</code> via <i>Package Installer</i>, game tersebut akan otomatis terpasang dan berjalan langsung dari Hardisk Eksternal ini.</li>
+                        <li><span className="font-semibold text-warning">*Catatan:</span> Ketika Anda menginstal game <code>.pkg</code> via <i>Package Installer</i>, game tersebut akan otomatis terpasang dan berjalan langsung dari Hardisk Eksternal ini.</li>
                       </ul>
                     </div>
                   </div>
@@ -1745,51 +1866,51 @@ const Pengaturan: React.FC<Props> = ({
               </div>
 
               {/* Card 5: Pengertian CFW, HEN, ODE, Matrix */}
-              <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+              <div className="border border-sep rounded-tile overflow-hidden">
                 <div
-                  className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  className="p-3 apple-tile flex justify-between items-center cursor-pointer hover:bg-fill/70 transition-colors"
                   onClick={() => setSopExpanded(sopExpanded === 5 ? null : 5)}
                 >
-                  <span className="font-bold text-[14px] text-zinc-800 dark:text-zinc-100">PENGERTIAN CFW, HEN, ODE, & MATRIX</span>
-                  <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${sopExpanded === 5 ? 'rotate-180' : ''}`} />
+                  <span className="font-semibold text-subhead text-label">PENGERTIAN CFW, HEN, ODE, &amp; MATRIX</span>
+                  <ChevronDown className={`w-4 h-4 text-label-3 transition-transform duration-200 ${sopExpanded === 5 ? "rotate-180" : ""}`} />
                 </div>
                 {sopExpanded === 5 && (
-                  <div className="p-4 bg-white dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-700 animate-in slide-in-from-top-2 duration-200 space-y-4">
-                    <div className="text-xs text-zinc-500 leading-relaxed">
+                  <div className="p-4 bg-surface border-t border-sep animate-in slide-in-from-top-2 duration-200 space-y-4">
+                    <div className="text-caption text-label-2 leading-relaxed">
                       Berikut adalah istilah modifikasi/jailbreak yang umum digunakan pada konsol PlayStation (PS2, PS3, dan PS4):
                     </div>
-                    
+
                     <div className="space-y-3">
                       <div>
-                        <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase">1. CFW (Custom Firmware)</h4>
-                        <p className="text-[13px] text-zinc-600 dark:text-zinc-300 mt-0.5">
+                        <h4 className="font-bold text-caption text-tint uppercase">1. CFW (Custom Firmware)</h4>
+                        <p className="text-footnote text-label-2 mt-0.5">
                           Sistem operasi (firmware) konsol yang sudah dimodifikasi secara permanen agar bisa menjalankan homebrew dan game bajakan langsung dari HDD.
                           <br /><b>Kelebihan:</b> Permanen (tidak perlu diaktifkan ulang setelah PS dimatikan), fitur sangat lengkap (control fan, temperatur, dll).
                           <br /><b>Penerapan:</b> Hanya tersedia di <b>PS3</b> tipe Fat dan Slim seri tertentu (seri 20xx/21xx/25xx dengan minver down 3.56). Di PS4 tidak ada istilah CFW murni.
                         </p>
                       </div>
 
-                      <div className="border-t border-zinc-100 dark:border-zinc-800/60 pt-3">
-                        <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase">2. HEN (Homebrew Enabler)</h4>
-                        <p className="text-[13px] text-zinc-600 dark:text-zinc-300 mt-0.5">
+                      <div className="border-t border-sep pt-3">
+                        <h4 className="font-bold text-caption text-tint uppercase">2. HEN (Homebrew Enabler)</h4>
+                        <p className="text-footnote text-label-2 mt-0.5">
                           Jailbreak berbasis software (aplikasi/browser exploit) yang bersifat non-permanen. Fitur jailbreak hanya aktif selama konsol menyala.
                           <br /><b>Karakteristik:</b> Setiap kali konsol dinyalakan atau di-restart, Anda <b>wajib mengaktifkan HEN terlebih dahulu</b> (klik ikon "Enable HEN" di PS3 atau buka exploit via browser/PPPwn di PS4). Jika tidak, game bajakan tidak akan bisa dibuka.
                           <br /><b>Penerapan:</b> Digunakan pada <b>PS3</b> Slim seri akhir (30xx) / Super Slim (40xx) yang tidak bisa dipasang CFW, serta semua jenis exploit di <b>PS4</b> (GoldHEN).
                         </p>
                       </div>
 
-                      <div className="border-t border-zinc-100 dark:border-zinc-800/60 pt-3">
-                        <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase">3. ODE (Optical Drive Emulator)</h4>
-                        <p className="text-[13px] text-zinc-600 dark:text-zinc-300 mt-0.5">
+                      <div className="border-t border-sep pt-3">
+                        <h4 className="font-bold text-caption text-tint uppercase">3. ODE (Optical Drive Emulator)</h4>
+                        <p className="text-footnote text-label-2 mt-0.5">
                           Modifikasi berbasis hardware (perangkat keras tambahan berupa chip emulasi) yang dipasang untuk memanipulasi pembacaan Bluray Drive agar konsol membaca game dari hardisk eksternal.
                           <br /><b>Karakteristik:</b> Sangat populer dulu untuk membobol PS3 seri Super Slim sebelum HEN ditemukan. Saat ini sudah jarang digunakan karena HEN gratis dan lebih praktis.
                           <br /><b>Penerapan:</b> Umumnya dipasang di <b>PS3</b> Fat/Slim/Super Slim.
                         </p>
                       </div>
 
-                      <div className="border-t border-zinc-100 dark:border-zinc-800/60 pt-3">
-                        <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase">4. MATRIX (Modchip PS2)</h4>
-                        <p className="text-[13px] text-zinc-600 dark:text-zinc-300 mt-0.5">
+                      <div className="border-t border-sep pt-3">
+                        <h4 className="font-bold text-caption text-tint uppercase">4. MATRIX (Modchip PS2)</h4>
+                        <p className="text-footnote text-label-2 mt-0.5">
                           Modchip (IC tambahan) yang disolder pada motherboard PS2 untuk membypass proteksi region lock dan membolehkan pembacaan kaset bajakan.
                           <br /><b>Penerapan di Hardisk:</b> Di rental/toko Indonesia, "PS2 Matrix" berarti PS2 yang dipasang chip Matrix v5.0 (atau sejenis) agar saat dinyalakan langsung otomatis melakukan boot ke <b>Open PS2 Loader (OPL)</b> dari hardisk eksternal/internal tanpa memerlukan MC Boot (memory card exploit).
                         </p>
@@ -1800,27 +1921,24 @@ const Pengaturan: React.FC<Props> = ({
               </div>
 
               {/* Card 6: Cara HEN BD-JB PS4 */}
-              <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+              <div className="border border-sep rounded-tile overflow-hidden">
                 <div
-                  className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  className="p-3 apple-tile flex justify-between items-center cursor-pointer hover:bg-fill/70 transition-colors"
                   onClick={() => setSopExpanded(sopExpanded === 6 ? null : 6)}
                 >
-                  <span className="font-bold text-[14px] text-zinc-800 dark:text-zinc-100">CARA HEN BD-JB PS4 (FW 9.00 - 11.00+)</span>
-                  <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${sopExpanded === 6 ? 'rotate-180' : ''}`} />
+                  <span className="font-semibold text-subhead text-label">CARA HEN BD-JB PS4 (FW 9.00 - 11.00+)</span>
+                  <ChevronDown className={`w-4 h-4 text-label-3 transition-transform duration-200 ${sopExpanded === 6 ? "rotate-180" : ""}`} />
                 </div>
                 {sopExpanded === 6 && (
-                  <div className="p-4 bg-white dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-700 animate-in slide-in-from-top-2 duration-200 space-y-4">
-                    <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-950/40 p-3 rounded-xl flex gap-2.5">
-                      <Info className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                      <div className="text-xs text-amber-800 dark:text-amber-300">
-                        <span className="font-semibold">Informasi Awal (Asumsi Sudah Memiliki Kaset BD-JB):</span>
-                        <p className="mt-1">
-                          Panduan ini ditujukan bagi Anda yang sudah memiliki kaset Blu-ray Disc khusus exploit BD-JB (biasanya dibeli pre-burn/siap pakai di toko online). Anda tidak perlu melakukan burning disc lagi di PC.
-                        </p>
-                      </div>
-                    </div>
+                  <div className="p-4 bg-surface border-t border-sep animate-in slide-in-from-top-2 duration-200 space-y-4">
+                    <Notice tone="warning">
+                      <span className="font-semibold">Informasi Awal (Asumsi Sudah Memiliki Kaset BD-JB):</span>
+                      <p className="mt-1">
+                        Panduan ini ditujukan bagi Anda yang sudah memiliki kaset Blu-ray Disc khusus exploit BD-JB (biasanya dibeli pre-burn/siap pakai di toko online). Anda tidak perlu melakukan burning disc lagi di PC.
+                      </p>
+                    </Notice>
 
-                    <ul className="list-decimal pl-5 space-y-2 text-[13px] text-zinc-600 dark:text-zinc-300">
+                    <ul className="list-decimal pl-5 space-y-2 text-footnote text-label-2">
                       <li>
                         <b>Persiapan USB Payload:</b>
                         <ul className="list-disc pl-5 mt-1 space-y-1">
@@ -1835,33 +1953,30 @@ const Pengaturan: React.FC<Props> = ({
                       <li>Tunggu beberapa saat. Program Java di dalam kaset akan berjalan otomatis, memicu kernel exploit, dan mencari file <code>goldhen.bin</code> pada USB Flashdisk Anda.</li>
                       <li>Setelah exploit berhasil dipicu, notifikasi **"GoldHEN Loaded / Exploit Success"** akan muncul di pojok kiri atas layar.</li>
                       <li><b>Selesai!</b> Keluarkan kaset BD-JB dan cabut USB Flashdisk Anda. Game bajakan sekarang sudah aktif dan siap dimainkan.</li>
-                      <li><span className="font-semibold text-amber-600 dark:text-amber-400">*Tips Rental:</span> Agar tidak perlu memancing ulang exploit setiap kali PS4 dinyalakan, gunakan fitur <b>Rest Mode</b> (Mode Istirahat) saat mematikan PS4. Selama konsol tidak mati total, status HEN akan tetap aktif.</li>
+                      <li><span className="font-semibold text-warning">*Tips Rental:</span> Agar tidak perlu memancing ulang exploit setiap kali PS4 dinyalakan, gunakan fitur <b>Rest Mode</b> (Mode Istirahat) saat mematikan PS4. Selama konsol tidak mati total, status HEN akan tetap aktif.</li>
                     </ul>
                   </div>
                 )}
               </div>
 
               {/* Card 7: Cara Install HEN di PS3 */}
-              <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+              <div className="border border-sep rounded-tile overflow-hidden">
                 <div
-                  className="p-3 bg-zinc-50 dark:bg-zinc-800/50 flex justify-between items-center cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  className="p-3 apple-tile flex justify-between items-center cursor-pointer hover:bg-fill/70 transition-colors"
                   onClick={() => setSopExpanded(sopExpanded === 7 ? null : 7)}
                 >
-                  <span className="font-bold text-[14px] text-zinc-800 dark:text-zinc-100">CARA INSTALL HEN DI PS3 (FW 4.90 / 4.91 HFW)</span>
-                  <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${sopExpanded === 7 ? 'rotate-180' : ''}`} />
+                  <span className="font-semibold text-subhead text-label">CARA INSTALL HEN DI PS3 (FW 4.90 / 4.91 HFW)</span>
+                  <ChevronDown className={`w-4 h-4 text-label-3 transition-transform duration-200 ${sopExpanded === 7 ? "rotate-180" : ""}`} />
                 </div>
                 {sopExpanded === 7 && (
-                  <div className="p-4 bg-white dark:bg-black/20 border-t border-zinc-200 dark:border-zinc-700 animate-in slide-in-from-top-2 duration-200 space-y-4">
-                    <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-950/40 p-3 rounded-xl flex gap-2.5">
-                      <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-                      <span className="text-xs text-blue-800 dark:text-blue-300">
-                        <b>Catatan:</b> Proses instalasi HEN terbagi menjadi 2 tahap besar, yaitu <b>install Hybrid Firmware (HFW)</b> terlebih dahulu lewat USB flashdisk, kemudian mengaktifkan <b>explot HEN via Browser internet PS3</b>.
-                      </span>
-                    </div>
+                  <div className="p-4 bg-surface border-t border-sep animate-in slide-in-from-top-2 duration-200 space-y-4">
+                    <Notice tone="info">
+                      <b>Catatan:</b> Proses instalasi HEN terbagi menjadi 2 tahap besar, yaitu <b>install Hybrid Firmware (HFW)</b> terlebih dahulu lewat USB flashdisk, kemudian mengaktifkan <b>explot HEN via Browser internet PS3</b>.
+                    </Notice>
 
                     <div>
-                      <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase mb-1">Tahap 1: Instalasi Hybrid Firmware (HFW)</h4>
-                      <ul className="list-decimal pl-5 space-y-1.5 text-[13px] text-zinc-600 dark:text-zinc-300">
+                      <h4 className="font-bold text-caption text-tint uppercase mb-1">Tahap 1: Instalasi Hybrid Firmware (HFW)</h4>
+                      <ul className="list-decimal pl-5 space-y-1.5 text-footnote text-label-2">
                         <li>Siapkan USB Flashdisk (format ke <b>FAT32</b>).</li>
                         <li>Download file HFW yang sesuai dengan versi sistem Anda (misal: 4.91 HFW).</li>
                         <li>Di dalam flashdisk, buat struktur folder: <code>PS3</code> &gt; <code>UPDATE</code> (gunakan huruf kapital).</li>
@@ -1871,8 +1986,8 @@ const Pengaturan: React.FC<Props> = ({
                     </div>
 
                     <div>
-                      <h4 className="font-bold text-xs text-blue-600 dark:text-blue-400 uppercase mb-1">Tahap 2: Pemasangan PS3HEN via Web Browser</h4>
-                      <ul className="list-decimal pl-5 space-y-1.5 text-[13px] text-zinc-600 dark:text-zinc-300">
+                      <h4 className="font-bold text-caption text-tint uppercase mb-1">Tahap 2: Pemasangan PS3HEN via Web Browser</h4>
+                      <ul className="list-decimal pl-5 space-y-1.5 text-footnote text-label-2">
                         <li>Hubungkan PS3 ke jaringan Internet yang stabil (Wi-Fi/LAN).</li>
                         <li>Buka aplikasi <b>Internet Browser</b> bawaan PS3.</li>
                         <li>Tekan tombol <b>Triangle (Segitiga)</b> &gt; masuk ke <b>Tools</b> &gt; bersihkan semua <b>Cookies, Search History, Cache, dan Authentication Info</b>.</li>
@@ -1896,57 +2011,53 @@ const Pengaturan: React.FC<Props> = ({
         <div className="space-y-5">
           {/* 1. Header Logo (Tetap Fixed/Diluar Scroll) */}
           <div className="text-center space-y-2">
-            <div className="w-16 h-16 bg-zinc-900 dark:bg-zinc-800 rounded-[18px] mx-auto shadow-lg flex items-center justify-center text-white">
+            <div className="w-16 h-16 bg-action text-action-label rounded-card mx-auto shadow-card flex items-center justify-center">
               <Gamepad2 size={32} />
             </div>
             <div>
-              <h3 className="text-xl font-bold text-zinc-900 dark:text-white">URBAN Console</h3>
-              <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mt-0.5">Build v{versionData.version}</div>
+              <h3 className="text-title3 font-bold text-label">URBAN Console</h3>
+              <div className="text-caption font-medium text-label-2 mt-0.5 tabular-nums">Build v{versionData.version}</div>
             </div>
           </div>
 
           {/* 2. Content Wrapper (Scrollable Box) */}
           <IOSGroup title="Informasi & Panduan" className="mb-0">
-            {/* Gunakan max-h yg pas supaya tidak overflow keluar dari tinggi modal fixed */}
-            <div className="max-h-[380px] overflow-y-auto p-5 scrollbar-thin">
-              {/* Tentang */}
-              <h4 className="text-sm font-semibold text-zinc-900 dark:text-white flex items-center gap-2 mb-2">
-                <Pin size={16} className="text-zinc-500 shrink-0" /> Tentang Aplikasi
+            <div className="max-h-[380px] overflow-y-auto p-5 scrollbar-ios">
+              <h4 className="text-subhead font-semibold text-label flex items-center gap-2 mb-2">
+                <Pin size={16} className="text-label-2 shrink-0" /> Tentang Aplikasi
               </h4>
-              <p className="text-[14px] leading-relaxed text-zinc-600 dark:text-zinc-300 mb-6">
+              <p className="text-subhead leading-relaxed text-label-2 mb-6">
                 Aplikasi ini digunakan untuk mencatat transaksi, pemasukan, dan pengeluaran <b>URBAN PlayStation Lampung</b>. Aplikasi bersifat pribadi untuk kebutuhan internal.
               </p>
 
-              {/* Panduan */}
-              <h4 className="text-sm font-semibold text-zinc-900 dark:text-white flex items-center gap-2 mb-2">
-                <BookOpen size={16} className="text-zinc-500 shrink-0" /> Panduan Singkat
+              <h4 className="text-subhead font-semibold text-label flex items-center gap-2 mb-2">
+                <BookOpen size={16} className="text-label-2 shrink-0" /> Panduan Singkat
               </h4>
-              <div className="text-[14px] leading-relaxed text-zinc-600 dark:text-zinc-300 space-y-3 mb-6">
+              <div className="text-subhead leading-relaxed text-label-2 space-y-3 mb-6">
                 <p>
-                  Aplikasi ini sudah dilengkapi fitur <b>penjumlahan otomatis</b>, <b>grafik</b>, <b>tarik data</b>, <b>backup & restore</b>, <b>filter tanggal</b>, serta pilihan <b>tema Gelap/Terang</b>.
+                  Aplikasi ini sudah dilengkapi fitur <b>penjumlahan otomatis</b>, <b>grafik</b>, <b>tarik data</b>, <b>backup &amp; restore</b>, <b>filter tanggal</b>, serta pilihan <b>tema Gelap/Terang</b>.
                 </p>
-                <ul className="list-disc ml-4 space-y-1.5 marker:text-zinc-400">
+                <ul className="list-disc ml-4 space-y-1.5 marker:text-label-3">
                   <li>Untuk <b>mengganti tema</b>, tekan tombol <b>Gelap/Terang</b> di pojok kanan atas.</li>
                   <li>Menambah atau mengedit item rincian (PS, jajanan, jasa, sewa) bisa diakses melalui menu <b>Edit Rincian</b>.</li>
-                  <li><b>Backup seluruh data</b> bisa dilakukan lewat menu <b>Backup & Restore Data</b>.</li>
+                  <li><b>Backup seluruh data</b> bisa dilakukan lewat menu <b>Backup &amp; Restore Data</b>.</li>
                   <li><b>Ekspor data ke CSV</b> dapat diakses pada menu <b>Export Data</b>.</li>
                   <li><b>Reset Setting</b> tersedia di menu <b>Reset Setting</b> untuk mengembalikan pengaturan default (data transaksi tetap aman).</li>
                 </ul>
-                <div className="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-100 dark:border-yellow-900/30 p-3 rounded-xl flex gap-2.5 mt-2">
-                  <Lightbulb size={16} className="text-amber-500 shrink-0 mt-0.5" />
-                  <span className="text-xs text-yellow-800 dark:text-yellow-200/80">
-                    <b>Tips:</b> Jangan lupa lakukan backup data secara berkala agar catatan tidak hilang.
-                  </span>
-                </div>
+                <Notice tone="warning" className="mt-2">
+                  <div className="flex gap-2 items-start">
+                    <Lightbulb size={15} className="shrink-0 mt-0.5" />
+                    <span><b>Tips:</b> Jangan lupa lakukan backup data secara berkala agar catatan tidak hilang.</span>
+                  </div>
+                </Notice>
               </div>
 
-              {/* Kontak */}
-              <h4 className="text-sm font-semibold text-zinc-900 dark:text-white flex items-center gap-2 mb-2">
-                <Phone size={16} className="text-zinc-500 shrink-0" /> Kontak
+              <h4 className="text-subhead font-semibold text-label flex items-center gap-2 mb-2">
+                <Phone size={16} className="text-label-2 shrink-0" /> Kontak
               </h4>
-              <div className="text-[14px] text-zinc-600 dark:text-zinc-300">
-                <div className="font-medium">URBAN PlayStation Lampung</div>
-                <div>Telp/WA: <span className="text-blue-600 dark:text-blue-400 font-medium">085709647790</span></div>
+              <div className="text-subhead text-label-2">
+                <div className="font-medium text-label">URBAN PlayStation Lampung</div>
+                <div>Telp/WA: <span className="text-tint font-medium tabular-nums">085709647790</span></div>
               </div>
             </div>
           </IOSGroup>
@@ -1956,67 +2067,8 @@ const Pengaturan: React.FC<Props> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-6 bg-black/40 backdrop-blur-sm transition-all duration-300">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-6 bg-black/40 dark:bg-black/75 backdrop-blur-[8px] transition-all duration-300">
       <style dangerouslySetInnerHTML={{__html: `
-        /* Custom iOS range inputs styling */
-        input[type="range"].ios-slider {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 100%;
-          height: 6px;
-          border-radius: 9999px;
-          background: #E5E5EA;
-          outline: none;
-          transition: background 0.2s ease;
-        }
-        .dark input[type="range"].ios-slider {
-          background: #2C2C2E;
-        }
-        input[type="range"].ios-slider::-webkit-slider-thumb {
-          -webkit-appearance: none;
-          appearance: none;
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          background: #FFFFFF;
-          border: 0.5px solid rgba(0, 0, 0, 0.08);
-          box-shadow: 0px 3px 8px rgba(0, 0, 0, 0.12), 0px 3px 1px rgba(0, 0, 0, 0.04);
-          cursor: pointer;
-          transition: transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-        }
-        input[type="range"].ios-slider::-moz-range-thumb {
-          width: 24px;
-          height: 24px;
-          border: none;
-          border-radius: 50%;
-          background: #FFFFFF;
-          border: 0.5px solid rgba(0, 0, 0, 0.08);
-          box-shadow: 0px 3px 8px rgba(0, 0, 0, 0.12), 0px 3px 1px rgba(0, 0, 0, 0.04);
-          cursor: pointer;
-          transition: transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-        }
-        input[type="range"].ios-slider:active::-webkit-slider-thumb {
-          transform: scale(1.15);
-        }
-        input[type="range"].ios-slider:active::-moz-range-thumb {
-          transform: scale(1.15);
-        }
-
-        /* Tab change transitions */
-        .animate-tab-change {
-          animation: iosTabSlide 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-        @keyframes iosTabSlide {
-          from {
-            opacity: 0;
-            transform: translateY(8px) scale(0.995);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
-        }
-        
         /* Smooth squircle bounce */
         .sidebar-icon-squircle {
           transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -2024,7 +2076,7 @@ const Pengaturan: React.FC<Props> = ({
         button:hover .sidebar-icon-squircle {
           transform: scale(1.08) rotate(3deg);
         }
-        
+
         /* Custom iOS-style scrollbars */
         .scrollbar-ios::-webkit-scrollbar {
           width: 5px;
@@ -2048,94 +2100,133 @@ const Pengaturan: React.FC<Props> = ({
         }
       `}} />
 
-      {/* ✅ FIX: Tinggi Desktop dikunci di 640px (md:h-[640px]).
-        Jadi walaupun isi kontennya sedikit (seperti tab 'Export'), kotak modal tetap besar.
-        Ini menjaga layout tidak berubah-ubah (jumping).
-      */}
-      <div className="w-full h-full md:h-[640px] md:max-w-[850px] bg-[#F2F2F7]/95 dark:bg-black/95 backdrop-blur-2xl md:rounded-[20px] shadow-2xl overflow-hidden flex flex-col md:flex-row border border-zinc-200/50 dark:border-zinc-800">
+      <div className="w-full h-full md:h-[640px] md:max-w-[850px] apple-sheet-grouped md:border md:border-white/50 md:dark:border-white/[0.12] md:rounded-[32px] shadow-float ring-1 ring-black/10 dark:ring-white/15 overflow-hidden flex flex-col md:flex-row">
 
         {/* SIDEBAR (Desktop) */}
-        <div className="hidden md:flex flex-col w-[260px] bg-[#F2F2F7]/40 dark:bg-[#1c1c1e]/40 border-r border-zinc-200 dark:border-zinc-800 py-6 px-3 backdrop-blur-xl">
-          <div className="px-3 mb-6"><h2 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">Pengaturan</h2></div>
+        <div className="hidden md:flex flex-col w-[260px] apple-bar border-r border-sep py-5 px-3">
+          <div className="px-3 mb-5"><h2 className="text-title2 text-label tracking-tight">Pengaturan</h2></div>
 
           {/* iOS Profile Head (Desktop) */}
-          <div className="px-1 mb-5">
-            <div onClick={() => setTab("profile")} className={`bg-white/80 dark:bg-[#2C2C2E]/80 backdrop-blur-md rounded-2xl p-3 flex items-center gap-3 cursor-pointer shadow-sm border border-black/5 dark:border-white/5 transition-all ${tab === 'profile' ? 'ring-2 ring-blue-500 border-transparent dark:ring-blue-400' : 'hover:bg-white dark:hover:bg-[#2C2C2E]'}`}>
-              <div 
-                className="w-11 h-11 rounded-full overflow-hidden shrink-0 flex items-center justify-center border border-black/5 dark:border-white/5 shadow-sm"
-                style={{ backgroundColor: userProfilePic ? undefined : (userProfileColor || "#3b82f6") }}
+          <div className="px-1 mb-4">
+            <button
+              type="button"
+              onClick={() => setTab("profile")}
+              className={`w-full text-left apple-card rounded-tile p-3 flex items-center gap-3 cursor-pointer shadow-card ring-1 ring-edge transition-all ${
+                tab === "profile" ? "ring-2 ring-tint border-transparent" : "hover:bg-fill/40"
+              }`}
+            >
+              <div
+                className="w-11 h-11 rounded-full overflow-hidden shrink-0 flex items-center justify-center border border-edge shadow-card"
+                style={{ backgroundColor: userProfilePic ? undefined : (userProfileColor || "#0088FF") }}
               >
                 {userProfilePic ? (
-                  <img src={userProfilePic} className="w-full h-full object-cover" />
+                  <img src={userProfilePic} alt="Foto profil" className="w-full h-full object-cover" />
                 ) : (
                   <span className="font-bold text-white text-sm uppercase">
-                    {(userEmail?.split('@')[0] || "U").substring(0, 2).toUpperCase()}
+                    {(userEmail?.split("@")[0] || "U").substring(0, 2).toUpperCase()}
                   </span>
                 )}
               </div>
               <div className="flex-1 w-0">
-                <h3 className="text-[15px] font-bold text-zinc-900 dark:text-white truncate leading-tight">{userEmail?.split('@')[0] || "User"}</h3>
-                <p className="text-[11px] text-zinc-500 truncate leading-tight mt-0.5">Edit akun, cek detail...</p>
+                <h3 className="text-subhead font-bold text-label truncate leading-tight">{userEmail?.split("@")[0] || "User"}</h3>
+                <p className="text-caption2 text-label-2 truncate leading-tight mt-0.5">Edit akun, cek detail...</p>
               </div>
-              <ChevronRight className="w-4 h-4 text-zinc-400 opacity-60 mr-1" />
-            </div>
+              <ChevronRight className="w-4 h-4 text-label-3 mr-0.5 shrink-0" />
+            </button>
           </div>
 
           <div className="space-y-1 flex-1 overflow-y-auto scrollbar-ios">
             {menu.map((m) => (
-              <button key={m.key} onClick={() => setTab(m.key)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${tab === m.key ? "bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-sm" : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50"}`}>
-                <div className={`w-6 h-6 rounded-[6px] flex items-center justify-center text-[12px] text-white shadow-sm sidebar-icon-squircle ${m.color}`}>{m.icon}</div>
-                <span>{m.label}</span>
+              <button
+                key={m.key}
+                type="button"
+                onClick={() => setTab(m.key)}
+                className={`w-full min-h-[42px] flex items-center gap-3 px-3 py-2 rounded-full text-subhead transition-colors ${
+                  tab === m.key
+                    ? "bg-surface dark:bg-white/[0.12] text-tint dark:text-[#45ADFF] font-semibold shadow-card"
+                    : "text-label-2 font-medium hover:bg-fill/60 hover:text-label"
+                }`}
+              >
+                <IconBadge color={m.color} className="w-6 h-6 rounded-[6px] sidebar-icon-squircle [&>svg]:h-3.5 [&>svg]:w-3.5">
+                  {m.icon}
+                </IconBadge>
+                <span className="truncate">{m.label}</span>
               </button>
             ))}
           </div>
         </div>
 
         {/* MOBILE MENU */}
-        <div className={`flex flex-col flex-1 bg-[#F2F2F7] dark:bg-black h-full md:hidden ${mobileView === 'content' ? 'hidden' : 'flex'}`}>
-          <div className="px-5 py-4 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md sticky top-0 z-10 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center">
-            <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">Pengaturan</h2>
-            <button onClick={onClose} className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors"><X className="w-4 h-4" /></button>
+        <div className={`flex flex-col flex-1 bg-transparent h-full md:hidden ${mobileView === "content" ? "hidden" : "flex"}`}>
+          <div className="px-5 py-4 apple-bar sticky top-0 z-10 border-b border-sep flex justify-between items-center">
+            <h2 className="text-title2 text-label">Pengaturan</h2>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Tutup Pengaturan"
+              className="w-8 h-8 rounded-full bg-fill flex items-center justify-center text-label-2 hover:text-label transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
           <div className="flex-1 overflow-y-auto p-5 scrollbar-ios">
-            {/* iOS Profile Head (Mobile) */}
-            <IOSGroup className="!mb-8">
-              <div onClick={() => { setTab("profile"); setMobileView("content"); }} className="p-4 flex flex-row items-center gap-4 cursor-pointer active:bg-zinc-100 dark:active:bg-zinc-700/50 transition-colors">
-                <div 
-                  className="w-16 h-16 rounded-full overflow-hidden shrink-0 flex items-center justify-center border border-black/5 dark:border-white/5 shadow-sm"
-                  style={{ backgroundColor: userProfilePic ? undefined : (userProfileColor || "#3b82f6") }}
+            <IOSGroup className="!mb-6">
+              <button
+                type="button"
+                onClick={() => { setTab("profile"); setMobileView("content"); }}
+                className="w-full p-4 flex flex-row items-center gap-4 text-left active:bg-fill/60 transition-colors"
+              >
+                <div
+                  className="w-16 h-16 rounded-full overflow-hidden shrink-0 flex items-center justify-center border border-edge shadow-card"
+                  style={{ backgroundColor: userProfilePic ? undefined : (userProfileColor || "#0088FF") }}
                 >
                   {userProfilePic ? (
-                    <img src={userProfilePic} className="w-full h-full object-cover" />
+                    <img src={userProfilePic} alt="Foto profil" className="w-full h-full object-cover" />
                   ) : (
                     <span className="font-bold text-white text-xl uppercase">
-                      {(userEmail?.split('@')[0] || "U").substring(0, 2).toUpperCase()}
+                      {(userEmail?.split("@")[0] || "U").substring(0, 2).toUpperCase()}
                     </span>
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-[20px] font-bold text-zinc-900 dark:text-white truncate">{userEmail?.split('@')[0] || "User"}</h3>
-                  <p className="text-[13px] text-zinc-500 truncate mt-0.5">Edit akun, cek detail...</p>
+                  <h3 className="text-title3 font-bold text-label truncate">{userEmail?.split("@")[0] || "User"}</h3>
+                  <p className="text-footnote text-label-2 truncate mt-0.5">Edit akun, cek detail...</p>
                 </div>
-                <ChevronRight className="w-5 h-5 text-zinc-400 opacity-60 mr-1" />
-              </div>
+                <ChevronRight className="w-5 h-5 text-label-3 mr-1 shrink-0" />
+              </button>
             </IOSGroup>
 
-            <IOSGroup>{menu.map((m, i) => (<IOSRow key={m.key} label={m.label} icon={m.icon} iconColor={m.color} isLast={i === menu.length - 1} onClick={() => { setTab(m.key); setMobileView("content"); }} />))}</IOSGroup>
-            <IOSGroup><IOSRow label="Tutup Pengaturan" icon={<X size={16} />} iconColor="bg-zinc-400" isLast onClick={onClose} /></IOSGroup>
+            <IOSGroup>{menu.map((m) => (<IOSRow key={m.key} label={m.label} icon={m.icon} iconColor={m.color} onClick={() => { setTab(m.key); setMobileView("content"); }} />))}</IOSGroup>
+            <IOSGroup><IOSRow label="Tutup Pengaturan" icon={<X size={16} />} iconColor="gray" chevron={false} onClick={onClose} /></IOSGroup>
           </div>
         </div>
 
         {/* CONTENT */}
-        <div className={`flex flex-col flex-1 bg-[#F2F2F7] dark:bg-black h-full overflow-hidden ${mobileView === 'menu' ? 'hidden md:flex' : 'flex'}`}>
-          <div className="shrink-0 h-14 md:h-16 px-4 md:px-8 border-b border-zinc-200/80 dark:border-zinc-800/80 flex items-center justify-between bg-white/50 dark:bg-zinc-900/50 backdrop-blur-xl">
-            <div className="flex items-center gap-2">
-              <button onClick={() => setMobileView('menu')} className="md:hidden text-[#007AFF] dark:text-[#0A84FF] flex items-center gap-0.5 font-normal text-[17px] -ml-2 pr-2 active:opacity-60 transition-opacity"><ChevronLeft className="w-6 h-6 -ml-1" /> Kembali</button>
-              <h3 className="text-lg md:text-xl font-bold text-zinc-900 dark:text-white">{menu.find(m => m.key === tab)?.label}</h3>
+        <div className={`flex flex-col flex-1 bg-transparent h-full overflow-hidden ${mobileView === "menu" ? "hidden md:flex" : "flex"}`}>
+          <div className="shrink-0 h-14 md:h-16 px-4 md:px-7 border-b border-sep flex items-center justify-between apple-bar">
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                type="button"
+                onClick={() => setMobileView("menu")}
+                className="md:hidden text-tint flex items-center gap-0.5 font-normal text-callout -ml-2 pr-2 active:opacity-60 transition-opacity"
+              >
+                <ChevronLeft className="w-5 h-5" /> Kembali
+              </button>
+              <h3 className="text-headline md:text-title3 text-label truncate">
+                {tab === "profile" ? "Akun" : menu.find((m) => m.key === tab)?.label}
+              </h3>
             </div>
-            <button onClick={onClose} className="hidden md:flex items-center justify-center w-8 h-8 rounded-full bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 transition-colors shadow-sm" title="Tutup (Esc)"><X className="w-4 h-4" /></button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="hidden md:flex items-center justify-center w-8 h-8 rounded-full bg-fill text-label-2 hover:text-label transition-colors"
+              title="Tutup (Esc)"
+              aria-label="Tutup Pengaturan"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 md:p-8 scrollbar-ios">
+          <div className="flex-1 overflow-y-auto p-4 md:p-7 scrollbar-ios">
             <div className="max-w-2xl mx-auto md:mx-0">
               <div key={tab} className="animate-tab-change">
                 {renderContent()}
@@ -2156,6 +2247,48 @@ const Pengaturan: React.FC<Props> = ({
           onBatal={() => setAksiAman(null)}
           onBerhasil={() => jalankanAksiAman(aksiAman)}
         />
+      )}
+
+      <AlertDialog
+        open={confirmLogoutOpen}
+        onClose={() => setConfirmLogoutOpen(false)}
+        title="Keluar dari akun?"
+        description="Yakin ingin keluar dari akun Admin?"
+        icon={<LogOut />}
+        iconColor="red"
+        zClassName="z-[270]"
+        actions={[
+          { label: "Batal", role: "cancel", onClick: () => setConfirmLogoutOpen(false) },
+          {
+            label: "Keluar",
+            role: "destructive",
+            onClick: () => {
+              setConfirmLogoutOpen(false);
+              runOrAlert(onLogout);
+            },
+          },
+        ]}
+      />
+
+      <AlertDialog
+        open={!!deleteAsistenId}
+        onClose={() => !isLoading && setDeleteAsistenId(null)}
+        title="Hapus pengingat asisten?"
+        description="Pengingat pengeluaran bulanan ini akan dihapus permanen."
+        icon={<AlertTriangle />}
+        iconColor="red"
+        dismissible={!isLoading}
+        zClassName="z-[270]"
+        actions={[
+          { label: "Batal", role: "cancel", onClick: () => setDeleteAsistenId(null), disabled: isLoading },
+          { label: isLoading ? "Menghapus..." : "Hapus", role: "destructive", onClick: konfirmasiHapusAsisten, disabled: isLoading },
+        ]}
+      />
+
+      {toast && (
+        <div className="fixed left-1/2 -translate-x-1/2 bottom-[calc(24px+env(safe-area-inset-bottom))] z-[400] px-4 py-2.5 rounded-full bg-action text-action-label text-subhead font-medium shadow-float max-w-[90vw] text-center">
+          {toast}
+        </div>
       )}
     </div>
   );

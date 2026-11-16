@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { X, MapPin, Camera, AlertCircle } from "lucide-react";
+import { X, MapPin, Camera } from "lucide-react";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { MapContainer, TileLayer, Marker, Circle, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
+import { Button, Notice, Pill } from "../ui";
 
 // Fix Leaflet marker icon issue in React
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -351,106 +352,138 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
   if (!isOpen) return null;
 
   const popupContent = (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 font-sans">
-      <div className="absolute inset-0 bg-black/40 dark:bg-black/70 backdrop-blur-[4px] transition-opacity" onClick={submitting ? undefined : onClose} />
-      
-      <div className="relative w-full max-w-[340px] sm:max-w-[380px] overflow-hidden rounded-[28px] bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-2xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
-        
-        {/* Header - Apple Style */}
-        <div className="relative px-6 pt-6 pb-4 text-center">
-          <h3 className="text-[19px] font-semibold tracking-tight text-zinc-900 dark:text-white">Absen {jenisAbsen}</h3>
-          <p className="text-[13px] text-zinc-500 dark:text-zinc-400 mt-1">Konfirmasi lokasi dan foto Anda.</p>
-          <button 
-            onClick={submitting ? undefined : onClose} 
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 font-sans" role="dialog" aria-modal="true">
+      <div
+        className="absolute inset-0 bg-black/45 dark:bg-black/70 backdrop-blur-sm transition-opacity"
+        onClick={submitting ? undefined : onClose}
+      />
+
+      <div className="relative w-full max-w-[360px] sm:max-w-[400px] overflow-hidden rounded-sheet apple-sheet shadow-float border border-white/65 dark:border-white/[0.14] ring-1 ring-black/10 dark:ring-white/10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[88vh]">
+        <div className="relative px-6 pt-6 pb-4 text-center border-b border-sep">
+          <h3 className="text-headline text-label">Absen {jenisAbsen}</h3>
+          <p className="text-footnote text-label-2 mt-1">Konfirmasi lokasi dan foto Anda.</p>
+          <button
+            type="button"
+            onClick={submitting ? undefined : onClose}
             disabled={submitting}
-            className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 dark:bg-white/10 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-white/20 transition-colors disabled:opacity-40"
+            aria-label="Tutup"
+            className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-fill text-label-2 hover:text-label transition-colors disabled:opacity-40"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 pb-5 space-y-5">
-          
-          {/* Lokasi Section */}
-          <div className="bg-zinc-50 dark:bg-[#2C2C2E]/50 rounded-[20px] p-4 border border-black/5 dark:border-white/5 shadow-inner">
-             <div className="flex flex-col gap-2 mb-3">
-               <div className="flex items-center gap-2">
-                 <MapPin className="w-4 h-4 text-blue-500" />
-                 <span className="text-[13px] font-semibold text-zinc-800 dark:text-zinc-200">Lokasi Anda</span>
-               </div>
-               {locationError && (
-                 <div className="flex w-fit items-center gap-1.5 px-3 py-1.5 bg-red-50 dark:bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl text-[11px] font-bold">
-                   <AlertCircle className="w-3.5 h-3.5" />
-                   {locationError}
-                 </div>
-               )}
-             </div>
-             
-             <div className="w-full h-36 bg-zinc-200 dark:bg-zinc-800 rounded-xl overflow-hidden relative shadow-sm ring-1 ring-black/5 dark:ring-white/5">
-                <MapContainer center={[TOKO_COORD.lat, TOKO_COORD.lng]} zoom={16} scrollWheelZoom={false} style={{ width: '100%', height: '100%' }} zoomControl={false} attributionControl={false}>
-                  <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
-                  <Marker position={[TOKO_COORD.lat, TOKO_COORD.lng]} />
-                  <Circle center={[TOKO_COORD.lat, TOKO_COORD.lng]} radius={MAX_DISTANCE_METERS} pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.15, weight: 1 }} />
-                  {userCoord && <Marker position={[userCoord.lat, userCoord.lng]} />}
-                  <FlyToUser coord={userCoord} />
-                </MapContainer>
-             </div>
-             
-             <button 
-               onClick={handleMatchLocation}
-               className={`group relative flex w-full items-center justify-center gap-2 rounded-xl transition-all duration-200 active:scale-[0.96] disabled:opacity-50 font-semibold select-none overflow-hidden px-4 py-2.5 text-sm mt-3 ${
-                 isLocationMatched
-                 ? "bg-blue-100/50 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 border border-transparent"
-                 : "bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 shadow-md shadow-zinc-500/10 border border-transparent dark:border-white/5"
-               }`}
-             >
-               {!isLocationMatched && <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/10 dark:via-black/10 to-transparent z-10" />}
-               <span className="relative z-0">{isLocationMatched ? "Lokasi Sesuai ✓" : (userCoord ? "Coba Lagi" : "Cocokkan Koordinat")}</span>
-             </button>
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+          <div className="apple-tile rounded-tile p-4 space-y-3">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-tint" />
+                <span className="text-subhead font-semibold text-label">Lokasi Anda</span>
+              </div>
+              {locationError && <Notice tone="negative">{locationError}</Notice>}
+            </div>
+
+            <div className="w-full h-36 bg-fill rounded-field overflow-hidden relative ring-1 ring-edge">
+              <MapContainer
+                center={[TOKO_COORD.lat, TOKO_COORD.lng]}
+                zoom={16}
+                scrollWheelZoom={false}
+                style={{ width: "100%", height: "100%" }}
+                zoomControl={false}
+                attributionControl={false}
+              >
+                <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
+                <Marker position={[TOKO_COORD.lat, TOKO_COORD.lng]} />
+                <Circle
+                  center={[TOKO_COORD.lat, TOKO_COORD.lng]}
+                  radius={MAX_DISTANCE_METERS}
+                  pathOptions={{ color: "#0088FF", fillColor: "#0088FF", fillOpacity: 0.15, weight: 1 }}
+                />
+                {userCoord && <Marker position={[userCoord.lat, userCoord.lng]} />}
+                <FlyToUser coord={userCoord} />
+              </MapContainer>
+            </div>
+
+            {isLocationMatched ? (
+              <button
+                type="button"
+                onClick={handleMatchLocation}
+                className="flex w-full items-center justify-center gap-2 min-h-[44px] rounded-full bg-positive/15 text-positive border border-positive/30 text-subhead font-semibold transition-colors"
+              >
+                Lokasi Sesuai ✓
+              </button>
+            ) : (
+              <Button variant="filled" size="md" block onClick={handleMatchLocation}>
+                {userCoord ? "Coba Lagi" : "Cocokkan Koordinat"}
+              </Button>
+            )}
           </div>
 
-          {/* Kamera Sections: Identitas + Evidence Kebersihan (hanya Absen Pulang) */}
           {evidenceItems.map((item, idx) => {
             const foto = photos[item.key];
             const isActive = isCameraActive && activeKey === item.key;
             const mirror = item.facing === "user";
             return (
-              <div key={item.key} className="bg-zinc-50 dark:bg-[#2C2C2E]/50 rounded-[20px] p-4 border border-black/5 dark:border-white/5 shadow-inner">
-                <div className="flex justify-between items-center mb-3">
-                  <span className="text-[13px] font-semibold text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
-                    <Camera className="w-4 h-4 text-emerald-500" /> {item.label}
+              <div key={item.key} className="apple-tile rounded-tile p-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-subhead font-semibold text-label flex items-center gap-1.5">
+                    <Camera className="w-4 h-4 text-positive" /> {item.label}
                   </span>
                   {idx > 0 && (
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${foto ? "text-emerald-500" : "text-red-500"}`}>
-                      {foto ? "Terisi" : "Wajib"}
-                    </span>
+                    <Pill color={foto ? "green" : "red"}>{foto ? "Terisi" : "Wajib"}</Pill>
                   )}
                 </div>
 
                 {foto ? (
-                  <div className="relative w-full aspect-[4/3] rounded-xl overflow-hidden border-2 border-emerald-400 dark:border-emerald-500/50 shadow-sm">
+                  <div className="relative w-full aspect-[4/3] rounded-field overflow-hidden border-2 border-positive/60 shadow-card">
                     <img src={foto} alt={`Foto ${item.label}`} className="w-full h-full object-cover" />
-                    <button onClick={() => { setPhotos(p => { const n = { ...p }; delete n[item.key]; return n; }); startCamera(item.key); }} className="absolute bottom-3 right-3 bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-md px-3 py-1.5 rounded-lg text-[12px] font-semibold text-zinc-800 dark:text-zinc-200 active:scale-95 transition-transform shadow-md">Ulangi</button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPhotos((p) => {
+                          const n = { ...p };
+                          delete n[item.key];
+                          return n;
+                        });
+                        startCamera(item.key);
+                      }}
+                      className="absolute bottom-3 right-3 apple-glass px-3.5 py-1.5 rounded-full text-caption font-semibold text-label active:scale-95 transition-transform shadow-card"
+                    >
+                      Ulangi
+                    </button>
                   </div>
                 ) : isActive ? (
-                  <div className="relative w-full aspect-[4/3] rounded-xl overflow-hidden bg-black shadow-inner ring-1 ring-black/10">
-                    <video ref={videoRef} autoPlay playsInline muted className={`w-full h-full object-cover ${mirror ? "scale-x-[-1]" : ""}`} />
+                  <div className="relative w-full aspect-[4/3] rounded-field overflow-hidden bg-black ring-1 ring-edge">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className={`w-full h-full object-cover ${mirror ? "scale-x-[-1]" : ""}`}
+                    />
                     <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-                      <button onClick={capturePhoto} className="w-16 h-16 bg-white/30 backdrop-blur-md flex items-center justify-center rounded-full active:scale-90 transition-transform">
-                        <div className="w-[52px] h-[52px] bg-white rounded-full shadow-sm" />
+                      <button
+                        type="button"
+                        onClick={capturePhoto}
+                        aria-label="Ambil foto"
+                        className="w-16 h-16 bg-white/30 backdrop-blur-md flex items-center justify-center rounded-full active:scale-90 transition-transform"
+                      >
+                        <div className="w-[52px] h-[52px] bg-white rounded-full shadow-card" />
                       </button>
                     </div>
                   </div>
                 ) : (
                   <button
+                    type="button"
                     onClick={() => startCamera(item.key)}
                     disabled={!isLocationMatched}
-                    className={`w-full py-6 text-[14px] font-semibold rounded-xl transition-all shadow-sm flex flex-col items-center justify-center gap-2 border border-dashed
-                      ${isLocationMatched
-                        ? "bg-emerald-50/50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/30"
-                        : "bg-zinc-100/50 text-zinc-400 border-zinc-300 dark:bg-[#1C1C1E] dark:border-white/10 dark:text-zinc-500 opacity-60 cursor-not-allowed"}`}
+                    className={`w-full py-6 text-subhead font-semibold rounded-field transition-colors flex flex-col items-center justify-center gap-2 border border-dashed ${
+                      isLocationMatched
+                        ? "bg-positive/10 text-positive border-positive/40 hover:bg-positive/15"
+                        : "bg-fill text-label-3 border-sep opacity-60 cursor-not-allowed"
+                    }`}
                   >
-                    <Camera className="w-7 h-7 mb-1 opacity-80" />
+                    <Camera className="w-7 h-7 opacity-80" />
                     Buka Kamera
                   </button>
                 )}
@@ -458,28 +491,25 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
             );
           })}
           <canvas ref={canvasRef} className="hidden" />
-
         </div>
 
-        {/* Footer Action */}
-        <div className="p-5 border-t border-gray-200/50 dark:border-white/10 bg-zinc-50/80 dark:bg-[#1C1C1E]/80 backdrop-blur-xl">
-           {missingCount > 0 && isLocationMatched && (
-             <p className="text-[12px] text-center text-red-500 font-medium mb-3">
-               {missingCount} foto wajib belum diisi
-             </p>
-           )}
-           <button 
-             onClick={handleSubmit}
-             disabled={!canSubmit}
-             className={`w-full py-3.5 text-[16px] font-semibold rounded-[14px] transition-all flex items-center justify-center gap-2
-               ${canSubmit
-                 ? "bg-blue-500 text-white hover:bg-blue-600 shadow-md shadow-blue-500/20 active:scale-[0.98]" 
-                 : "bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500 cursor-not-allowed"}`}
-           >
-             {submitting ? "Memproses Absensi..." : `Kirim Absen ${jenisAbsen || ''}`}
-           </button>
+        <div className="p-4 border-t border-sep apple-bar space-y-2.5">
+          {missingCount > 0 && isLocationMatched && (
+            <p className="text-caption text-center text-negative font-medium">
+              {missingCount} foto wajib belum diisi
+            </p>
+          )}
+          <Button
+            variant="filled"
+            size="lg"
+            block
+            disabled={!canSubmit}
+            loading={submitting}
+            onClick={handleSubmit}
+          >
+            {submitting ? "Memproses Absensi..." : `Kirim Absen ${jenisAbsen || ""}`}
+          </Button>
         </div>
-
       </div>
     </div>
   );

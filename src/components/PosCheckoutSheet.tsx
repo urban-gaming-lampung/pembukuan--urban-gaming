@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { X, CheckCircle2, Download, Printer, Share2, AlertTriangle, Package, Loader2, MessageCircle, PlusCircle, Link2Off, Handshake, Pencil, RotateCcw, Clock, ArrowLeftRight } from "lucide-react";
 import logoBlack from "../assets/urban-logo-black.png";
-import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
+import { Button, Card, Eyebrow, Notice, Pill, Sheet } from "../ui";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { adaTukarTambah, bayarNota, commitPosSale, infoNego, nilaiTukarNota, isBonus, Kondisi, negoSatuan, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, sisaBayar, StokRef } from "../lib/posSales";
 import { UploadTransferProof } from "./TableEditor";
@@ -273,21 +273,21 @@ export function useNotaActions(sale: PosSale | null) {
 }
 
 export const NotaActionButtons: React.FC<{ sale: PosSale; actions: ReturnType<typeof useNotaActions> }> = ({ sale, actions: a }) => {
-  const btn = "flex flex-col items-center justify-center gap-1 h-[62px] rounded-2xl text-[11.5px] font-bold active:scale-[0.97] transition disabled:opacity-50";
+  const btn = "flex flex-col items-center justify-center gap-1 min-h-[60px] rounded-tile text-caption font-semibold active:scale-[0.98] transition-all disabled:opacity-40";
   return (
     <div className={`grid gap-2 ${sale.pembeliWa || a.canShare ? "grid-cols-3" : "grid-cols-2"}`}>
-      <button type="button" disabled={!!a.busy} onClick={a.cetak} className={`${btn} bg-zinc-900 text-white dark:bg-white dark:text-zinc-900`}>
+      <button type="button" disabled={!!a.busy} onClick={a.cetak} className={`${btn} bg-action text-action-label hover:opacity-90`}>
         {a.busy === "thermal" ? <Loader2 className="w-5 h-5 animate-spin" /> : <Printer className="w-5 h-5" />}Cetak Thermal
       </button>
-      <button type="button" disabled={!!a.busy} onClick={a.unduh} className={`${btn} bg-red-600 text-white`}>
+      <button type="button" disabled={!!a.busy} onClick={a.unduh} className={`${btn} bg-negative text-white hover:opacity-90`}>
         {a.busy === "pdf" ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}Unduh PDF
       </button>
       {sale.pembeliWa ? (
-        <button type="button" disabled={!!a.busy} onClick={a.kirimWa} className={`${btn} bg-emerald-600 text-white`}>
+        <button type="button" disabled={!!a.busy} onClick={a.kirimWa} className={`${btn} bg-positive text-white hover:opacity-90`}>
           {a.busy === "wa" ? <Loader2 className="w-5 h-5 animate-spin" /> : <MessageCircle className="w-5 h-5" />}Kirim WA
         </button>
       ) : a.canShare ? (
-        <button type="button" disabled={!!a.busy} onClick={a.bagikan} className={`${btn} bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white`}>
+        <button type="button" disabled={!!a.busy} onClick={a.bagikan} className={`${btn} bg-fill text-label hover:brightness-95 dark:hover:brightness-110`}>
           <Share2 className="w-5 h-5" />Bagikan PDF
         </button>
       ) : null}
@@ -341,7 +341,6 @@ const ribuan = (s: string) => {
 const PosCheckoutSheet: React.FC<Props> = ({
   open, onClose, lines, subtotal, discountPercent, discountAmount, total, metode, setMetode, kasirNama, categories, data, onCompleted, hitungDiskon, dipesan,
 }) => {
-  useBodyScrollLock(open);
   const [pembeli, setPembeli] = useState("");
   const [pembeliWa, setPembeliWa] = useState("");
   const [variant, setVariant] = useState<Record<string, string>>({});
@@ -515,369 +514,561 @@ const PosCheckoutSheet: React.FC<Props> = ({
     setSaving("");
   };
 
-  if (!open) return null;
+  const sheetFooter = !sale ? (
+    <div className="space-y-2">
+      {error && <Notice tone="negative">{error}</Notice>}
+      {butuhBukti && !error && (
+        <p className="text-caption font-semibold text-warning text-center">
+          Upload bukti transfer untuk melanjutkan
+        </p>
+      )}
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          variant="filled"
+          size="lg"
+          loading={saving === "thermal"}
+          disabled={!!saving || !lines.length || butuhBukti || dpSalah || jatuhTempoSalah}
+          icon={<Printer />}
+          onClick={() => simpan("thermal")}
+        >
+          Cetak Struk
+        </Button>
+        <Button
+          variant="destructive"
+          size="lg"
+          loading={saving === "pdf"}
+          disabled={!!saving || !lines.length || butuhBukti || dpSalah || jatuhTempoSalah}
+          icon={<Download />}
+          onClick={() => simpan("pdf")}
+          className="!bg-negative !text-white hover:opacity-90"
+        >
+          Nota PDF
+        </Button>
+      </div>
+      <Button
+        variant="plain"
+        size="sm"
+        block
+        disabled={!!saving || !lines.length || butuhBukti || dpSalah || jatuhTempoSalah}
+        onClick={() => simpan("none")}
+        className="text-label-2"
+      >
+        {saving === "none" ? "Menyimpan…" : "Simpan tanpa cetak"}
+      </Button>
+      <p className="text-caption2 text-center text-label-3">
+        {isDp
+          ? "Nota DP tersimpan BELUM LUNAS · stok berkurang saat pelunasan."
+          : adaTukar
+            ? "Stok barang dijual berkurang · barang tukar tambah menunggu konfirmasi stok."
+            : "Transaksi tersimpan & stok barang terhubung otomatis berkurang."}
+      </p>
+    </div>
+  ) : (
+    <div className="space-y-2">
+      <NotaActionButtons sale={sale} actions={actions} />
+      <Button
+        variant="filled"
+        size="lg"
+        block
+        icon={<PlusCircle />}
+        onClick={close}
+      >
+        Transaksi Baru
+      </Button>
+    </div>
+  );
 
   return (
-    <div className="fixed inset-0 z-[250] flex items-end sm:items-center justify-center font-sans">
-      <div className="absolute inset-0 bg-black/55 backdrop-blur-[2px]" onClick={close} />
-      <div className="relative w-full sm:max-w-md bg-zinc-50 dark:bg-[#141416] rounded-t-[26px] sm:rounded-[26px] max-h-[94vh] flex flex-col overflow-hidden shadow-2xl">
-        <div className="flex justify-center pt-2 sm:hidden"><div className="w-9 h-[5px] rounded-full bg-zinc-300 dark:bg-zinc-600" /></div>
-
+    <>
+      <Sheet
+        open={open}
+        onClose={close}
+        size="sm"
+        variant="grouped"
+        zClassName="z-[250]"
+        icon={sale ? <CheckCircle2 /> : undefined}
+        iconColor={sale ? "green" : undefined}
+        title={
+          !sale
+            ? "Selesaikan Transaksi"
+            : sale.status === "DP"
+              ? "Nota DP Tersimpan"
+              : "Transaksi Tersimpan"
+        }
+        subtitle={
+          !sale
+            ? `${jumlahBarang} barang · kasir ${kasirNama}`
+            : sale.status === "DP"
+              ? `${sale.noNota} · DP ${rupiah(sale.dp || 0)} · sisa ${rupiah(sisaBayar(sale))}`
+              : adaTukarTambah(sale)
+                ? `${sale.noNota} · ${bayarNota(sale) < 0 ? "ke pembeli " : ""}${rupiah(Math.abs(bayarNota(sale)))}`
+                : `${sale.noNota} · ${rupiah(sale.total)}`
+        }
+        footer={sheetFooter}
+      >
         {!sale ? (
-          <>
-            <div className="px-4 pt-2 pb-3 flex items-center gap-3">
-              <div className="flex-1 min-w-0">
-                <h3 className="text-[18px] font-black text-zinc-900 dark:text-white leading-tight">Selesaikan Transaksi</h3>
-                <p className="text-[12px] text-zinc-500">{jumlahBarang} barang · kasir {kasirNama}</p>
+          <div className="space-y-3">
+            {/* Total */}
+            <div className="rounded-card bg-action text-action-label px-4 py-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.06em] opacity-70">
+                {adaTukar ? labelBayarTukar(bayar) : "Total Bayar"}
               </div>
-              <button type="button" onClick={close} aria-label="Tutup" className="w-9 h-9 rounded-full bg-zinc-200/70 dark:bg-zinc-800 flex items-center justify-center"><X className="w-4 h-4" /></button>
+              <div className="text-display font-mono tracking-tight leading-none mt-1 tabular-nums">
+                {rupiah(adaTukar ? Math.abs(bayar) : hitung.total)}
+              </div>
+              {adaTukar && (
+                <div className="text-footnote mt-1.5 opacity-85">
+                  Total barang {rupiah(hitung.total)} · tukar tambah −{rupiah(nilaiTukar)}
+                </div>
+              )}
+              {adaNego && (
+                <div className="text-footnote mt-1.5 opacity-85 flex items-center gap-1.5 flex-wrap">
+                  <Handshake className="w-3.5 h-3.5 shrink-0" />
+                  <span>
+                    Harga normal <span className="line-through opacity-75">{rupiah(hitung.subtotal + totalNego)}</span>
+                  </span>
+                  <span>
+                    · nego {totalNego >= 0 ? "−" : "+"}
+                    {rupiah(Math.abs(totalNego))}
+                  </span>
+                </div>
+              )}
+              {hitung.discountAmount > 0 && (
+                <div className="text-footnote mt-1 opacity-85">
+                  <span className="line-through opacity-70 mr-1.5">{rupiah(hitung.subtotal)}</span>
+                  hemat promo {rupiah(hitung.discountAmount)} ({hitung.discountPercent}%)
+                </div>
+              )}
+              {isDp && nominalDp > 0 && !dpSalah && (
+                <div className="mt-2.5 pt-2.5 border-t border-action-label/15 grid grid-cols-2 gap-2 text-footnote">
+                  <div>
+                    <div className="opacity-70">Bayar sekarang (DP)</div>
+                    <div className="text-subhead font-bold font-mono tabular-nums">{rupiah(nominalDp)}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="opacity-70">Sisa saat pelunasan</div>
+                    <div className="text-subhead font-bold font-mono tabular-nums">{rupiah(hitung.total - nominalDp)}</div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-3">
-              {/* Total */}
-              <div className="rounded-[20px] bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-4 py-3.5">
-                <div className="text-[11px] font-bold uppercase tracking-widest opacity-60">{adaTukar ? labelBayarTukar(bayar) : "Total bayar"}</div>
-                <div className="text-[30px] font-black font-mono tracking-tight leading-none mt-1">{rupiah(adaTukar ? Math.abs(bayar) : hitung.total)}</div>
-                {adaTukar && (
-                  <div className="text-[12px] mt-1.5 opacity-80">
-                    Total barang {rupiah(hitung.total)} · tukar tambah −{rupiah(nilaiTukar)}
-                  </div>
-                )}
-                {adaNego && (
-                  <div className="text-[12px] mt-1.5 opacity-80 flex items-center gap-1.5 flex-wrap">
-                    <Handshake className="w-3.5 h-3.5 shrink-0" />
-                    <span>Harga normal <span className="line-through opacity-70">{rupiah(hitung.subtotal + totalNego)}</span></span>
-                    <span>· nego {totalNego >= 0 ? "−" : "+"}{rupiah(Math.abs(totalNego))}</span>
-                  </div>
-                )}
-                {hitung.discountAmount > 0 && (
-                  <div className="text-[12px] mt-1 opacity-80">
-                    <span className="line-through opacity-60 mr-1.5">{rupiah(hitung.subtotal)}</span>hemat promo {rupiah(hitung.discountAmount)} ({hitung.discountPercent}%)
-                  </div>
-                )}
-                {isDp && nominalDp > 0 && !dpSalah && (
-                  <div className="mt-2.5 pt-2.5 border-t border-white/15 dark:border-black/10 grid grid-cols-2 gap-2 text-[12px]">
-                    <div><div className="opacity-60">Bayar sekarang (DP)</div><div className="text-[15px] font-black font-mono">{rupiah(nominalDp)}</div></div>
-                    <div className="text-right"><div className="opacity-60">Sisa saat pelunasan</div><div className="text-[15px] font-black font-mono">{rupiah(hitung.total - nominalDp)}</div></div>
-                  </div>
-                )}
+            {/* Cara bayar: lunas / DP */}
+            <Card bodyClassName="space-y-3">
+              <Eyebrow>Cara Bayar</Eyebrow>
+              <div className="grid grid-cols-2 gap-1 p-1 rounded-full apple-segmented" role="tablist" aria-label="Cara bayar">
+                {(["LUNAS", "DP"] as const).map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    role="tab"
+                    aria-selected={caraBayar === c}
+                    disabled={c === "DP" && tukar.length > 0}
+                    onClick={() => {
+                      setCaraBayar(c);
+                      setError("");
+                    }}
+                    className={`min-h-[38px] rounded-full text-footnote font-semibold transition-all disabled:opacity-40 ${
+                      caraBayar === c ? "apple-segmented-thumb text-label" : "text-label-2 hover:text-label hover:bg-white/30 dark:hover:bg-white/[0.05]"
+                    }`}
+                  >
+                    {c === "LUNAS" ? "Bayar Lunas" : "Bayar DP"}
+                  </button>
+                ))}
               </div>
-
-              {/* Cara bayar: lunas / DP */}
-              <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] p-3.5 space-y-2.5">
-                <div className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Cara bayar</div>
-                <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-zinc-100 dark:bg-zinc-800" role="tablist" aria-label="Cara bayar">
-                  {(["LUNAS", "DP"] as const).map((c) => (
-                    <button key={c} type="button" role="tab" aria-selected={caraBayar === c} disabled={c === "DP" && tukar.length > 0} onClick={() => { setCaraBayar(c); setError(""); }}
-                      className={`h-10 rounded-[10px] text-[12px] sm:text-[13px] font-bold uppercase tracking-wide transition disabled:opacity-40 ${caraBayar === c ? "bg-white dark:bg-zinc-600 text-zinc-900 dark:text-white shadow" : "text-zinc-500"}`}>
-                      {c === "LUNAS" ? "Bayar Lunas" : "Bayar DP"}
-                    </button>
-                  ))}
-                </div>
-                {tukar.length > 0 && !isDp && <p className="text-[11.5px] text-zinc-500 -mt-0.5">Nota tukar tambah harus lunas — DP belum bisa dipakai.</p>}
-                {isDp && (
-                  <div className="space-y-2.5 pt-0.5">
-                    <div>
-                      <label htmlFor="nominal-dp" className="text-[12px] font-semibold text-zinc-500">Nominal DP</label>
-                      <div className={`mt-1 flex items-center h-12 px-3.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 ${dpStr && dpSalah ? "ring-2 ring-red-500/40" : ""}`}>
-                        <span className="text-[14px] font-bold text-zinc-400 mr-1.5">Rp</span>
-                        <input id="nominal-dp" inputMode="numeric" autoComplete="off" value={dpStr} onChange={(e) => { setDpStr(ribuan(e.target.value)); setError(""); }} placeholder="0"
-                          className="flex-1 min-w-0 bg-transparent text-[16px] font-bold tabular-nums text-zinc-900 dark:text-white focus:outline-none" />
-                      </div>
-                      <div className="mt-1.5 flex gap-1.5">
-                        {[30, 50].map((pct) => (
-                          <button key={pct} type="button" onClick={() => setDpStr(ribuan(String(Math.round((hitung.total * pct) / 100 / 1000) * 1000)))}
-                            className="h-8 px-3 rounded-lg text-[12px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 active:scale-95">{pct}%</button>
-                        ))}
-                        {dpStr && dpSalah && <span className="self-center text-[11.5px] font-semibold text-red-600">Harus kurang dari total</span>}
-                      </div>
+              {tukar.length > 0 && !isDp && (
+                <p className="text-caption text-label-2">
+                  Nota tukar tambah harus lunas — DP belum bisa dipakai.
+                </p>
+              )}
+              {isDp && (
+                <div className="space-y-3 pt-0.5">
+                  <div>
+                    <label htmlFor="nominal-dp" className="text-caption font-semibold text-label-2">
+                      Nominal DP
+                    </label>
+                    <div
+                      className={`mt-1 flex items-center h-11 px-3.5 rounded-field bg-fill transition-all focus-within:bg-surface focus-within:ring-2 focus-within:ring-tint/35 ${
+                        dpStr && dpSalah ? "ring-2 ring-negative/50" : ""
+                      }`}
+                    >
+                      <span className="text-subhead font-semibold text-label-3 mr-1.5">Rp</span>
+                      <input
+                        id="nominal-dp"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        value={dpStr}
+                        onChange={(e) => {
+                          setDpStr(ribuan(e.target.value));
+                          setError("");
+                        }}
+                        placeholder="0"
+                        className="flex-1 min-w-0 bg-transparent text-[16px] sm:text-subhead font-semibold tabular-nums text-label placeholder:text-label-3 focus:outline-none"
+                      />
                     </div>
-                    <div>
-                      <label htmlFor="jatuh-tempo" className="text-[12px] font-semibold text-zinc-500">Jatuh tempo pelunasan</label>
-                      <input id="jatuh-tempo" type="date" value={jatuhTempo} min={tanggalNanti(0)} onChange={(e) => { setJatuhTempo(e.target.value); setError(""); }}
-                        className={`mt-1 w-full h-12 px-3.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-[15px] font-semibold text-zinc-900 dark:text-white focus:outline-none ${jatuhTempoSalah ? "ring-2 ring-red-500/40" : ""}`} />
-                      <div className="mt-1.5 flex gap-1.5">
-                        {[7, 14].map((n) => (
-                          <button key={n} type="button" onClick={() => setJatuhTempo(tanggalNanti(n))}
-                            className={`h-8 px-3 rounded-lg text-[12px] font-bold active:scale-95 ${jatuhTempo === tanggalNanti(n) ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200"}`}>{n} hari</button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2 rounded-xl bg-amber-50 dark:bg-amber-500/10 px-3 py-2.5 text-[12px] leading-snug text-amber-800 dark:text-amber-300">
-                      <Clock className="w-4 h-4 shrink-0 mt-px" />
-                      <span>Nota tercatat <b>BELUM LUNAS</b>. Stok belum berkurang — barang berstatus <b>dipesan</b> sampai pelunasan di Kasir POS › Belum Lunas.</span>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {[30, 50].map((pct) => (
+                        <Button
+                          key={pct}
+                          size="sm"
+                          variant="gray"
+                          onClick={() => setDpStr(ribuan(String(Math.round(((hitung.total * pct) / 100) / 1000) * 1000)))}
+                        >
+                          {pct}%
+                        </Button>
+                      ))}
+                      {dpStr && dpSalah && (
+                        <span className="text-caption font-semibold text-negative">Harus kurang dari total</span>
+                      )}
                     </div>
                   </div>
-                )}
-              </div>
-
-              {/* Tukar tambah: barang pembeli masuk sebagai potongan */}
-              {bisaTukar && <KartuTukarTambah daftar={tukar} onTambah={() => setUbahTukar("")} onUbah={(k) => setUbahTukar(k)} />}
-
-              {/* Pembeli */}
-              <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] p-3.5 space-y-2.5">
-                <div className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Pembeli</div>
-                <input value={pembeli} onChange={(e) => setPembeli(e.target.value)} placeholder="Nama pembeli (kosong = Pelanggan)" autoComplete="off"
-                  className="w-full h-12 px-3.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-[15px] font-semibold text-zinc-900 dark:text-white placeholder:text-zinc-400 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-zinc-900/20 dark:focus:ring-white/20" />
-                <input value={pembeliWa} onChange={(e) => setPembeliWa(e.target.value)} inputMode="tel" placeholder="No. WhatsApp (opsional, untuk garansi)" autoComplete="off"
-                  className="w-full h-12 px-3.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-[15px] font-semibold text-zinc-900 dark:text-white placeholder:text-zinc-400 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-zinc-900/20 dark:focus:ring-white/20" />
-                {tanpaUang ? (
-                  <p className="text-[12px] text-zinc-500 px-0.5">Nilai tukar tambah sama dengan harga barang — tidak ada uang yang dibayar.</p>
-                ) : (<>
-                {adaTukar && bayar < 0 && <div className="text-[12px] font-semibold text-zinc-500 px-0.5">URBAN membayar ke pembeli lewat</div>}
-                <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-zinc-100 dark:bg-zinc-800">
-                  {(["CASH", "TRANSFER"] as const).map((m) => (
-                    <button key={m} type="button" onClick={() => setMetode(m)}
-                      className={`h-10 rounded-[10px] text-[13px] font-bold transition ${metode === m ? (m === "CASH" ? "bg-emerald-600 text-white shadow" : "bg-blue-600 text-white shadow") : "text-zinc-500"}`}>
-                      {m === "CASH" ? "Tunai" : "Transfer / QRIS"}
-                    </button>
-                  ))}
-                </div>
-                {metode === "TRANSFER" && (
-                  <div className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 ${bukti ? "bg-blue-50 dark:bg-blue-500/10" : "bg-amber-50 dark:bg-amber-500/10 ring-1 ring-amber-300/60 dark:ring-amber-500/30"}`}>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[14px] font-bold text-zinc-900 dark:text-white">{adaTukar && bayar < 0 ? "Bukti transfer ke pembeli" : "Bukti transfer"}</div>
-                      <div className={`text-[12px] ${bukti ? "text-blue-700 dark:text-blue-300" : "text-amber-700 dark:text-amber-400"}`}>
-                        {bukti ? "Terupload ✓ · ketuk foto untuk lihat" : "Wajib · foto / screenshot bukti transfer"}
-                      </div>
+                  <div>
+                    <label htmlFor="jatuh-tempo" className="text-caption font-semibold text-label-2">
+                      Jatuh tempo pelunasan
+                    </label>
+                    <input
+                      id="jatuh-tempo"
+                      type="date"
+                      value={jatuhTempo}
+                      min={tanggalNanti(0)}
+                      onChange={(e) => {
+                        setJatuhTempo(e.target.value);
+                        setError("");
+                      }}
+                      className={`mt-1 w-full h-11 px-3.5 rounded-field bg-fill text-[16px] sm:text-subhead font-medium text-label focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35 ${
+                        jatuhTempoSalah ? "ring-2 ring-negative/50" : ""
+                      }`}
+                    />
+                    <div className="mt-2 flex gap-1.5">
+                      {[7, 14].map((n) => (
+                        <Button
+                          key={n}
+                          size="sm"
+                          variant={jatuhTempo === tanggalNanti(n) ? "filled" : "gray"}
+                          onClick={() => setJatuhTempo(tanggalNanti(n))}
+                        >
+                          {n} hari
+                        </Button>
+                      ))}
                     </div>
-                    <UploadTransferProof value={bukti} onChange={setBukti} />
                   </div>
-                )}
-                </>)}
-              </div>
-
-              {/* Barang & stok */}
-              <div className="rounded-[20px] bg-white dark:bg-[#1c1c1e] p-3.5">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Barang, harga & stok</div>
-                  <Package className="w-4 h-4 text-zinc-300" />
+                  <Notice tone="warning">
+                    Nota tercatat <b>BELUM LUNAS</b>. Stok belum berkurang — barang berstatus <b>dipesan</b> sampai pelunasan di Kasir URBAN › Belum Lunas.
+                  </Notice>
                 </div>
-                <div className="divide-y divide-zinc-100 dark:divide-white/5">
-                  {resolved.map(({ line: l, ref, pilih }) => {
-                    const sisa = ref ? sisaOf(ref) : null;
-                    const need = ref ? needByKey.get(kunciStok(ref)) || 0 : 0;
-                    const dip = ref ? dipesanLain(ref) : 0;
-                    // Stok yang benar-benar bebas = stok tercatat − barang yang sudah dipesan lewat DP
-                    const sesudah = sisa === null ? null : sisa - dip - need;
-                    const kategoriItems = pilih ? categories.find((c) => c.kategori === pilih)?.items || [] : [];
-                    const h = hargaAkhir(l);
-                    const nego = negoBaris(l);
-                    const diubah = h !== l.price;
-                    return (
-                      <div key={l.id} className="py-2.5 first:pt-0 last:pb-0">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 text-[13.5px] font-bold text-zinc-900 dark:text-white leading-snug">
-                            {l.category === "ISI GAME" && l.platform ? `${l.name} (${l.platform})` : l.name}
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <div className="text-[13px] font-black font-mono text-zinc-900 dark:text-white">{rupiah(h * l.quantity)}</div>
-                            <div className="text-[11px] text-zinc-400">{l.quantity} × {rupiah(h)}</div>
+              )}
+            </Card>
+
+            {/* Tukar tambah: barang pembeli masuk sebagai potongan */}
+            {bisaTukar && <KartuTukarTambah daftar={tukar} onTambah={() => setUbahTukar("")} onUbah={(k) => setUbahTukar(k)} />}
+
+            {/* Pembeli */}
+            <Card bodyClassName="space-y-3">
+              <Eyebrow>Pembeli</Eyebrow>
+              <input
+                value={pembeli}
+                onChange={(e) => setPembeli(e.target.value)}
+                placeholder="Nama pembeli (kosong = Pelanggan)"
+                autoComplete="off"
+                className="w-full h-11 px-3.5 rounded-field bg-fill text-[16px] sm:text-subhead font-medium text-label placeholder:text-label-3 focus:outline-none focus:bg-surface dark:focus:bg-[#2C2C2E] focus:ring-2 focus:ring-tint/35"
+              />
+              <input
+                value={pembeliWa}
+                onChange={(e) => setPembeliWa(e.target.value)}
+                inputMode="tel"
+                placeholder="No. WhatsApp (opsional, untuk garansi)"
+                autoComplete="off"
+                className="w-full h-11 px-3.5 rounded-field bg-fill text-[16px] sm:text-subhead font-medium text-label placeholder:text-label-3 focus:outline-none focus:bg-surface dark:focus:bg-[#2C2C2E] focus:ring-2 focus:ring-tint/35"
+              />
+              {tanpaUang ? (
+                <p className="text-caption text-label-2 px-0.5">
+                  Nilai tukar tambah sama dengan harga barang — tidak ada uang yang dibayar.
+                </p>
+              ) : (
+                <>
+                  {adaTukar && bayar < 0 && (
+                    <div className="text-caption font-semibold text-label-2 px-0.5">
+                      URBAN membayar ke pembeli lewat
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-1 p-1 rounded-full apple-segmented">
+                    {(["CASH", "TRANSFER"] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setMetode(m)}
+                        className={`min-h-[44px] rounded-full text-subhead font-semibold inline-flex items-center justify-center gap-1.5 transition-all ${
+                          metode === m ? "apple-segmented-thumb text-label" : "text-label-2 hover:text-label hover:bg-white/30 dark:hover:bg-white/[0.05]"
+                        }`}
+                      >
+                        <span
+                          className={`h-2 w-2 rounded-full ${
+                            metode === m ? (m === "CASH" ? "bg-positive" : "bg-tint") : "bg-label-4"
+                          }`}
+                          aria-hidden
+                        />
+                        {m === "CASH" ? "Tunai" : "Transfer / QRIS"}
+                      </button>
+                    ))}
+                  </div>
+                  {metode === "TRANSFER" && (
+                    <div
+                      className={`flex items-center gap-3 rounded-field px-3.5 py-2.5 ${
+                        bukti
+                          ? "bg-tint/10 dark:bg-tint/15 ring-1 ring-tint/25"
+                          : "bg-warning/10 dark:bg-warning/15 ring-1 ring-warning/35"
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="text-subhead font-semibold text-label">
+                          {adaTukar && bayar < 0 ? "Bukti transfer ke pembeli" : "Bukti transfer"}
+                        </div>
+                        <div className={`text-caption ${bukti ? "text-tint" : "text-warning"}`}>
+                          {bukti ? "Terupload ✓ · ketuk foto untuk lihat" : "Wajib · foto / screenshot bukti transfer"}
+                        </div>
+                      </div>
+                      <UploadTransferProof value={bukti} onChange={setBukti} />
+                    </div>
+                  )}
+                </>
+              )}
+            </Card>
+
+            {/* Barang & stok */}
+            <Card>
+              <div className="flex items-center justify-between mb-2.5">
+                <Eyebrow>Barang, Harga & Stok</Eyebrow>
+                <Package className="w-4 h-4 text-label-3" />
+              </div>
+              <div className="divide-y divide-sep">
+                {resolved.map(({ line: l, ref, pilih }) => {
+                  const sisa = ref ? sisaOf(ref) : null;
+                  const need = ref ? needByKey.get(kunciStok(ref)) || 0 : 0;
+                  const dip = ref ? dipesanLain(ref) : 0;
+                  // Stok yang benar-benar bebas = stok tercatat − barang yang sudah dipesan lewat DP
+                  const sesudah = sisa === null ? null : sisa - dip - need;
+                  const kategoriItems = pilih ? categories.find((c) => c.kategori === pilih)?.items || [] : [];
+                  const h = hargaAkhir(l);
+                  const nego = negoBaris(l);
+                  const diubah = h !== l.price;
+                  return (
+                    <div key={l.id} className="py-3 first:pt-0 last:pb-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 text-subhead font-semibold text-label leading-snug">
+                          {l.category === "ISI GAME" && l.platform ? `${l.name} (${l.platform})` : l.name}
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="text-subhead font-bold font-mono tabular-nums text-label">{rupiah(h * l.quantity)}</div>
+                          <div className="text-caption text-label-3 tabular-nums">
+                            {l.quantity} × {rupiah(h)}
                           </div>
                         </div>
+                      </div>
 
-                        {/* Nego harga */}
-                        {editHarga === l.id ? (
-                          <div className="mt-2">
-                            <div className="flex items-center gap-2">
-                              <label className="flex-1 min-w-0 flex items-center h-11 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 ring-2 ring-violet-500/40">
-                                <span className="text-[13px] font-bold text-zinc-400 mr-1.5">Rp</span>
-                                <input
-                                  autoFocus
-                                  inputMode="numeric"
-                                  aria-label={`Harga satuan baru ${l.name}`}
-                                  value={draftHarga}
-                                  onChange={(e) => setDraftHarga(ribuan(e.target.value))}
-                                  onKeyDown={(e) => { if (e.key === "Enter") simpanHarga(l); if (e.key === "Escape") setEditHarga(null); }}
-                                  className="flex-1 min-w-0 bg-transparent text-[15px] font-bold tabular-nums text-zinc-900 dark:text-white focus:outline-none"
-                                />
-                                <span className="text-[11px] font-semibold text-zinc-400 ml-1">/pcs</span>
-                              </label>
-                              <button type="button" onClick={() => simpanHarga(l)} className="h-11 px-4 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[13px] font-black active:scale-95">OK</button>
-                              <button type="button" onClick={() => setEditHarga(null)} aria-label="Batal ubah harga" className="h-11 w-11 shrink-0 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500 flex items-center justify-center active:scale-95"><X className="w-4 h-4" /></button>
-                            </div>
-                            <div className="mt-1 text-[11.5px] text-zinc-500">Harga normal {rupiah(l.price)}/pcs · harga baru dicatat di nota & analitik</div>
-                          </div>
-                        ) : (
-                          <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
-                            {!diubah && l.price === 0 && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-lg text-[11.5px] font-bold bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300">
-                                Bonus paket · stok tetap berkurang
-                              </span>
-                            )}
-                            {diubah && (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11.5px] font-bold bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300">
-                                <Handshake className="w-3.5 h-3.5" />
-                                Nego {nego >= 0 ? "−" : "+"}{rupiah(Math.abs(nego))}
-                                <span className="font-semibold opacity-70">· normal <span className="line-through">{rupiah(l.price)}</span></span>
-                              </span>
-                            )}
-                            <button type="button" onClick={() => mulaiUbahHarga(l)}
-                              className="inline-flex items-center gap-1 h-9 px-3 rounded-lg text-[12px] font-bold text-zinc-700 dark:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 active:scale-95">
-                              <Pencil className="w-3.5 h-3.5" />{diubah ? "Ubah lagi" : "Ubah harga"}
+                      {/* Nego harga */}
+                      {editHarga === l.id ? (
+                        <div className="mt-2">
+                          <div className="flex items-center gap-2">
+                            <label className="flex-1 min-w-0 flex items-center h-11 px-3 rounded-field bg-fill ring-2 ring-accent/40">
+                              <span className="text-footnote font-semibold text-label-3 mr-1.5">Rp</span>
+                              <input
+                                autoFocus
+                                inputMode="numeric"
+                                aria-label={`Harga satuan baru ${l.name}`}
+                                value={draftHarga}
+                                onChange={(e) => setDraftHarga(ribuan(e.target.value))}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") simpanHarga(l);
+                                  if (e.key === "Escape") setEditHarga(null);
+                                }}
+                                className="flex-1 min-w-0 bg-transparent text-[16px] sm:text-subhead font-semibold tabular-nums text-label focus:outline-none"
+                              />
+                              <span className="text-caption font-medium text-label-3 ml-1">/pcs</span>
+                            </label>
+                            <Button variant="filled" size="md" onClick={() => simpanHarga(l)}>
+                              OK
+                            </Button>
+                            <button
+                              type="button"
+                              onClick={() => setEditHarga(null)}
+                              aria-label="Batal ubah harga"
+                              className="h-11 w-11 shrink-0 rounded-full bg-fill text-label-2 hover:text-label flex items-center justify-center active:scale-95"
+                            >
+                              <X className="w-4 h-4" />
                             </button>
-                            {diubah && (
-                              <button type="button" onClick={() => kembalikanHarga(l.id)}
-                                className="inline-flex items-center gap-1 h-9 px-2.5 rounded-lg text-[12px] font-bold text-zinc-500 active:scale-95">
-                                <RotateCcw className="w-3.5 h-3.5" />Harga normal
-                              </button>
-                            )}
                           </div>
-                        )}
-                        {pilih && (
-                          <select value={variant[l.id] || ""} onChange={(e) => { setVariant((v) => ({ ...v, [l.id]: e.target.value })); setError(""); }}
-                            className={`mt-2 w-full h-11 px-3 rounded-xl text-[13px] font-semibold ${variant[l.id] ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white" : "bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 ring-1 ring-amber-300/60"}`}>
-                            <option value="">Pilih varian {pilih.toLowerCase()}…</option>
-                            {kategoriItems.map((it) => {
-                              const n = data?.[pilih]?.[it]?.jumlah;
-                              return <option key={it} value={it}>{it}{typeof n === "number" ? ` — sisa ${n}` : ""}</option>;
-                            })}
-                          </select>
-                        )}
-                        {ref && sisa !== null && !data?.[ref.kategori]?.[ref.item] && (
-                          <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11.5px] font-bold bg-zinc-100 text-zinc-600 dark:bg-white/5 dark:text-zinc-300">
-                            <Package className="w-3.5 h-3.5" />Stok {ref.item} belum dihitung — isi di menu Stok
+                          <div className="mt-1 text-caption text-label-2">
+                            Harga normal {rupiah(l.price)}/pcs · harga baru dicatat di nota & analitik
                           </div>
-                        )}
-                        {ref && sisa !== null && !!data?.[ref.kategori]?.[ref.item] && (
-                          <div className={`mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11.5px] font-bold ${sesudah! < 0 ? "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400" : sesudah === 0 || isDp ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"}`}>
-                            {sesudah! < 0 ? <AlertTriangle className="w-3.5 h-3.5" /> : isDp ? <Clock className="w-3.5 h-3.5" /> : <Package className="w-3.5 h-3.5" />}
+                        </div>
+                      ) : (
+                        <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                          {!diubah && l.price === 0 && (
+                            <Pill color="purple">
+                              Bonus paket · stok tetap berkurang
+                            </Pill>
+                          )}
+                          {diubah && (
+                            <Pill color="purple" icon={<Handshake />}>
+                              Nego {nego >= 0 ? "−" : "+"}
+                              {rupiah(Math.abs(nego))}
+                              <span className="font-normal opacity-80">
+                                · normal <span className="line-through">{rupiah(l.price)}</span>
+                              </span>
+                            </Pill>
+                          )}
+                          <Button size="sm" variant="gray" icon={<Pencil />} onClick={() => mulaiUbahHarga(l)}>
+                            {diubah ? "Ubah lagi" : "Ubah harga"}
+                          </Button>
+                          {diubah && (
+                            <Button size="sm" variant="plain" icon={<RotateCcw />} onClick={() => kembalikanHarga(l.id)}>
+                              Harga normal
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                      {pilih && (
+                        <select
+                          value={variant[l.id] || ""}
+                          onChange={(e) => {
+                            setVariant((v) => ({ ...v, [l.id]: e.target.value }));
+                            setError("");
+                          }}
+                          className={`mt-2 w-full h-11 px-3 rounded-field text-[15px] sm:text-footnote font-semibold focus:outline-none focus:ring-2 focus:ring-tint/35 ${
+                            variant[l.id]
+                              ? "bg-fill text-label"
+                              : "bg-warning/10 dark:bg-warning/15 text-warning ring-1 ring-warning/40"
+                          }`}
+                        >
+                          <option value="">Pilih varian {pilih.toLowerCase()}…</option>
+                          {kategoriItems.map((it) => {
+                            const n = data?.[pilih]?.[it]?.jumlah;
+                            return (
+                              <option key={it} value={it}>
+                                {it}
+                                {typeof n === "number" ? ` — sisa ${n}` : ""}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      )}
+                      {ref && sisa !== null && !data?.[ref.kategori]?.[ref.item] && (
+                        <div className="mt-2">
+                          <Pill tone="neutral" icon={<Package />}>
+                            Stok {ref.item} belum dihitung — isi di menu Stok
+                          </Pill>
+                        </div>
+                      )}
+                      {ref && sisa !== null && !!data?.[ref.kategori]?.[ref.item] && (
+                        <div className="mt-2">
+                          <Pill
+                            tone={sesudah! < 0 ? "negative" : sesudah === 0 || isDp ? "warning" : "positive"}
+                            icon={sesudah! < 0 ? <AlertTriangle /> : isDp ? <Clock /> : <Package />}
+                          >
                             {sesudah! < 0
                               ? `Stok ${sisa}${dip ? `, ${dip} sudah dipesan DP` : ""}, butuh ${need} — cek stok fisik`
                               : isDp
                                 ? `Dipesan · stok ${ref.item} tetap ${sisa}${dip ? ` (${dip} dipesan lain)` : ""}`
                                 : `Stok ${ref.item}: ${sisa} → ${sisa - need}${dip ? ` · ${dip} dipesan DP` : ""}${sesudah === 0 ? " (habis)" : ""}`}
-                          </div>
-                        )}
-                        {ref && sisa === null && (
-                          <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11.5px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
-                            <AlertTriangle className="w-3.5 h-3.5" />Barang stok "{ref.item}" tidak ditemukan — hubungkan ulang
-                          </div>
-                        )}
-                        {!l.stokRef && l.category === "JUALAN" && (
-                          <div className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] text-zinc-400">
-                            <Link2Off className="w-3.5 h-3.5" />Belum terhubung ke stok — stok tidak berkurang
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                          </Pill>
+                        </div>
+                      )}
+                      {ref && sisa === null && (
+                        <div className="mt-2">
+                          <Pill tone="warning" icon={<AlertTriangle />}>
+                            Barang stok "{ref.item}" tidak ditemukan — hubungkan ulang
+                          </Pill>
+                        </div>
+                      )}
+                      {!l.stokRef && l.category === "JUALAN" && (
+                        <div className="mt-2 inline-flex items-center gap-1.5 text-caption text-label-3">
+                          <Link2Off className="w-3.5 h-3.5" />
+                          Belum terhubung ke stok — stok tidak berkurang
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            </div>
-
-            <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] bg-white dark:bg-[#1c1c1e] border-t border-zinc-200/70 dark:border-white/5 space-y-2">
-              {error && <div className="text-[12.5px] font-semibold text-red-600 bg-red-50 dark:bg-red-500/10 rounded-xl px-3 py-2">{error}</div>}
-              {butuhBukti && !error && <div className="text-[12.5px] font-semibold text-amber-700 dark:text-amber-400 text-center">Upload bukti transfer untuk melanjutkan</div>}
-              <div className="grid grid-cols-2 gap-2">
-                <button type="button" disabled={!!saving || !lines.length || butuhBukti || dpSalah || jatuhTempoSalah} onClick={() => simpan("thermal")}
-                  className="h-[52px] rounded-2xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[14px] font-black flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]">
-                  {saving === "thermal" ? <Loader2 className="w-5 h-5 animate-spin" /> : <Printer className="w-5 h-5" />}Cetak Struk
-                </button>
-                <button type="button" disabled={!!saving || !lines.length || butuhBukti || dpSalah || jatuhTempoSalah} onClick={() => simpan("pdf")}
-                  className="h-[52px] rounded-2xl bg-red-600 text-white text-[14px] font-black flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]">
-                  {saving === "pdf" ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}Nota PDF
-                </button>
-              </div>
-              <button type="button" disabled={!!saving || !lines.length || butuhBukti || dpSalah || jatuhTempoSalah} onClick={() => simpan("none")}
-                className="w-full h-9 text-[12.5px] font-bold text-zinc-500 disabled:opacity-50">
-                {saving === "none" ? "Menyimpan…" : "Simpan tanpa cetak"}
-              </button>
-              <p className="text-[11px] text-center text-zinc-400 -mt-1">
-                {isDp
-                  ? "Nota DP tersimpan BELUM LUNAS · stok berkurang saat pelunasan."
-                  : adaTukar
-                    ? "Stok barang dijual berkurang · barang tukar tambah menunggu konfirmasi stok."
-                    : "Transaksi tersimpan & stok barang terhubung otomatis berkurang."}
-              </p>
-            </div>
-          </>
+            </Card>
+          </div>
         ) : (
-          <>
-            <div className="px-4 pt-2 pb-3 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0"><CheckCircle2 className="w-6 h-6" /></div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-[17px] font-black text-zinc-900 dark:text-white leading-tight">{sale.status === "DP" ? "Nota DP tersimpan" : "Transaksi tersimpan"}</h3>
-                <p className="text-[12px] text-zinc-500 font-mono truncate">
-                  {sale.status === "DP"
-                    ? `${sale.noNota} · DP ${rupiah(sale.dp || 0)} · sisa ${rupiah(sisaBayar(sale))}`
-                    : adaTukarTambah(sale)
-                      ? `${sale.noNota} · ${bayarNota(sale) < 0 ? "ke pembeli " : ""}${rupiah(Math.abs(bayarNota(sale)))}`
-                      : `${sale.noNota} · ${rupiah(sale.total)}`}
-                </p>
-              </div>
-              <button type="button" onClick={close} aria-label="Tutup" className="w-9 h-9 rounded-full bg-zinc-200/70 dark:bg-zinc-800 flex items-center justify-center"><X className="w-4 h-4" /></button>
-            </div>
+          <div className="space-y-3">
+            {actions.msg && <Notice tone="info">{actions.msg}</Notice>}
 
-            <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-3">
-              {actions.msg && <div className="text-[12.5px] font-semibold text-zinc-700 dark:text-zinc-200 bg-white dark:bg-[#1c1c1e] rounded-xl px-3 py-2">{actions.msg}</div>}
+            {(sale.stokKurang?.length || 0) > 0 && (
+              <Notice tone="warning">
+                <div className="font-bold mb-1">Stok tercatat kurang</div>
+                {sale.stokKurang!.map((k) => (
+                  <div key={k.kategori + k.item}>
+                    • {k.kategori} › {k.item}: terjual {k.diminta}, tercatat {k.tersedia}. Cek & koreksi stok fisik.
+                  </div>
+                ))}
+              </Notice>
+            )}
 
-              {(sale.stokKurang?.length || 0) > 0 && (
-                <div className="rounded-2xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 p-3 text-[12px] text-amber-800 dark:text-amber-300">
-                  <div className="font-black flex items-center gap-1.5 mb-1"><AlertTriangle className="w-4 h-4" />Stok tercatat kurang</div>
-                  {sale.stokKurang!.map((k) => (
-                    <div key={k.kategori + k.item}>• {k.kategori} › {k.item}: terjual {k.diminta}, tercatat {k.tersedia}. Cek & koreksi stok fisik.</div>
-                  ))}
-                </div>
-              )}
+            {sale.status === "DP" && (
+              <Notice tone="warning">
+                Barang <b>dipesan</b> — stok berkurang saat pelunasan. Lunasi lewat <b>Kasir URBAN › Belum Lunas</b> paling lambat jatuh tempo.
+              </Notice>
+            )}
 
-              {sale.status === "DP" && (
-                <div className="flex items-start gap-2 rounded-2xl bg-amber-50 dark:bg-amber-500/10 p-3 text-[12.5px] leading-snug text-amber-800 dark:text-amber-300">
-                  <Clock className="w-4 h-4 shrink-0 mt-px" />
-                  <span>Barang <b>dipesan</b> — stok berkurang saat pelunasan. Lunasi lewat <b>Kasir POS › Belum Lunas</b> paling lambat jatuh tempo.</span>
-                </div>
-              )}
-
-              {adaTukarTambah(sale) && (
-                <div className="flex items-start gap-2 rounded-2xl bg-white dark:bg-[#1c1c1e] p-3 text-[12.5px] leading-snug text-zinc-700 dark:text-zinc-300">
-                  <ArrowLeftRight className="w-4 h-4 shrink-0 mt-px text-blue-600" />
+            {adaTukarTambah(sale) && (
+              <Card flush className="p-3.5">
+                <div className="flex items-start gap-2.5 text-footnote leading-snug text-label">
+                  <ArrowLeftRight className="w-4 h-4 shrink-0 mt-0.5 text-tint" />
                   <span>
                     {sale.tukarTambah?.length || 0} barang tukar tambah ({rupiah(nilaiTukarNota(sale))}) menunggu <b>Konfirmasi stok</b> oleh owner / super admin.
                   </span>
                 </div>
-              )}
+              </Card>
+            )}
 
-              {sale.status !== "DP" && sale.items.some((it) => it.stokRef) && (
-                <div className="rounded-2xl bg-white dark:bg-[#1c1c1e] p-3">
-                  <div className="text-[11px] font-bold uppercase tracking-widest text-zinc-400 mb-1.5">Stok berkurang</div>
-                  {Array.from(
-                    sale.items.reduce((m, it) => {
-                      if (it.stokRef) { const k = kunciStok(it.stokRef); m.set(k, { ref: it.stokRef, qty: (m.get(k)?.qty || 0) + it.qty }); }
-                      return m;
-                    }, new Map<string, { ref: StokRef; qty: number }>()).values()
-                  ).map(({ ref, qty }) => {
-                    const now = sale.stokSesudah?.[kunciStok(ref)] ?? sisaOf(ref);
-                    const kurang = sale.stokKurang?.find((k) => k.kategori === ref.kategori && k.item === ref.item);
-                    const terpotong = kurang ? Math.min(qty, kurang.tersedia) : qty;
-                    return (
-                      <div key={kunciStok(ref)} className="flex items-center justify-between text-[12.5px] py-0.5">
-                        <span className="text-zinc-700 dark:text-zinc-300 truncate pr-2">{ref.kategori} › <b>{ref.item}</b></span>
-                        <span className="shrink-0 font-mono font-bold">
-                          {terpotong > 0 ? <span className="text-red-600">−{terpotong}</span> : <span className="text-amber-600">tdk terpotong</span>}
-                          <span className="text-zinc-400"> · sisa {now ?? "-"}</span>
-                        </span>
-                      </div>
-                    );
-                  })}
+            {sale.status !== "DP" && sale.items.some((it) => it.stokRef) && (
+              <Card flush className="p-3.5">
+                <div className="mb-1.5">
+                  <Eyebrow>Stok Berkurang</Eyebrow>
                 </div>
-              )}
+                {Array.from(
+                  sale.items
+                    .reduce((m, it) => {
+                      if (it.stokRef) {
+                        const k = kunciStok(it.stokRef);
+                        m.set(k, { ref: it.stokRef, qty: (m.get(k)?.qty || 0) + it.qty });
+                      }
+                      return m;
+                    }, new Map<string, { ref: StokRef; qty: number }>())
+                    .values()
+                ).map(({ ref, qty }) => {
+                  const now = sale.stokSesudah?.[kunciStok(ref)] ?? sisaOf(ref);
+                  const kurang = sale.stokKurang?.find((k) => k.kategori === ref.kategori && k.item === ref.item);
+                  const terpotong = kurang ? Math.min(qty, kurang.tersedia) : qty;
+                  return (
+                    <div key={kunciStok(ref)} className="flex items-center justify-between text-footnote py-0.5">
+                      <span className="text-label-2 truncate pr-2">
+                        {ref.kategori} › <b className="text-label">{ref.item}</b>
+                      </span>
+                      <span className="shrink-0 font-mono font-bold tabular-nums">
+                        {terpotong > 0 ? (
+                          <span className="text-negative">−{terpotong}</span>
+                        ) : (
+                          <span className="text-warning">tdk terpotong</span>
+                        )}
+                        <span className="text-label-3"> · sisa {now ?? "-"}</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </Card>
+            )}
 
-              <div className="rounded-[22px] bg-zinc-200/60 dark:bg-black/40 p-3">
-                <NotaPreview sale={sale} />
-              </div>
+            <div className="rounded-card bg-fill p-3">
+              <NotaPreview sale={sale} />
             </div>
-
-            <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] bg-white dark:bg-[#1c1c1e] border-t border-zinc-200/70 dark:border-white/5 space-y-2">
-              <NotaActionButtons sale={sale} actions={actions} />
-              <button type="button" onClick={close}
-                className="w-full h-12 rounded-2xl bg-blue-600 text-white text-[15px] font-black flex items-center justify-center gap-2 active:scale-[0.98]">
-                <PlusCircle className="w-5 h-5" />Transaksi Baru
-              </button>
-            </div>
-          </>
+          </div>
         )}
-      </div>
-      {ubahTukar !== null && !sale && (() => {
+      </Sheet>
+      {open && ubahTukar !== null && !sale && (() => {
         const awal = tukar.find((t) => t.key === ubahTukar) || null;
         return (
           <TukarTambahSheet
@@ -885,7 +1076,14 @@ const PosCheckoutSheet: React.FC<Props> = ({
             nilaiLain={tukar.filter((t) => t.key !== ubahTukar).reduce((a, t) => a + t.nilai * t.qty, 0)}
             awal={awal}
             onClose={() => setUbahTukar(null)}
-            onHapus={awal ? () => { setTukar((l) => l.filter((t) => t.key !== awal.key)); setUbahTukar(null); } : undefined}
+            onHapus={
+              awal
+                ? () => {
+                    setTukar((l) => l.filter((t) => t.key !== awal.key));
+                    setUbahTukar(null);
+                  }
+                : undefined
+            }
             onSimpan={(d) => {
               setTukar((l) => (l.some((t) => t.key === d.key) ? l.map((t) => (t.key === d.key ? d : t)) : [...l, d]));
               setUbahTukar(null);
@@ -894,7 +1092,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
           />
         );
       })()}
-    </div>
+    </>
   );
 };
 

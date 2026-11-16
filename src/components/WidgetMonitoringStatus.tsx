@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Clock, Monitor, Gamepad2, Smartphone, ShieldCheck, Settings2, MessageCircle } from "lucide-react";
 import { doc, setDoc, onSnapshot } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
@@ -186,7 +187,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
         <div className="flex flex-col gap-6 lg:flex-row lg:gap-6">
           {/* Kolom kiri: Master inventaris & ringkasan Ready/Jalan */}
           <div className="flex flex-col gap-4 lg:w-5/12">
-            <div className="rounded-tile bg-surface-2 p-4 ring-1 ring-edge">
+            <div className="rounded-tile apple-tile p-4 ring-1 ring-edge">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Settings2 className="h-4 w-4 text-tint" />
@@ -264,7 +265,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
           </div>
 
           {/* Kolom kanan: Status unit aktif & ready */}
-          <div className="w-full rounded-tile bg-surface-2 p-4 ring-1 ring-edge lg:w-7/12">
+          <div className="w-full rounded-tile apple-tile p-4 ring-1 ring-edge lg:w-7/12">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Monitor className="h-4 w-4 text-tint" />
@@ -298,7 +299,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
                         setSelectedUnit(u);
                       }
                     }}
-                    className={`relative flex min-w-0 max-w-full cursor-pointer flex-col overflow-hidden rounded-tile bg-surface p-3 pt-3.5 text-center shadow-card ring-1 transition-all hover:-translate-y-0.5 active:scale-[0.98] ${
+                    className={`relative flex min-w-0 max-w-full cursor-pointer flex-col overflow-hidden rounded-tile apple-card p-3 pt-3.5 text-center shadow-card ring-1 transition-all hover:-translate-y-0.5 active:scale-[0.98] ${
                       isWarning ? "ring-warning/60" : "ring-edge"
                     }`}
                   >
@@ -323,7 +324,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
                         <p className="w-full truncate font-mono text-caption2 text-label-3">{formatWa(u.waPenyewa)}</p>
                       )}
 
-                      <span className="inline-block rounded-md bg-fill px-1.5 py-0.5 text-caption2 font-medium text-label-2">
+                      <span className="inline-block rounded-full bg-fill px-2 py-0.5 text-caption2 font-medium text-label-2">
                         By: {adminName}
                       </span>
 
@@ -354,7 +355,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
                             e.stopPropagation();
                             kirimPengingat(u);
                           }}
-                          className="mt-1 inline-flex min-h-[36px] w-full items-center justify-center gap-1 rounded-control bg-positive px-2 text-caption font-semibold text-white transition-opacity active:opacity-80"
+                          className="mt-1 inline-flex min-h-[36px] w-full items-center justify-center gap-1 rounded-full bg-positive px-2.5 text-caption font-semibold text-white transition-opacity active:opacity-80"
                         >
                           <MessageCircle className="h-3.5 w-3.5 shrink-0" />
                           Ingatkan
@@ -402,14 +403,14 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
         </div>
       </Card>
 
-      {selectedUnit && (() => {
+      {selectedUnit && typeof document !== "undefined" && (() => {
         const sel: KartuUnit = activeRentals.find((r) => r.uid === selectedUnit.uid) || selectedUnit;
         const tarif = tarifTelatPerJam(sel.jenis);
         const adaReminder = bisaIngatkan(sel) && !sel.isVerified;
-        return (
+        return createPortal(
           <div className="fixed inset-0 z-[700] flex items-center justify-center p-4" role="dialog" aria-modal="true">
             <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={() => setSelectedUnit(null)} />
-            <div className="relative z-10 w-full max-w-sm rounded-card bg-surface/95 p-5 shadow-float ring-1 ring-edge backdrop-blur-xl animate-in zoom-in-95 duration-200 sm:p-6">
+            <div className="relative z-10 w-full max-w-sm rounded-sheet apple-sheet border border-white/50 dark:border-white/[0.12] p-5 shadow-float ring-1 ring-edge animate-in zoom-in-95 duration-200 sm:p-6">
               <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-fill" />
 
               <h3 className="text-center text-title3 font-bold text-label">{sel.jenis}</h3>
@@ -438,7 +439,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
                 )}
               </div>
 
-              <div className="mb-5 rounded-tile bg-surface-2 p-4 text-center ring-1 ring-edge">
+              <div className="mb-5 rounded-tile apple-tile p-4 text-center ring-1 ring-edge">
                 <p className="text-callout font-medium leading-relaxed text-label">
                   {teksPerkiraanKembali(sel.endMs)}
                 </p>
@@ -474,7 +475,8 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
                 </Button>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         );
       })()}
 
