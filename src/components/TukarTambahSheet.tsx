@@ -201,7 +201,7 @@ export const TukarTambahSheet: React.FC<{
             </Field>
             <div className="rounded-tile bg-fill/60 px-3.5 py-2.5 space-y-1 text-footnote">
               <div className="flex justify-between gap-3 text-label-2"><span>Harga barang dijual{nilaiLain ? " (sisa)" : ""}</span><span className="tabular-nums">{rupiah(sisa)}</span></div>
-              <div className="flex justify-between gap-3 text-label-2"><span>Nilai barang masuk</span><span className={`tabular-nums ${nilaiSalah ? "text-negative" : ""}`}>{isi ? `−${rupiah(Math.max(0, nilai))}` : "—"}</span></div>
+              <div className="flex justify-between gap-3 text-label-2"><span>Nilai barang masuk (potongan nota)</span><span className={`tabular-nums ${nilaiSalah ? "text-negative" : ""}`}>{isi ? `−${rupiah(Math.max(0, nilai))}` : "—"}</span></div>
               <div className="flex justify-between gap-3 pt-1 border-t border-sep text-subhead font-semibold text-label">
                 <span>{isi && nilai > 0 ? labelBayarTukar(bayar) : "Dibayar pembeli"}</span>
                 <span className="tabular-nums">{isi && nilai > 0 ? rupiah(Math.abs(bayar)) : "—"}</span>
@@ -223,7 +223,7 @@ export const TukarTambahSheet: React.FC<{
             </Field>
           </div>
 
-          <Notice>Barang masuk antrean <b className="font-semibold">Atur Stok › Konfirmasi stok</b>. Owner menentukan harga jualnya; stok bertambah setelah dikonfirmasi.</Notice>
+          <Notice>Potongan ini hanya memotong uang yang dibayar pembeli di nota (bukan pengeluaran kas). Barang masuk antrean <b className="font-semibold">Atur Stok › Konfirmasi stok</b> untuk penentuan harga jual &amp; modal masuk.</Notice>
         </div>
 
         <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] apple-bar border-t border-sep space-y-2">

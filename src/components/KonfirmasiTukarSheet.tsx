@@ -2,18 +2,21 @@
  * KONFIRMASI STOK — barang tukar tambah dari nota POS (owner / super admin).
  * Daftar antrean (Atur Stok › chip "Konfirmasi stok") + lembar konfirmasi satu barang:
  * produk dicocokkan otomatis (atau dibuat baru), harga jual ditentukan owner,
- * harga modal otomatis = nilai tukar tambah (bisa diubah). Aturan: src/lib/tukarTambah.ts.
+ * harga modal otomatis = Modal Sisa Tertahan (Opsi A: HPP keluar − uang pembeli), atau Nilai Tukar Nota (Opsi B).
  */
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeftRight, Check, ChevronRight, ImageOff, Loader2, Package, Plus, X } from "lucide-react";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../lib/firebase";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
-import type { ModalMap, ProdukJualan } from "../lib/barangJualan";
-import { kondisiProduk, namaJualan, PILIH_SAAT_CHECKOUT, stokRefLabel, StokRef } from "../lib/posSales";
+import { ModalMap, ProdukJualan, StokMasuk, useSemuaStokMasuk } from "../lib/barangJualan";
+import { bayarNota, kondisiProduk, namaJualan, nilaiTukarNota, PILIH_SAAT_CHECKOUT, PosSale, stokRefLabel, StokRef, usePosSales } from "../lib/posSales";
 import { cocokProdukSeken, konfirmasiTukarTambah, subKategoriTukar, TukarTambah, tujuanStokBaru } from "../lib/tukarTambah";
+import { hitungFifoHppPenjualan, hitungModalTertahan } from "../lib/akuntansiUsaha";
 import { persen, rupiah } from "../lib/format";
-import { Button, LineItem, LineList, Notice, Pill } from "../ui";
+import { Button, LineItem, LineList, Notice, Pill, SubTabs } from "../ui";
 
 type Data = Record<string, Record<string, StokItemValue>>;
 
@@ -38,7 +41,7 @@ const Foto: React.FC<{ url?: string; size?: number; className?: string }> = ({ u
 export const DaftarKonfirmasiTukar: React.FC<{ list: TukarTambah[]; loading: boolean; onPilih: (t: TukarTambah) => void }> = ({ list, loading, onPilih }) => (
   <section>
     <p className="px-1 pb-2 text-footnote text-label-2 leading-snug">
-      Barang dari tukar tambah di Kasir URBAN. Tentukan produk & harga jualnya — stok bertambah setelah dikonfirmasi. Nilainya sudah tercatat sebagai belanja stok di nota.
+      Barang dari tukar tambah di Kasir URBAN. Tentukan produk, harga jual &amp; modal barang masuk — stok bertambah setelah dikonfirmasi tanpa pengeluaran kas baru.
     </p>
     <div className="rounded-card apple-card ring-1 ring-edge shadow-card overflow-hidden divide-y divide-sep">
       {loading && <div className="py-10 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-label-3" /></div>}
@@ -72,11 +75,12 @@ export const KonfirmasiTukarSheet: React.FC<{
   tt: TukarTambah;
   products: ProdukJualan[];
   modalMap: ModalMap;
+  stokMasukList?: StokMasuk[];
   cats: StokKategori[];
   data: Data;
   onClose: () => void;
   onDone: (msg: string) => void;
-}> = ({ tt, products, modalMap, cats, data, onClose, onDone }) => {
+}> = ({ tt, products, modalMap, stokMasukList, cats, data, onClose, onDone }) => {
   useBodyScrollLock(true);
   const kandidat = useMemo(() => cocokProdukSeken(tt.nama, products), [tt.nama, products]);
   const seken = useMemo(() => products.filter((p) => kondisiProduk(p) === "SEKEN").sort((a, b) => a.name.localeCompare(b.name, "id")), [products]);
@@ -86,9 +90,52 @@ export const KonfirmasiTukarSheet: React.FC<{
   const qty = Math.max(1, tt.qty || 1);
   const [jualStr, setJualStr] = useState(() => (kandidat[0]?.yakin && kandidat[0].produk.price ? ribuan(String(kandidat[0].produk.price)) : ""));
   const [modalStr, setModalStr] = useState(ribuan(String(tt.nilai)));
+  const [modalMode, setModalMode] = useState<"TERTAHAN" | "NILAI_TUKAR" | "MANUAL">("TERTAHAN");
+  const [editedModal, setEditedModal] = useState(false);
   const [varian, setVarian] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+
+  // Baca nota POS asal & histori HPP FIFO agar Opsi A (Modal Sisa Tertahan) dihitung otomatis
+  const [saleDoc, setSaleDoc] = useState<PosSale | null | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    getDoc(doc(db, "pos_transaksi", tt.saleId))
+      .then((s) => {
+        if (!alive) return;
+        setSaleDoc(s.exists() ? ({ id: s.id, ...(s.data() as Omit<PosSale, "id">) }) : null);
+      })
+      .catch(() => { if (alive) setSaleDoc(null); });
+    return () => { alive = false; };
+  }, [tt.saleId]);
+  const { sales: salesSampaiNota, loading: loadingSales } = usePosSales(0, (tt.ts || Date.now()) + 60000, 3000);
+  const { list: stokMasukFallback, loading: loadingMasuk } = useSemuaStokMasuk(!stokMasukList);
+  const allMasuk = stokMasukList || stokMasukFallback;
+
+  const infoOpsi = useMemo(() => {
+    if (!saleDoc) return null;
+    const gabungan = new Map<string, PosSale>();
+    salesSampaiNota.forEach((s) => gabungan.set(s.id || s.noNota, s));
+    gabungan.set(saleDoc.id || saleDoc.noNota, saleDoc);
+    const hppMap = hitungFifoHppPenjualan(Array.from(gabungan.values()), allMasuk, modalMap);
+    const hNota = hppMap.get(saleDoc.id || saleDoc.noNota);
+    const hppKeluar = hNota?.hppTotal ?? 0;
+    const hppLengkap = hNota ? hNota.hppLengkap : false;
+    const kasPembeli = bayarNota(saleDoc);
+    const totalTertahan = hppLengkap ? hitungModalTertahan(hppKeluar, kasPembeli) : tt.nilai * qty;
+    const totalNilaiTt = nilaiTukarNota(saleDoc);
+    const jumlahTt = saleDoc.tukarTambah?.length || 1;
+    const share = jumlahTt <= 1 ? 1 : totalNilaiTt > 0 ? (tt.nilai * qty) / totalNilaiTt : 1 / jumlahTt;
+    const tertahanSatuan = hppLengkap ? Math.max(0, Math.round((totalTertahan * share) / qty)) : tt.nilai;
+    return { hppKeluar, hppLengkap, kasPembeli, totalNilaiTt, tertahanSatuan, multiItemTt: jumlahTt > 1 };
+  }, [saleDoc, salesSampaiNota, allMasuk, modalMap, tt.nilai, qty]);
+
+  useEffect(() => {
+    if (editedModal || modalMode !== "TERTAHAN") return;
+    if (infoOpsi?.hppLengkap) setModalStr(ribuan(String(infoOpsi.tertahanSatuan)));
+  }, [editedModal, modalMode, infoOpsi]);
+
+  const loadingHitung = saleDoc === undefined || loadingSales || (!stokMasukList && loadingMasuk);
 
   const pilihProduk = (id: string) => {
     setPilih(id);
@@ -121,7 +168,7 @@ export const KonfirmasiTukarSheet: React.FC<{
     try {
       const r = await konfirmasiTukarTambah(
         tt,
-        { produk, namaBaru, hargaJual: jual, modalSatuan: modal, varian: varian || undefined },
+        { produk, namaBaru, hargaJual: jual, modalSatuan: modal, modalMode, varian: varian || undefined },
         products,
         modalMap,
         (x) => data?.[x.kategori]?.[x.item]?.jumlah
@@ -275,21 +322,84 @@ export const KonfirmasiTukarSheet: React.FC<{
                 <span className="mt-1 block text-caption text-label-2">Harga produk sekarang {rupiah(produk.price)} — ikut berubah untuk semua stok produk ini.</span>
               )}
             </label>
-            <label className="block">
-              <span className="text-footnote font-semibold text-label-2">Harga modal / barang</span>
-              <div className="mt-1 flex items-center h-12 px-3.5 rounded-field bg-fill">
-                <span className="text-subhead font-semibold text-label-3 mr-1.5">Rp</span>
-                <input inputMode="numeric" value={modalStr} onChange={(e) => { setModalStr(ribuan(e.target.value)); setErr(""); }} placeholder="0" aria-label="Harga modal"
-                  className="flex-1 min-w-0 bg-transparent text-headline font-bold tabular-nums text-label focus:outline-none" />
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-footnote font-semibold text-label-2">Harga modal / barang</span>
+                {loadingHitung && <span className="text-caption text-label-3">Menghitung modal…</span>}
               </div>
-              <span className="mt-1 block text-caption text-label-2">
-                {modal === tt.nilai ? "Otomatis dari nilai tukar tambah." : `Nilai tukar tambah ${rupiah(tt.nilai)}.`}
-                {modalLama !== null && modalLama !== modal ? ` Modal produk sekarang ${rupiah(modalLama)}.` : ""}
-              </span>
-            </label>
+              <SubTabs<"TERTAHAN" | "NILAI_TUKAR">
+                size="sm"
+                value={modalMode === "NILAI_TUKAR" ? "NILAI_TUKAR" : "TERTAHAN"}
+                onChange={(m) => {
+                  setEditedModal(false);
+                  setModalMode(m);
+                  if (m === "NILAI_TUKAR") setModalStr(ribuan(String(tt.nilai)));
+                  else if (infoOpsi?.hppLengkap) setModalStr(ribuan(String(infoOpsi.tertahanSatuan)));
+                }}
+                ariaLabel="Cara hitung modal barang masuk"
+                options={[
+                  { key: "TERTAHAN", label: "Modal tertahan" },
+                  { key: "NILAI_TUKAR", label: "Nilai tukar nota" },
+                ]}
+              />
+              <label className="block">
+                <div className="flex items-center h-12 px-3.5 rounded-field bg-fill">
+                  <span className="text-subhead font-semibold text-label-3 mr-1.5">Rp</span>
+                  <input
+                    inputMode="numeric"
+                    value={modalStr}
+                    onChange={(e) => {
+                      setEditedModal(true);
+                      setModalMode("MANUAL");
+                      setModalStr(ribuan(e.target.value));
+                      setErr("");
+                    }}
+                    placeholder="0"
+                    aria-label="Harga modal"
+                    className="flex-1 min-w-0 bg-transparent text-headline font-bold tabular-nums text-label focus:outline-none"
+                  />
+                </div>
+              </label>
+
+              {infoOpsi && infoOpsi.hppLengkap ? (
+                <div className="rounded-tile bg-fill/60 px-3.5 py-2.5 space-y-1 text-caption text-label-2 tabular-nums">
+                  <div className="flex justify-between gap-2">
+                    <span>Modal barang keluar ({tt.noNota})</span>
+                    <span className="text-label font-medium">{rupiah(infoOpsi.hppKeluar)}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span>{infoOpsi.kasPembeli >= 0 ? "Uang dibayar pembeli" : "Uang ditambah URBAN"}</span>
+                    <span className="text-label font-medium">
+                      {infoOpsi.kasPembeli >= 0 ? `−${rupiah(infoOpsi.kasPembeli)}` : `+${rupiah(Math.abs(infoOpsi.kasPembeli))}`}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2 pt-1 border-t border-sep font-semibold text-label">
+                    <span>Sisa modal tertahan (Opsi A){infoOpsi.multiItemTt ? " · porsi unit" : ""}</span>
+                    <span>{rupiah(infoOpsi.tertahanSatuan)}</span>
+                  </div>
+                  {modalMode === "NILAI_TUKAR" && (
+                    <div className="pt-1 text-label-3 leading-snug">
+                      Opsi B (Nilai tukar nota {rupiah(tt.nilai)}) langsung mengakui laba dari selisih harga tukar saat ini; di Analitik tetap aman tanpa pengeluaran kas ganda.
+                    </div>
+                  )}
+                </div>
+              ) : !loadingHitung && saleDoc ? (
+                <Notice tone="warning">
+                  Sebagian barang keluar di nota {tt.noNota} belum punya harga modal, sehingga Modal Sisa Tertahan belum bisa dihitung otomatis. Isi modal barang keluar dulu atau isi modal secara manual.
+                </Notice>
+              ) : null}
+
+              {modalLama !== null && modalLama !== modal && (
+                <span className="block text-caption text-label-2">
+                  Modal stok lama {rupiah(modalLama)} — tersimpan terpisah per batch (FIFO), tidak menimpa unit lama.
+                </span>
+              )}
+            </div>
+
             {untung !== null && (
               <div className="flex items-center justify-between rounded-tile bg-fill/60 px-3.5 py-2.5 text-footnote">
-                <span className="text-label-2">Perkiraan untung / barang</span>
+                <span className="text-label-2">Perkiraan untung saat terjual</span>
                 <span className={`font-semibold tabular-nums ${untung >= 0 ? "text-positive" : "text-negative"}`}>
                   {untung >= 0 ? "+" : "−"}{rupiah(Math.abs(untung))} · {persen((untung / jual) * 100)}
                 </span>
@@ -297,7 +407,7 @@ export const KonfirmasiTukarSheet: React.FC<{
             )}
           </div>
 
-          <Notice>Stok bertambah {qty} dan tercatat di riwayat stok masuk tanpa pengeluaran baru — nilainya sudah dihitung sebagai belanja stok dari nota {tt.noNota}.</Notice>
+          <Notice>Stok bertambah {qty} dan masuk sebagai batch modal {rupiah(modal)}/pcs tanpa pengeluaran kas baru — di Analitik, laba penuh baru diakui saat barang ini terjual nanti.</Notice>
         </div>
 
         <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] apple-bar border-t border-sep space-y-2">

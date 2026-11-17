@@ -8,8 +8,9 @@ import { Kondisi, kondisiProduk, kondisiStok, PILIH_SAAT_CHECKOUT, produkSubKate
 import KondisiSwitch from "./KondisiSwitch";
 import {
   hapusBarangJualan, KATEGORI_PENGELUARAN_STOK, koreksiJumlahStok, kurangiStokMasukSalahInput, ModalMap, pratinjauOtomatis, ProdukJualan, rencanaKurangiStokMasuk,
-  simpanBarangJualan, StokMasuk, uploadFotoProduk, useModalProduk, useProdukJualan, useStokMasuk,
+  simpanBarangJualan, StokMasuk, uploadFotoProduk, useModalProduk, useProdukJualan, useSemuaStokMasuk, useStokMasuk,
 } from "../lib/barangJualan";
+import { hitungNilaiStokBatch, ringkasanModalAktifProduk } from "../lib/akuntansiUsaha";
 import StokMasukSheet, { digits, fmtDigits } from "./StokMasukSheet";
 import { refAda, StokRefSelect } from "./StokRefSelect";
 import { rupiah } from "../lib/format";
@@ -78,6 +79,7 @@ export default function InputStokJualan() {
   // Halaman Baru / Seken: semua ringkasan & daftar mengikuti kondisi terpilih
   const products = useMemo(() => semuaProduk.filter((p) => kondisiProduk(p) === kondisi), [semuaProduk, kondisi]);
   const { map: modalMap } = useModalProduk();
+  const { list: stokMasukList } = useSemuaStokMasuk();
   const { stokState, stokLoaded, masterLoaded, masterCategories } = useStokData();
   const minMap = useMinStok();
   const cats: StokKategori[] = Array.isArray(masterCategories?.jualan) ? masterCategories.jualan : [];
@@ -140,25 +142,11 @@ export default function InputStokJualan() {
     return out;
   }, [loaded, masterLoaded, semuaProduk, cats, kondisi]);
 
-  // Nilai stok (modal) SELURUH barang jualan (baru + seken): jumlah barang x rata-rata modal produk yang memakainya
-  const nilaiStok = useMemo(() => {
-    const per = new Map<string, number[]>();
-    semuaProduk.forEach((p) => {
-      const m = modalOf(p.id);
-      const r = p.stokRef;
-      if (m === null || !r) return;
-      const items = r.item === PILIH_SAAT_CHECKOUT ? cats.find((c) => c.kategori === r.kategori)?.items || [] : [r.item];
-      items.forEach((it) => per.set(`${r.kategori}||${it}`, [...(per.get(`${r.kategori}||${it}`) || []), m]));
-    });
-    let total = 0;
-    per.forEach((ms, k) => {
-      const [kat, it] = k.split("||");
-      const n = Math.max(0, Math.round(Number(data?.[kat]?.[it]?.jumlah) || 0));
-      total += n * (ms.reduce((a, b) => a + b, 0) / ms.length);
-    });
-    return total;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [semuaProduk, modalMap, cats, data]);
+  // Nilai stok (modal) SELURUH barang jualan (baru + seken): dihitung dari batch pembelian terbaru per barang stok
+  const nilaiStok = useMemo(
+    () => hitungNilaiStokBatch(semuaProduk, cats, data, modalMap, stokMasukList),
+    [semuaProduk, cats, data, modalMap, stokMasukList]
+  );
 
   const tanpaModal = products.filter((p) => modalOf(p.id) === null);
   const tanpaModalSemua = semuaProduk.filter((p) => modalOf(p.id) === null);
@@ -371,7 +359,13 @@ export default function InputStokJualan() {
             <Card flush>
               <div className="divide-y divide-sep">
                 {g.items.map((p) => {
-                  const m = modalOf(p.id);
+                  const stokQty =
+                    p.stokRef && p.stokRef.item !== PILIH_SAAT_CHECKOUT
+                      ? Math.max(0, Math.round(Number(data?.[p.stokRef.kategori]?.[p.stokRef.item]?.jumlah) || 0))
+                      : undefined;
+                  const ringModal = ringkasanModalAktifProduk(p.id, stokMasukList, stokQty, modalOf(p.id));
+                  const m = ringModal ? ringModal.modalSatuan : modalOf(p.id);
+                  const batchN = ringModal && ringModal.batches.length > 1 ? ringModal.batches.length : 0;
                   const untung = m !== null ? p.price - m : null;
                   return (
                     <button
@@ -389,7 +383,7 @@ export default function InputStokJualan() {
                             m !== null ? <span>· biaya {rupiah(m)}</span> : <span className="text-warning">· modal belum diisi</span>
                           ) : m !== null ? (
                             <>
-                              <span>· modal {rupiah(m)}</span>
+                              <span>· modal {batchN ? `rata ` : ""}{rupiah(m)}{batchN ? ` (${batchN} batch)` : ""}</span>
                               <span className={untung! >= 0 ? "text-positive" : "text-negative"}>· {untung! >= 0 ? "+" : ""}{p.price > 0 ? Math.round((untung! / p.price) * 100) : 0}%</span>
                             </>
                           ) : (
@@ -451,6 +445,7 @@ export default function InputStokJualan() {
           tt={konfirmasi}
           products={semuaProduk}
           modalMap={modalMap}
+          stokMasukList={stokMasukList}
           cats={cats}
           data={data}
           onClose={() => setKonfirmasi(null)}

@@ -17,6 +17,7 @@ import { rupiah } from "./format";
 import {
   hapusStokOtomatisBilaYatim, Kondisi, namaJualan, PILIH_SAAT_CHECKOUT, planStokSync, ProdukSync, StokRef, stokBaruUntukProduk, SubKategoriJualan,
 } from "./posSales";
+import { ringkasanModalAktifProduk } from "./akuntansiUsaha";
 
 export const KATEGORI_PENGELUARAN_STOK = "Stok Jualan";
 
@@ -276,6 +277,77 @@ const namaPengeluaran = (nama: string, item: string, qty: number) => `Stok juala
 /** Urutan riwayat stok masuk: tanggal beli terbaru dulu. */
 const urutTerbaru = (l: StokMasuk[]) => [...l].sort((a, b) => b.tanggal.localeCompare(a.tanggal) || b.ts - a.ts);
 
+/** Seluruh catatan stok masuk (realtime) — dipakai penilaian nilai stok batch & analitik HPP FIFO. */
+export function useSemuaStokMasuk(enabled = true): { list: StokMasuk[]; loading: boolean } {
+  const [list, setList] = useState<StokMasuk[]>([]);
+  const [loading, setLoading] = useState(enabled);
+  useEffect(() => {
+    if (!enabled) { setList([]); setLoading(false); return; }
+    setLoading(true);
+    return onSnapshot(
+      collection(db, "stok_masuk"),
+      (s) => {
+        setList(urutTerbaru(s.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StokMasuk, "id">) }))));
+        setLoading(false);
+      },
+      (e) => { console.warn("stok_masuk all:", e); setLoading(false); }
+    );
+  }, [enabled]);
+  return { list, loading };
+}
+
+/**
+ * Sinkronkan `product_costs/{produkId}` agar mencerminkan batch aktif di `stok_masuk`
+ * (rata-rata tertimbang sejumlah stok fisik terbaru, atau batch terakhir bila stok 0).
+ */
+export async function sinkronModalProdukDariStok(produkId: string, koreksiDariModal?: number): Promise<void> {
+  if (!produkId) return;
+  const [masukSnap, prodSnap, stokSnap, costSnap] = await Promise.all([
+    getDocs(query(collection(db, "stok_masuk"), where("produkId", "==", produkId))),
+    getDoc(doc(db, "products", produkId)),
+    getDoc(doc(db, "data", "stok")),
+    getDoc(doc(db, "product_costs", produkId)),
+  ]);
+  const list = masukSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<StokMasuk, "id">) }));
+  if (!list.length) return;
+
+  const prod = prodSnap.exists() ? (prodSnap.data() as any) : null;
+  const ref = prod?.stokRef as StokRef | null | undefined;
+  const jualan = (stokSnap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
+  const jumlahStok =
+    ref && ref.item !== PILIH_SAAT_CHECKOUT
+      ? Math.max(0, Math.round(Number(jualan?.[ref.kategori]?.[ref.item]?.jumlah) || 0))
+      : undefined;
+
+  const fallback = costSnap.exists() && typeof costSnap.data()?.hargaModal === "number" ? Number(costSnap.data()!.hargaModal) : null;
+  const ring = ringkasanModalAktifProduk(produkId, list, jumlahStok, fallback);
+  if (!ring) return;
+
+  const now = Date.now();
+  const prevRiwayat: { dari: number; modal: number }[] = Array.isArray(costSnap.data()?.riwayat)
+    ? [...costSnap.data()!.riwayat].map((r: any) => ({ dari: Number(r.dari) || now, modal: Math.round(Number(r.modal) || 0) })).sort((a, b) => a.dari - b.dari)
+    : [];
+
+  let nextRiwayat = prevRiwayat;
+  const last = prevRiwayat[prevRiwayat.length - 1];
+  const gantiTunggal =
+    list.length === 1 &&
+    last &&
+    ((koreksiDariModal !== undefined && last.modal === Math.round(koreksiDariModal)) || now - last.dari < 15000);
+
+  if (gantiTunggal) {
+    nextRiwayat = [...prevRiwayat.slice(0, -1), { dari: last.dari, modal: ring.modalSatuan }];
+  } else if (!last || last.modal !== ring.modalSatuan) {
+    nextRiwayat = [...prevRiwayat, { dari: now, modal: ring.modalSatuan }];
+  }
+
+  await setDoc(
+    doc(db, "product_costs", produkId),
+    { hargaModal: ring.modalSatuan, updatedAt: now, riwayat: nextRiwayat },
+    { merge: true }
+  );
+}
+
 /**
  * Riwayat stok masuk sebuah BARANG STOK (owner / super admin). Catatan menempel pada barang
  * stoknya, jadi catatan dari produk lain yang memakai stok yang sama — termasuk produk yang
@@ -366,6 +438,7 @@ export async function tambahStokMasuk(p: { id: string; nama: string }, target: S
       expenseId: expRef ? expRef.id : null, ts: now, oleh,
     });
   });
+  await sinkronModalProdukDariStok(p.id).catch((e) => console.warn("sinkron modal:", e));
   return masukRef.id;
 }
 
@@ -412,6 +485,7 @@ export async function ubahStokMasuk(rec: StokMasuk, d: StokMasukData, produkNama
     }
     tx.update(recRef, { qty: d.qty, modalSatuan: d.modalSatuan, tanggal: d.tanggal, catatPengeluaran: mau, expenseId, produkNama, updatedAt: now });
   });
+  await sinkronModalProdukDariStok(rec.produkId, rec.modalSatuan).catch((e) => console.warn("sinkron modal:", e));
   return { selisih: ikutStok ? selisih : 0 };
 }
 
@@ -439,6 +513,7 @@ export async function hapusStokMasuk(rec: StokMasuk, ikutStok = true): Promise<v
     if (e && e.exists()) tx.delete(e.ref);
     tx.delete(recRef);
   });
+  await sinkronModalProdukDariStok(rec.produkId).catch((e) => console.warn("sinkron modal:", e));
 }
 
 /**
@@ -481,6 +556,7 @@ export async function kurangiStokMasukSalahInput(ref: StokRef, kurang: number, n
       if (e && e.exists()) tx.update(e.ref, { qty: l.sisa, harga: Math.round(l.sisa * (l.rec.modalSatuan || 0)), nama: namaPengeluaran(l.rec.produkNama, l.rec.item, l.sisa) });
     });
   });
+  await Promise.all([...new Set(rencana.langkah.map((l) => l.rec.produkId).filter(Boolean))].map((pid) => sinkronModalProdukDariStok(pid).catch((e) => console.warn("sinkron modal:", e))));
   return { rupiah: rencana.rupiah };
 }
 

@@ -403,7 +403,7 @@ export function stokBaruUntukProduk(p: Pick<ProdukSync, "name" | "subcategory"> 
   const clean =
     name
       .replace(/\s*\((?:baru|seken|second|bekas)[^)]*\)\s*$/i, "")
-      .replace(/\s+(?:baru|seken)\s*$/i, "")
+      .replace(/\s*[-–—]?\s*(?:baru|seken|second|bekas)\s*$/i, "")
       .trim() || name;
   if (sub === "BD") return { kategori: KATEGORI_KASET_BD, item: clean.replace(/^(?:kaset\s+)?bd\s+/i, "").trim() || clean };
   if (sub === "Unit PS") return { kategori: seken ? "UNIT KONSOL SEKEN" : "UNIT KONSOL BARU", item: clean };

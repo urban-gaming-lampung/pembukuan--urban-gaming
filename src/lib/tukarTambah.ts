@@ -4,10 +4,11 @@
  * Alur:
  *  1. Kasir menambah "barang masuk" di checkout → commitPosSale menyimpan nota + dokumen
  *     `tukar_tambah/{id}` berstatus MENUNGGU (satu transaksi). Nilai barang memotong uang
- *     yang dibayar (bayarNota) dan dihitung sebagai belanja stok pada tanggal nota.
+ *     yang dibayar pembeli (bayarNota), bukan sebagai uang kas masuk/keluar baru.
  *  2. Owner / super admin membuka Atur Stok › Konfirmasi stok: menentukan produk (cocok
- *     otomatis / produk baru), harga jual, dan harga modal (otomatis = nilai tukar, bisa diubah).
- *     Stok bertambah + catatan stok masuk (tanpa pengeluaran, karena uangnya sudah di nota).
+ *     otomatis / produk baru), harga jual, dan harga modal (default Opsi A: modal sisa
+ *     tertahan = max(0, HPP keluar − kas diterima), atau bisa dialihkan ke Nilai Tukar Nota).
+ *     Stok bertambah + catatan stok masuk per batch (tanpa pengeluaran kas baru).
  *  3. Nota dibatalkan / dihapus → barang yang belum dikonfirmasi ikut batal; yang sudah masuk
  *     stok ditarik lagi (lihat posSales.cancelPosSale / deletePosSale).
  */
@@ -17,7 +18,7 @@ import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage
 import { auth, db, storage } from "./firebase";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { prepareStokWrites, writeStokInTx } from "./stokJualan";
-import { kompresFoto, ModalMap, pratinjauOtomatis, ProdukJualan, simpanBarangJualan } from "./barangJualan";
+import { kompresFoto, ModalMap, pratinjauOtomatis, ProdukJualan, simpanBarangJualan, sinkronModalProdukDariStok } from "./barangJualan";
 import { kondisiProduk, namaJualan, PILIH_SAAT_CHECKOUT, produkSubKategori, StokRef, SubKategoriJualan, tokenize } from "./posSales";
 import { tanggalHariKerja } from "./dateLocal";
 import { rupiah } from "./format";
@@ -49,6 +50,7 @@ export type TukarTambah = {
   stokMasukId?: string;
   hargaJual?: number;
   modalSatuan?: number;
+  modalMode?: "TERTAHAN" | "NILAI_TUKAR" | "MANUAL";
   konfirmasiOleh?: string;
   konfirmasiTs?: number;
 };
@@ -125,22 +127,43 @@ export function useTukarTambah(status: StatusTukarTambah = "MENUNGGU", enabled =
   return { list, loading };
 }
 
+/** Seluruh catatan tukar tambah (realtime) — dipakai Analitik Usaha untuk membaca modal diakui. */
+export function useSemuaTukarTambah(enabled = true): { list: TukarTambah[]; loading: boolean } {
+  const [list, setList] = useState<TukarTambah[]>([]);
+  const [loading, setLoading] = useState(enabled);
+  useEffect(() => {
+    if (!enabled) { setList([]); setLoading(false); return; }
+    setLoading(true);
+    return onSnapshot(
+      collection(db, "tukar_tambah"),
+      (s) => {
+        setList(s.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<TukarTambah, "id">) })).sort((a, b) => b.ts - a.ts));
+        setLoading(false);
+      },
+      (e) => { console.warn("tukar_tambah all:", e); setLoading(false); }
+    );
+  }, [enabled]);
+  return { list, loading };
+}
+
 export type KonfirmasiInput = {
   /** Produk yang sudah ada (null = buat produk baru) */
   produk: ProdukJualan | null;
   /** Nama produk baru (dipakai bila produk null) */
   namaBaru: string;
   hargaJual: number;
-  /** Harga modal per barang (otomatis = nilai tukar) */
+  /** Harga modal per barang (default Opsi A: modal sisa tertahan) */
   modalSatuan: number;
+  /** Cara penentuan modal yang dipilih owner */
+  modalMode?: "TERTAHAN" | "NILAI_TUKAR" | "MANUAL";
   /** Varian stok bila produk memakai "pilih saat checkout" */
   varian?: string;
 };
 
 /**
  * Konfirmasi barang tukar tambah masuk stok (owner / super admin):
- * produk dibuat / diperbarui (harga jual + harga modal), stok bertambah, catatan stok masuk dibuat
- * TANPA pengeluaran (nilainya sudah tercatat di nota), status tukar tambah → DIKONFIRMASI.
+ * produk dibuat / diperbarui (harga jual + stokRef), stok bertambah, catatan stok masuk dibuat per batch
+ * TANPA pengeluaran kas baru, status tukar tambah → DIKONFIRMASI, lalu modal produk disinkronkan.
  */
 export async function konfirmasiTukarTambah(
   tt: TukarTambah,
@@ -157,10 +180,11 @@ export async function konfirmasiTukarTambah(
   const cek = await getDoc(ttRef);
   if (!cek.exists() || cek.data()?.status !== "MENUNGGU") throw new Error("Barang ini sudah dikonfirmasi / dibatalkan.");
 
-  // 1. Produk + harga jual + harga modal (+ barang stok otomatis untuk produk baru)
+  // 1. Pastikan produk & harga jual tersedia; pertahankan modal lama bila produk sudah punya modal (sinkron batch menyusul setelah stok_masuk tertulis)
   const p = input.produk;
   const nama = namaJualan(p ? p.name : input.namaBaru || tt.nama);
   if (!nama) throw new Error("Nama produk wajib diisi.");
+  const modalSebelum = p ? modal[p.id]?.hargaModal ?? null : null;
   const simpan = await simpanBarangJualan(
     {
       id: p?.id,
@@ -168,14 +192,14 @@ export async function konfirmasiTukarTambah(
       subkategori: (p?.subcategory as SubKategoriJualan) || subKategoriTukar(nama),
       kondisi: "SEKEN",
       hargaJual,
-      hargaModal: modalSatuan,
+      hargaModal: modalSebelum !== null ? modalSebelum : modalSatuan,
       imageUrl: p?.imageUrl || tt.fotoBarang || "",
       // Produk lama tetap memakai hubungan stoknya; belum terhubung / baru → otomatis
       stokRef: p?.stokRef ? p.stokRef : undefined,
     },
     p,
     semuaProduk,
-    p ? modal[p.id]?.hargaModal ?? null : null,
+    modalSebelum,
     jumlahStok
   );
   let target = simpan.stokRef;
@@ -201,7 +225,7 @@ export async function konfirmasiTukarTambah(
       jualan,
       [{ ...target!, delta: qty }],
       "masuk",
-      `Tukar tambah · ${tt.noNota} · ${nama}${modalSatuan > 0 ? ` · modal ${rupiah(modalSatuan)}/pcs` : ""}`,
+      `Tukar tambah · ${tt.noNota} · ${nama} · modal ${rupiah(modalSatuan)}/pcs`,
       oleh,
       now
     );
@@ -213,8 +237,9 @@ export async function konfirmasiTukarTambah(
     });
     tx.update(ttRef, {
       status: "DIKONFIRMASI", produkId: simpan.id, stokRef: target, stokMasukId: masukRef.id,
-      hargaJual, modalSatuan, konfirmasiOleh: oleh, konfirmasiTs: now,
+      hargaJual, modalSatuan, ...(input.modalMode ? { modalMode: input.modalMode } : {}), konfirmasiOleh: oleh, konfirmasiTs: now,
     });
   });
+  await sinkronModalProdukDariStok(simpan.id).catch((e) => console.warn("sinkron modal:", e));
   return { produkId: simpan.id, stokRef: target };
 }

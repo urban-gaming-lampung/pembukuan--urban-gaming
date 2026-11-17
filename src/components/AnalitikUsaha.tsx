@@ -9,11 +9,13 @@ import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue } from "../hooks/useStokData";
 import { getMinStok, kunciStok, statusOf, useMinStok } from "../lib/stokJualan";
-import { bayarNota, cancelPosSale, deletePosSale, gabungNota, nilaiTukarNota, infoNego, isDpTerbuka, PosItem, PosSale, ringkasanDp, StokRef, tanggalPenjualan, terjualDalam, usePosSales, usePosSalesLunas, waktuPenjualan } from "../lib/posSales";
+import { adaTukarTambah, bayarNota, cancelPosSale, deletePosSale, gabungNota, infoNego, isDpTerbuka, PosItem, PosSale, ringkasanDp, StokRef, tanggalPenjualan, terjualDalam, usePosSales, usePosSalesLunas, waktuPenjualan } from "../lib/posSales";
 import { BatalDp } from "./NotaDpSheet";
 import { fmtTanggalNota } from "../lib/posReceipt";
 import { NotaActionButtons, NotaPreview, useNotaActions } from "./PosCheckoutSheet";
-import { modalPada, useModalProduk, useProdukJualan } from "../lib/barangJualan";
+import { useModalProduk, useProdukJualan, useSemuaStokMasuk } from "../lib/barangJualan";
+import { useSemuaTukarTambah } from "../lib/tukarTambah";
+import { alokasiProporsional, arusKasNota, hitungFifoHppPenjualan, ringkasanTukarUntukLaba } from "../lib/akuntansiUsaha";
 import { Kondisi, kondisiProduk } from "../lib/posSales";
 import { isBelanjaStok, periodRange, TransaksiOwner } from "../lib/keuangan";
 import { tebakModalBaris, useBarisUsahaManual } from "../lib/pemasukanUsaha";
@@ -49,14 +51,17 @@ export default function AnalitikUsaha(props: FilterProps) {
   // Hari kerja berganti -> periode "Bulan Ini" / "7 Hari" ikut bergeser
   const hariKerja = tanggalHariKerja();
   const period = useMemo(() => periodRange(mode, month, rangeStart, rangeEnd), [mode, month, rangeStart, rangeEnd, hariKerja]);
-  // Ambil juga periode sebelumnya (panjang sama) untuk perbandingan
+  // Ambil juga periode sebelumnya (panjang sama) untuk perbandingan, serta histori POS sejak awal agar FIFO HPP akurat
   const prevFrom = period.from > 0 ? Math.max(1, period.from - (period.to - period.from + 1)) : 0;
-  const { sales: raw, loading: loadingPos, error } = usePosSales(prevFrom, period.to, 4000);
+  const { sales: raw, loading: loadingPos, error } = usePosSales(0, period.to, 5000);
   // Nota DP yang dilunasi di periode ini (penjualannya dihitung saat lunas, walau nota dibuat sebelumnya)
-  const { sales: lunasRaw, loading: loadingLunas } = usePosSalesLunas(prevFrom, period.to);
+  const { sales: lunasRaw, loading: loadingLunas } = usePosSalesLunas(0, period.to);
   // Rincian Pemasukan Usaha yang diketik admin di pembukuan harian (termasuk riwayat lama)
   const { rows: manualRaw, loading: loadingManual } = useBarisUsahaManual(prevFrom, period.to);
-  const loading = loadingPos || loadingManual || loadingLunas;
+  const { list: stokMasukList, loading: loadingMasuk } = useSemuaStokMasuk();
+  const { list: tukarList, loading: loadingTukar } = useSemuaTukarTambah();
+  const ttById = useMemo(() => new Map(tukarList.map((t) => [t.id, t])), [tukarList]);
+  const loading = loadingPos || loadingManual || loadingLunas || loadingMasuk || loadingTukar;
   const { stokState, masterCategories } = useStokData();
   const minMap = useMinStok();
   const stokData = (stokState?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
@@ -68,7 +73,7 @@ export default function AnalitikUsaha(props: FilterProps) {
   const [selected, setSelected] = useState<PosSale | null>(null);
 
   // Riwayat nota = nota yang DIBUAT di periode ini
-  const inPeriod = useMemo(() => raw.filter((s) => s.ts >= period.from), [raw, period.from]);
+  const inPeriod = useMemo(() => raw.filter((s) => s.ts >= period.from && s.ts <= period.to), [raw, period.from, period.to]);
   // Penjualan = nota lunas (nota DP dihitung pada waktu pelunasan)
   const semua = useMemo(() => gabungNota(raw, lunasRaw), [raw, lunasRaw]);
   const cur = useMemo(
@@ -84,7 +89,7 @@ export default function AnalitikUsaha(props: FilterProps) {
   const adaData = cur.length > 0 || manualCur.length > 0 || dp.berjalan > 0 || dp.hangus > 0;
 
   const st = useMemo(() => {
-    let omzet = 0, qty = 0, diskon = 0, cash = 0, transfer = 0, cashN = 0, transferN = 0, nego = 0, negoN = 0, posOmzet = 0, manualOmzet = 0, tukar = 0, tukarN = 0;
+    let omzet = 0, qty = 0, diskon = 0, cash = 0, transfer = 0, cashN = 0, transferN = 0, nego = 0, negoN = 0, posOmzet = 0, posKasMasuk = 0, tukarKasKeluar = 0, manualOmzet = 0, tukar = 0, tukarN = 0;
     const byDay = new Map<string, { omzet: number; nota: number }>();
     const byCat = new Map<string, { omzet: number; qty: number }>();
     const byProduct = new Map<string, { nama: string; kategori: string; qty: number; omzet: number }>();
@@ -97,21 +102,25 @@ export default function AnalitikUsaha(props: FilterProps) {
       diskon += s.diskon || 0;
       const ng = infoNego(s);
       if (ng.ada) { nego += ng.total; negoN++; }
-      // Nota DP yang sudah lunas: tunai / transfer mengikuti tiap pembayaran
-      if (s.pembayaran?.length) {
-        s.pembayaran.forEach((p) => { if (p.metode === "TRANSFER") transfer += Number(p.jumlah) || 0; else cash += Number(p.jumlah) || 0; });
-        if (s.pembayaran[s.pembayaran.length - 1].metode === "TRANSFER") transferN++; else cashN++;
-      } else if (s.metode === "TRANSFER") { transfer += bayarNota(s); transferN++; } else { cash += bayarNota(s); cashN++; }
-      // Tukar tambah: nilai barang masuk memotong uang yang diterima (dicatat sebagai belanja stok)
-      const tt = nilaiTukarNota(s);
-      if (tt > 0) { tukar += tt; tukarN++; }
+      // Arus kas nyata (tunai / transfer = hanya uang yang benar-benar berpindah; potongan tukar tambah bukan kas masuk/keluar)
+      const kas = arusKasNota(s);
+      posKasMasuk += kas.kasMasuk;
+      tukarKasKeluar += kas.kasKeluar;
+      cash += kas.cash;
+      transfer += kas.transfer;
+      cashN += kas.cashN;
+      transferN += kas.transferN;
+      if (kas.tukar) {
+        tukar += kas.nilaiTukar;
+        tukarN++;
+      }
       const tJual = waktuPenjualan(s);
       const day = tanggalPenjualan(s);
       const d = byDay.get(day) || { omzet: 0, nota: 0 };
       d.omzet += s.total; d.nota++; byDay.set(day, d);
-      const kas = s.kasirNama || s.kasir?.split("@")[0] || "-";
-      const k = byKasir.get(kas) || { omzet: 0, nota: 0 };
-      k.omzet += s.total; k.nota++; byKasir.set(kas, k);
+      const kasirKey = s.kasirNama || s.kasir?.split("@")[0] || "-";
+      const k = byKasir.get(kasirKey) || { omzet: 0, nota: 0 };
+      k.omzet += s.total; k.nota++; byKasir.set(kasirKey, k);
       const h = byHour[new Date(tJual).getHours()];
       h.nota++; h.omzet += s.total;
       (s.items || []).forEach((it) => {
@@ -141,7 +150,7 @@ export default function AnalitikUsaha(props: FilterProps) {
     });
     const transaksi = cur.length + manualCur.length;
     return {
-      omzet, qty, diskon, nego, negoN, cash, transfer, cashN, transferN, posOmzet, manualOmzet, tukar, tukarN,
+      omzet, qty, diskon, nego, negoN, cash, transfer, cashN, transferN, posOmzet, posKasMasuk, tukarKasKeluar, manualOmzet, tukar, tukarN,
       nota: cur.length, manualN: manualCur.length, transaksi, avg: transaksi ? omzet / transaksi : 0,
       byDay, byCat, byProduct, byKasir, byHour, soldStok,
     };
@@ -149,32 +158,57 @@ export default function AnalitikUsaha(props: FilterProps) {
 
   const prevOmzet = useMemo(() => prev.reduce((s, x) => s + x.total, 0) + manualPrev.reduce((s, x) => s + x.harga, 0), [prev, manualPrev]);
 
-  // Modal & laba barang jualan (harga modal saat transaksi, dari riwayat harga modal)
+  // Modal & laba barang jualan: FIFO berbasis batch stok_masuk (jatuh ke product_costs bila belum ada batch) + penyesuaian tukar tambah Opsi A
   const { map: modalMap } = useModalProduk();
   const { products: produkJualan } = useProdukJualan();
+  const hppMap = useMemo(() => hitungFifoHppPenjualan(semua, stokMasukList, modalMap), [semua, stokMasukList, modalMap]);
   const laba = useMemo(() => {
-    let penjualan = 0, denganModal = 0, hpp = 0, qtyTanpa = 0, perkiraan = 0, penjualanTanpaModal = 0;
+    let penjualan = 0, denganModal = 0, hpp = 0, qtyTanpa = 0, perkiraan = 0, penjualanTanpaModal = 0, penyesuaianTukar = 0, nilaiTukarTotal = 0, modalTukarMasuk = 0;
     const perProduk = new Map<string, number>();
     const perKondisi: Record<Kondisi, { penjualan: number; laba: number; qty: number }> = { BARU: { penjualan: 0, laba: 0, qty: 0 }, SEKEN: { penjualan: 0, laba: 0, qty: 0 } };
     const byId = new Map(produkJualan.map((p) => [p.id, p]));
-    cur.forEach((s) =>
-      (s.items || []).forEach((it) => {
-        if (it.kategori !== "JUALAN") return;
-        penjualan += it.subtotal;
+    cur.forEach((s) => {
+      const h = hppMap.get(s.id || s.noNota);
+      const hppLengkapNota = h ? h.hppLengkap : true;
+      const tRing = ringkasanTukarUntukLaba(s, h?.hppTotal || 0, hppLengkapNota, ttById);
+      nilaiTukarTotal += tRing.nilaiTukar;
+      modalTukarMasuk += tRing.modalDiakui;
+      const deltaNota = hppLengkapNota ? tRing.penyesuaianLaba : 0;
+      penyesuaianTukar += deltaNota;
+
+      const jualanEntries = (s.items || [])
+        .map((it, idx) => ({ it, hItem: h?.items.find((x) => x.itemIndex === idx) }))
+        .filter((x) => x.it.kategori === "JUALAN" && (Number(x.it.qty) || 0) > 0);
+      const modalWeights = jualanEntries.map((x) => x.hItem?.subtotalDenganModal ?? 0);
+      const allocWeights = modalWeights.some((w) => w > 0) ? modalWeights : jualanEntries.map((x) => Number(x.it.subtotal) || 0);
+      const penyesuaianPerItem = alokasiProporsional(allocWeights, deltaNota);
+
+      jualanEntries.forEach(({ it, hItem }, jIdx) => {
+        const deltaTukar = penyesuaianPerItem[jIdx] || 0;
+        const subtotalEfektif = (Number(it.subtotal) || 0) + deltaTukar;
+        penjualan += subtotalEfektif;
         const prod = byId.get(it.id);
         const kd: Kondisi = it.kondisi || (prod ? kondisiProduk(prod) : kondisiProduk({ name: it.nama, stokRef: it.stokRef }));
-        perKondisi[kd].penjualan += it.subtotal;
+        perKondisi[kd].penjualan += subtotalEfektif;
         perKondisi[kd].qty += it.qty;
-        const m = modalPada(modalMap[it.id], waktuPenjualan(s));
-        if (!m) { qtyTanpa += it.qty; penjualanTanpaModal += it.subtotal; return; }
-        if (m.perkiraan) perkiraan += it.qty;
-        denganModal += it.subtotal;
-        hpp += m.modal * it.qty;
+        if (!hItem || hItem.qtyDenganModal <= 0) {
+          qtyTanpa += it.qty;
+          penjualanTanpaModal += Number(it.subtotal) || 0;
+          return;
+        }
+        if (hItem.qtyTanpaModal > 0) {
+          qtyTanpa += hItem.qtyTanpaModal;
+          penjualanTanpaModal += hItem.subtotalTanpaModal;
+        }
+        if (hItem.perkiraan) perkiraan += hItem.qtyDenganModal;
+        const itemDenganModalEfektif = hItem.subtotalDenganModal + deltaTukar;
+        denganModal += itemDenganModalEfektif;
+        hpp += hItem.hpp;
         const key = String(it.nama || "").toUpperCase();
-        perProduk.set(key, (perProduk.get(key) || 0) + it.subtotal - m.modal * it.qty);
-        perKondisi[kd].laba += it.subtotal - m.modal * it.qty;
-      })
-    );
+        perProduk.set(key, (perProduk.get(key) || 0) + itemDenganModalEfektif - hItem.hpp);
+        perKondisi[kd].laba += itemDenganModalEfektif - hItem.hpp;
+      });
+    });
     // Barang dari pembukuan harian (stik, kabel, dll.): perkiraan modal dari harga modal barang saat ini
     let manualBarang = 0;
     manualCur.forEach((r) => {
@@ -194,10 +228,10 @@ export default function AnalitikUsaha(props: FilterProps) {
       perKondisi[kd].laba += r.harga - t.modal;
     });
     const kotor = denganModal - hpp;
-    return { penjualan, denganModal, hpp, kotor, margin: denganModal > 0 ? (kotor / denganModal) * 100 : 0, qtyTanpa, perkiraan, perProduk, perKondisi, penjualanTanpaModal, manualBarang };
-  }, [cur, manualCur, modalMap, produkJualan]);
+    return { penjualan, denganModal, hpp, kotor, margin: denganModal > 0 ? (kotor / denganModal) * 100 : 0, qtyTanpa, perkiraan, perProduk, perKondisi, penjualanTanpaModal, manualBarang, penyesuaianTukar, nilaiTukarTotal, modalTukarMasuk };
+  }, [cur, manualCur, modalMap, produkJualan, hppMap, ttById]);
 
-  // ===== Arus uang usaha (uang masuk vs uang keluar) =====
+  // ===== Arus uang usaha (uang nyata masuk vs uang nyata keluar) =====
   const uang = useMemo(() => {
     let belanjaStok = 0, operasional = 0, lain = 0;
     (props.pengeluaran || []).forEach((e) => {
@@ -206,19 +240,16 @@ export default function AnalitikUsaha(props: FilterProps) {
       else operasional += v;
     });
     (props.pemasukan || []).forEach((e) => { lain += Number(e.harga) || 0; });
-    const masuk = st.omzet + lain + dp.berjalan + dp.hangus;
-    // Barang tukar tambah = belanja stok yang dibayar dengan potongan nota
-    const tukar = st.tukar;
-    const keluar = belanjaStok + tukar + operasional;
-    return { belanjaStok, tukar, operasional, lain, masuk, keluar, selisih: masuk - keluar };
-  }, [props.pengeluaran, props.pemasukan, st.omzet, st.tukar, dp.berjalan, dp.hangus]);
+    const masuk = st.posKasMasuk + st.manualOmzet + lain + dp.berjalan + dp.hangus;
+    const tukarKeluar = st.tukarKasKeluar;
+    const keluar = belanjaStok + tukarKeluar + operasional;
+    return { belanjaStok, tukarKeluar, operasional, lain, masuk, keluar, selisih: masuk - keluar };
+  }, [props.pengeluaran, props.pemasukan, st.posKasMasuk, st.tukarKasKeluar, st.manualOmzet, dp.berjalan, dp.hangus]);
 
   // ===== Laba & margin usaha =====
-  // Penjualan terhitung = omzet POS tanpa barang jualan yang belum punya harga modal.
-  // Isi game, servis & rental POS dihitung tanpa modal barang.
+  // Penjualan terhitung = omzet POS + penyesuaian modal tukar tambah (kas + modal diakui) - barang tanpa harga modal + DP hangus.
   const untung = useMemo(() => {
-    // DP hangus = pemasukan tanpa modal (barang tidak diserahkan)
-    const terhitung = Math.max(0, st.omzet - laba.penjualanTanpaModal) + dp.hangus;
+    const terhitung = Math.max(0, st.omzet + laba.penyesuaianTukar - laba.penjualanTanpaModal) + dp.hangus;
     const kotor = terhitung - laba.hpp;
     const bersih = kotor - uang.operasional;
     return {
@@ -228,7 +259,7 @@ export default function AnalitikUsaha(props: FilterProps) {
       marginKotor: terhitung > 0 ? (kotor / terhitung) * 100 : 0,
       marginBersih: terhitung > 0 ? (bersih / terhitung) * 100 : 0,
     };
-  }, [st.omzet, laba.penjualanTanpaModal, laba.hpp, uang.operasional, dp.hangus]);
+  }, [st.omzet, laba.penyesuaianTukar, laba.penjualanTanpaModal, laba.hpp, uang.operasional, dp.hangus]);
   const growth = period.from > 0 && prevOmzet > 0 ? ((st.omzet - prevOmzet) / prevOmzet) * 100 : null;
 
   // Grafik omzet: harian (<= 62 hari) atau bulanan — per hari kerja (sama dengan pembukuan)
@@ -327,13 +358,19 @@ export default function AnalitikUsaha(props: FilterProps) {
         keluarSub="uang dikeluarkan"
       >
         <LineList className="mt-3 border-t border-sep">
-          <LineItem dot={MARK.masuk} label="Penjualan POS" note={`${st.nota} nota`} value={rupiah(st.posOmzet)} muted={st.posOmzet === 0} />
+          <LineItem
+            dot={MARK.masuk}
+            label="Penjualan POS"
+            note={st.tukar > 0 ? `${st.nota} nota · bruto ${rpShort(st.posOmzet)} − tukar tambah ${rpShort(st.tukar)}` : `${st.nota} nota`}
+            value={rupiah(st.posKasMasuk)}
+            muted={st.posKasMasuk === 0}
+          />
           {st.manualOmzet > 0 && <LineItem dot={MARK.masuk} label="Rincian pembukuan" note={`${st.manualN} input admin`} value={rupiah(st.manualOmzet)} />}
           {dp.berjalan > 0 && <LineItem dot={MARK.masuk} label="DP belum lunas" note={`${dp.berjalanN} nota · sisa ${rpShort(dp.sisa)}`} value={rupiah(dp.berjalan)} />}
           {dp.hangus > 0 && <LineItem dot={MARK.masuk} label="DP hangus" note={`${dp.hangusN} nota batal`} value={rupiah(dp.hangus)} />}
           <LineItem dot={MARK.masuk} label="Pemasukan lain" note="modal dll." value={rupiah(uang.lain)} muted={uang.lain === 0} />
           <LineItem dot={MARK.keluar} label="Belanja stok" value={`${uang.belanjaStok > 0 ? "−" : ""}${rupiah(uang.belanjaStok)}`} muted={uang.belanjaStok === 0} />
-          {uang.tukar > 0 && <LineItem dot={MARK.keluar} label="Barang tukar tambah" note={`${st.tukarN} nota · potongan harga`} value={`−${rupiah(uang.tukar)}`} />}
+          {uang.tukarKeluar > 0 && <LineItem dot={MARK.keluar} label="Selisih tukar tambah" note="kas dibayar ke pembeli" value={`−${rupiah(uang.tukarKeluar)}`} />}
           <LineItem dot={MARK.keluar} label="Biaya operasional" value={`${uang.operasional > 0 ? "−" : ""}${rupiah(uang.operasional)}`} muted={uang.operasional === 0} />
         </LineList>
         {growth !== null && !loading && (
@@ -400,7 +437,11 @@ export default function AnalitikUsaha(props: FilterProps) {
             <LineList className="mt-3 border-t border-sep">
               <LineItem
                 label="Penjualan"
-                note={[laba.penjualanTanpaModal > 0 && "di luar barang tanpa harga modal", dp.hangus > 0 && "termasuk DP hangus"].filter(Boolean).join(" · ") || undefined}
+                note={[
+                  laba.penjualanTanpaModal > 0 && "di luar barang tanpa harga modal",
+                  laba.penyesuaianTukar !== 0 && `penyesuaian modal tukar tambah ${laba.penyesuaianTukar < 0 ? "−" : "+"}${rpShort(Math.abs(laba.penyesuaianTukar))}`,
+                  dp.hangus > 0 && "termasuk DP hangus",
+                ].filter(Boolean).join(" · ") || undefined}
                 value={rupiah(untung.terhitung)}
               />
               <LineItem label="Modal barang terjual" value={`−${rupiah(laba.hpp)}`} />
@@ -409,7 +450,7 @@ export default function AnalitikUsaha(props: FilterProps) {
               <LineItem label="Laba bersih" total value={<Amount value={untung.bersih} tone="auto" className="font-bold" />} />
             </LineList>
 
-            {laba.penjualan > 0 && (
+            {(laba.penjualan > 0 || laba.penjualanTanpaModal > 0) && (
               <div className="mt-3 grid grid-cols-2 gap-2">
                 {(["BARU", "SEKEN"] as const).map((k) => (
                   <StatTile
@@ -432,7 +473,8 @@ export default function AnalitikUsaha(props: FilterProps) {
               </p>
             )}
             <p className="mt-2.5 text-caption leading-relaxed text-label-2">
-              Laba kotor = penjualan − modal barang yang terjual (isi game, HEN & servis dihitung tanpa modal barang). Laba bersih = laba kotor − biaya operasional usaha. Belanja stok adalah uang keluar, tetapi baru menjadi modal saat barangnya terjual.
+              Laba kotor = penjualan − modal barang yang terjual (isi game, HEN &amp; servis dihitung tanpa modal barang). Laba bersih = laba kotor − biaya operasional usaha. Belanja stok adalah uang keluar, tetapi baru menjadi modal saat barangnya terjual.
+              {laba.nilaiTukarTotal > 0 && ` Nota tukar tambah dihitung dari kas diterima + modal barang masuk diakui (${rupiah(laba.modalTukarMasuk)}), jadi tidak menggandakan belanja stok dan sisa untung diakui saat barang tukar tambah terjual.`}
             </p>
           </Card>
         </>
@@ -460,6 +502,11 @@ export default function AnalitikUsaha(props: FilterProps) {
               <StatTile label="Rata-rata" icon={<Receipt />} value={<TileValue>{rpShort(st.avg)}</TileValue>} sub={st.manualN ? `${st.nota} nota · ${st.manualN} pembukuan` : `${st.nota} nota · ${st.qty} barang`} />
               <StatTile label="Nota batal" icon={<Ban />} value={<TileValue>{batalCount}</TileValue>} sub="tidak dihitung" />
             </div>
+            {st.tukar > 0 && (
+              <p className="mt-2.5 text-caption text-label-2">
+                Tunai &amp; Transfer adalah uang bersih diterima pembeli (sesudah potongan tukar tambah {rupiah(st.tukar)} dari {st.tukarN} nota).
+              </p>
+            )}
           </Card>
 
           {/* Grafik omzet */}
@@ -605,10 +652,11 @@ export default function AnalitikUsaha(props: FilterProps) {
                       {s.batal && <Pill>{s.status === "BATAL_PEMBELI" ? "DP hangus" : s.status === "BATAL_URBAN" ? "DP kembali" : "Batal"}</Pill>}
                       {isDpTerbuka(s) && <Pill tone="warning">Belum lunas</Pill>}
                       {!s.batal && s.lunasTs && <Pill tone="positive">DP · lunas</Pill>}
+                      {!s.batal && adaTukarTambah(s) && <Pill>Tukar tambah</Pill>}
                       {!s.batal && infoNego(s).ada && <Pill tone="tint">Nego</Pill>}
                     </div>
                     <div className="truncate text-caption text-label-2">
-                      {s.noNota} · {new Date(s.ts).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {(s.items || []).reduce((a, i) => a + i.qty, 0)} barang
+                      {s.noNota} · {new Date(s.ts).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {(s.items || []).reduce((a, i) => a + i.qty, 0)} barang{adaTukarTambah(s) ? ` · bayar ${rpShort(bayarNota(s))}` : ""}
                     </div>
                   </div>
                   <span className={`shrink-0 text-subhead font-semibold tabular-nums ${s.batal ? "text-label-3 line-through" : "text-label"}`}>{rpShort(s.total)}</span>

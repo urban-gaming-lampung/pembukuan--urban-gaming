@@ -2,7 +2,8 @@ import React, { useMemo } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from "recharts";
 import { Gamepad2, Store, BarChart3, Layers } from "lucide-react";
 import FilterComp from "./Filter";
-import { dpHangus, gabungNota, isDpTerbuka, nilaiTukarNota, tanggalPenjualan, terjualDalam, totalDibayar, usePosSales, usePosSalesLunas } from "../lib/posSales";
+import { dpHangus, gabungNota, isDpTerbuka, tanggalPenjualan, terjualDalam, totalDibayar, usePosSales, usePosSalesLunas } from "../lib/posSales";
+import { arusKasNota } from "../lib/akuntansiUsaha";
 import { Bisnis, bisnisOf, isBelanjaStok, pemasukanRental, pengeluaranAdminRental, periodRange, TransaksiOwner } from "../lib/keuangan";
 import type { HistoryItem } from "../lib/types";
 import { barisUsahaManual } from "../lib/pemasukanUsaha";
@@ -103,18 +104,21 @@ export default function AnalitikKeseluruhan(props: Props) {
     });
     if (r.buku) masukKe("RENTAL|buku", "Pembukuan harian rental", "Rental", r.buku);
 
-    // USAHA — nota POS lunas (nota DP dihitung saat pelunasan), per hari kerja
+    // USAHA — nota POS lunas (nota DP dihitung saat pelunasan), per hari kerja (hanya uang nyata)
     gabungNota(sales, lunas).forEach((s) => {
       if (!terjualDalam(s, period.from, period.to)) return;
-      u.pos += s.total;
+      const kas = arusKasNota(s);
+      const day = tanggalPenjualan(s);
+      if (kas.kasMasuk > 0) {
+        u.pos += kas.kasMasuk;
+        tambah(day, "um", kas.kasMasuk);
+      }
       u.nota++;
-      tambah(tanggalPenjualan(s), "um", s.total);
-      // Tukar tambah: barang pembeli dibayar dengan potongan nota = belanja stok di hari nota
-      const tt = nilaiTukarNota(s);
-      if (tt > 0) {
-        u.stok += tt;
-        tambah(tanggalPenjualan(s), "uk", tt);
-        keluarKe("USAHA|Barang tukar tambah", "Barang tukar tambah", LABEL_BISNIS.USAHA, tt);
+      // Hanya catat uang keluar bila nilai tukar tambah melebihi total belanja sehingga URBAN menambah tunai ke pembeli
+      if (kas.kasKeluar > 0) {
+        u.stok += kas.kasKeluar;
+        tambah(day, "uk", kas.kasKeluar);
+        keluarKe("USAHA|Selisih tukar tambah", "Selisih tukar tambah (kas keluar)", LABEL_BISNIS.USAHA, kas.kasKeluar);
       }
     });
     if (u.pos) masukKe("USAHA|pos", "Penjualan POS", `Usaha · ${u.nota} nota`, u.pos);
@@ -323,8 +327,8 @@ export default function AnalitikKeseluruhan(props: Props) {
           </div>
 
           <Footnote className="pt-1">
-            Rental = pembukuan harian + transaksi owner bertanda Rental. Usaha = nota POS (tanpa nota batal) + transaksi owner bertanda Usaha, termasuk belanja stok dari Input › Atur Stok.
-            {d.u.stok > 0 && " Belanja stok tercatat sebagai uang keluar saat dibeli, walau barangnya masih ada di toko."}
+            Rental = pembukuan harian + transaksi owner bertanda Rental. Usaha = uang masuk nyata dari nota POS (tanpa nota batal &amp; potongan tukar tambah) + transaksi owner bertanda Usaha, termasuk belanja stok dari Input › Atur Stok.
+            {d.u.stok > 0 && " Belanja stok tercatat sebagai uang keluar saat dibeli tunai/transfer, walau barangnya masih ada di toko."}
           </Footnote>
         </>
       )}

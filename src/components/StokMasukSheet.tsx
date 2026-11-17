@@ -116,7 +116,7 @@ const StokMasukSheet: React.FC<{
             ))}
           </Card>
           <p className="px-1 text-caption leading-snug text-label-2">
-            Barang dari <b className="font-semibold text-label">tukar tambah</b>. Nilainya sudah tercatat di nota sebagai belanja stok, jadi tidak ada pengeluaran terpisah. Jumlahnya mengikuti nota — membatalkan nota menarik barang ini dari stok.
+            Barang dari <b className="font-semibold text-label">tukar tambah</b> (bukan pembelian tunai, jadi tidak dicatat sebagai pengeluaran kas). Harga modal menjadi HPP saat barang ini terjual nanti. Jumlahnya mengikuti nota — membatalkan nota menarik barang ini dari stok.
           </p>
         </div>
       ) : (
