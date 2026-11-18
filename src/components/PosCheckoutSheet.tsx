@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { X, CheckCircle2, Download, Printer, Share2, AlertTriangle, Package, Loader2, MessageCircle, PlusCircle, Link2Off, Handshake, Pencil, RotateCcw, Clock, ArrowLeftRight } from "lucide-react";
+import { X, CheckCircle2, Download, Printer, Share2, AlertTriangle, Package, Loader2, MessageCircle, PlusCircle, Link2Off, Handshake, Pencil, RotateCcw, Clock, ArrowLeftRight, Gift } from "lucide-react";
 import logoBlack from "../assets/urban-logo-black.png";
 import { Button, Card, Eyebrow, Notice, Pill, Sheet } from "../ui";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
-import { adaTukarTambah, bayarNota, commitPosSale, dpSudahDiSaldoNota, infoNego, nilaiTukarNota, isBonus, Kondisi, negoSatuan, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, sisaBayar, StokRef, updateDpSudahDiSaldoPos } from "../lib/posSales";
+import { adaTukarTambah, bayarNota, commitPosSale, dpSudahDiSaldoNota, infoNego, nilaiTukarNota, isBonus, Kondisi, kondisiProduk, negoSatuan, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, sisaBayar, StokRef, updateDpSudahDiSaldoPos } from "../lib/posSales";
+import { alokasiBonusPsFifo, type PsBonusBatch } from "../lib/psBonusFifo";
 import { UploadTransferProof } from "./TableEditor";
 import { barangTukarTambah, barisPembayaran, belumDibayar, belumLunas, statusTegas, buildNotaPdf, fmtTanggalNota, isNotaSewa, judulNota, KETENTUAN_DP, kotakSyarat, labelPembeli, notaFileName, preloadNotaAssets, printNotaThermal, STORE, teksPembayaran, teksPenutup, teksStatusBayar } from "../lib/posReceipt";
 import { rupiah } from "../lib/format";
@@ -323,6 +324,10 @@ type Props = {
     discountAmount: number;
     total: number;
   };
+  /** Antrean FIFO batch PS Baru -> stik bonus otomatis per unit */
+  psBonusBatches?: PsBonusBatch[];
+  /** Daftar produk etalase untuk menyelesaikan stokRef terbaru produk stik bonus */
+  bonusProducts?: { id: string; name: string; stokRef?: StokRef | null; kondisi?: Kondisi; subcategory?: string }[];
 };
 
 /** Tanggal (YYYY-MM-DD) n hari dari sekarang. */
@@ -339,11 +344,12 @@ const ribuan = (s: string) => {
 };
 
 const PosCheckoutSheet: React.FC<Props> = ({
-  open, onClose, lines, subtotal, discountPercent, discountAmount, total, metode, setMetode, kasirNama, categories, data, onCompleted, hitungDiskon, dipesan,
+  open, onClose, lines, subtotal, discountPercent, discountAmount, total, metode, setMetode, kasirNama, categories, data, onCompleted, hitungDiskon, dipesan, psBonusBatches, bonusProducts,
 }) => {
   const [pembeli, setPembeli] = useState("");
   const [pembeliWa, setPembeliWa] = useState("");
   const [variant, setVariant] = useState<Record<string, string>>({});
+  const [bonusVariants, setBonusVariants] = useState<Record<string, string[]>>({});
   const [bukti, setBukti] = useState("");
   const [saving, setSaving] = useState<"" | "pdf" | "thermal" | "none">("");
   const [error, setError] = useState("");
@@ -366,7 +372,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
   useEffect(() => { if (open) preloadNotaAssets(); }, [open]);
 
   const reset = () => {
-    setPembeli(""); setPembeliWa(""); setVariant({}); setBukti(""); setError(""); setSale(null); setSaving(""); actions.setMsg("");
+    setPembeli(""); setPembeliWa(""); setVariant({}); setBonusVariants({}); setBukti(""); setError(""); setSale(null); setSaving(""); actions.setMsg("");
     setHargaNego({}); setEditHarga(null); setDraftHarga("");
     setCaraBayar("LUNAS"); setDpStr(""); setAdaDpLama(false); setDpLamaStr(""); setJatuhTempo(tanggalNanti(JATUH_TEMPO_BAWAAN));
     setTukar([]); setUbahTukar(null);
@@ -431,11 +437,71 @@ const PosCheckoutSheet: React.FC<Props> = ({
       }),
     [lines, variant]
   );
+
+  const bonusAloc = useMemo(
+    () =>
+      alokasiBonusPsFifo(
+        resolved.map(({ line: l, ref }) => ({
+          id: l.id,
+          nama: l.name,
+          kategori: l.category,
+          subkategori: l.subcategory || null,
+          kondisi: l.kondisi || null,
+          harga: typeof hargaNego[l.id] === "number" ? hargaNego[l.id] : l.price,
+          hargaNormal: l.price,
+          qty: l.quantity,
+          stokRef: ref,
+        })),
+        psBonusBatches || []
+      ),
+    [resolved, hargaNego, psBonusBatches]
+  );
+
+  const bonusResolved = useMemo(
+    () =>
+      bonusAloc.slots.map((slot) => {
+        const live = bonusProducts?.find((p) => p.id === slot.bonusStik.produkId);
+        const rawRef = live && live.stokRef !== undefined ? live.stokRef : slot.bonusStik.stokRef;
+        const pilih = rawRef?.item === PILIH_SAAT_CHECKOUT ? rawRef.kategori : null;
+        if (!pilih) {
+          return {
+            slot,
+            rawRef,
+            pilih: null as string | null,
+            picks: [] as string[],
+            slices: [{ qty: slot.totalStikQty, ref: rawRef, variantName: "" }],
+            ready: true,
+          };
+        }
+        const saved = bonusVariants[slot.key] || [];
+        const picks = Array.from({ length: slot.totalStikQty }, (_, i) => saved[i] || "");
+        const ready = picks.every(Boolean);
+        const counts = new Map<string, number>();
+        picks.forEach((v) => {
+          if (v) counts.set(v, (counts.get(v) || 0) + 1);
+        });
+        const slices = Array.from(counts.entries()).map(([v, qty]) => ({
+          qty,
+          ref: { kategori: pilih, item: v } as StokRef,
+          variantName: v,
+        }));
+        return { slot, rawRef, pilih, picks, slices, ready };
+      }),
+    [bonusAloc.slots, bonusProducts, bonusVariants]
+  );
+
   const needByKey = useMemo(() => {
     const m = new Map<string, number>();
     resolved.forEach((x) => { if (x.ref) m.set(kunciStok(x.ref), (m.get(kunciStok(x.ref)) || 0) + x.line.quantity); });
+    bonusResolved.forEach((b) => {
+      b.slices.forEach((s) => {
+        if (s.ref && s.ref.item !== PILIH_SAAT_CHECKOUT) {
+          m.set(kunciStok(s.ref), (m.get(kunciStok(s.ref)) || 0) + s.qty);
+        }
+      });
+    });
     return m;
-  }, [resolved]);
+  }, [resolved, bonusResolved]);
   // Barang ada di master tapi belum pernah diisi stoknya = 0; null = barang sudah tidak ada di master
   const sisaOf = (r: StokRef): number | null => {
     const v = data?.[r.kategori]?.[r.item];
@@ -443,6 +509,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
     return categories.some((c) => c.kategori === r.kategori && c.items.includes(r.item)) ? 0 : null;
   };
   const belumPilih = resolved.filter((x) => x.pilih && !x.ref);
+  const belumPilihBonus = bonusResolved.find((b) => !b.ready);
   const jumlahBarang = lines.reduce((s, l) => s + l.quantity, 0);
   const isDp = caraBayar === "DP";
   // Tukar tambah hanya untuk nota lunas yang menjual barang
@@ -463,6 +530,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
   const simpan = async (mode: "pdf" | "thermal" | "none") => {
     if (saving || !lines.length) return;
     if (belumPilih.length) { setError(`Pilih varian stok untuk "${belumPilih[0].line.name}".`); return; }
+    if (belumPilihBonus) { setError(`Pilih warna stik bonus untuk "${belumPilihBonus.slot.parentNama}".`); return; }
     if (butuhBukti) { setError("Upload foto bukti transfer dulu."); return; }
     if (editHarga) { setError("Selesaikan ubah harga dulu (ketuk OK)."); return; }
     if (dpLamaSalah) { setError(`DP lama tidak boleh lebih dari ${rupiah(bayar)} (atau Rp 0 jika aktif).`); return; }
@@ -470,9 +538,10 @@ const PosCheckoutSheet: React.FC<Props> = ({
     if (jatuhTempoSalah) { setError("Pilih tanggal jatuh tempo pelunasan (hari ini atau sesudahnya)."); return; }
     setSaving(mode);
     setError("");
-    const items: PosItem[] = resolved.map(({ line: l, ref }) => {
+    const items: PosItem[] = [];
+    resolved.forEach(({ line: l, ref }, idx) => {
       const h = hargaAkhir(l);
-      return {
+      items.push({
         id: l.id,
         nama: l.name,
         kategori: l.category,
@@ -484,8 +553,32 @@ const PosCheckoutSheet: React.FC<Props> = ({
         qty: l.quantity,
         subtotal: h * l.quantity,
         stokRef: ref,
-      };
+      });
+      bonusResolved
+        .filter((b) => b.slot.parentIndex === idx)
+        .forEach(({ slot, slices }) => {
+          const stikProd = bonusProducts?.find((p) => p.id === slot.bonusStik.produkId);
+          slices.forEach((sl) => {
+            const namaBonus = sl.variantName ? `${slot.bonusStik.produkNama} · ${sl.variantName}` : slot.bonusStik.produkNama;
+            items.push({
+              id: slot.bonusStik.produkId,
+              nama: namaBonus,
+              kategori: "JUALAN",
+              subkategori: "Stik",
+              kondisi: stikProd?.kondisi || (sl.ref ? kondisiProduk({ name: namaBonus, stokRef: sl.ref }) : "BARU"),
+              platform: null,
+              harga: 0,
+              qty: sl.qty,
+              subtotal: 0,
+              stokRef: sl.ref,
+              bonusUntukProdukId: l.id,
+              bonusUntukNama: l.name,
+              bonusDariBatchId: slot.batchId,
+            });
+          });
+        });
     });
+    const expectedBonusSlotKeys = bonusAloc.slots.map((sl) => `${sl.key}:${sl.totalStikQty}`);
     let s: PosSale;
     try {
       s = await commitPosSale({
@@ -501,7 +594,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
         diskon: hitung.discountAmount,
         total: hitung.total,
         ...(!isDp && nominalDpLama > 0 ? { dpSudahDiSaldo: nominalDpLama } : {}),
-      }, isDp ? { dp: { jumlah: nominalDp, jatuhTempo } } : adaTukar ? { tukarTambah: tukar.map(({ key, ...t }) => t) } : {});
+      }, isDp ? { dp: { jumlah: nominalDp, jatuhTempo } } : adaTukar ? { tukarTambah: tukar.map(({ key, ...t }) => t), expectedBonusSlotKeys } : { expectedBonusSlotKeys });
     } catch (e: any) {
       setError("Transaksi gagal disimpan: " + (e?.message || e) + ". Stok tidak berubah, coba lagi.");
       setSaving("");
@@ -899,7 +992,8 @@ const PosCheckoutSheet: React.FC<Props> = ({
                 <Package className="w-4 h-4 text-label-3" />
               </div>
               <div className="divide-y divide-sep">
-                {resolved.map(({ line: l, ref, pilih }) => {
+                {resolved.map(({ line: l, ref, pilih }, idx) => {
+                  const rowBonuses = bonusResolved.filter((b) => b.slot.parentIndex === idx);
                   const sisa = ref ? sisaOf(ref) : null;
                   const need = ref ? needByKey.get(kunciStok(ref)) || 0 : 0;
                   const dip = ref ? dipesanLain(ref) : 0;
@@ -1044,6 +1138,104 @@ const PosCheckoutSheet: React.FC<Props> = ({
                           Belum terhubung ke stok — stok tidak berkurang
                         </div>
                       )}
+                      {rowBonuses.map(({ slot, pilih: pilihBonus, picks, slices }) => {
+                        const bonusItems = pilihBonus ? categories.find((c) => c.kategori === pilihBonus)?.items || [] : [];
+                        return (
+                          <div key={slot.key} className="mt-2.5 rounded-field bg-tint/[0.07] dark:bg-tint/15 ring-1 ring-tint/20 px-3 py-2.5 space-y-2">
+                            <div className="flex items-start justify-between gap-2 text-caption">
+                              <span className="inline-flex items-center gap-1.5 font-semibold text-label min-w-0">
+                                <Gift className="w-3.5 h-3.5 text-tint shrink-0" />
+                                <span className="truncate">Bonus {slot.totalStikQty}× {slot.bonusStik.produkNama}</span>
+                              </span>
+                              <span className="shrink-0 font-bold text-tint">BONUS · Rp 0</span>
+                            </div>
+
+                            {pilihBonus && (
+                              <div className="space-y-1.5">
+                                {picks.map((val, pIdx) => (
+                                  <div key={pIdx} className="flex items-center gap-1.5">
+                                    <select
+                                      value={val}
+                                      onChange={(e) => {
+                                        const nextVal = e.target.value;
+                                        setBonusVariants((m) => {
+                                          const arr = Array.from({ length: slot.totalStikQty }, (_, i) => m[slot.key]?.[i] || "");
+                                          arr[pIdx] = nextVal;
+                                          return { ...m, [slot.key]: arr };
+                                        });
+                                        setError("");
+                                      }}
+                                      className={`flex-1 min-w-0 h-10 px-3 rounded-field text-[15px] sm:text-footnote font-semibold focus:outline-none focus:ring-2 focus:ring-tint/35 ${
+                                        val
+                                          ? "bg-surface text-label border border-sep"
+                                          : "bg-warning/10 dark:bg-warning/15 text-warning ring-1 ring-warning/40"
+                                      }`}
+                                    >
+                                      <option value="">
+                                        {slot.totalStikQty > 1 ? `Stik bonus #${pIdx + 1}` : "Pilih warna stik bonus"}…
+                                      </option>
+                                      {bonusItems.map((it) => {
+                                        const n = data?.[pilihBonus]?.[it]?.jumlah;
+                                        return (
+                                          <option key={it} value={it}>
+                                            {it}{typeof n === "number" ? ` — sisa ${n}` : ""}
+                                          </option>
+                                        );
+                                      })}
+                                    </select>
+                                    {pIdx > 0 && picks[0] && val !== picks[0] && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setBonusVariants((m) => {
+                                            const arr = Array.from({ length: slot.totalStikQty }, (_, i) => m[slot.key]?.[i] || "");
+                                            arr[pIdx] = picks[0];
+                                            return { ...m, [slot.key]: arr };
+                                          });
+                                          setError("");
+                                        }}
+                                        className="h-10 px-2.5 rounded-field bg-surface border border-sep text-caption font-semibold text-tint shrink-0 active:opacity-75"
+                                      >
+                                        Sama ({picks[0]})
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            <div className="flex flex-wrap gap-1.5">
+                              {slices.map((sl, sIdx) => {
+                                if (!sl.ref || sl.ref.item === PILIH_SAAT_CHECKOUT) return null;
+                                const bSisa = sisaOf(sl.ref);
+                                if (bSisa === null || !data?.[sl.ref.kategori]?.[sl.ref.item]) {
+                                  return (
+                                    <Pill key={sIdx} tone="neutral" icon={<Package />}>
+                                      Stok {sl.ref.item} belum dihitung
+                                    </Pill>
+                                  );
+                                }
+                                const bNeed = needByKey.get(kunciStok(sl.ref)) || sl.qty;
+                                const bDip = dipesanLain(sl.ref);
+                                const bSesudah = bSisa - bDip - bNeed;
+                                return (
+                                  <Pill
+                                    key={sIdx}
+                                    tone={bSesudah < 0 ? "negative" : bSesudah === 0 || isDp ? "warning" : "positive"}
+                                    icon={bSesudah < 0 ? <AlertTriangle /> : isDp ? <Clock /> : <Package />}
+                                  >
+                                    {bSesudah < 0
+                                      ? `Stok ${sl.ref.item} ${bSisa}${bDip ? `, ${bDip} dipesan` : ""}, butuh ${bNeed}`
+                                      : isDp
+                                        ? `Dipesan · stok ${sl.ref.item} tetap ${bSisa}`
+                                        : `Stok ${sl.ref.item}: ${bSisa} → ${bSisa - bNeed}${bSesudah === 0 ? " (habis)" : ""}`}
+                                  </Pill>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}

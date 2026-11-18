@@ -127,9 +127,11 @@ export default function AnalitikUsaha(props: FilterProps) {
         const cl = catLabel(it);
         const c = byCat.get(cl) || { omzet: 0, qty: 0 };
         c.omzet += it.subtotal; c.qty += it.qty; byCat.set(cl, c);
-        const pn = it.kategori === "ISI GAME" && it.platform ? `${it.nama} (${it.platform})` : it.kategori === "JUALAN" ? String(it.nama || "").toUpperCase() : it.nama;
-        const p = byProduct.get(pn) || { nama: pn, kategori: cl, qty: 0, omzet: 0 };
-        p.qty += it.qty; p.omzet += it.subtotal; byProduct.set(pn, p);
+        if (!it.bonusUntukProdukId) {
+          const pn = it.kategori === "ISI GAME" && it.platform ? `${it.nama} (${it.platform})` : it.kategori === "JUALAN" ? String(it.nama || "").toUpperCase() : it.nama;
+          const p = byProduct.get(pn) || { nama: pn, kategori: cl, qty: 0, omzet: 0 };
+          p.qty += it.qty; p.omzet += it.subtotal; byProduct.set(pn, p);
+        }
         if (it.stokRef) {
           const rk = kunciStok(it.stokRef);
           const x = soldStok.get(rk) || { ref: it.stokRef, qty: 0 };
@@ -203,7 +205,7 @@ export default function AnalitikUsaha(props: FilterProps) {
         const itemDenganModalEfektif = hItem.subtotalDenganModal + deltaTukar;
         denganModal += itemDenganModalEfektif;
         hpp += hItem.hpp;
-        const key = String(it.nama || "").toUpperCase();
+        const key = String(it.bonusUntukNama || it.nama || "").toUpperCase();
         perProduk.set(key, (perProduk.get(key) || 0) + itemDenganModalEfektif - hItem.hpp);
         perKondisi[kd].laba += itemDenganModalEfektif - hItem.hpp;
       });

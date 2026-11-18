@@ -7,11 +7,12 @@ import { getMinStok, pulihkanStokJualanDariRiwayat, removeJualanItem, statusOf, 
 import { Kondisi, kondisiProduk, kondisiStok, PILIH_SAAT_CHECKOUT, produkSubKategori, stokBeririsan, StokRef, SubKategoriJualan, syncProdukKeStok } from "../lib/posSales";
 import KondisiSwitch from "./KondisiSwitch";
 import {
-  hapusBarangJualan, KATEGORI_PENGELUARAN_STOK, koreksiJumlahStok, kurangiStokMasukSalahInput, ModalMap, pratinjauOtomatis, ProdukJualan, rencanaKurangiStokMasuk,
-  simpanBarangJualan, StokMasuk, uploadFotoProduk, useModalProduk, useProdukJualan, useSemuaStokMasuk, useStokMasuk,
+  bersihkanProdukBonusLama, hapusBarangJualan, KATEGORI_PENGELUARAN_STOK, koreksiJumlahStok, kurangiStokMasukSalahInput, ModalMap, pratinjauOtomatis, ProdukJualan, PsBonusBatch, rencanaKurangiStokMasuk,
+  simpanBarangJualan, sinkronBackfillPsBonusFifo, StokMasuk, uploadFotoProduk, useModalProduk, useProdukJualan, usePsBonusFifo, useSemuaStokMasuk, useStokMasuk,
 } from "../lib/barangJualan";
 import { hitungNilaiStokBatch, ringkasanModalAktifProduk } from "../lib/akuntansiUsaha";
-import StokMasukSheet, { digits, fmtDigits } from "./StokMasukSheet";
+import { isUnitPsBaruRef } from "../lib/psBonusFifo";
+import StokMasukSheet, { BonusStikPicker, buildStikOpsi, digits, fmtDigits, resolveBonusStikSpec } from "./StokMasukSheet";
 import { refAda, StokRefSelect } from "./StokRefSelect";
 import { rupiah } from "../lib/format";
 import { TukarTambah, useTukarTambah } from "../lib/tukarTambah";
@@ -79,7 +80,8 @@ export default function InputStokJualan() {
   // Halaman Baru / Seken: semua ringkasan & daftar mengikuti kondisi terpilih
   const products = useMemo(() => semuaProduk.filter((p) => kondisiProduk(p) === kondisi), [semuaProduk, kondisi]);
   const { map: modalMap } = useModalProduk();
-  const { list: stokMasukList } = useSemuaStokMasuk();
+  const { list: stokMasukList, loading: loadingMasuk } = useSemuaStokMasuk();
+  const { batches: psBonusBatches, loaded: fifoLoaded } = usePsBonusFifo();
   const { stokState, stokLoaded, masterLoaded, masterCategories } = useStokData();
   const minMap = useMinStok();
   const cats: StokKategori[] = Array.isArray(masterCategories?.jualan) ? masterCategories.jualan : [];
@@ -122,6 +124,33 @@ export default function InputStokJualan() {
       .then((r) => { if (r.linked || r.created) setSyncInfo(r); })
       .catch((e) => console.warn("Sinkron produk ke stok gagal:", e));
   }, [loaded, masterLoaded, semuaProduk]);
+
+  // Bersihkan produk "stik bonus Rp 0" lama dari katalog tanpa menyentuh stok fisik & riwayat nota
+  const bonusCleanupTried = useRef(false);
+  useEffect(() => {
+    if (!loaded || bonusCleanupTried.current) return;
+    if (!semuaProduk.some((p) => p.category === "JUALAN" && !(Number(p.price) > 0))) return;
+    bonusCleanupTried.current = true;
+    bersihkanProdukBonusLama(semuaProduk)
+      .then((n) => {
+        if (n > 0) showToast(`${n} produk bonus Rp 0 lama dibersihkan (stok & nota tetap utuh)`);
+      })
+      .catch((e) => console.warn("Bersihkan produk bonus Rp 0 gagal:", e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, semuaProduk]);
+
+  // Seed batch PS Baru lama di stok_masuk yang belum tercatat ke data/ps_bonus_fifo
+  const lastBackfillSig = useRef("");
+  useEffect(() => {
+    if (loadingMasuk || !stokLoaded || !fifoLoaded) return;
+    const existingIds = new Set(psBonusBatches.map((b) => b.id));
+    const missing = stokMasukList.filter((r) => r.qty > 0 && isUnitPsBaruRef(r) && !existingIds.has(r.id));
+    if (!missing.length) return;
+    const sig = missing.map((m) => `${m.id}:${m.qty}`).sort().join("|");
+    if (sig === lastBackfillSig.current) return;
+    lastBackfillSig.current = sig;
+    sinkronBackfillPsBonusFifo(stokMasukList, data).catch((e) => console.warn("Backfill PS bonus FIFO gagal:", e));
+  }, [loadingMasuk, stokLoaded, fifoLoaded, stokMasukList, psBonusBatches, data]);
 
   const modalOf = (id: string) => modalMap[id]?.hargaModal ?? null;
 
@@ -211,10 +240,8 @@ export default function InputStokJualan() {
         <div className="flex-1 min-w-0">
           <div className="text-subhead font-semibold text-label leading-snug line-clamp-2">{p.name}</div>
           <div className="text-footnote text-label-2 mt-0.5 flex flex-wrap gap-x-1.5 tabular-nums">
-            {!p.price ? <span className="font-bold text-tint">BONUS · Rp 0</span> : <span>{rupiah(p.price)}</span>}
-            {!p.price ? (
-              m !== null ? <span>· biaya {rupiah(m)}</span> : <span className="text-warning">· modal belum diisi</span>
-            ) : m !== null ? (
+            <span>{rupiah(p.price)}</span>
+            {m !== null ? (
               <>
                 <span>· modal {batchN ? `rata ` : ""}{rupiah(m)}{batchN ? ` (${batchN} batch)` : ""}</span>
                 <span className={untung! >= 0 ? "text-positive" : "text-negative"}>· {untung! >= 0 ? "+" : ""}{p.price > 0 ? Math.round((untung! / p.price) * 100) : 0}%</span>
@@ -476,6 +503,7 @@ export default function InputStokJualan() {
           init={editor}
           products={semuaProduk}
           modalMap={modalMap}
+          psBonusBatches={psBonusBatches}
           cats={cats}
           data={data}
           minMap={minMap}
@@ -515,12 +543,13 @@ const BarangJualanSheet: React.FC<{
   init: EditorInit;
   products: ProdukJualan[];
   modalMap: ModalMap;
+  psBonusBatches: PsBonusBatch[];
   cats: StokKategori[];
   data: Data;
   minMap: Record<string, Record<string, number>>;
   onClose: () => void;
   onDone: (msg: string) => void;
-}> = ({ init, products, modalMap, cats, data, minMap, onClose, onDone }) => {
+}> = ({ init, products, modalMap, psBonusBatches, cats, data, minMap, onClose, onDone }) => {
   const p = init.produk;
   const modalAwal = p ? modalMap[p.id]?.hargaModal ?? null : null;
   const [nama, setNama] = useState(p?.name || init.nama || "");
@@ -538,6 +567,8 @@ const BarangJualanSheet: React.FC<{
   const [tanggal, setTanggal] = useState(toLocalYmd());
   const [catat, setCatat] = useState(true);
   const [varian, setVarian] = useState("");
+  const [bonusQty, setBonusQty] = useState(0);
+  const [bonusStikId, setBonusStikId] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirmHapusOpen, setConfirmHapusOpen] = useState(false);
   const [err, setErr] = useState("");
@@ -553,13 +584,14 @@ const BarangJualanSheet: React.FC<{
   useEffect(() => () => { if (foto && fotoPreview.startsWith("blob:")) URL.revokeObjectURL(fotoPreview); }, [foto, fotoPreview]);
 
   const jualN = Number(jual || 0);
-  // Rp 0 = barang bonus / paket (mis. stik bonus pembelian PS): gratis di nota, stok tetap berkurang
-  const bonus = jual !== "" && jualN === 0;
   const modalN = modal === "" ? null : Number(modal);
   const untung = modalN !== null && jualN > 0 ? jualN - modalN : null;
   const modalMasukN = modalMasuk === "" ? modalN || 0 : Number(modalMasuk);
   const preview = useMemo(() => (ref === undefined ? pratinjauOtomatis(nama, sub, kondisiB, cats) : null), [ref, nama, sub, kondisiB, cats]);
   const efektif = ref === undefined ? preview?.ref || null : ref;
+  const isPsBaru = sub === "Unit PS" && kondisiB === "BARU";
+  const stikList = useMemo(() => buildStikOpsi(products, cats, data), [products, cats, data]);
+  const bonusSpec = isPsBaru && qty > 0 ? resolveBonusStikSpec(bonusQty, bonusStikId, stikList) : null;
   const sv = stokView(efektif, cats, data, minMap);
   const varianList = efektif?.item === PILIH_SAAT_CHECKOUT ? cats.find((c) => c.kategori === efektif.kategori)?.items || [] : [];
   // Produk lain yang menghitung barang stok yang sama (termasuk lewat "pilih varian saat checkout")
@@ -623,9 +655,10 @@ const BarangJualanSheet: React.FC<{
   const simpan = async () => {
     setErr("");
     if (!nama.trim()) return setErr("Nama barang wajib diisi.");
-    if (jual === "") return setErr("Harga jual wajib diisi. Untuk barang bonus paket, nyalakan “Barang bonus”.");
+    if (jual === "" || !(jualN > 0)) return setErr("Harga jual wajib lebih dari Rp 0.");
     if (qty > 0 && varianList.length && !varian) return setErr("Pilih varian untuk stok masuk.");
     if (qty > 0 && ref === null) return setErr("Barang tidak dihubungkan ke stok, jadi stok masuk tidak bisa dicatat.");
+    if (qty > 0 && isPsBaru && bonusQty > 0 && !bonusSpec) return setErr("Pilih stik di etalase untuk bonus paket PS Baru.");
     setSaving(true);
     try {
       const imageUrl = foto ? await uploadFotoProduk(foto) : p?.imageUrl || "";
@@ -636,7 +669,9 @@ const BarangJualanSheet: React.FC<{
         products,
         modalAwal,
         jumlah,
-        qty > 0 ? { qty, modalSatuan: modalMasukN, tanggal, catatPengeluaran: catat, varian: varian || undefined } : undefined
+        qty > 0
+          ? { qty, modalSatuan: modalMasukN, tanggal, catatPengeluaran: catat, varian: varian || undefined, bonusStik: isPsBaru ? bonusSpec : undefined }
+          : undefined
       );
       onDone(
         `${p ? "Perubahan disimpan" : "Barang ditambahkan"}${r.dibuat ? " · stok baru dibuat" : ""}${qty > 0 ? ` · stok +${qty}${catat && modalMasukN > 0 ? " · pengeluaran dicatat" : ""}` : ""}`
@@ -740,26 +775,13 @@ const BarangJualanSheet: React.FC<{
           {/* Harga */}
           <Card>
             <div className="space-y-3">
-              {/* Barang bonus / paket (Rp 0) */}
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setJual(bonus ? "" : "0")}>
-                  <div className="text-subhead font-semibold text-label">Barang bonus</div>
-                  <div className="text-caption text-label-2 leading-snug">Rp 0 di kasir &amp; nota, mis. stik bonus pembelian PS. Stok tetap berkurang.</div>
-                </div>
-                <Toggle on={bonus} onChange={(on) => setJual(on ? "0" : "")} label="Barang bonus" />
-              </div>
-              <div className="h-px bg-sep" />
               <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
                 <div>
                   <span className={label}>Harga jual</span>
-                  {bonus ? (
-                    <div className="h-11 px-3.5 rounded-field bg-tint/10 flex items-center text-subhead font-bold tracking-wide text-tint">BONUS · Rp 0</div>
-                  ) : (
-                    <div className="relative">
-                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-subhead text-label-3">Rp</span>
-                      <input inputMode="numeric" value={fmtDigits(jual)} onChange={(e) => setJual(digits(e.target.value))} placeholder="0" className={`${field} pl-10 tabular-nums`} />
-                    </div>
-                  )}
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-subhead text-label-3">Rp</span>
+                    <input inputMode="numeric" value={fmtDigits(jual)} onChange={(e) => setJual(digits(e.target.value))} placeholder="0" className={`${field} pl-10 tabular-nums`} />
+                  </div>
                 </div>
                 <div>
                   <span className={label}>Harga modal</span>
@@ -774,12 +796,6 @@ const BarangJualanSheet: React.FC<{
                   <span>{untung >= 0 ? "Untung per barang" : "Rugi per barang"}</span>
                   <span className="font-semibold tabular-nums">{rupiah(Math.abs(untung))} · {Math.round((untung / jualN) * 100)}%</span>
                 </div>
-              ) : bonus ? (
-                <Footnote className="px-0.5 leading-snug">
-                  {modalN !== null && modalN > 0
-                    ? <>Biaya bonus <b className="text-label">{rupiah(modalN)}</b> per barang ikut dihitung sebagai modal, jadi laba penjualan PS di Analitik Usaha tetap akurat.</>
-                    : <>Isi harga modal stik supaya biaya bonus ikut mengurangi laba di Analitik Usaha.</>}
-                </Footnote>
               ) : (
                 <Footnote className="px-0.5">Isi harga modal supaya laba &amp; margin terhitung di Analitik Usaha. Harga modal tidak tampil di kasir.</Footnote>
               )}
@@ -959,6 +975,16 @@ const BarangJualanSheet: React.FC<{
                       </div>
                       <Toggle on={catat} onChange={setCatat} label="Catat ke pengeluaran" />
                     </div>
+                    {isPsBaru && (
+                      <BonusStikPicker
+                        qty={bonusQty}
+                        onQtyChange={setBonusQty}
+                        stikId={bonusStikId}
+                        onStikChange={setBonusStikId}
+                        stikList={stikList}
+                        suggestion={riwayatMasuk.find((x) => x.bonusStik && x.bonusStik.qty > 0)?.bonusStik || null}
+                      />
+                    )}
                   </div>
                 )}
               </div>
@@ -986,6 +1012,7 @@ const BarangJualanSheet: React.FC<{
                 {(semuaRiwayat ? riwayatMasuk : riwayatMasuk.slice(0, 5)).map((r) => {
                   const [y, m, d] = r.tanggal.split("-").map(Number);
                   const tgl = y ? new Date(y, m - 1, d) : new Date(r.ts);
+                  const fifoRec = psBonusBatches.find((b) => b.id === r.id);
                   return (
                     <button key={r.id} type="button" onClick={() => setEditMasuk(r)} className="w-full flex items-center gap-3 py-2.5 text-left active:opacity-70">
                       <div className="w-11 shrink-0 rounded-control bg-surface-2 border border-sep py-1.5 text-center leading-none">
@@ -999,6 +1026,14 @@ const BarangJualanSheet: React.FC<{
                           {r.catatPengeluaran ? " · masuk pengeluaran" : ""}
                           {r.sumber === "TUKAR_TAMBAH" ? ` · tukar tambah ${r.noNota || ""}` : ""}
                         </div>
+                        {(r.bonusStik?.qty || (isUnitPsBaruRef(r) && fifoRec)) && (
+                          <div className={`text-caption2 truncate ${r.bonusStik?.qty ? "text-tint font-medium" : "text-label-3"}`}>
+                            {r.bonusStik && r.bonusStik.qty > 0
+                              ? `Bonus ${r.bonusStik.qty}× ${r.bonusStik.produkNama}`
+                              : "Tanpa bonus stik"}
+                            {fifoRec ? ` · sisa batch ${fifoRec.rem}/${fifoRec.qtyAwal}` : ""}
+                          </div>
+                        )}
                         {r.produkId !== p.id && (
                           <div className="text-caption2 text-warning truncate">
                             dari {r.produkNama || "produk lain"}{products.some((x) => x.id === r.produkId) ? "" : " · produk sudah dihapus"}

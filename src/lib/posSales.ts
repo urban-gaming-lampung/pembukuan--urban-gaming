@@ -15,6 +15,7 @@ import { applyMasterChanges, kunciStok, prepareStokWrites, removeJualanItem, wri
 import { sinkronNotaDiam } from "./posPembukuan";
 import { tanggalHariKerja } from "./dateLocal";
 import { pad, rupiah } from "./format";
+import { alokasiBonusPsFifo, kembalikanBatchFifo, type PsBonusBatch, type PsBonusBatchUsed, type PsBonusFifoDoc } from "./psBonusFifo";
 
 export type StokRef = { kategori: string; item: string }; // item "*" = pilih saat checkout
 export const PILIH_SAAT_CHECKOUT = "*";
@@ -36,6 +37,10 @@ export type PosItem = {
   subtotal: number;
   stokRef?: StokRef | null; // barang stok yang benar-benar dikurangi
   kondisi?: Kondisi; // khusus JUALAN: BARU / SEKEN
+  /** Jika item ini adalah stik bonus otomatis dari unit PS Baru */
+  bonusUntukProdukId?: string;
+  bonusUntukNama?: string;
+  bonusDariBatchId?: string;
 };
 
 export type PosSale = {
@@ -117,6 +122,8 @@ export type PosSale = {
   dpSudahDiSaldo?: number;
   /** True bila kas tunai nota POS ini sudah ditandai masuk/ditransfer ke rekening pemilik. */
   tunaiSudahSetor?: boolean;
+  /** Batch `ps_bonus_fifo` yang dikonsumsi saat nota lunas (untuk pengembalian saat batal/hapus). */
+  psBatchUsed?: PsBonusBatchUsed[];
 };
 
 /** Satu barang tukar tambah di nota (detail lengkap + foto ada di koleksi tukar_tambah/{id}). */
@@ -258,7 +265,8 @@ export const negoSatuan = (it: Pick<PosItem, "harga" | "hargaNormal">) =>
   typeof it.hargaNormal === "number" && it.hargaNormal !== it.harga ? it.hargaNormal - it.harga : 0;
 
 /** Barang bonus / paket: harga jualnya memang Rp 0 (mis. stik bonus pembelian PS), bukan hasil nego. Stok tetap berkurang. */
-export const isBonus = (it: Pick<PosItem, "harga" | "hargaNormal">) => !(Number(it.harga) > 0) && negoSatuan(it) === 0;
+export const isBonus = (it: Pick<PosItem, "harga" | "hargaNormal" | "bonusUntukProdukId">) =>
+  !!it.bonusUntukProdukId || (!(Number(it.harga) > 0) && negoSatuan(it) === 0);
 
 /** Ringkasan nego satu nota (dihitung dari barang, aman untuk nota lama tanpa field `nego`). */
 export function infoNego(s: Pick<PosSale, "items" | "subtotal" | "negoOleh" | "kasirNama" | "kasir">) {
@@ -498,7 +506,7 @@ export const stokRefLabel = (r?: StokRef | null) =>
 export async function commitPosSale(
   input: Omit<PosSale, "noNota" | "ts" | "tanggal" | "kasir" | "stokKurang">,
   /** Bayar DP: stok belum berkurang sampai pelunasan. */
-  opsi: { dp?: { jumlah: number; jatuhTempo: string }; tukarTambah?: TukarTambahInput[] } = {}
+  opsi: { dp?: { jumlah: number; jatuhTempo: string }; tukarTambah?: TukarTambahInput[]; expectedBonusSlotKeys?: string[] } = {}
 ): Promise<PosSale> {
   const kasir = auth.currentUser?.email || "admin";
   const now = Date.now();
@@ -508,6 +516,7 @@ export async function commitPosSale(
   const dayKey = `${String(d.getFullYear()).slice(2)}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
   const counterRef = doc(db, "data", "pos_counter");
   const stokRef = doc(db, "data", "stok");
+  const fifoRef = doc(db, "data", "ps_bonus_fifo");
   const saleRef = doc(collection(db, "pos_transaksi"));
 
   for (const it of input.items) {
@@ -547,13 +556,31 @@ export async function commitPosSale(
   }
 
   const hasil = await runTransaction(db, async (tx) => {
-    const [cSnap, sSnap] = await Promise.all([tx.get(counterRef), tx.get(stokRef)]);
+    const [cSnap, sSnap, fSnap] = await Promise.all([tx.get(counterRef), tx.get(stokRef), !dp ? tx.get(fifoRef) : Promise.resolve(null)]);
     const c = cSnap.data() || {};
     const seq = c.day === dayKey ? (Number(c.seq) || 0) + 1 : 1;
     const noNota = `URB-${dayKey}-${pad(seq, 3)}`;
 
     const jualan = (sSnap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
     const { stokKurang, changes } = potongStok(input.items, jualan);
+
+    let psBatchUsed: PsBonusBatchUsed[] = [];
+    if (!dp) {
+      const fifoData = fSnap && fSnap.exists() ? (fSnap.data() as PsBonusFifoDoc) : null;
+      const fifoBatches = Array.isArray(fifoData?.batches) ? fifoData!.batches : [];
+      const aloc = alokasiBonusPsFifo(input.items, fifoBatches);
+      if (opsi.expectedBonusSlotKeys) {
+        const liveKeys = aloc.slots.map((s) => `${s.key}:${s.totalStikQty}`).join("|");
+        const expKeys = opsi.expectedBonusSlotKeys.join("|");
+        if (liveKeys !== expKeys) {
+          throw new Error("Batch stok PS baru saja berubah (mungkin baru terjual kasir lain). Cek ulang detail bonus di checkout.");
+        }
+      }
+      if (aloc.batchUsed.length > 0) {
+        psBatchUsed = aloc.batchUsed;
+        tx.set(fifoRef, { batches: aloc.nextBatches }, { merge: true });
+      }
+    }
 
     // Nota DP: stok baru dipotong saat pelunasan (barang berstatus "dipesan")
     const w = dp ? { patch: {}, logs: [] as any[] } : prepareStokWrites(jualan, changes, "terjual", `Nota ${noNota}${input.pembeli ? ` · ${input.pembeli}` : ""}`, kasir, now);
@@ -570,6 +597,7 @@ export async function commitPosSale(
           ...restInput, noNota, ts: now, tanggal, kasir, stokKurang,
           ...(dpSudahDiSaldo > 0 ? { dpSudahDiSaldo } : {}),
           ...(tt.length ? { tukarTambah: tt.map((x, i) => ({ id: ttRefs[i].id, nama: x.nama, qty: x.qty, nilai: x.nilai, sn: x.sn })), nilaiTukar } : {}),
+          ...(psBatchUsed.length ? { psBatchUsed } : {}),
         };
     const stokSesudah = sisaSesudah(w.logs as any[]);
     tx.set(counterRef, { day: dayKey, seq }, { merge: true });
@@ -635,9 +663,10 @@ export async function deletePosSale(sale: PosSale): Promise<void> {
   const now = Date.now();
   const saleRef = doc(db, "pos_transaksi", sale.id);
   const stokDoc = doc(db, "data", "stok");
+  const fifoRef = doc(db, "data", "ps_bonus_fifo");
   const logs = await getDocs(query(collection(db, "stok_log"), where("noNota", "==", sale.noNota)));
   await runTransaction(db, async (tx) => {
-    const [sSnap, stSnap] = await Promise.all([tx.get(saleRef), tx.get(stokDoc)]);
+    const [sSnap, stSnap, fSnap] = await Promise.all([tx.get(saleRef), tx.get(stokDoc), tx.get(fifoRef)]);
     if (!sSnap.exists()) throw new Error("Nota sudah tidak ada.");
     const cur = sSnap.data() as PosSale;
     const tt = await bacaTukarTambahNota(tx, cur);
@@ -646,6 +675,16 @@ export async function deletePosSale(sale: PosSale): Promise<void> {
     const changes = !cur.batal && cur.status !== "DP" ? restoreChanges(cur) : [];
     // Barang tukar tambah yang sudah masuk stok ikut ditarik
     if (!cur.batal) changes.push(...tarikTukarTambah(tt, jualan));
+    if (!cur.batal && cur.status !== "DP" && fSnap.exists()) {
+      const fifoData = fSnap.data() as PsBonusFifoDoc;
+      const usedList = cur.psBatchUsed || fifoData.usedBySale?.[sale.id!];
+      if (usedList?.length || fifoData.usedBySale?.[sale.id!]) {
+        const nextBatches = kembalikanBatchFifo(fifoData.batches || [], usedList);
+        const nextUsed = { ...(fifoData.usedBySale || {}) };
+        delete nextUsed[sale.id!];
+        tx.set(fifoRef, { batches: nextBatches, usedBySale: nextUsed }, { merge: true });
+      }
+    }
     if (changes.length) {
       const w = prepareStokWrites(jualan, changes, "koreksi", "", oleh, now);
       if (Object.keys(w.patch).length) tx.set(stokDoc, { jualan: w.patch }, { merge: true }); // tanpa log: riwayatnya ikut dihapus
@@ -670,14 +709,25 @@ export async function cancelPosSale(sale: PosSale, alasan = ""): Promise<void> {
   const now = Date.now();
   const saleRef = doc(db, "pos_transaksi", sale.id);
   const stokDoc = doc(db, "data", "stok");
+  const fifoRef = doc(db, "data", "ps_bonus_fifo");
   await runTransaction(db, async (tx) => {
-    const [sSnap, stSnap] = await Promise.all([tx.get(saleRef), tx.get(stokDoc)]);
+    const [sSnap, stSnap, fSnap] = await Promise.all([tx.get(saleRef), tx.get(stokDoc), tx.get(fifoRef)]);
     if (!sSnap.exists()) throw new Error("Nota tidak ditemukan.");
     const cur = sSnap.data() as PosSale;
     if (cur.batal) throw new Error("Nota ini sudah dibatalkan.");
     if (cur.status === "DP") throw new Error("Nota DP dibatalkan lewat pilihan Dibatalkan pembeli / Dibatalkan URBAN.");
     const tt = await bacaTukarTambahNota(tx, cur);
     const jualan = (stSnap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
+    if (fSnap.exists()) {
+      const fifoData = fSnap.data() as PsBonusFifoDoc;
+      const usedList = cur.psBatchUsed || fifoData.usedBySale?.[sale.id!];
+      if (usedList?.length || fifoData.usedBySale?.[sale.id!]) {
+        const nextBatches = kembalikanBatchFifo(fifoData.batches || [], usedList);
+        const nextUsed = { ...(fifoData.usedBySale || {}) };
+        delete nextUsed[sale.id!];
+        tx.set(fifoRef, { batches: nextBatches, usedBySale: nextUsed }, { merge: true });
+      }
+    }
     // Barang terjual kembali ke stok; barang tukar tambah yang sudah masuk stok ditarik keluar
     const changes = [...restoreChanges(cur), ...tarikTukarTambah(tt, jualan)];
     const w = prepareStokWrites(jualan, changes, "koreksi", `Batal nota ${cur.noNota}${alasan.trim() ? ` · ${alasan.trim()}` : ""}`, oleh, now);
@@ -705,8 +755,9 @@ export async function lunasiNotaDp(
   const now = Date.now();
   const saleRef = doc(db, "pos_transaksi", sale.id);
   const stokDoc = doc(db, "data", "stok");
+  const fifoRef = doc(db, "data", "ps_bonus_fifo");
   return runTransaction(db, async (tx) => {
-    const [sSnap, stSnap] = await Promise.all([tx.get(saleRef), tx.get(stokDoc)]);
+    const [sSnap, stSnap, fSnap] = await Promise.all([tx.get(saleRef), tx.get(stokDoc), tx.get(fifoRef)]);
     if (!sSnap.exists()) throw new Error("Nota tidak ditemukan.");
     const cur = { ...(sSnap.data() as PosSale), id: sale.id };
     if (cur.batal || cur.status !== "DP") throw new Error("Nota ini sudah tidak menunggu pelunasan.");
@@ -715,6 +766,14 @@ export async function lunasiNotaDp(
     const { stokKurang, changes } = potongStok(cur.items, jualan);
     const w = prepareStokWrites(jualan, changes, "terjual", `Pelunasan nota ${cur.noNota}${cur.pembeli ? ` · ${cur.pembeli}` : ""}`, oleh, now);
     writeStokInTx(tx, w, { noNota: cur.noNota });
+    if (fSnap.exists()) {
+      const fifoData = fSnap.data() as PsBonusFifoDoc;
+      const aloc = alokasiBonusPsFifo(cur.items || [], Array.isArray(fifoData?.batches) ? fifoData.batches : []);
+      if (aloc.batchUsed.length > 0) {
+        const nextUsed = { ...(fifoData?.usedBySale || {}), [sale.id!]: aloc.batchUsed };
+        tx.set(fifoRef, { batches: aloc.nextBatches, usedBySale: nextUsed }, { merge: true });
+      }
+    }
     const pembayaran: PembayaranNota[] = [
       ...(cur.pembayaran || []),
       { jenis: "PELUNASAN", jumlah: sisa, metode: bayar.metode, ...(bayar.buktiTransfer ? { buktiTransfer: bayar.buktiTransfer } : {}), ts: now, oleh, olehNama: bayar.kasirNama },

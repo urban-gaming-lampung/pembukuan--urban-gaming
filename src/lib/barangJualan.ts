@@ -18,6 +18,21 @@ import {
   hapusStokOtomatisBilaYatim, Kondisi, namaJualan, PILIH_SAAT_CHECKOUT, planStokSync, ProdukSync, StokRef, stokBaruUntukProduk, SubKategoriJualan,
 } from "./posSales";
 import { ringkasanModalAktifProduk } from "./akuntansiUsaha";
+import {
+  BonusStikSpec, isUnitPsBaruRef, PsBonusBatch, PsBonusFifoDoc, rancangBackfillPsBonusFifo,
+  sesuaikanHapusPsBonusBatch, tambahPsBonusBatch, ubahPsBonusBatch,
+} from "./psBonusFifo";
+
+export type { BonusStikSpec, PsBonusBatch };
+export const cleanBonusStik = (b?: BonusStikSpec | null): BonusStikSpec | null =>
+  b && b.qty > 0 && b.produkId
+    ? {
+        produkId: String(b.produkId),
+        produkNama: String(b.produkNama || ""),
+        qty: Math.max(1, Math.round(Number(b.qty) || 1)),
+        stokRef: b.stokRef ? { kategori: String(b.stokRef.kategori), item: String(b.stokRef.item) } : null,
+      }
+    : null;
 
 export const KATEGORI_PENGELUARAN_STOK = "Stok Jualan";
 
@@ -134,7 +149,7 @@ export type BarangJualanInput = {
   /** undefined = Otomatis, null = tidak dihubungkan */
   stokRef: StokRef | null | undefined;
 };
-export type StokMasukInput = { qty: number; modalSatuan: number; tanggal: string; catatPengeluaran: boolean; varian?: string };
+export type StokMasukInput = { qty: number; modalSatuan: number; tanggal: string; catatPengeluaran: boolean; varian?: string; bonusStik?: BonusStikSpec | null };
 
 /**
  * Simpan barang jualan + hubungan stok + harga modal + (opsional) stok masuk & pengeluaran.
@@ -150,8 +165,8 @@ export async function simpanBarangJualan(
 ): Promise<{ id: string; stokRef: StokRef | null; dibuat: boolean }> {
   const nama = namaJualan(input.nama);
   if (!nama) throw new Error("Nama barang wajib diisi.");
-  // Rp 0 = barang bonus / paket (mis. stik bonus pembelian PS): gratis di nota, stok tetap berkurang
-  if (!Number.isFinite(input.hargaJual) || input.hargaJual < 0) throw new Error("Harga jual tidak valid.");
+  // Produk Rp 0 bonus dihapus — bonus stik dikelola otomatis lewat batch PS Baru
+  if (!Number.isFinite(input.hargaJual) || input.hargaJual <= 0) throw new Error("Harga jual wajib lebih dari Rp 0.");
   const lain = semuaProduk.filter((p) => p.id !== input.id);
 
   // 1. Tentukan barang stok
@@ -227,6 +242,7 @@ export async function simpanBarangJualan(
       modalSatuan: Math.round(masuk.modalSatuan || 0),
       tanggal: masuk.tanggal,
       catatPengeluaran: masuk.catatPengeluaran,
+      bonusStik: cleanBonusStik(masuk.bonusStik),
     });
   }
 
@@ -263,10 +279,12 @@ export type StokMasuk = {
   sumber?: "TUKAR_TAMBAH";
   noNota?: string;
   tukarTambahId?: string;
+  /** Khusus unit PS Baru: stik bonus etalase per 1 unit PS pada batch ini. */
+  bonusStik?: BonusStikSpec | null;
 };
 /** Catatan stok masuk dari tukar tambah — dikelola lewat notanya, bukan diedit manual. */
 export const dariTukarTambah = (r: Pick<StokMasuk, "sumber">) => r.sumber === "TUKAR_TAMBAH";
-export type StokMasukData = { qty: number; modalSatuan: number; tanggal: string; catatPengeluaran: boolean };
+export type StokMasukData = { qty: number; modalSatuan: number; tanggal: string; catatPengeluaran: boolean; bonusStik?: BonusStikSpec | null };
 
 const tglLabel = (ymd: string) => {
   const [y, m, d] = ymd.split("-").map(Number);
@@ -294,6 +312,53 @@ export function useSemuaStokMasuk(enabled = true): { list: StokMasuk[]; loading:
     );
   }, [enabled]);
   return { list, loading };
+}
+
+/** Antrean FIFO batch PS Baru & bonus stiknya (dibaca POS kasir maupun Owner tanpa membuka harga modal). */
+export function usePsBonusFifo(enabled = true): { batches: PsBonusBatch[]; loaded: boolean } {
+  const [batches, setBatches] = useState<PsBonusBatch[]>([]);
+  const [loaded, setLoaded] = useState(!enabled);
+  useEffect(() => {
+    if (!enabled) { setBatches([]); setLoaded(true); return; }
+    return onSnapshot(
+      doc(db, "data", "ps_bonus_fifo"),
+      (s) => {
+        const d = s.data() as PsBonusFifoDoc | undefined;
+        setBatches(Array.isArray(d?.batches) ? d!.batches : []);
+        setLoaded(true);
+      },
+      (e) => { console.warn("ps_bonus_fifo:", e); setLoaded(true); }
+    );
+  }, [enabled]);
+  return { batches, loaded };
+}
+
+/** Seed batch `stok_masuk` PS Baru lama yang belum tercatat ke `data/ps_bonus_fifo`. */
+export async function sinkronBackfillPsBonusFifo(
+  stokMasukList: StokMasuk[],
+  jualanData: Record<string, Record<string, { jumlah?: number }>> | undefined
+): Promise<boolean> {
+  const psMasuk = stokMasukList.filter((b) => b.qty > 0 && isUnitPsBaruRef(b));
+  if (!psMasuk.length) return false;
+  const fifoRef = doc(db, "data", "ps_bonus_fifo");
+  let changed = false;
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(fifoRef);
+    const existing = snap.exists() && Array.isArray((snap.data() as any)?.batches) ? ((snap.data() as any).batches as PsBonusBatch[]) : [];
+    const plan = rancangBackfillPsBonusFifo(psMasuk, jualanData, existing);
+    if (!plan.changed) return;
+    changed = true;
+    tx.set(fifoRef, { batches: plan.nextBatches }, { merge: true });
+  });
+  return changed;
+}
+
+/** Hapus produk jualan Rp 0 (bonus manual lama) dari katalog tanpa menghapus stok fisik maupun riwayat nota lama. */
+export async function bersihkanProdukBonusLama(products: ProdukJualan[]): Promise<number> {
+  const targets = products.filter((p) => p.category === "JUALAN" && !(Number(p.price) > 0));
+  if (!targets.length) return 0;
+  await Promise.all(targets.map((p) => deleteDoc(doc(db, "products", p.id))));
+  return targets.length;
 }
 
 /**
@@ -408,14 +473,31 @@ export async function tambahStokMasuk(p: { id: string; nama: string }, target: S
   const oleh = auth.currentUser?.email || "owner";
   const now = Date.now();
   const stokDoc = doc(db, "data", "stok");
+  const fifoDoc = doc(db, "data", "ps_bonus_fifo");
   const masukRef = doc(collection(db, "stok_masuk"));
+  const bonusStik = cleanBonusStik(d.bonusStik);
+  const trackFifo = isUnitPsBaruRef(target) || !!bonusStik;
   const pakaiPengeluaran = d.catatPengeluaran && d.modalSatuan > 0;
   const expRef = pakaiPengeluaran ? doc(collection(db, "owner_expenses")) : null;
   await runTransaction(db, async (tx) => {
-    const s = await tx.get(stokDoc);
+    const [s, fSnap] = await Promise.all([tx.get(stokDoc), trackFifo ? tx.get(fifoDoc) : Promise.resolve(null)]);
     const jualan = (s.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
     const w = prepareStokWrites(jualan, [{ ...target, delta: d.qty }], "masuk", `${catatanStokMasuk(p.nama)}${d.modalSatuan > 0 ? ` · modal ${rupiah(d.modalSatuan)}/pcs` : ""}`, oleh, now);
     writeStokInTx(tx, w, { produkId: p.id, stokMasukId: masukRef.id });
+    if (trackFifo) {
+      const existing = fSnap && fSnap.exists() && Array.isArray((fSnap.data() as any)?.batches) ? ((fSnap.data() as any).batches as PsBonusBatch[]) : [];
+      const nextBatches = tambahPsBonusBatch(existing, {
+        id: masukRef.id,
+        produkId: p.id,
+        kategori: target.kategori,
+        item: target.item,
+        tanggal: d.tanggal,
+        ts: now,
+        qtyAwal: d.qty,
+        bonusStik,
+      });
+      tx.set(fifoDoc, { batches: nextBatches }, { merge: true });
+    }
     if (expRef) {
       tx.set(expRef, {
         nama: namaPengeluaran(p.nama, target.item, d.qty),
@@ -436,6 +518,7 @@ export async function tambahStokMasuk(p: { id: string; nama: string }, target: S
       produkId: p.id, produkNama: p.nama, kategori: target.kategori, item: target.item,
       qty: d.qty, modalSatuan: d.modalSatuan, tanggal: d.tanggal, catatPengeluaran: !!expRef,
       expenseId: expRef ? expRef.id : null, ts: now, oleh,
+      ...(bonusStik ? { bonusStik } : {}),
     });
   });
   await sinkronModalProdukDariStok(p.id).catch((e) => console.warn("sinkron modal:", e));
@@ -451,19 +534,42 @@ export async function ubahStokMasuk(rec: StokMasuk, d: StokMasukData, produkNama
   const oleh = auth.currentUser?.email || "owner";
   const now = Date.now();
   const stokDoc = doc(db, "data", "stok");
+  const fifoDoc = doc(db, "data", "ps_bonus_fifo");
   const recRef = doc(db, "stok_masuk", rec.id);
   const selisih = Math.round(d.qty) - rec.qty;
+  const bonusStik = cleanBonusStik(d.bonusStik);
   await runTransaction(db, async (tx) => {
-    const [s, r, e] = await Promise.all([
+    const [s, r, e, fSnap] = await Promise.all([
       tx.get(stokDoc),
       tx.get(recRef),
       rec.expenseId ? tx.get(doc(db, "owner_expenses", rec.expenseId)) : Promise.resolve(null),
+      tx.get(fifoDoc),
     ]);
     if (!r.exists()) throw new Error("Catatan stok masuk sudah tidak ada.");
+    const jualan = (s.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
     if (selisih !== 0 && ikutStok) {
-      const jualan = (s.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
       const w = prepareStokWrites(jualan, [{ kategori: rec.kategori, item: rec.item, delta: selisih }], "koreksi", `Edit stok masuk ${tglLabel(rec.tanggal)}: ${rec.qty} → ${d.qty}`, oleh, now);
       writeStokInTx(tx, w, { produkId: rec.produkId, stokMasukId: rec.id });
+    }
+    const existingBatches = fSnap.exists() && Array.isArray((fSnap.data() as any)?.batches) ? ((fSnap.data() as any).batches as PsBonusBatch[]) : [];
+    const curFisik = Math.max(0, Math.round(Number(jualan?.[rec.kategori]?.[rec.item]?.jumlah) || 0));
+    const fisikSesudah = selisih !== 0 && ikutStok ? Math.max(0, curFisik + selisih) : curFisik;
+    if (isUnitPsBaruRef(rec) || !!bonusStik || existingBatches.some((b) => b.id === rec.id)) {
+      const nextBatches = ubahPsBonusBatch(
+        existingBatches,
+        {
+          id: rec.id,
+          produkId: rec.produkId,
+          kategori: rec.kategori,
+          item: rec.item,
+          tanggal: d.tanggal,
+          ts: rec.ts,
+          qtyAwal: d.qty,
+          bonusStik,
+        },
+        fisikSesudah
+      );
+      tx.set(fifoDoc, { batches: nextBatches }, { merge: true });
     }
     const mau = d.catatPengeluaran && d.modalSatuan > 0;
     let expenseId: string | null = e && e.exists() ? rec.expenseId : null;
@@ -483,7 +589,10 @@ export async function ubahStokMasuk(rec: StokMasuk, d: StokMasukData, produkNama
       tx.delete(doc(db, "owner_expenses", expenseId));
       expenseId = null;
     }
-    tx.update(recRef, { qty: d.qty, modalSatuan: d.modalSatuan, tanggal: d.tanggal, catatPengeluaran: mau, expenseId, produkNama, updatedAt: now });
+    tx.update(recRef, {
+      qty: d.qty, modalSatuan: d.modalSatuan, tanggal: d.tanggal, catatPengeluaran: mau, expenseId, produkNama, updatedAt: now,
+      bonusStik: bonusStik ?? null,
+    });
   });
   await sinkronModalProdukDariStok(rec.produkId, rec.modalSatuan).catch((e) => console.warn("sinkron modal:", e));
   return { selisih: ikutStok ? selisih : 0 };
@@ -497,18 +606,24 @@ export async function hapusStokMasuk(rec: StokMasuk, ikutStok = true): Promise<v
   const oleh = auth.currentUser?.email || "owner";
   const now = Date.now();
   const stokDoc = doc(db, "data", "stok");
+  const fifoDoc = doc(db, "data", "ps_bonus_fifo");
   const recRef = doc(db, "stok_masuk", rec.id);
   await runTransaction(db, async (tx) => {
-    const [s, r, e] = await Promise.all([
+    const [s, r, e, fSnap] = await Promise.all([
       tx.get(stokDoc),
       tx.get(recRef),
       rec.expenseId ? tx.get(doc(db, "owner_expenses", rec.expenseId)) : Promise.resolve(null),
+      tx.get(fifoDoc),
     ]);
     if (!r.exists()) throw new Error("Catatan stok masuk sudah tidak ada.");
     if (ikutStok) {
       const jualan = (s.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
       const w = prepareStokWrites(jualan, [{ kategori: rec.kategori, item: rec.item, delta: -rec.qty }], "koreksi", `Hapus stok masuk ${tglLabel(rec.tanggal)} (+${rec.qty})`, oleh, now);
       writeStokInTx(tx, w, { produkId: rec.produkId, stokMasukId: rec.id });
+    }
+    const existingBatches = fSnap.exists() && Array.isArray((fSnap.data() as any)?.batches) ? ((fSnap.data() as any).batches as PsBonusBatch[]) : [];
+    if (existingBatches.some((b) => b.id === rec.id)) {
+      tx.set(fifoDoc, { batches: sesuaikanHapusPsBonusBatch(existingBatches, rec.id, 0) }, { merge: true });
     }
     if (e && e.exists()) tx.delete(e.ref);
     tx.delete(recRef);
@@ -531,8 +646,9 @@ export async function kurangiStokMasukSalahInput(ref: StokRef, kurang: number, n
   const oleh = auth.currentUser?.email || "owner";
   const now = Date.now();
   const stokDoc = doc(db, "data", "stok");
+  const fifoDoc = doc(db, "data", "ps_bonus_fifo");
   await runTransaction(db, async (tx) => {
-    const s = await tx.get(stokDoc);
+    const [s, fSnap] = await Promise.all([tx.get(stokDoc), tx.get(fifoDoc)]);
     const cek = await Promise.all(
       rencana.langkah.map(async (l) => ({
         l,
@@ -546,7 +662,13 @@ export async function kurangiStokMasukSalahInput(ref: StokRef, kurang: number, n
     const jualan = (s.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
     const w = prepareStokWrites(jualan, [{ kategori: ref.kategori, item: ref.item, delta: -n }], "koreksi", `Salah input stok masuk · ${nama}`, oleh, now);
     writeStokInTx(tx, w);
+    let fifoBatches = fSnap.exists() && Array.isArray((fSnap.data() as any)?.batches) ? ((fSnap.data() as any).batches as PsBonusBatch[]) : [];
+    let fifoTouched = false;
     cek.forEach(({ l, r, e }) => {
+      if (fifoBatches.some((b) => b.id === l.rec.id)) {
+        fifoBatches = sesuaikanHapusPsBonusBatch(fifoBatches, l.rec.id, l.sisa);
+        fifoTouched = true;
+      }
       if (l.sisa <= 0) {
         if (e && e.exists()) tx.delete(e.ref);
         tx.delete(r.ref);
@@ -555,6 +677,7 @@ export async function kurangiStokMasukSalahInput(ref: StokRef, kurang: number, n
       tx.update(r.ref, { qty: l.sisa, updatedAt: now });
       if (e && e.exists()) tx.update(e.ref, { qty: l.sisa, harga: Math.round(l.sisa * (l.rec.modalSatuan || 0)), nama: namaPengeluaran(l.rec.produkNama, l.rec.item, l.sisa) });
     });
+    if (fifoTouched) tx.set(fifoDoc, { batches: fifoBatches }, { merge: true });
   });
   await Promise.all([...new Set(rencana.langkah.map((l) => l.rec.produkId).filter(Boolean))].map((pid) => sinkronModalProdukDariStok(pid).catch((e) => console.warn("sinkron modal:", e))));
   return { rupiah: rencana.rupiah };

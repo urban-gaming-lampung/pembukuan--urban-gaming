@@ -11,6 +11,8 @@ import PosCheckoutSheet from "./PosCheckoutSheet";
 import NotaDpSheet from "./NotaDpSheet";
 import { StokRefSelect } from "./StokRefSelect";
 import { dipesanDari, hapusStokOtomatisBilaYatim, hariKeJatuhTempo, Kondisi, kondisiProduk, PILIH_SAAT_CHECKOUT, StokRef, stokBaruUntukProduk, useNotaDp } from "../lib/posSales";
+import { usePsBonusFifo } from "../lib/barangJualan";
+import { alokasiBonusPsFifo } from "../lib/psBonusFifo";
 import KondisiSwitch from "./KondisiSwitch";
 import { getMinStok, renameJualanItem, statusOf, useMinStok, kunciStok } from "../lib/stokJualan";
 import { rupiah, formatRibuanInput } from "../lib/format";
@@ -128,7 +130,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   const [activeSub, setActiveSub] = useState<"JUALAN" | "RENTAL" | "SERVIS" | "ISI GAME">("JUALAN");
   const [activeJualanSub, setActiveJualanSub] = useState<"Unit PS" | "Stik" | "Hardisk" | "Aksesoris" | "BD">("Unit PS");
   const [activeKondisi, setActiveKondisi] = useState<Kondisi>("BARU");
-  const jualanSubCount = (k: Kondisi, sub: string) => products.filter((p) => p.category === "JUALAN" && kondisiProduk(p) === k && getSubCategory(p) === sub).length;
+  const jualanSubCount = (k: Kondisi, sub: string) => products.filter((p) => p.category === "JUALAN" && Number(p.price) > 0 && kondisiProduk(p) === k && getSubCategory(p) === sub).length;
   const [activeIsiGameSub, setActiveIsiGameSub] = useState<"PS3 CFW/HEN" | "PS4 HEN" | "PS5 HEN" | "Switch CFW" | "PC">("PS4 HEN");
   const [searchQuery, setSearchQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
@@ -203,6 +205,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
   // Nota DP (belum lunas): barangnya "dipesan" — stok belum berkurang
   const { list: notaDp } = useNotaDp();
+  const { batches: psBonusBatches } = usePsBonusFifo();
   const dipesan = useMemo(() => dipesanDari(notaDp), [notaDp]);
   const dpLewat = notaDp.filter((s) => (hariKeJatuhTempo(s.jatuhTempo) ?? 0) < 0).length;
   const [openDp, setOpenDp] = useState(false);
@@ -624,7 +627,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       return result.sort((a, b) => a.name.localeCompare(b.name, "id", { sensitivity: "base" }));
     }
 
-    let result = products.filter((p) => p.category === activeSub);
+    let result = products.filter((p) => p.category === activeSub && (p.category !== "JUALAN" || Number(p.price) > 0));
     const searching = searchQuery.trim() !== "";
     
     // Search query filter
@@ -644,8 +647,28 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
   const totalCartQty = cart.reduce((sum, item) => sum + item.quantity, 0);
 
+  const bonusDiKeranjang = useMemo(
+    () =>
+      alokasiBonusPsFifo(
+        cart.map((c) => ({
+          id: c.id,
+          nama: c.name,
+          kategori: c.category,
+          subkategori: c.category === "JUALAN" ? getSubCategory(c) : null,
+          kondisi: c.category === "JUALAN" ? kondisiProduk(c) : null,
+          harga: c.price,
+          qty: c.quantity,
+          stokRef: c.stokRef || null,
+        })),
+        psBonusBatches
+      ).slots,
+    [cart, psBonusBatches]
+  );
+
   const renderCartItems = (mobile: boolean) =>
-    cart.map((item) => (
+    cart.map((item, idx) => {
+      const bonusSlots = bonusDiKeranjang.filter((s) => s.parentIndex === idx);
+      return (
       <div
         key={item.id}
         className={`flex items-center justify-between rounded-tile apple-card ring-1 ring-edge animate-in fade-in duration-200 ${
@@ -665,6 +688,15 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             )}
             {rupiah(item.price)} x {item.quantity}
           </div>
+          {bonusSlots.length > 0 && (
+            <div className="mt-1 space-y-0.5">
+              {bonusSlots.map((bs) => (
+                <div key={bs.key} className="text-caption2 font-semibold text-tint truncate">
+                  + Bonus {bs.totalStikQty}× {bs.bonusStik.produkNama} (Rp 0)
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
@@ -698,7 +730,8 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
           </button>
         </div>
       </div>
-    ));
+      );
+    });
 
   const renderCartFooter = (withClearAction: boolean) => (
     <div className="space-y-3">
@@ -1635,6 +1668,14 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
         categories={stokCats}
         data={stokData}
         dipesan={dipesan}
+        psBonusBatches={psBonusBatches}
+        bonusProducts={products.map((p) => ({
+          id: p.id,
+          name: p.name,
+          stokRef: p.stokRef ?? null,
+          kondisi: p.category === "JUALAN" ? kondisiProduk(p) : undefined,
+          subcategory: p.category === "JUALAN" ? getSubCategory(p) : undefined,
+        }))}
         onCompleted={() => {
           setCart([]);
           setOpenMobileCart(false);
