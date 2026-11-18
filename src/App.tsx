@@ -1,4 +1,4 @@
-import { useMemo, Suspense, lazy } from "react";
+import { useMemo, useState, useEffect, Suspense, lazy } from "react";
 import Header, { getColorForEmail } from "./components/Header";
 import Input from "./components/Input";
 import RincianHarian from "./components/RincianHarian";
@@ -14,15 +14,15 @@ import Footer from "./components/Footer";
 import GeminiReportGenerator from "./components/GeminiReportGenerator";
 import Reminder from "./components/Reminder";
 import PdfExporter from "./components/PdfExporter";
-import Pengaturan from "./components/Pengaturan";
-import EditRincian from "./components/EditRincian";
 import { sewaItemHint } from "./lib/priceLists";
-import HalamanStok from "./components/HalamanStok";
-import PageOwner from "./components/PageOwner";
-import POSModal from "./components/POSModal";
-import GalleryModal from "./components/GalleryModal";
-import WidgetMonitoringStatus from "./components/WidgetMonitoringStatus";
-import WidgetMonitoringDevice from "./components/WidgetMonitoringDevice";
+const Pengaturan = lazy(() => import("./components/Pengaturan"));
+const EditRincian = lazy(() => import("./components/EditRincian"));
+const HalamanStok = lazy(() => import("./components/HalamanStok"));
+const PageOwner = lazy(() => import("./components/PageOwner"));
+const POSModal = lazy(() => import("./components/POSModal"));
+const GalleryModal = lazy(() => import("./components/GalleryModal"));
+const WidgetMonitoringStatus = lazy(() => import("./components/WidgetMonitoringStatus"));
+const WidgetMonitoringDevice = lazy(() => import("./components/WidgetMonitoringDevice"));
 import LiveCursors from "./components/LiveCursors";
 import Login from "./components/Login";
 import versionData from "./version.json";
@@ -213,6 +213,15 @@ export default function App() {
     handlePaymentVerifyNo,
     handlePaymentVerifyYes
   } = useAppController();
+  const [posMounted, setPosMounted] = useState(false);
+  useEffect(() => {
+    if (openPOS) setPosMounted(true);
+  }, [openPOS]);
+  const tabFallback = (
+    <div className="py-16 flex items-center justify-center">
+      <div className="w-8 h-8 border-[3px] border-tint border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
   // Saran isi cepat No. WA penyewa dari riwayat sewa (nama penyewa -> WA terakhir)
   const waPenyewaTerakhir = useMemo(() => petaWaPenyewa(history), [history]);
 
@@ -365,31 +374,33 @@ export default function App() {
           >
 
             {activeTab === "PAGE OWNER" && isSuperAdminOrOwner ? (
-              <PageOwner
-                totalHarian={totalHarian} totalJajanan={totalJajanan}
-                totalJasaAks={totalJasaAks} totalSewa={totalSewa}
-                totalCash={totalCash} 
-                totalTransfer={totalTransfer}
-                totalPengeluaran={totalPengeluaran}
-                pendapatanBersih={totalPemasukanHarian({ totalHarian, totalJajanan, totalJasaAks, totalSewa }) - totalPengeluaran}
-                history={history}
-                rowsSewa={rowsSewa}
-                activeDate={tanggal}
-                onVerifyActiveRental={handleVerifyReturn}
-                onPengingatSewa={handleCatatPengingat}
-                hargaItems={hargaSewa}
-                filterMode={filter}
-                setFilterMode={setFilter}
-                filterMonth={filterMonth}
-                setFilterMonth={setFilterMonth}
-                rangeStart={rangeStart}
-                setRangeStart={setRangeStart}
-                rangeEnd={rangeEnd}
-                setRangeEnd={setRangeEnd}
-                filteredHistory={filteredHistory}
-                isVerifyingPayment={!!paymentVerifyPrompt}
-                tampilJajanan={rincianVisibility.jajanan !== false}
-              />
+              <Suspense fallback={tabFallback}>
+                <PageOwner
+                  totalHarian={totalHarian} totalJajanan={totalJajanan}
+                  totalJasaAks={totalJasaAks} totalSewa={totalSewa}
+                  totalCash={totalCash} 
+                  totalTransfer={totalTransfer}
+                  totalPengeluaran={totalPengeluaran}
+                  pendapatanBersih={totalPemasukanHarian({ totalHarian, totalJajanan, totalJasaAks, totalSewa }) - totalPengeluaran}
+                  history={history}
+                  rowsSewa={rowsSewa}
+                  activeDate={tanggal}
+                  onVerifyActiveRental={handleVerifyReturn}
+                  onPengingatSewa={handleCatatPengingat}
+                  hargaItems={hargaSewa}
+                  filterMode={filter}
+                  setFilterMode={setFilter}
+                  filterMonth={filterMonth}
+                  setFilterMonth={setFilterMonth}
+                  rangeStart={rangeStart}
+                  setRangeStart={setRangeStart}
+                  rangeEnd={rangeEnd}
+                  setRangeEnd={setRangeEnd}
+                  filteredHistory={filteredHistory}
+                  isVerifyingPayment={!!paymentVerifyPrompt}
+                  tampilJajanan={rincianVisibility.jajanan !== false}
+                />
+              </Suspense>
             ) : activeTab === "MONITORING" && !isSuperAdminOrOwner ? (
               <div className="flex flex-col gap-4">
                 <SubTabs
@@ -401,25 +412,31 @@ export default function App() {
 
                 {adminMonitoringTab === "status" ? (
                   <div className="animate-in fade-in duration-200">
-                    <WidgetMonitoringStatus 
-                      history={history || []} 
-                      rowsSewa={rowsSewa} 
-                      activeDate={tanggal} 
-                      onVerifyActiveRental={handleVerifyReturn} 
-                      onPengingat={handleCatatPengingat}
-                      isOwner={isSuperAdminOrOwner} 
-                      hargaItems={hargaSewa}
-                      isVerifyingPayment={!!paymentVerifyPrompt}
-                    />
+                    <Suspense fallback={tabFallback}>
+                      <WidgetMonitoringStatus 
+                        history={history || []} 
+                        rowsSewa={rowsSewa} 
+                        activeDate={tanggal} 
+                        onVerifyActiveRental={handleVerifyReturn} 
+                        onPengingat={handleCatatPengingat}
+                        isOwner={isSuperAdminOrOwner} 
+                        hargaItems={hargaSewa}
+                        isVerifyingPayment={!!paymentVerifyPrompt}
+                      />
+                    </Suspense>
                   </div>
                 ) : (
                   <div className="animate-in fade-in duration-200">
-                    <WidgetMonitoringDevice isOwner={isSuperAdminOrOwner} />
+                    <Suspense fallback={tabFallback}>
+                      <WidgetMonitoringDevice isOwner={isSuperAdminOrOwner} />
+                    </Suspense>
                   </div>
                 )}
               </div>
             ) : activeTab === "UPDATE STOK" && !isSuperAdminOrOwner ? (
-              <HalamanStok isOwner={false} tampilJajanan={rincianVisibility.jajanan !== false} />
+              <Suspense fallback={tabFallback}>
+                <HalamanStok isOwner={false} tampilJajanan={rincianVisibility.jajanan !== false} />
+              </Suspense>
             ) : (
               <div className="space-y-5 sm:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out fill-mode-both">
                 <div id="section-input">
@@ -535,61 +552,77 @@ export default function App() {
             <Footer />
           </AppShell>
 
-          <EditRincian
-            isOpen={!!openEditRincian}
-            title={getTitle(openEditRincian)}
-            initialData={openEditRincian ? getPrices(openEditRincian) : []}
-            onClose={() => setOpenEditRincian(null)}
-            onSave={async (items, baseline) => { if (openEditRincian) await handleSavePrices(openEditRincian, items, baseline); }}
-            onResetDefault={() => openEditRincian && handleResetSpecificDefault(openEditRincian)}
-            getItemHint={openEditRincian === "sewa" ? sewaItemHint : undefined}
-          />
+          {!!openEditRincian && (
+            <Suspense fallback={null}>
+              <EditRincian
+                isOpen={!!openEditRincian}
+                title={getTitle(openEditRincian)}
+                initialData={openEditRincian ? getPrices(openEditRincian) : []}
+                onClose={() => setOpenEditRincian(null)}
+                onSave={async (items, baseline) => { if (openEditRincian) await handleSavePrices(openEditRincian, items, baseline); }}
+                onResetDefault={() => openEditRincian && handleResetSpecificDefault(openEditRincian)}
+                getItemHint={openEditRincian === "sewa" ? sewaItemHint : undefined}
+              />
+            </Suspense>
+          )}
 
           <input ref={restoreInputRef} type="file" accept="application/json" className="hidden" onChange={(e) => onPickRestoreFile(e.target.files?.[0] ?? null)} />
           
-          <Pengaturan
-            open={openSettings} onClose={() => setOpenSettings(false)}
-            isOwner={isSuperAdminOrOwner}
-            hargaHarian={hargaHarian} hargaJajanan={hargaJajanan} hargaJasaAks={hargaJasaAks} hargaSewa={hargaSewa}
-            ongkirConfig={ongkirConfig} setOngkirConfig={handleUpdateOngkirConfig}
-            absenConfig={absenConfig} setAbsenConfig={handleUpdateAbsenConfig}
-            themeMode={themeMode} onThemeChange={handleUpdateThemeMode}
-            tableMode={tableMode} onTableModeChange={handleUpdateTableMode}
-            kualitasGambar={kualitasGambar} onKualitasGambarChange={handleUpdateKualitasGambar}
-            onBackupData={doBackup} onRestoreData={() => restoreInputRef.current?.click()} 
-            onBackupDrive={handleBackupDrive} onRestoreDrive={handleRestoreDrive}
-            onExportCSV={exportCSV} onResetSetting={resetSetting}
-            onLogout={handleLogout}
-            onOpenEditHarian={() => setOpenEditRincian("harian")}
-            onOpenEditJajanan={() => setOpenEditRincian("jajanan")}
-            onOpenEditJasaAks={() => setOpenEditRincian("jasaAks")}
-            onOpenEditSewa={() => setOpenEditRincian("sewa")}
-            rincianVisibility={rincianVisibility}
-            onRincianVisibilityChange={handleUpdateRincianVisibility}
-            userEmail={user?.email}
-            userProfilePic={userProfilePic || undefined}
-            onProfilePicChange={handleProfilePicChange}
-            customBgDark={customBgDark || undefined}
-            onBgDarkChange={(url) => handleBgDarkChange(url)}
-            userProfileColor={userProfileColor}
-            onProfileColorChange={handleUpdateProfileColor}
-            history={history}
-          />
+          {openSettings && (
+            <Suspense fallback={null}>
+              <Pengaturan
+                open={openSettings} onClose={() => setOpenSettings(false)}
+                isOwner={isSuperAdminOrOwner}
+                hargaHarian={hargaHarian} hargaJajanan={hargaJajanan} hargaJasaAks={hargaJasaAks} hargaSewa={hargaSewa}
+                ongkirConfig={ongkirConfig} setOngkirConfig={handleUpdateOngkirConfig}
+                absenConfig={absenConfig} setAbsenConfig={handleUpdateAbsenConfig}
+                themeMode={themeMode} onThemeChange={handleUpdateThemeMode}
+                tableMode={tableMode} onTableModeChange={handleUpdateTableMode}
+                kualitasGambar={kualitasGambar} onKualitasGambarChange={handleUpdateKualitasGambar}
+                onBackupData={doBackup} onRestoreData={() => restoreInputRef.current?.click()} 
+                onBackupDrive={handleBackupDrive} onRestoreDrive={handleRestoreDrive}
+                onExportCSV={exportCSV} onResetSetting={resetSetting}
+                onLogout={handleLogout}
+                onOpenEditHarian={() => setOpenEditRincian("harian")}
+                onOpenEditJajanan={() => setOpenEditRincian("jajanan")}
+                onOpenEditJasaAks={() => setOpenEditRincian("jasaAks")}
+                onOpenEditSewa={() => setOpenEditRincian("sewa")}
+                rincianVisibility={rincianVisibility}
+                onRincianVisibilityChange={handleUpdateRincianVisibility}
+                userEmail={user?.email}
+                userProfilePic={userProfilePic || undefined}
+                onProfilePicChange={handleProfilePicChange}
+                customBgDark={customBgDark || undefined}
+                onBgDarkChange={(url) => handleBgDarkChange(url)}
+                userProfileColor={userProfileColor}
+                onProfileColorChange={handleUpdateProfileColor}
+                history={history}
+              />
+            </Suspense>
+          )}
 
-          <POSModal
-            open={openPOS}
-            onClose={() => setOpenPOS(false)}
-            isSuperAdminOrOwner={isSuperAdminOrOwner}
-            adminName={user?.email ? user.email.split('@')[0] : "Admin"}
-            catalogChanges={catalogChanges}
-          />
+          {posMounted && (
+            <Suspense fallback={null}>
+              <POSModal
+                open={openPOS}
+                onClose={() => setOpenPOS(false)}
+                isSuperAdminOrOwner={isSuperAdminOrOwner}
+                adminName={user?.email ? user.email.split('@')[0] : "Admin"}
+                catalogChanges={catalogChanges}
+              />
+            </Suspense>
+          )}
 
-          <GalleryModal
-            open={openGallery}
-            onClose={() => setOpenGallery(false)}
-            isSuperAdminOrOwner={isSuperAdminOrOwner}
-            adminName={user?.email ? user.email.split('@')[0] : "Super Admin"}
-          />
+          {openGallery && (
+            <Suspense fallback={null}>
+              <GalleryModal
+                open={openGallery}
+                onClose={() => setOpenGallery(false)}
+                isSuperAdminOrOwner={isSuperAdminOrOwner}
+                adminName={user?.email ? user.email.split('@')[0] : "Super Admin"}
+              />
+            </Suspense>
+          )}
 
           {/* === POPUPS: UDS APPLE HIG === */}
           <AlertDialog

@@ -7,6 +7,16 @@ export default defineConfig({
   base: process.env.VERCEL ? '/' : '/pembukuan--urban-gaming/',
   build: {
     outDir: process.env.VERCEL ? 'dist' : 'docs', // Output diarahkan ke docs
-    emptyOutDir: true, 
+    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage'],
+          charts: ['recharts'],
+          icons: ['lucide-react'],
+        },
+      },
+    },
   },
 })

@@ -44,7 +44,7 @@ export const IconBadge: React.FC<{
 
 /** Permukaan kartu dasar (iOS 27 Liquid Glass, sudut 26px, bezel kaca + specular highlight). */
 export const kartu =
-  "rounded-card apple-card ring-1 ring-edge shadow-card dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.09),0_14px_36px_rgba(0,0,0,0.42)]";
+  "rounded-card apple-card ring-1 ring-edge shadow-card dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.09),0_8px_24px_rgba(0,0,0,0.34)]";
 
 /** Permukaan tile nested kaca di dalam kartu (sudut 16px, selaras dengan tile Input). */
 export const tile =
@@ -52,7 +52,7 @@ export const tile =
 
 /** Variasi tile interaktif (hover lebih cerah + transisi halus). */
 export const tileInteractive =
-  "rounded-tile apple-tile apple-tile-interactive ring-1 ring-black/[0.04] dark:ring-white/[0.06] transition-all duration-200";
+  "rounded-tile apple-tile apple-tile-interactive ring-1 ring-black/[0.04] dark:ring-white/[0.06] transition-colors duration-150";
 
 /**
  * Kartu standar Apple.
@@ -95,7 +95,7 @@ export const Card: React.FC<{
   const isHero = variant === "hero";
   const hasHeader = !!(title || accessory);
   const surfaceCls = isTinted
-    ? cx("rounded-card backdrop-blur-2xl border border-white/55 dark:border-white/[0.13] shadow-card", AKSEN_TILE[resolved].bg)
+    ? cx("rounded-card md:backdrop-blur-lg border border-white/55 dark:border-white/[0.13] shadow-card", AKSEN_TILE[resolved].bg)
     : kartu;
 
   return (

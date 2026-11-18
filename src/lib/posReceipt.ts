@@ -3,7 +3,7 @@
  * Identitas toko mengikuti Design System "URBAN Gaming Lampung" (footer banner):
  * logo, WhatsApp, Instagram, alamat. Logo hitam = versi resmi untuk cetak satu warna.
  */
-import jsPDF from "jspdf";
+import type JsPDF from "jspdf";
 import logoBlackUrl from "../assets/urban-logo-black.png";
 import { adaTukarTambah, bayarNota, dpSudahDiSaldoNota, infoNego, isBonus, negoSatuan, nilaiTukarNota, pernahDp, sisaBayar, totalDibayar } from "./posSales";
 import type { PosSale } from "./posSales";
@@ -152,7 +152,7 @@ async function logoDataUrl(): Promise<{ url: string; ratio: number } | null> {
 
 const W = 80, M = 5, CW = W - M * 2;
 
-function drawNota(pdf: jsPDF, s: PosSale, logo: { url: string; ratio: number } | null): number {
+function drawNota(pdf: JsPDF, s: PosSale, logo: { url: string; ratio: number } | null): number {
   let y = 6;
   const center = (t: string, size: number, style: "normal" | "bold" = "normal", lh = size * 0.42) => {
     pdf.setFont("helvetica", style);
@@ -335,8 +335,8 @@ function drawNota(pdf: jsPDF, s: PosSale, logo: { url: string; ratio: number } |
   return y;
 }
 
-export async function buildNotaPdf(s: PosSale): Promise<jsPDF> {
-  const logo = await logoDataUrl();
+export async function buildNotaPdf(s: PosSale): Promise<JsPDF> {
+  const [{ default: jsPDF }, logo] = await Promise.all([import("jspdf"), logoDataUrl()]);
   const measure = new jsPDF({ unit: "mm", format: [W, 600] });
   const h = Math.ceil(drawNota(measure, s, logo));
   const pdf = new jsPDF({ unit: "mm", format: [W, Math.max(h, 120)] });

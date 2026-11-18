@@ -1,7 +1,6 @@
 import React, { forwardRef, useImperativeHandle, useRef, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
+import type JsPDF from "jspdf";
 import { 
   RowHarian, RowJajanan, RowJasaAks, RowSewa, HistoryItem 
 } from "../lib/types";
@@ -203,7 +202,8 @@ const PdfExporter = forwardRef<PdfExporterHandle, Props>(function PdfExporter({ 
      if (!el) return null;
 
      try {
-         const canvas = await html2canvas(el, {
+         const { default: html2canvas } = await import("html2canvas");
+    const canvas = await html2canvas(el, {
             scale,
             useCORS: true,
             logging: false, // Matikan log untuk performa
@@ -284,7 +284,11 @@ const PdfExporter = forwardRef<PdfExporterHandle, Props>(function PdfExporter({ 
     // Scroll ke atas agar html2canvas menangkap layout dengan benar
     window.scrollTo(0, 0);
 
-    let pdf: jsPDF | null = null;
+    const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+      import("jspdf"),
+      import("html2canvas"),
+    ]);
+    let pdf: JsPDF | null = null;
     let filename = `Laporan_URBAN_${data.tanggal}.pdf`;
 
     try {

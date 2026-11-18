@@ -261,14 +261,14 @@ export default function Header({
 
   // Floating frosted-glass panel
   const glassContainer = [
-    "mx-auto w-full max-w-6xl px-4 md:px-8 transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] will-change-transform",
+    "mx-auto w-full max-w-6xl px-4 md:px-8",
     scrolled ? "pt-[max(0.65rem,env(safe-area-inset-top))] sm:pt-4" : "pt-[max(1rem,env(safe-area-inset-top))] sm:pt-6",
   ].join(" ");
 
   const glassPanel = [
     "relative overflow-hidden apple-glass",
     "border border-[var(--ui-glass-border)] ring-1 ring-edge",
-    "transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] will-change-[padding,border-radius,box-shadow]",
+    "transition-colors duration-200",
     scrolled
       ? "rounded-card md:rounded-full p-3 sm:px-5 sm:py-2.5 shadow-float"
       : "rounded-card sm:rounded-[28px] p-4 sm:p-6 shadow-card",
@@ -286,7 +286,7 @@ export default function Header({
             <div className="flex items-start justify-between gap-2 w-full min-w-0">
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 <div
-                  className={`relative shrink-0 overflow-hidden rounded-full bg-fill shadow-inner flex items-center justify-center border border-white/40 dark:border-white/10 transition-all duration-300 ${
+                  className={`relative shrink-0 overflow-hidden rounded-full bg-fill shadow-inner flex items-center justify-center border border-white/40 dark:border-white/10 transition-transform duration-200 ${
                     scrolled ? "w-10 h-10" : "w-14 h-14"
                   }`}
                 >
@@ -299,14 +299,14 @@ export default function Header({
 
                 <div className="flex flex-col min-w-0 flex-1">
                   <h1
-                    className={`font-bold tracking-tight text-label truncate transition-all duration-300 ${
+                    className={`font-bold tracking-tight text-label truncate transition-colors duration-200 ${
                       scrolled ? "text-lg" : "text-xl"
                     }`}
                   >
                     Hi, {namaPendek}
                   </h1>
                   <span
-                    className={`text-caption sm:text-footnote font-normal text-label-2 truncate transition-all duration-300 ${
+                    className={`text-caption sm:text-footnote font-normal text-label-2 truncate transition-opacity duration-200 ${
                       scrolled ? "opacity-0 h-0 overflow-hidden" : "opacity-100 mt-0.5"
                     }`}
                   >
@@ -314,7 +314,7 @@ export default function Header({
                   </span>
 
                   <div
-                    className={`flex flex-wrap items-center gap-1.5 transition-all duration-300 ${
+                    className={`flex flex-wrap items-center gap-1.5 transition-opacity duration-200 ${
                       scrolled ? "opacity-0 h-0 overflow-hidden mt-0" : "opacity-100 h-auto mt-1.5"
                     }`}
                   >
@@ -367,14 +367,14 @@ export default function Header({
             <div className="flex items-center gap-3 min-w-0">
               <div className="min-w-0">
                 <h1
-                  className={`font-bold tracking-tight text-label truncate transition-all duration-300 ${
+                  className={`font-bold tracking-tight text-label truncate transition-colors duration-200 ${
                     scrolled ? "text-headline" : "text-title1"
                   }`}
                 >
                   {sectionTitle || "Pembukuan Digital"}
                 </h1>
                 <div
-                  className={`text-footnote text-label-2 truncate transition-all duration-300 ${
+                  className={`text-footnote text-label-2 truncate transition-opacity duration-200 ${
                     scrolled ? "opacity-0 h-0 overflow-hidden" : "opacity-100"
                   }`}
                 >
@@ -463,7 +463,7 @@ const ActionButton = ({
   className?: string;
 }) => {
   const base =
-    "group relative flex items-center gap-1.5 rounded-full transition-all duration-200 active:scale-[0.97] disabled:opacity-50 font-semibold select-none overflow-hidden whitespace-nowrap";
+    "group relative flex items-center gap-1.5 rounded-full transition-[transform,opacity,background-color] duration-150 active:scale-[0.97] disabled:opacity-50 font-semibold select-none overflow-hidden whitespace-nowrap";
   const size = compact ? "px-3.5 py-1.5 text-footnote" : "px-4 py-2.5 min-h-[42px] text-subhead";
   const variants: Record<ButtonVariant, string> = {
     primary: "bg-action text-action-label hover:opacity-90 shadow-card",
@@ -499,7 +499,7 @@ const IconButton = ({
     onClick={onClick}
     title={title}
     aria-label={title}
-    className={`relative rounded-full text-label-2 hover:text-label hover:bg-fill active:scale-95 border border-transparent hover:border-sep transition-all ${
+    className={`relative rounded-full text-label-2 hover:text-label hover:bg-fill active:scale-95 border border-transparent hover:border-sep transition-[transform,color,background-color] duration-150 ${
       compact ? "p-2" : "p-2 sm:p-2.5"
     }`}
   >

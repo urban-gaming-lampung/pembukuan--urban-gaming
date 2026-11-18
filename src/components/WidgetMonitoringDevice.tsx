@@ -8,10 +8,7 @@ import {
 } from "lucide-react";
 import { doc, setDoc, onSnapshot, deleteDoc, updateDoc } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
-import html2canvas from "html2canvas";
-import { Html5Qrcode } from "html5-qrcode";
 import { Button, Card, EmptyState, Eyebrow, IconBadge, MOTION, Pill, Sheet, SubTabs, TextAreaField } from "../ui";
-import jsPDF from "jspdf";
 
 import useStokData, { RegisteredDevice, DeviceType } from "../hooks/useStokData";
 import { toLocalYmd } from "../lib/dateLocal";
@@ -105,7 +102,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
   // Scanner state
   const [showScanner, setShowScanner] = useState(false);
   const [scanningError, setScanningError] = useState<string | null>(null);
-  const qrCodeRef = useRef<Html5Qrcode | null>(null);
+  const qrCodeRef = useRef<any>(null);
   const [isTorchSupported, setIsTorchSupported] = useState(false);
   const [isTorchOn, setIsTorchOn] = useState(false);
 
@@ -305,7 +302,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
           return;
         }
 
-        const html5QrCode = new Html5Qrcode("qr-reader-view");
+        const { Html5Qrcode } = await import("html5-qrcode");
+      const html5QrCode = new Html5Qrcode("qr-reader-view");
         qrCodeRef.current = html5QrCode;
         
         const config = { 
@@ -343,7 +341,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
             checkTorchSupport();
           } catch (secondErr) {
             console.warn("Failed front camera, trying default available camera...", secondErr);
-            const devices = await Html5Qrcode.getCameras();
+            const { Html5Qrcode } = await import("html5-qrcode");
+      const devices = await Html5Qrcode.getCameras();
             if (devices && devices.length > 0) {
               await html5QrCode.start(
                 devices[0].id,
@@ -445,9 +444,10 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
   };
 
   // Upload scan file fallback
-  const handleUploadScanFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadScanFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
+      const { Html5Qrcode } = await import("html5-qrcode");
       const html5QrCode = new Html5Qrcode("qr-reader-file-temp");
       html5QrCode.scanFile(file, false)
         .then((decodedText) => {
@@ -637,6 +637,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
         }
       }
 
+      const { default: html2canvas } = await import("html2canvas");
       const canvas = await html2canvas(clonedSticker, {
         scale: 8, // 8x scale (2x of previous 4x) for ultra-high resolution print quality
         useCORS: true,
@@ -704,6 +705,10 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       // Tunggu React untuk me-render halaman ke DOM
       await new Promise((resolve) => setTimeout(resolve, 650));
 
+      const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+        import("jspdf"),
+        import("html2canvas"),
+      ]);
       const pdf = new jsPDF({
         orientation: "portrait",
         unit: "mm",

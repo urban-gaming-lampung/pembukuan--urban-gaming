@@ -53,7 +53,7 @@ export function SubTabs<T extends string>({
             aria-selected={aktif}
             onClick={() => onChange(o.key)}
             className={cx(
-              "leading-tight whitespace-nowrap transition-all duration-200 flex items-center justify-center gap-1.5 text-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
+              "leading-tight whitespace-nowrap transition-[color,background-color,box-shadow] duration-150 flex items-center justify-center gap-1.5 text-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
               kecil
                 ? "min-h-[34px] px-3 py-1.5 text-caption font-bold uppercase tracking-wide"
                 : cx(

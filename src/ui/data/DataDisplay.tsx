@@ -142,7 +142,7 @@ export const StatTile: React.FC<{
     </>
   );
   const base = cx(
-    "min-w-0 rounded-tile px-3.5 sm:px-4 py-3 sm:py-3.5 text-left transition-all duration-200",
+    "min-w-0 rounded-tile px-3.5 sm:px-4 py-3 sm:py-3.5 text-left transition-[transform,opacity,background-color] duration-150",
     gaya ? gaya.bg : cx("apple-tile ring-1 ring-black/[0.03] dark:ring-white/[0.03]", onClick && "apple-tile-interactive"),
     className
   );

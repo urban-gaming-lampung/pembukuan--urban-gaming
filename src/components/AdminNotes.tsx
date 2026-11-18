@@ -246,9 +246,9 @@ export default function AdminNotes({
                 setIsEditing(false);
                 setIsOpenModal(true);
               }}
-              className={`group relative rounded-tile p-3 sm:p-3.5 transition-all duration-200 cursor-pointer text-left flex flex-col justify-between overflow-hidden hover:scale-[1.01] active:scale-[0.99] min-h-[86px] sm:min-h-[92px] max-h-[144px] ${
+              className={`group relative rounded-tile p-3 sm:p-3.5 transition-transform duration-150 cursor-pointer text-left flex flex-col justify-between overflow-hidden active:scale-[0.99] min-h-[86px] sm:min-h-[92px] max-h-[144px] ${
                 note.isPinned
-                  ? `backdrop-blur-md ${AKSEN_TILE.yellow.bg}`
+                  ? AKSEN_TILE.yellow.bg
                   : "apple-tile apple-tile-interactive ring-1 ring-edge"
               }`}
               title="Klik untuk membuka catatan lengkap"
@@ -485,7 +485,7 @@ export default function AdminNotes({
                     key={note.id}
                     className={`relative rounded-tile p-4 transition-colors ${
                       note.isPinned
-                        ? `backdrop-blur-md ${AKSEN_TILE.yellow.bg}`
+                        ? AKSEN_TILE.yellow.bg
                         : "apple-tile ring-1 ring-edge"
                     } ${isSelected ? "ring-2 ring-tint/40" : ""}`}
                   >

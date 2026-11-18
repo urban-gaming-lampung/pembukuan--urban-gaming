@@ -1,6 +1,8 @@
 import { runSalaryTransaction } from "../lib/salaryPersistence";
 import React, { useState, useEffect } from "react";
-import AbsenPopup, { AbsenEvidence } from "./AbsenPopup";
+import { lazy, Suspense } from "react";
+import type { AbsenEvidence } from "./AbsenPopup";
+const AbsenPopup = lazy(() => import("./AbsenPopup"));
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadString, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "../lib/firebase";
@@ -817,12 +819,14 @@ const Input: React.FC<InputProps> = ({
       />
 
       {/* Absen Popup (Realtime Location) */}
-      <AbsenPopup
-        isOpen={popupAbsen !== null}
-        jenisAbsen={popupAbsen}
-        onClose={() => setPopupAbsen(null)}
-        shift={shiftPegawai}
-        tanggal={tanggal}
+      {popupAbsen !== null && (
+        <Suspense fallback={null}>
+          <AbsenPopup
+            isOpen={popupAbsen !== null}
+            jenisAbsen={popupAbsen}
+            onClose={() => setPopupAbsen(null)}
+            shift={shiftPegawai}
+            tanggal={tanggal}
         onSubmit={async (waktu, fotoBase64, _coord, evidence) => {
           const currentMode = popupAbsen;
           if (!currentMode) return;
@@ -877,7 +881,9 @@ const Input: React.FC<InputProps> = ({
           // 2. Tutup popup hanya setelah backend dan local state sukses tersimpan
           setPopupAbsen(null);
         }}
-      />
+          />
+        </Suspense>
+      )}
 
       <AlertDialog
         open={showAbsenBlockedAlert}

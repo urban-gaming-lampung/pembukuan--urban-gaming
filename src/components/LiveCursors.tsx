@@ -19,6 +19,12 @@ export default function LiveCursors({ users, currentUserEmail }: { users: Presen
   const [rects, setRects] = useState<Record<string, DOMRect>>({});
 
   useEffect(() => {
+    const hasRemoteFocus = users.some((u) => u.email !== currentUserEmail && Boolean(u.focusedField));
+    if (!hasRemoteFocus) {
+      setRects((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      return;
+    }
+
     let ticking = false;
     
     const updateRects = () => {
@@ -68,7 +74,7 @@ export default function LiveCursors({ users, currentUserEmail }: { users: Presen
         return (
           <div
             key={u.uid}
-            className="absolute border-2 transition-all duration-200 ease-out shadow-[0_0_10px_rgba(0,0,0,0.2)] rounded-md"
+            className="absolute border-2 transition-[top,left,width,height] duration-200 ease-out shadow-[0_0_10px_rgba(0,0,0,0.2)] rounded-md"
             style={{
               top: rect.top - 2, // slightly expand the border
               left: rect.left - 2,

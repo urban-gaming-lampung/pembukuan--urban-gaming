@@ -41,7 +41,7 @@ export const Button: React.FC<
     disabled={disabled || loading}
     {...rest}
     className={cx(
-      "inline-flex select-none items-center justify-center gap-1.5 transition-all disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-tint/35 [&>svg]:h-4 [&>svg]:w-4",
+      "inline-flex select-none items-center justify-center gap-1.5 transition-[opacity,background-color,transform] duration-150 disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-tint/35 [&>svg]:h-4 [&>svg]:w-4",
       VARIAN_TOMBOL[variant],
       UKURAN_TOMBOL[size],
       block && "w-full",
@@ -70,7 +70,7 @@ export const IconButton: React.FC<
     disabled={disabled || loading}
     {...rest}
     className={cx(
-      "relative inline-flex shrink-0 select-none items-center justify-center rounded-full transition-all disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-tint/35",
+      "relative inline-flex shrink-0 select-none items-center justify-center rounded-full transition-[opacity,background-color,transform] duration-150 disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-tint/35",
       VARIAN_TOMBOL[variant],
       UKURAN_IKON_TOMBOL[size],
       className
