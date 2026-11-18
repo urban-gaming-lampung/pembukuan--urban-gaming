@@ -11,6 +11,7 @@ import {
   Notice,
   SearchField,
   Sheet,
+  Toast,
   Toggle,
 } from "../ui";
 
@@ -2156,7 +2157,7 @@ export default function GalleryModal({
                     )}
                   </div>
                   <div className="flex-1">
-                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-control bg-surface hover:brightness-95 text-label text-footnote font-semibold shadow-card cursor-pointer active:scale-95 transition-all border border-edge">
+                    <label className="inline-flex h-11 sm:h-9 cursor-pointer items-center gap-1.5 rounded-full bg-fill px-4 text-footnote font-semibold text-label transition-all hover:brightness-[0.95] dark:hover:brightness-115 active:scale-95">
                       <Icons.Upload className="w-3.5 h-3.5 text-label" />
                       <span>Pilih Foto Cover Baru</span>
                       <input
@@ -2258,15 +2259,14 @@ export default function GalleryModal({
         ]}
       />
 
-      {/* ============================================================
-          FLOATING TOAST NOTIFICATION
-          ============================================================ */}
-      {toastMsg && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] px-4 py-2.5 rounded-full bg-action text-action-label text-footnote font-semibold shadow-float flex items-center gap-2 animate-in fade-in slide-in-from-bottom-4 duration-200">
-          <Icons.Check className="w-3.5 h-3.5 text-positive stroke-[3]" />
-          <span>{toastMsg}</span>
-        </div>
-      )}
+      {/* FLOATING TOAST NOTIFICATION */}
+      <Toast
+        open={Boolean(toastMsg)}
+        message={toastMsg}
+        tone={toastMsg?.startsWith("Gagal") ? "negative" : "positive"}
+        onClose={() => setToastMsg(null)}
+        zClassName="z-[200]"
+      />
 
     </div>
   );

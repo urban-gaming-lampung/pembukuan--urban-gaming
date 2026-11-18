@@ -1,11 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { createPortal } from "react-dom";
-import { X, MapPin, Camera } from "lucide-react";
-import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
+import { MapPin, Camera } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Circle, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { Button, Notice, Pill } from "../ui";
+import { Button, Notice, Pill, Sheet } from "../ui";
 
 // Fix Leaflet marker icon issue in React
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -103,7 +101,6 @@ function FlyToUser({ coord }: { coord: {lat: number, lng: number} | null }) {
 }
 
 const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, onSubmit, shift, tanggal }) => {
-  useBodyScrollLock(isOpen);
   const [userCoord, setUserCoord] = useState<{lat: number, lng: number} | null>(null);
   const [isLocationMatched, setIsLocationMatched] = useState<boolean>(false);
   const [locationError, setLocationError] = useState("");
@@ -349,151 +346,17 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
     }
   };
 
-  if (!isOpen) return null;
-
-  const popupContent = (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 font-sans" role="dialog" aria-modal="true">
-      <div
-        className="absolute inset-0 bg-black/45 dark:bg-black/70 backdrop-blur-sm transition-opacity"
-        onClick={submitting ? undefined : onClose}
-      />
-
-      <div className="relative w-full max-w-[360px] sm:max-w-[400px] overflow-hidden rounded-sheet apple-sheet shadow-float border border-white/65 dark:border-white/[0.14] ring-1 ring-black/10 dark:ring-white/10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[88vh]">
-        <div className="relative px-6 pt-6 pb-4 text-center border-b border-sep">
-          <h3 className="text-headline text-label">Absen {jenisAbsen}</h3>
-          <p className="text-footnote text-label-2 mt-1">Konfirmasi lokasi dan foto Anda.</p>
-          <button
-            type="button"
-            onClick={submitting ? undefined : onClose}
-            disabled={submitting}
-            aria-label="Tutup"
-            className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-fill text-label-2 hover:text-label transition-colors disabled:opacity-40"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-          <div className="apple-tile rounded-tile p-4 space-y-3">
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-tint" />
-                <span className="text-subhead font-semibold text-label">Lokasi Anda</span>
-              </div>
-              {locationError && <Notice tone="negative">{locationError}</Notice>}
-            </div>
-
-            <div className="w-full h-36 bg-fill rounded-field overflow-hidden relative ring-1 ring-edge">
-              <MapContainer
-                center={[TOKO_COORD.lat, TOKO_COORD.lng]}
-                zoom={16}
-                scrollWheelZoom={false}
-                style={{ width: "100%", height: "100%" }}
-                zoomControl={false}
-                attributionControl={false}
-              >
-                <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
-                <Marker position={[TOKO_COORD.lat, TOKO_COORD.lng]} />
-                <Circle
-                  center={[TOKO_COORD.lat, TOKO_COORD.lng]}
-                  radius={MAX_DISTANCE_METERS}
-                  pathOptions={{ color: "#0088FF", fillColor: "#0088FF", fillOpacity: 0.15, weight: 1 }}
-                />
-                {userCoord && <Marker position={[userCoord.lat, userCoord.lng]} />}
-                <FlyToUser coord={userCoord} />
-              </MapContainer>
-            </div>
-
-            {isLocationMatched ? (
-              <button
-                type="button"
-                onClick={handleMatchLocation}
-                className="flex w-full items-center justify-center gap-2 min-h-[44px] rounded-full bg-positive/15 text-positive border border-positive/30 text-subhead font-semibold transition-colors"
-              >
-                Lokasi Sesuai ✓
-              </button>
-            ) : (
-              <Button variant="filled" size="md" block onClick={handleMatchLocation}>
-                {userCoord ? "Coba Lagi" : "Cocokkan Koordinat"}
-              </Button>
-            )}
-          </div>
-
-          {evidenceItems.map((item, idx) => {
-            const foto = photos[item.key];
-            const isActive = isCameraActive && activeKey === item.key;
-            const mirror = item.facing === "user";
-            return (
-              <div key={item.key} className="apple-tile rounded-tile p-4 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-subhead font-semibold text-label flex items-center gap-1.5">
-                    <Camera className="w-4 h-4 text-positive" /> {item.label}
-                  </span>
-                  {idx > 0 && (
-                    <Pill color={foto ? "green" : "red"}>{foto ? "Terisi" : "Wajib"}</Pill>
-                  )}
-                </div>
-
-                {foto ? (
-                  <div className="relative w-full aspect-[4/3] rounded-field overflow-hidden border-2 border-positive/60 shadow-card">
-                    <img src={foto} alt={`Foto ${item.label}`} className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPhotos((p) => {
-                          const n = { ...p };
-                          delete n[item.key];
-                          return n;
-                        });
-                        startCamera(item.key);
-                      }}
-                      className="absolute bottom-3 right-3 apple-glass px-3.5 py-1.5 rounded-full text-caption font-semibold text-label active:scale-95 transition-transform shadow-card"
-                    >
-                      Ulangi
-                    </button>
-                  </div>
-                ) : isActive ? (
-                  <div className="relative w-full aspect-[4/3] rounded-field overflow-hidden bg-black ring-1 ring-edge">
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className={`w-full h-full object-cover ${mirror ? "scale-x-[-1]" : ""}`}
-                    />
-                    <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-                      <button
-                        type="button"
-                        onClick={capturePhoto}
-                        aria-label="Ambil foto"
-                        className="w-16 h-16 bg-white/30 backdrop-blur-md flex items-center justify-center rounded-full active:scale-90 transition-transform"
-                      >
-                        <div className="w-[52px] h-[52px] bg-white rounded-full shadow-card" />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => startCamera(item.key)}
-                    disabled={!isLocationMatched}
-                    className={`w-full py-6 text-subhead font-semibold rounded-field transition-colors flex flex-col items-center justify-center gap-2 border border-dashed ${
-                      isLocationMatched
-                        ? "bg-positive/10 text-positive border-positive/40 hover:bg-positive/15"
-                        : "bg-fill text-label-3 border-sep opacity-60 cursor-not-allowed"
-                    }`}
-                  >
-                    <Camera className="w-7 h-7 opacity-80" />
-                    Buka Kamera
-                  </button>
-                )}
-              </div>
-            );
-          })}
-          <canvas ref={canvasRef} className="hidden" />
-        </div>
-
-        <div className="p-4 border-t border-sep apple-bar space-y-2.5">
+  return (
+    <Sheet
+      open={isOpen}
+      onClose={() => { if (!submitting) onClose(); }}
+      size="sm"
+      variant="surface"
+      zClassName="z-[99999]"
+      title={`Absen ${jenisAbsen || ""}`}
+      subtitle="Konfirmasi lokasi dan foto Anda."
+      footer={
+        <div className="space-y-2.5">
           {missingCount > 0 && isLocationMatched && (
             <p className="text-caption text-center text-negative font-medium">
               {missingCount} foto wajib belum diisi
@@ -510,11 +373,129 @@ const AbsenPopup: React.FC<AbsenPopupProps> = ({ jenisAbsen, isOpen, onClose, on
             {submitting ? "Memproses Absensi..." : `Kirim Absen ${jenisAbsen || ""}`}
           </Button>
         </div>
-      </div>
-    </div>
-  );
+      }
+    >
+      <div className="space-y-4">
+        <div className="apple-tile rounded-tile p-4 space-y-3">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-tint" />
+              <span className="text-subhead font-semibold text-label">Lokasi Anda</span>
+            </div>
+            {locationError && <Notice tone="negative">{locationError}</Notice>}
+          </div>
 
-  return createPortal(popupContent, document.body);
+          <div className="w-full h-36 bg-fill rounded-field overflow-hidden relative ring-1 ring-edge">
+            <MapContainer
+              center={[TOKO_COORD.lat, TOKO_COORD.lng]}
+              zoom={16}
+              scrollWheelZoom={false}
+              style={{ width: "100%", height: "100%" }}
+              zoomControl={false}
+              attributionControl={false}
+            >
+              <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
+              <Marker position={[TOKO_COORD.lat, TOKO_COORD.lng]} />
+              <Circle
+                center={[TOKO_COORD.lat, TOKO_COORD.lng]}
+                radius={MAX_DISTANCE_METERS}
+                pathOptions={{ color: "#0088FF", fillColor: "#0088FF", fillOpacity: 0.15, weight: 1 }}
+              />
+              {userCoord && <Marker position={[userCoord.lat, userCoord.lng]} />}
+              <FlyToUser coord={userCoord} />
+            </MapContainer>
+          </div>
+
+          {isLocationMatched ? (
+            <button
+              type="button"
+              onClick={handleMatchLocation}
+              className="flex w-full items-center justify-center gap-2 min-h-[44px] rounded-full bg-positive/15 text-positive border border-positive/30 text-subhead font-semibold transition-colors"
+            >
+              Lokasi Sesuai ✓
+            </button>
+          ) : (
+            <Button variant="filled" size="md" block onClick={handleMatchLocation}>
+              {userCoord ? "Coba Lagi" : "Cocokkan Koordinat"}
+            </Button>
+          )}
+        </div>
+
+        {evidenceItems.map((item, idx) => {
+          const foto = photos[item.key];
+          const isActive = isCameraActive && activeKey === item.key;
+          const mirror = item.facing === "user";
+          return (
+            <div key={item.key} className="apple-tile rounded-tile p-4 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-subhead font-semibold text-label flex items-center gap-1.5">
+                  <Camera className="w-4 h-4 text-positive" /> {item.label}
+                </span>
+                {idx > 0 && (
+                  <Pill color={foto ? "green" : "red"}>{foto ? "Terisi" : "Wajib"}</Pill>
+                )}
+              </div>
+
+              {foto ? (
+                <div className="relative w-full aspect-[4/3] rounded-field overflow-hidden border-2 border-positive/60 shadow-card">
+                  <img src={foto} alt={`Foto ${item.label}`} className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPhotos((p) => {
+                        const n = { ...p };
+                        delete n[item.key];
+                        return n;
+                      });
+                      startCamera(item.key);
+                    }}
+                    className="absolute bottom-3 right-3 apple-glass px-3.5 py-1.5 rounded-full text-caption font-semibold text-label active:scale-95 transition-transform shadow-card"
+                  >
+                    Ulangi
+                  </button>
+                </div>
+              ) : isActive ? (
+                <div className="relative w-full aspect-[4/3] rounded-field overflow-hidden bg-black ring-1 ring-edge">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`w-full h-full object-cover ${mirror ? "scale-x-[-1]" : ""}`}
+                  />
+                  <div className="absolute bottom-4 left-0 right-0 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={capturePhoto}
+                      aria-label="Ambil foto"
+                      className="w-16 h-16 bg-white/30 backdrop-blur-md flex items-center justify-center rounded-full active:scale-90 transition-transform"
+                    >
+                      <div className="w-[52px] h-[52px] bg-white rounded-full shadow-card" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => startCamera(item.key)}
+                  disabled={!isLocationMatched}
+                  className={`w-full py-6 text-subhead font-semibold rounded-field transition-colors flex flex-col items-center justify-center gap-2 border border-dashed ${
+                    isLocationMatched
+                      ? "bg-positive/10 text-positive border-positive/40 hover:bg-positive/15"
+                      : "bg-fill text-label-3 border-sep opacity-60 cursor-not-allowed"
+                  }`}
+                >
+                  <Camera className="w-7 h-7 opacity-80" />
+                  Buka Kamera
+                </button>
+              )}
+            </div>
+          );
+        })}
+        <canvas ref={canvasRef} className="hidden" />
+      </div>
+    </Sheet>
+  );
 };
 
 export default AbsenPopup;

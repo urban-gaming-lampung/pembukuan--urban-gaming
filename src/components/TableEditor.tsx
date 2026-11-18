@@ -1,8 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { rupiah, toInt, formatRibuanInput } from "../lib/format";
-import { AKSEN_TILE, AlertDialog, Amount, Button, Card, Pill } from "../ui";
-import type { WarnaIkon } from "../ui/tokens";
+import { AKSEN_TILE, AlertDialog, Amount, Button, Card, ImagePreviewModal, Pill, type WarnaIkon } from "../ui";
 import {
   Clock,
   Plus,
@@ -16,7 +15,6 @@ import {
   Camera,
   Loader2,
   Eye,
-  ExternalLink,
   Lock,
   Gamepad2,
   Coffee,
@@ -24,7 +22,6 @@ import {
   CalendarCheck2,
   Wallet,
   Receipt,
-  X,
 } from "lucide-react";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "../lib/firebase";
@@ -521,64 +518,17 @@ export const UploadTransferProof: React.FC<UploadTransferProofProps> = ({ value,
           </span>
         </button>
 
-        {showPreview && createPortal(
-          <div
-            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-[3px] p-4"
-            onClick={() => setShowPreview(false)}
-          >
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-label="Pratinjau Bukti Transfer"
-              className="relative w-full max-w-md apple-sheet text-label p-4 rounded-sheet border border-white/50 dark:border-white/[0.12] ring-1 ring-edge shadow-float flex flex-col items-center"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="w-full flex justify-between items-center mb-3 pb-2.5 border-b border-sep">
-                <span className="text-headline text-label">Pratinjau Bukti Transfer</span>
-                <button
-                  type="button"
-                  onClick={() => setShowPreview(false)}
-                  aria-label="Tutup pratinjau"
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-fill text-label-2 hover:text-label transition"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div className="w-full flex items-center justify-center rounded-tile apple-tile p-2 ring-1 ring-edge">
-                <img
-                  src={value}
-                  alt="Bukti Transfer"
-                  className="w-full max-h-[52vh] rounded-field object-contain"
-                />
-              </div>
-
-              <div className="flex gap-2.5 mt-4 w-full justify-between">
-                <a
-                  href={value}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 h-11 px-4 text-center bg-action text-action-label text-subhead font-semibold rounded-field transition hover:opacity-85 active:opacity-75 flex items-center justify-center gap-1.5"
-                >
-                  <ExternalLink size={15} />
-                  Buka Penuh
-                </a>
-                {!disabled && (
-                  <Button
-                    variant="destructive"
-                    size="md"
-                    className="flex-1"
-                    icon={<Trash2 size={15} />}
-                    onClick={() => setConfirmDelete(true)}
-                  >
-                    Hapus Bukti
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+        <ImagePreviewModal
+          open={showPreview}
+          onClose={() => setShowPreview(false)}
+          src={value}
+          title="Pratinjau Bukti Transfer"
+          alt="Bukti Transfer"
+          onDelete={() => setConfirmDelete(true)}
+          deleteLabel="Hapus Bukti"
+          deleteDisabled={disabled}
+          zClassName="z-[9999]"
+        />
         {dialogPortal}
       </>
     );

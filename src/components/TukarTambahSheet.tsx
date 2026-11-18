@@ -4,15 +4,13 @@
  * lalu dikonfirmasi owner di Atur Stok › Konfirmasi stok. Aturan: src/lib/tukarTambah.ts.
  */
 import React, { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { ArrowLeftRight, Camera, ChevronRight, Loader2, Plus, Trash2, X } from "lucide-react";
-import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
+import { ArrowLeftRight, Camera, ChevronRight, Loader2, Plus, Trash2 } from "lucide-react";
 import type { TukarTambahInput } from "../lib/posSales";
 import { namaJualan } from "../lib/posSales";
 import { subKategoriTukar, uploadFotoTukarTambah } from "../lib/tukarTambah";
 import { labelBayarTukar } from "../lib/posReceipt";
 import { rupiah } from "../lib/format";
-import { Button, Notice, SubTabs } from "../ui";
+import { Button, Notice, Sheet, SubTabs } from "../ui";
 
 export type DraftTukar = TukarTambahInput & { key: string };
 
@@ -124,7 +122,6 @@ export const TukarTambahSheet: React.FC<{
   onHapus?: () => void;
   onClose: () => void;
 }> = ({ totalNota, nilaiLain, awal, onSimpan, onHapus, onClose }) => {
-  useBodyScrollLock(true);
   const [nama, setNama] = useState(awal?.nama || "");
   const [mode, setMode] = useState<Mode>(awal ? "NILAI" : "PEMBELI");
   const [uangStr, setUangStr] = useState(awal ? ribuan(String(awal.nilai)) : "");
@@ -162,79 +159,73 @@ export const TukarTambahSheet: React.FC<{
 
   const labelUang = mode === "PEMBELI" ? "Uang tambah dari pembeli" : mode === "URBAN" ? "Uang dari URBAN ke pembeli" : "Nilai barang pembeli";
 
-  if (typeof document === "undefined") return null;
-
-  return createPortal(
-    <div className="fixed inset-0 z-[260] flex items-end sm:items-center justify-center font-sans">
-      <div className="absolute inset-0 bg-black/45 dark:bg-black/70 backdrop-blur-[8px]" onClick={onClose} />
-      <div className="relative w-full sm:max-w-md apple-sheet-grouped border border-white/50 dark:border-white/[0.12] rounded-t-sheet sm:rounded-[32px] max-h-[92vh] flex flex-col overflow-hidden shadow-float">
-        <div className="flex justify-center pt-2 sm:hidden"><div className="w-9 h-[5px] rounded-full bg-sep" /></div>
-        <div className="px-4 pt-2 pb-3 flex items-center gap-3">
-          <div className="flex-1 min-w-0">
-            <h3 className="text-title3 font-bold text-label leading-tight">Barang masuk</h3>
-            <p className="text-footnote text-label-2">Tukar tambah · kondisi seken</p>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Tutup" className="w-11 h-11 rounded-full bg-fill flex items-center justify-center text-label-2 hover:text-label active:opacity-70"><X className="w-4 h-4" /></button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-3">
-          <div className="rounded-card apple-card ring-1 ring-edge shadow-card p-3.5 space-y-3">
-            <Field label="Nama barang" hint={sub ? <>Terdeteksi <b className="font-semibold text-label">{LABEL_SUB[sub] || sub}</b> · produk & stok dicocokkan saat konfirmasi</> : "Contoh: SWITCH 1 OLED, PS4 SLIM 500GB"}>
-              <input value={nama} onChange={(e) => { setNama(e.target.value); setError(""); }} placeholder="Nama & tipe barang" autoComplete="off" autoCapitalize="characters" className={`${inputCls} uppercase placeholder-shown:normal-case`} />
-            </Field>
-          </div>
-
-          <div className="rounded-card apple-card ring-1 ring-edge shadow-card p-3.5 space-y-3">
-            <SubTabs<Mode>
-              size="sm"
-              value={mode}
-              onChange={(m) => { setMode(m); setUangStr(""); }}
-              ariaLabel="Siapa yang menambah uang"
-              options={[{ key: "PEMBELI", label: "Pembeli" }, { key: "URBAN", label: "URBAN" }, { key: "NILAI", label: "Nilai barang" }]}
-            />
-            <Field label={labelUang}>
-              <div className={`flex items-center h-12 px-3.5 rounded-field bg-fill ${nilaiSalah ? "ring-2 ring-negative/40" : ""}`}>
-                <span className="text-subhead font-semibold text-label-3 mr-1.5">Rp</span>
-                <input inputMode="numeric" autoComplete="off" value={uangStr} onChange={(e) => { setUangStr(ribuan(e.target.value)); setError(""); }} placeholder="0" aria-label={labelUang}
-                  className="flex-1 min-w-0 bg-transparent text-headline font-bold tabular-nums text-label focus:outline-none" />
-              </div>
-            </Field>
-            <div className="rounded-tile bg-fill/60 px-3.5 py-2.5 space-y-1 text-footnote">
-              <div className="flex justify-between gap-3 text-label-2"><span>Harga barang dijual{nilaiLain ? " (sisa)" : ""}</span><span className="tabular-nums">{rupiah(sisa)}</span></div>
-              <div className="flex justify-between gap-3 text-label-2"><span>Nilai barang masuk (potongan nota)</span><span className={`tabular-nums ${nilaiSalah ? "text-negative" : ""}`}>{isi ? `−${rupiah(Math.max(0, nilai))}` : "—"}</span></div>
-              <div className="flex justify-between gap-3 pt-1 border-t border-sep text-subhead font-semibold text-label">
-                <span>{isi && nilai > 0 ? labelBayarTukar(bayar) : "Dibayar pembeli"}</span>
-                <span className="tabular-nums">{isi && nilai > 0 ? rupiah(Math.abs(bayar)) : "—"}</span>
-              </div>
-            </div>
-            {nilaiSalah && <p className="text-caption font-semibold text-negative">Uang tambah tidak boleh melebihi harga barang yang dijual — pilih URBAN tambah bila URBAN yang membayar.</p>}
-          </div>
-
-          <div className="rounded-card apple-card ring-1 ring-edge shadow-card p-3.5 space-y-3">
-            <Field label="Nomor seri (SN)">
-              <input value={sn} onChange={(e) => { setSn(e.target.value.toUpperCase()); setError(""); }} placeholder="Lihat label di bawah / belakang unit" autoComplete="off" autoCapitalize="characters" spellCheck={false} className={`${inputCls} font-mono placeholder:font-sans`} />
-            </Field>
-            <div className="grid grid-cols-2 gap-2">
-              <FotoTile label="Foto SN" value={fotoSn} onChange={(u) => { setFotoSn(u); setError(""); }} onError={setError} />
-              <FotoTile label="Foto barang" value={fotoBarang} onChange={(u) => { setFotoBarang(u); setError(""); }} onError={setError} />
-            </div>
-            <Field label="Catatan (opsional)">
-              <input value={catatan} onChange={(e) => setCatatan(e.target.value)} placeholder="Kelengkapan, minus, dll." autoComplete="off" className={inputCls} />
-            </Field>
-          </div>
-
-          <Notice>Potongan ini hanya memotong uang yang dibayar pembeli di nota (bukan pengeluaran kas). Barang masuk antrean <b className="font-semibold">Atur Stok › Konfirmasi stok</b> untuk penentuan harga jual &amp; modal masuk.</Notice>
-        </div>
-
-        <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] apple-bar border-t border-sep space-y-2">
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      size="md"
+      variant="grouped"
+      zClassName="z-[260]"
+      title="Barang masuk"
+      subtitle="Tukar tambah · kondisi seken"
+      footer={
+        <div className="space-y-2">
           {error && <div className="text-footnote font-semibold text-negative bg-negative/10 rounded-field px-3 py-2">{error}</div>}
           <div className="flex gap-2">
             {onHapus && <Button variant="destructive" size="lg" onClick={onHapus} aria-label="Hapus barang ini" icon={<Trash2 />} className="w-[52px] px-0" />}
             <Button size="lg" block onClick={simpan}>{awal ? "Simpan perubahan" : "Tambahkan ke nota"}</Button>
           </div>
         </div>
+      }
+    >
+      <div className="space-y-3">
+        <div className="rounded-card apple-card ring-1 ring-edge shadow-card p-3.5 space-y-3">
+          <Field label="Nama barang" hint={sub ? <>Terdeteksi <b className="font-semibold text-label">{LABEL_SUB[sub] || sub}</b> · produk & stok dicocokkan saat konfirmasi</> : "Contoh: SWITCH 1 OLED, PS4 SLIM 500GB"}>
+            <input value={nama} onChange={(e) => { setNama(e.target.value); setError(""); }} placeholder="Nama & tipe barang" autoComplete="off" autoCapitalize="characters" className={`${inputCls} uppercase placeholder-shown:normal-case`} />
+          </Field>
+        </div>
+
+        <div className="rounded-card apple-card ring-1 ring-edge shadow-card p-3.5 space-y-3">
+          <SubTabs<Mode>
+            size="sm"
+            value={mode}
+            onChange={(m) => { setMode(m); setUangStr(""); }}
+            ariaLabel="Siapa yang menambah uang"
+            options={[{ key: "PEMBELI", label: "Pembeli" }, { key: "URBAN", label: "URBAN" }, { key: "NILAI", label: "Nilai barang" }]}
+          />
+          <Field label={labelUang}>
+            <div className={`flex items-center h-12 px-3.5 rounded-field bg-fill ${nilaiSalah ? "ring-2 ring-negative/40" : ""}`}>
+              <span className="text-subhead font-semibold text-label-3 mr-1.5">Rp</span>
+              <input inputMode="numeric" autoComplete="off" value={uangStr} onChange={(e) => { setUangStr(ribuan(e.target.value)); setError(""); }} placeholder="0" aria-label={labelUang}
+                className="flex-1 min-w-0 bg-transparent text-headline font-bold tabular-nums text-label focus:outline-none" />
+            </div>
+          </Field>
+          <div className="rounded-tile bg-fill/60 px-3.5 py-2.5 space-y-1 text-footnote">
+            <div className="flex justify-between gap-3 text-label-2"><span>Harga barang dijual{nilaiLain ? " (sisa)" : ""}</span><span className="tabular-nums">{rupiah(sisa)}</span></div>
+            <div className="flex justify-between gap-3 text-label-2"><span>Nilai barang masuk (potongan nota)</span><span className={`tabular-nums ${nilaiSalah ? "text-negative" : ""}`}>{isi ? `−${rupiah(Math.max(0, nilai))}` : "—"}</span></div>
+            <div className="flex justify-between gap-3 pt-1 border-t border-sep text-subhead font-semibold text-label">
+              <span>{isi && nilai > 0 ? labelBayarTukar(bayar) : "Dibayar pembeli"}</span>
+              <span className="tabular-nums">{isi && nilai > 0 ? rupiah(Math.abs(bayar)) : "—"}</span>
+            </div>
+          </div>
+          {nilaiSalah && <p className="text-caption font-semibold text-negative">Uang tambah tidak boleh melebihi harga barang yang dijual — pilih URBAN tambah bila URBAN yang membayar.</p>}
+        </div>
+
+        <div className="rounded-card apple-card ring-1 ring-edge shadow-card p-3.5 space-y-3">
+          <Field label="Nomor seri (SN)">
+            <input value={sn} onChange={(e) => { setSn(e.target.value.toUpperCase()); setError(""); }} placeholder="Lihat label di bawah / belakang unit" autoComplete="off" autoCapitalize="characters" spellCheck={false} className={`${inputCls} font-mono placeholder:font-sans`} />
+          </Field>
+          <div className="grid grid-cols-2 gap-2">
+            <FotoTile label="Foto SN" value={fotoSn} onChange={(u) => { setFotoSn(u); setError(""); }} onError={setError} />
+            <FotoTile label="Foto barang" value={fotoBarang} onChange={(u) => { setFotoBarang(u); setError(""); }} onError={setError} />
+          </div>
+          <Field label="Catatan (opsional)">
+            <input value={catatan} onChange={(e) => setCatatan(e.target.value)} placeholder="Kelengkapan, minus, dll." autoComplete="off" className={inputCls} />
+          </Field>
+        </div>
+
+        <Notice>Potongan ini hanya memotong uang yang dibayar pembeli di nota (bukan pengeluaran kas). Barang masuk antrean <b className="font-semibold">Atur Stok › Konfirmasi stok</b> untuk penentuan harga jual &amp; modal masuk.</Notice>
       </div>
-    </div>,
-    document.body
+    </Sheet>
   );
 };

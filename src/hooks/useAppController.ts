@@ -1079,13 +1079,15 @@ export default function useAppController() {
   const manualPengeluaranCash = useMemo(() => rowsPengeluaran.reduce((sum, r: any) => (r.bayar === "Cash" && !r._autoOngkirKey ? sum + toInt(r.harga) : sum), 0), [rowsPengeluaran]);
 
   useEffect(() => {
-    // Ongkir bagi hasil: bagian pengantar dibayar lewat gaji, bukan dari kas harian
+    // Ongkir bagi hasil: bila masuk gaji bulanan, bagian pengantar tidak dipotong dari kas harian
     const isNewPolicy = tanggal >= ONGKIR_BAGI_HASIL_SEJAK;
 
     let sisaKas: number;
 
     if (isNewPolicy) {
-      sisaKas = Math.max(0, totalCash - manualPengeluaranCash);
+      sisaKas = ongkirConfig.masukGaji
+        ? Math.max(0, totalCash - manualPengeluaranCash)
+        : Math.max(0, totalCash - totalPengeluaranCash);
     } else {
       const ongkirIncomeCash = rowsSewa.reduce((sum, r: any) => (bayarCash(r.bayar) ? sum + ongkirBaris(r) : sum), 0);
       const ongkirExpenseCash = rowsSewa.reduce((sum, r: any) => (r._bayarOngkir === "Cash" ? sum + ongkirPengantar(r, ongkirConfig.pegawaiPersen) : sum), 0);
@@ -1105,7 +1107,7 @@ export default function useAppController() {
         }
         return prev;
     });
-  }, [totalCash, totalPengeluaranCash, manualPengeluaranCash, rowsSewa, ongkirConfig.pegawaiPersen, tanggal]);
+  }, [totalCash, totalPengeluaranCash, manualPengeluaranCash, rowsSewa, ongkirConfig.pegawaiPersen, ongkirConfig.masukGaji, tanggal]);
 
   useEffect(() => {
      const ongkirEntries: { key: string; ket: string; harga: number; bayar: string; _namaPengantar?: string }[] = [];

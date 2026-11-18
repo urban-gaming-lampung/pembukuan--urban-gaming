@@ -3,19 +3,18 @@ import { createPortal } from "react-dom";
 import { 
   QrCode, Camera, Gamepad2, Monitor, Smartphone, 
   Trash2, Edit, Save, CheckCircle2, XCircle, AlertCircle, 
-  Upload, History, Sparkles, Download, X, Eye,
+  Upload, History, Sparkles, Download, Eye,
   Flashlight, FlashlightOff
 } from "lucide-react";
 import { doc, setDoc, onSnapshot, deleteDoc, updateDoc } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
 import html2canvas from "html2canvas";
 import { Html5Qrcode } from "html5-qrcode";
-import { Button, Card, EmptyState, Eyebrow, IconBadge, Pill } from "../ui";
+import { Button, Card, EmptyState, Eyebrow, IconBadge, MOTION, Pill, Sheet, SubTabs, TextAreaField } from "../ui";
 import jsPDF from "jspdf";
 
 import useStokData, { RegisteredDevice, DeviceType } from "../hooks/useStokData";
 import { toLocalYmd } from "../lib/dateLocal";
-import SubTabs from "./common/SubTabs";
 
 interface WidgetMonitoringDeviceProps {
   isOwner?: boolean;
@@ -815,19 +814,20 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                   </div>
                 </div>
 
-                <div className="flex w-full shrink-0 flex-col gap-2 sm:flex-row md:w-auto">
+                <div className="grid w-full shrink-0 grid-cols-1 gap-2 sm:flex sm:w-auto sm:items-center">
                   <Button
                     type="button"
                     variant="filled"
                     size="md"
+                    block
                     icon={<Camera />}
                     onClick={startScanning}
-                    className="min-h-[44px]"
+                    className="sm:w-auto"
                   >
                     Buka kamera scan
                   </Button>
 
-                  <label className="inline-flex min-h-[44px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-control bg-fill px-4 text-subhead font-medium text-label ring-1 ring-edge transition-opacity active:opacity-75 sm:flex-initial">
+                  <label className="inline-flex h-11 cursor-pointer items-center justify-center gap-1.5 rounded-full bg-fill px-4 text-subhead font-semibold text-label transition-all hover:brightness-[0.95] dark:hover:brightness-115 active:opacity-70">
                     <Upload className="h-4 w-4 text-label-2" />
                     Unggah foto QR
                     <input
@@ -1352,15 +1352,15 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                   </div>
                 </div>
 
-                {/* Download Buttons */}
-                <div className="mt-6 flex w-full flex-col justify-center gap-3 sm:flex-row">
+                {/* Download Buttons — grid agar size="lg" (50px) selalu sama persis dengan Simpan stiker */}
+                <div className="mt-6 grid w-full grid-cols-1 gap-2.5 sm:grid-cols-2">
                   <Button
                     type="button"
                     variant="filled"
                     size="lg"
+                    block
                     icon={<Download />}
                     onClick={handleDownloadSticker}
-                    className="flex-1"
                   >
                     Download stiker (PNG)
                   </Button>
@@ -1368,9 +1368,9 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                     type="button"
                     variant="tinted"
                     size="lg"
+                    block
                     icon={<QrCode />}
                     onClick={() => handleDownloadAllStickersPDF()}
-                    className="flex-1"
                   >
                     Download semua (PDF)
                   </Button>
@@ -1390,36 +1390,39 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                     <Eyebrow>Daftar unit terdaftar ({devices.length} unit)</Eyebrow>
                   </div>
                   {devices.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                    <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:items-center">
                       <Button
                         type="button"
                         variant="gray"
-                        size="sm"
+                        size="md"
+                        aria-label={selectedStickerIds.length === devices.length ? "Batal pilih semua stiker" : "Pilih semua stiker"}
                         onClick={() => setSelectedStickerIds(selectedStickerIds.length === devices.length ? [] : devices.map((d) => d.id))}
-                        className="min-h-[44px] sm:min-h-[34px]"
+                        className="w-full sm:w-auto !px-2 sm:!px-4 text-footnote sm:text-subhead whitespace-nowrap"
                       >
-                        {selectedStickerIds.length === devices.length ? "Batal pilih" : "Pilih semua"}
+                        {selectedStickerIds.length === devices.length ? "Batal" : "Semua"}
                       </Button>
                       <Button
                         type="button"
                         variant="tinted"
-                        size="sm"
+                        size="md"
                         icon={<QrCode />}
+                        aria-label={`Cetak ${selectedStickerIds.length} stiker terpilih (PDF)`}
                         disabled={selectedStickerIds.length === 0 || isGeneratingPdf}
                         onClick={() => handleDownloadAllStickersPDF(selectedStickerIds)}
-                        className="min-h-[44px] sm:min-h-[34px]"
+                        className="w-full sm:w-auto !px-2 sm:!px-4 text-footnote sm:text-subhead whitespace-nowrap [&>svg]:hidden min-[400px]:[&>svg]:inline"
                       >
-                        Cetak terpilih ({selectedStickerIds.length})
+                        Cetak ({selectedStickerIds.length})
                       </Button>
                       <Button
                         type="button"
                         variant="filled"
-                        size="sm"
+                        size="md"
                         icon={<QrCode />}
+                        aria-label="Download semua stiker (PDF)"
                         onClick={() => handleDownloadAllStickersPDF()}
-                        className="min-h-[44px] sm:min-h-[34px]"
+                        className="w-full sm:w-auto !px-2 sm:!px-4 text-footnote sm:text-subhead whitespace-nowrap [&>svg]:hidden min-[400px]:[&>svg]:inline"
                       >
-                        Download semua (PDF)
+                        Semua PDF
                       </Button>
                     </div>
                   )}
@@ -1612,242 +1615,223 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       {/* Hidden container for QR file reader temp scanner initialization */}
       <div id="qr-reader-file-temp" className="hidden" />
 
-      {/* Modal 1: QR Scanner Modal (Floating) */}
-      {showScanner && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/55 backdrop-blur-md" onClick={stopScanning} />
-          <div className="relative z-10 w-full max-w-md overflow-hidden rounded-sheet apple-sheet border border-white/50 dark:border-white/[0.12] shadow-float ring-1 ring-edge animate-in zoom-in-95 duration-200">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-sep p-4 sm:p-5">
-              <div className="flex items-center gap-2 text-left">
-                <QrCode className="h-5 w-5 text-tint" />
-                <h3 className="text-headline font-semibold text-label">Pindai QR code device</h3>
-              </div>
-              <button
-                type="button"
-                onClick={stopScanning}
-                aria-label="Tutup pemindai"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-fill text-label-2 transition-opacity active:opacity-75"
-              >
-                <X className="h-4 w-4" />
-              </button>
+      {/* Modal 1: QR Scanner Modal (UDS Sheet) */}
+      <Sheet
+        open={showScanner}
+        onClose={stopScanning}
+        size="sm"
+        variant="surface"
+        zClassName="z-[9999]"
+        icon={<QrCode />}
+        iconColor="blue"
+        title="Pindai QR code device"
+        footer={
+          <div className="space-y-3">
+            <p className="text-center text-footnote text-label-2">
+              Posisikan QR code di dalam kotak untuk memindai secara otomatis.
+            </p>
+            <div className="flex gap-2.5">
+              <label className="inline-flex h-[50px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full bg-fill px-5 text-headline text-label transition-all hover:brightness-[0.95] dark:hover:brightness-115 active:opacity-70">
+                <Upload className="h-4 w-4 text-tint" />
+                Unggah file QR
+                <input type="file" accept="image/*" onChange={handleUploadScanFile} className="hidden" />
+              </label>
+              <Button type="button" variant="destructive" size="lg" onClick={stopScanning} className="flex-1">
+                Batal
+              </Button>
             </div>
+          </div>
+        }
+      >
+        <div className="relative aspect-square w-full overflow-hidden rounded-tile bg-black ring-1 ring-edge">
+          <div id="qr-reader-view" className="h-full w-full" />
+          <button
+            type="button"
+            onClick={toggleTorch}
+            className={`absolute bottom-4 left-4 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border backdrop-blur-md transition-transform active:scale-95 ${
+              isTorchOn
+                ? "border-warning bg-warning text-black shadow-lg"
+                : "border-white/25 bg-black/60 text-white hover:bg-black/80"
+            }`}
+            title="Nyalakan/matikan lampu kilat"
+          >
+            {isTorchOn ? <Flashlight className="h-5 w-5 fill-current" /> : <FlashlightOff className="h-5 w-5" />}
+          </button>
 
-            {/* Camera Viewport */}
-            <div className="relative aspect-square w-full overflow-hidden bg-black">
-              <div id="qr-reader-view" className="h-full w-full" />
-              <button
-                type="button"
-                onClick={toggleTorch}
-                className={`absolute bottom-4 left-4 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border backdrop-blur-md transition-transform active:scale-95 ${
-                  isTorchOn
-                    ? "border-warning bg-warning text-black shadow-lg"
-                    : "border-white/25 bg-black/60 text-white hover:bg-black/80"
-                }`}
-                title="Nyalakan/matikan lampu kilat"
-              >
-                {isTorchOn ? <Flashlight className="h-5 w-5 fill-current" /> : <FlashlightOff className="h-5 w-5" />}
-              </button>
-            </div>
-
-            {/* Footer / Alternate Options */}
-            <div className="flex flex-col gap-3 border-t border-sep bg-surface-2 p-4 sm:p-5">
-              <p className="text-center text-footnote text-label-2">
-                Posisikan QR code di dalam kotak untuk memindai secara otomatis.
-              </p>
-              <div className="flex gap-2.5">
-                <label className="inline-flex min-h-[48px] flex-1 cursor-pointer items-center justify-center gap-2 rounded-full bg-fill px-4 text-subhead font-medium text-label ring-1 ring-edge transition-opacity active:opacity-75">
+          {scanningError && (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-surface p-6 text-center">
+              <AlertCircle className="mb-3 h-12 w-12 text-negative" />
+              <p className="mb-4 text-callout font-semibold text-label">{scanningError}</p>
+              <div className="flex w-full flex-col gap-2.5">
+                <label className="inline-flex h-[50px] w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-fill px-5 text-headline text-label transition-all hover:brightness-[0.95] dark:hover:brightness-115 active:opacity-70">
                   <Upload className="h-4 w-4 text-tint" />
                   Unggah file QR
                   <input type="file" accept="image/*" onChange={handleUploadScanFile} className="hidden" />
                 </label>
-                <Button type="button" variant="destructive" size="lg" onClick={stopScanning} className="flex-1">
-                  Batal
+                <Button type="button" variant="gray" size="lg" block onClick={stopScanning}>
+                  Tutup
                 </Button>
               </div>
             </div>
+          )}
+        </div>
+      </Sheet>
 
-            {scanningError && (
-              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-surface p-6 text-center">
-                <AlertCircle className="mb-3 h-12 w-12 text-negative" />
-                <p className="mb-4 text-callout font-semibold text-label">{scanningError}</p>
-                <div className="flex w-full flex-col gap-2.5">
-                  <label className="inline-flex min-h-[48px] w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-fill px-4 text-subhead font-medium text-label ring-1 ring-edge transition-opacity active:opacity-75">
-                    <Upload className="h-4 w-4 text-tint" />
-                    Unggah file QR
-                    <input type="file" accept="image/*" onChange={handleUploadScanFile} className="hidden" />
-                  </label>
-                  <Button type="button" variant="gray" size="lg" block onClick={stopScanning}>
-                    Tutup
-                  </Button>
-                </div>
-              </div>
-            )}
+      {/* Modal 2: Status Update Modal (UDS Sheet) */}
+      <Sheet
+        open={Boolean(updatingDevice)}
+        onClose={() => setUpdatingDevice(null)}
+        size="sm"
+        variant="surface"
+        zClassName="z-[9999]"
+        title={updatingDevice ? DEVICE_LABELS[updatingDevice.type as DeviceType] : ""}
+        subtitle={updatingDevice ? `UNIT ${String(updatingDevice.number).padStart(2, "0")}` : undefined}
+        footer={
+          <div className="flex gap-2.5">
+            <Button
+              type="button"
+              variant="gray"
+              size="lg"
+              onClick={() => setUpdatingDevice(null)}
+              className="flex-1"
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              variant="filled"
+              size="lg"
+              onClick={handleSaveStatusUpdate}
+              className="flex-1"
+            >
+              Simpan status
+            </Button>
           </div>
-        </div>,
-        document.body
-      )}
-
-      {/* Modal 2: Status Update Modal (Baik/Rusak + Keterangan) */}
-      {updatingDevice && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setUpdatingDevice(null)} />
-          <div className="relative z-10 max-h-[90vh] w-full max-w-sm overflow-y-auto rounded-sheet apple-sheet border border-white/50 dark:border-white/[0.12] p-5 shadow-float ring-1 ring-edge animate-in zoom-in-95 duration-200 sm:p-6">
-            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-fill" />
-
-            <h3 className="text-center text-title3 font-bold text-label">
-              {DEVICE_LABELS[updatingDevice.type as DeviceType]}
-            </h3>
-            <p className="mt-1 mb-4 text-center font-mono text-title2 font-bold tabular-nums text-tint">
-              UNIT {String(updatingDevice.number).padStart(2, "0")}
-            </p>
-
-            <div className="flex flex-col gap-4">
-              {/* Kategori Stik (Khusus Stik PS3 & PS4) */}
-              {updatingDevice.type?.startsWith("stik") && (
-                <div className="flex flex-col gap-1.5 text-left animate-in fade-in duration-200">
-                  <label className="text-caption font-semibold uppercase tracking-wide text-label-3">Kategori stik</label>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => setUpdateStikType("OP")}
-                      className={`flex min-h-[48px] items-center justify-center rounded-tile px-3 text-footnote font-semibold ring-1 transition-colors ${
-                        updateStikType === "OP"
-                          ? "bg-positive/10 text-positive ring-positive"
-                          : "bg-surface-2 text-label-2 ring-edge hover:bg-fill"
-                      }`}
-                    >
-                      Original Pabrik (OP)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setUpdateStikType("OM")}
-                      className={`flex min-h-[48px] items-center justify-center rounded-tile px-3 text-footnote font-semibold ring-1 transition-colors ${
-                        updateStikType === "OM"
-                          ? "bg-tint/10 text-tint ring-tint"
-                          : "bg-surface-2 text-label-2 ring-edge hover:bg-fill"
-                      }`}
-                    >
-                      Original Mesin (OM)
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Radio Group Status */}
-              <div className="flex flex-col gap-1.5 text-left">
-                <label className="text-caption font-semibold uppercase tracking-wide text-label-3">Kondisi alat</label>
+        }
+      >
+        {updatingDevice && (
+          <div className="flex flex-col gap-4">
+            {/* Kategori Stik (Khusus Stik PS3 & PS4) */}
+            {updatingDevice.type?.startsWith("stik") && (
+              <div className={`flex flex-col gap-1.5 text-left ${MOTION.panel}`}>
+                <label className="text-caption font-semibold uppercase tracking-wide text-label-3">Kategori stik</label>
                 <div className="grid grid-cols-2 gap-2.5">
                   <button
                     type="button"
-                    onClick={() => setUpdateStatus("baik")}
-                    className={`flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-tile text-footnote font-semibold ring-1 transition-colors ${
-                      updateStatus === "baik"
+                    onClick={() => setUpdateStikType("OP")}
+                    className={`flex min-h-[48px] items-center justify-center rounded-tile px-3 text-footnote font-semibold ring-1 transition-colors ${
+                      updateStikType === "OP"
                         ? "bg-positive/10 text-positive ring-positive"
                         : "bg-surface-2 text-label-2 ring-edge hover:bg-fill"
                     }`}
                   >
-                    <CheckCircle2 className="h-4 w-4 text-positive" /> Kondisi normal
+                    Original Pabrik (OP)
                   </button>
                   <button
                     type="button"
-                    onClick={() => setUpdateStatus("rusak")}
-                    className={`flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-tile text-footnote font-semibold ring-1 transition-colors ${
-                      updateStatus === "rusak"
-                        ? "bg-negative/10 text-negative ring-negative"
+                    onClick={() => setUpdateStikType("OM")}
+                    className={`flex min-h-[48px] items-center justify-center rounded-tile px-3 text-footnote font-semibold ring-1 transition-colors ${
+                      updateStikType === "OM"
+                        ? "bg-tint/10 text-tint ring-tint"
                         : "bg-surface-2 text-label-2 ring-edge hover:bg-fill"
                     }`}
                   >
-                    <XCircle className="h-4 w-4 text-negative" /> Kondisi rusak
+                    Original Mesin (OM)
                   </button>
                 </div>
               </div>
+            )}
 
-              {/* Keterangan Kerusakan */}
-              {updateStatus === "rusak" && (
-                <div className="flex flex-col gap-1.5 text-left animate-in slide-in-from-top-2 duration-200">
-                  <label className="text-caption font-semibold uppercase tracking-wide text-label-3">Keterangan kerusakan</label>
-                  <textarea
-                    value={updateKeterangan}
-                    onChange={(e) => setUpdateKeterangan(e.target.value)}
-                    placeholder="Contoh: Tombol R2 macet, analog kiri ngedrift..."
-                    rows={3}
-                    className="w-full rounded-field bg-surface-2 p-3 text-[16px] sm:text-callout text-label ring-1 ring-edge focus:outline-none focus:ring-2 focus:ring-tint"
-                  />
-                </div>
-              )}
-
-              {/* Update Log metadata */}
-              {updatingDevice.updatedAt && (
-                <div className="text-center text-caption text-label-3">
-                  Diupdate oleh: {updatingDevice.updatedBy?.split("@")[0]}
-                  <span className="mt-0.5 block">Waktu: {new Date(updatingDevice.updatedAt || 0).toLocaleString("id-ID")}</span>
-                </div>
-              )}
-
-              <div className="mt-2 flex gap-2.5">
-                <Button
+            {/* Radio Group Status */}
+            <div className="flex flex-col gap-1.5 text-left">
+              <label className="text-caption font-semibold uppercase tracking-wide text-label-3">Kondisi alat</label>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
                   type="button"
-                  variant="gray"
-                  size="lg"
-                  onClick={() => setUpdatingDevice(null)}
-                  className="flex-1"
+                  onClick={() => setUpdateStatus("baik")}
+                  className={`flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-tile text-footnote font-semibold ring-1 transition-colors ${
+                    updateStatus === "baik"
+                      ? "bg-positive/10 text-positive ring-positive"
+                      : "bg-surface-2 text-label-2 ring-edge hover:bg-fill"
+                  }`}
                 >
-                  Batal
-                </Button>
-                <Button
+                  <CheckCircle2 className="h-4 w-4 text-positive" /> Kondisi normal
+                </button>
+                <button
                   type="button"
-                  variant="filled"
-                  size="lg"
-                  onClick={handleSaveStatusUpdate}
-                  className="flex-1"
+                  onClick={() => setUpdateStatus("rusak")}
+                  className={`flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-tile text-footnote font-semibold ring-1 transition-colors ${
+                    updateStatus === "rusak"
+                      ? "bg-negative/10 text-negative ring-negative"
+                      : "bg-surface-2 text-label-2 ring-edge hover:bg-fill"
+                  }`}
                 >
-                  Simpan status
-                </Button>
-              </div>
-
-              {/* Damage/Repair History Section */}
-              <div className="mt-2 border-t border-sep pt-4">
-                <label className="mb-2 block text-left text-caption font-semibold uppercase tracking-wide text-label-3">
-                  Riwayat kerusakan & perbaikan ({updatingDevice.history?.length || 0})
-                </label>
-                {updatingDevice.history && updatingDevice.history.length > 0 ? (
-                  <div className="flex max-h-36 flex-col gap-2 overflow-y-auto pr-1 text-left">
-                    {[...updatingDevice.history].reverse().map((entry, idx) => (
-                      <div
-                        key={idx}
-                        className="rounded-tile bg-surface-2 p-2.5 text-footnote ring-1 ring-edge"
-                      >
-                        <div className="mb-1 flex items-center justify-between">
-                          <Pill tone={entry.status === "rusak" ? "negative" : "positive"}>
-                            {entry.status === "rusak" ? "Rusak" : "Normal"}
-                          </Pill>
-                          <span className="font-mono text-caption2 text-label-3">
-                            {new Date(entry.updatedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "2-digit" })}
-                          </span>
-                        </div>
-                        {entry.keterangan && (
-                          <p className="mb-0.5 text-footnote font-medium leading-relaxed text-label">
-                            {entry.keterangan}
-                          </p>
-                        )}
-                        <span className="block text-caption2 text-label-3">
-                          Oleh: {entry.updatedBy?.split("@")[0]}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="py-2 text-center text-footnote italic text-label-3">
-                    Belum ada riwayat kondisi
-                  </p>
-                )}
+                  <XCircle className="h-4 w-4 text-negative" /> Kondisi rusak
+                </button>
               </div>
             </div>
+
+            {/* Keterangan Kerusakan */}
+            {updateStatus === "rusak" && (
+              <div className={MOTION.panel}>
+                <TextAreaField
+                  label="Keterangan kerusakan"
+                  value={updateKeterangan}
+                  onChange={(e) => setUpdateKeterangan(e.target.value)}
+                  placeholder="Contoh: Tombol R2 macet, analog kiri ngedrift..."
+                  rows={3}
+                />
+              </div>
+            )}
+
+            {/* Update Log metadata */}
+            {updatingDevice.updatedAt && (
+              <div className="text-center text-caption text-label-3">
+                Diupdate oleh: {updatingDevice.updatedBy?.split("@")[0]}
+                <span className="mt-0.5 block">Waktu: {new Date(updatingDevice.updatedAt || 0).toLocaleString("id-ID")}</span>
+              </div>
+            )}
+
+            {/* Damage/Repair History Section */}
+            <div className="border-t border-sep pt-4">
+              <label className="mb-2 block text-left text-caption font-semibold uppercase tracking-wide text-label-3">
+                Riwayat kerusakan & perbaikan ({updatingDevice.history?.length || 0})
+              </label>
+              {updatingDevice.history && updatingDevice.history.length > 0 ? (
+                <div className="flex max-h-36 flex-col gap-2 overflow-y-auto pr-1 text-left">
+                  {[...updatingDevice.history].reverse().map((entry, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-tile bg-surface-2 p-2.5 text-footnote ring-1 ring-edge"
+                    >
+                      <div className="mb-1 flex items-center justify-between">
+                        <Pill tone={entry.status === "rusak" ? "negative" : "positive"}>
+                          {entry.status === "rusak" ? "Rusak" : "Normal"}
+                        </Pill>
+                        <span className="font-mono text-caption2 text-label-3">
+                          {new Date(entry.updatedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "2-digit" })}
+                        </span>
+                      </div>
+                      {entry.keterangan && (
+                        <p className="mb-0.5 text-footnote font-medium leading-relaxed text-label">
+                          {entry.keterangan}
+                        </p>
+                      )}
+                      <span className="block text-caption2 text-label-3">
+                        Oleh: {entry.updatedBy?.split("@")[0]}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="py-2 text-center text-footnote italic text-label-3">
+                  Belum ada riwayat kondisi
+                </p>
+              )}
+            </div>
           </div>
-        </div>,
-        document.body
-      )}
+        )}
+      </Sheet>
       {/* Off-screen PDF Page Renderer */}
       {isGeneratingPdf && (
         <div 
@@ -2052,8 +2036,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
       {/* PDF Loader Modal */}
       {isGeneratingPdf && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          <div className="relative z-10 flex w-full max-w-sm flex-col items-center rounded-sheet apple-sheet border border-white/50 dark:border-white/[0.12] p-6 text-center shadow-float ring-1 ring-edge animate-in zoom-in-95 duration-200 sm:p-8">
+          <div className={`absolute inset-0 bg-black/50 backdrop-blur-sm ${MOTION.backdrop}`} />
+          <div className={`relative z-10 flex w-full max-w-sm flex-col items-center rounded-sheet apple-sheet border border-white/50 dark:border-white/[0.12] p-6 text-center shadow-float ring-1 ring-edge sm:p-8 ${MOTION.dialog}`}>
             {/* PDF Icon */}
             <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-tile bg-tint/10 text-tint">
               <QrCode className="h-7 w-7 animate-pulse" />

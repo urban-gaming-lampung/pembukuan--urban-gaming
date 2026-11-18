@@ -1,13 +1,11 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { createPortal } from "react-dom";
 import HistoryPembukuan from "./HistoryPembukuan";
-import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
-import { AlertCircle, Activity, ChevronRight, ClipboardEdit, Terminal, X } from "lucide-react";
+import { AlertCircle, Activity, ChevronRight, ClipboardEdit, Terminal } from "lucide-react";
 import { doc, setDoc, onSnapshot, query, collection, updateDoc, orderBy } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { HistoryItem, RowSewa } from "../lib/types";
 import { rupiah, formatDateShort, toInt } from "../lib/format";
-import { Amount, Button, Card, ChartTip, EmptyState, Eyebrow, Pill, SubTabs } from "../ui";
+import { Amount, Button, Card, ChartTip, EmptyState, Eyebrow, MOTION, Pill, Sheet, SubTabs } from "../ui";
 import TabPegawai from "./TabPegawai";
 import WidgetMonitoringStatus from "./WidgetMonitoringStatus";
 import HalamanStok from "./HalamanStok";
@@ -93,9 +91,6 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   const [showIncomeModal, setShowIncomeModal] = useState(false);
   const [selectedIncomeCategory, setSelectedIncomeCategory] = useState<string | null>(null);
 
-  useBodyScrollLock(showAnalitikModal);
-  useBodyScrollLock(showIncomeModal);
-
   // States for Analitik Sub-tabs and Logging
   const [analitikSubTab, setAnalitikSubTab] = useState<"KESELURUHAN" | "PEMBUKUAN" | "USAHA">("KESELURUHAN");
   const [inputSubTab, setInputSubTab] = useState<"TRANSAKSI" | "STOK">("TRANSAKSI");
@@ -110,7 +105,6 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   const [editRequests, setEditRequests] = useState<any[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
-  useBodyScrollLock(!!selectedRequest);
 
   const [expandedMonths, setExpandedMonths] = useState<string[]>([]);
   const [expandedWeeks, setExpandedWeeks] = useState<string[]>([]);
@@ -737,177 +731,201 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     selectedCatItems: any[];
     getColor: (cat: string) => string;
   }) => {
-    if (!open || typeof document === "undefined") return null;
-    return createPortal(
-      <div className="fixed inset-0 z-[600] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
-        <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-sheet apple-sheet border border-white/50 dark:border-white/[0.12] shadow-float ring-1 ring-edge animate-in slide-in-from-bottom-4 duration-300 sm:max-h-[85vh] sm:w-[95%] sm:max-w-[960px] sm:rounded-[32px] sm:zoom-in-95">
-          {/* Drag Handle (mobile) */}
-          <div className="flex justify-center pt-2.5 pb-1 sm:hidden">
-            <div className="h-1 w-9 rounded-full bg-fill" />
-          </div>
-
-          {/* Header */}
-          <div className="flex shrink-0 items-center justify-between border-b border-sep px-5 py-4 sm:px-6">
-            <div>
-              <h2 className="text-title3 font-bold tracking-tight text-label">{title}</h2>
-              <p className="mt-0.5 text-footnote text-label-2">{labelPeriode} · {items.length} transaksi</p>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Tutup rincian"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-fill text-label-2 transition-opacity active:opacity-75"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          {/* Scrollable Content */}
-          <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: "touch" }}>
-            {/* Chart + Categories */}
-            <div className="px-5 pt-5 pb-3 sm:px-6">
-              <div className="flex flex-col items-start gap-6 md:flex-row">
-                {/* Donut Chart */}
-                <div className="flex w-full shrink-0 flex-col items-center md:w-[250px]">
-                  <div className="relative mx-auto h-[230px] w-[230px]">
-                    {chartData.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={chartData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={62}
-                            outerRadius={92}
-                            paddingAngle={3}
-                            dataKey="value"
-                            stroke="none"
-                            style={{ cursor: "pointer", outline: "none" }}
-                            onClick={(_: any, idx: number) => {
-                              const cat = chartData[idx]?.name;
-                              setSelectedCat((prev) => (prev === cat ? null : cat));
-                            }}
-                          >
-                            {chartData.map((e, i) => (
-                              <Cell
-                                key={`c-${i}`}
-                                fill={e.color}
-                                opacity={selectedCat ? (selectedCat === e.name ? 1 : 0.25) : 1}
-                                style={{ transition: "opacity 0.3s ease", cursor: "pointer" }}
-                              />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            content={({ active, payload }: any) =>
-                              active && payload?.length ? (
-                                <ChartTip
-                                  title={payload[0].name}
-                                  rows={[{
-                                    color: payload[0].payload?.color,
-                                    label: "Nominal",
-                                    value: rupiah(Number(payload[0].value || 0)),
-                                  }]}
-                                />
-                              ) : null
-                            }
+    return (
+      <Sheet
+        open={open}
+        onClose={onClose}
+        size="xl"
+        variant="surface"
+        zClassName="z-[600]"
+        title={title}
+        subtitle={`${labelPeriode} · ${items.length} transaksi`}
+      >
+        <div className="space-y-4">
+          {/* Chart + Categories */}
+          <div className="flex flex-col items-start gap-6 md:flex-row">
+            {/* Donut Chart */}
+            <div className="flex w-full shrink-0 flex-col items-center md:w-[250px]">
+              <div className="relative mx-auto h-[230px] w-[230px]">
+                {chartData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={chartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={62}
+                        outerRadius={92}
+                        paddingAngle={3}
+                        dataKey="value"
+                        stroke="none"
+                        style={{ cursor: "pointer", outline: "none" }}
+                        onClick={(_: any, idx: number) => {
+                          const cat = chartData[idx]?.name;
+                          setSelectedCat((prev) => (prev === cat ? null : cat));
+                        }}
+                      >
+                        {chartData.map((e, i) => (
+                          <Cell
+                            key={`c-${i}`}
+                            fill={e.color}
+                            opacity={selectedCat ? (selectedCat === e.name ? 1 : 0.25) : 1}
+                            style={{ transition: "opacity 0.3s ease", cursor: "pointer" }}
                           />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-footnote text-label-3">
-                        Belum ada data
-                      </div>
-                    )}
-                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                      <div className="flex flex-col items-center rounded-tile bg-surface/90 px-3 py-1.5 ring-1 ring-edge backdrop-blur-md">
-                        <Eyebrow>Total</Eyebrow>
-                        <span className={`text-subhead font-bold tabular-nums ${isExpense ? "text-negative" : "text-positive"}`}>
-                          {rupiah(totalAmount)}
-                        </span>
-                      </div>
-                    </div>
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        content={({ active, payload }: any) =>
+                          active && payload?.length ? (
+                            <ChartTip
+                              title={payload[0].name}
+                              rows={[{
+                                color: payload[0].payload?.color,
+                                label: "Nominal",
+                                value: rupiah(Number(payload[0].value || 0)),
+                              }]}
+                            />
+                          ) : null
+                        }
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-footnote text-label-3">
+                    Belum ada data
                   </div>
-                  <p className="mt-2 text-caption text-label-3">Ketuk segmen untuk filter</p>
-                </div>
-
-                {/* Category Cards */}
-                <div className="w-full flex-1">
-                  <div className={`grid grid-cols-2 gap-2 ${isExpense ? "sm:grid-cols-3 lg:grid-cols-4" : "sm:grid-cols-4"}`}>
-                    {chartData.map((cat) => {
-                      const isActive = selectedCat === cat.name;
-                      const pct = totalAmount > 0 ? ((cat.value / totalAmount) * 100).toFixed(1) : "0";
-                      const count = items.filter((x) => x.kategori === cat.name).length;
-                      return (
-                        <button
-                          type="button"
-                          key={cat.name}
-                          onClick={() => setSelectedCat((prev) => (prev === cat.name ? null : cat.name))}
-                          className={`relative overflow-hidden rounded-tile p-3 text-left transition-all active:scale-[0.97] ${
-                            isActive
-                              ? "bg-tint/10 ring-2 ring-tint"
-                              : "apple-tile apple-tile-interactive ring-1 ring-edge"
-                          }`}
-                        >
-                          <div className="mb-1.5 flex items-center gap-1.5">
-                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: cat.color }} />
-                            <span className="truncate text-caption font-medium text-label-2">{cat.name}</span>
-                          </div>
-                          <div className="flex items-end justify-between gap-2">
-                            <span className="text-subhead font-bold tabular-nums text-label">{rupiah(cat.value)}</span>
-                            <div className="flex flex-col items-end text-caption2 tabular-nums">
-                              <span className="font-semibold text-label-2">{pct}%</span>
-                              <span className="text-label-3">{count}x</span>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
+                )}
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <div className="flex flex-col items-center rounded-tile bg-surface/90 px-3 py-1.5 ring-1 ring-edge backdrop-blur-md">
+                    <Eyebrow>Total</Eyebrow>
+                    <span className={`text-subhead font-bold tabular-nums ${isExpense ? "text-negative" : "text-positive"}`}>
+                      {rupiah(totalAmount)}
+                    </span>
                   </div>
                 </div>
               </div>
+              <p className="mt-2 text-caption text-label-3">Ketuk segmen untuk filter</p>
             </div>
 
-            {/* Section Divider */}
-            <div className="mx-5 my-3 flex items-center gap-3 sm:mx-6">
-              <div className="h-px flex-1 bg-sep" />
-              <Eyebrow>{selectedCat || allLabel}</Eyebrow>
-              <div className="h-px flex-1 bg-sep" />
-            </div>
-
-            {/* Detail / Full List */}
-            <div className="px-5 pb-6 sm:px-6">
-              {selectedCat ? (
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5">
-                      <span
-                        className="flex h-8 w-8 items-center justify-center rounded-tile ring-1 ring-edge"
-                        style={{ backgroundColor: `${getColor(selectedCat)}18` }}
-                      >
-                        <span className="h-3 w-3 rounded-full" style={{ backgroundColor: getColor(selectedCat) }} />
-                      </span>
-                      <div>
-                        <h4 className="text-callout font-bold leading-tight text-label">{selectedCat}</h4>
-                        <p className="text-caption text-label-3">{selectedCatItems.length} transaksi</p>
+            {/* Category Cards */}
+            <div className="w-full flex-1">
+              <div className={`grid grid-cols-2 gap-2 ${isExpense ? "sm:grid-cols-3 lg:grid-cols-4" : "sm:grid-cols-4"}`}>
+                {chartData.map((cat) => {
+                  const isActive = selectedCat === cat.name;
+                  const pct = totalAmount > 0 ? ((cat.value / totalAmount) * 100).toFixed(1) : "0";
+                  const count = items.filter((x) => x.kategori === cat.name).length;
+                  return (
+                    <button
+                      type="button"
+                      key={cat.name}
+                      onClick={() => setSelectedCat((prev) => (prev === cat.name ? null : cat.name))}
+                      className={`relative overflow-hidden rounded-tile p-3 text-left transition-all active:scale-[0.97] ${
+                        isActive
+                          ? "bg-tint/10 ring-2 ring-tint"
+                          : "apple-tile apple-tile-interactive ring-1 ring-edge"
+                      }`}
+                    >
+                      <div className="mb-1.5 flex items-center gap-1.5">
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: cat.color }} />
+                        <span className="truncate text-caption font-medium text-label-2">{cat.name}</span>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <span className={`text-headline font-bold tabular-nums ${isExpense ? "text-negative" : "text-positive"}`}>
-                        {rupiah(selectedCatItems.reduce((s, x) => s + x.harga, 0))}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedCat(null)}
-                        className="mt-0.5 block w-full text-right text-caption font-semibold text-tint transition-opacity active:opacity-75"
-                      >
-                        ← Semua
-                      </button>
+                      <div className="flex items-end justify-between gap-2">
+                        <span className="text-subhead font-bold tabular-nums text-label">{rupiah(cat.value)}</span>
+                        <div className="flex flex-col items-end text-caption2 tabular-nums">
+                          <span className="font-semibold text-label-2">{pct}%</span>
+                          <span className="text-label-3">{count}x</span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Section Divider */}
+          <div className="my-2 flex items-center gap-3">
+            <div className="h-px flex-1 bg-sep" />
+            <Eyebrow>{selectedCat || allLabel}</Eyebrow>
+            <div className="h-px flex-1 bg-sep" />
+          </div>
+
+          {/* Detail / Full List */}
+          <div>
+            {selectedCat ? (
+              <div className={MOTION.panel}>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <span
+                      className="flex h-8 w-8 items-center justify-center rounded-tile ring-1 ring-edge"
+                      style={{ backgroundColor: `${getColor(selectedCat)}18` }}
+                    >
+                      <span className="h-3 w-3 rounded-full" style={{ backgroundColor: getColor(selectedCat) }} />
+                    </span>
+                    <div>
+                      <h4 className="text-callout font-bold leading-tight text-label">{selectedCat}</h4>
+                      <p className="text-caption text-label-3">{selectedCatItems.length} transaksi</p>
                     </div>
                   </div>
-                  <div className="flex max-h-[280px] flex-col gap-1.5 overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: "touch" }}>
-                    {selectedCatItems.map((o, idx) => (
-                      <div key={idx} className="flex items-center justify-between gap-3 rounded-tile apple-tile px-3.5 py-2.5 ring-1 ring-edge">
+                  <div className="text-right">
+                    <span className={`text-headline font-bold tabular-nums ${isExpense ? "text-negative" : "text-positive"}`}>
+                      {rupiah(selectedCatItems.reduce((s, x) => s + x.harga, 0))}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCat(null)}
+                      className="mt-0.5 block w-full text-right text-caption font-semibold text-tint transition-opacity active:opacity-75"
+                    >
+                      ← Semua
+                    </button>
+                  </div>
+                </div>
+                <div className="flex max-h-[280px] flex-col gap-1.5 overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: "touch" }}>
+                  {selectedCatItems.map((o, idx) => (
+                    <div key={idx} className="flex items-center justify-between gap-3 rounded-tile apple-tile px-3.5 py-2.5 ring-1 ring-edge">
+                      <div className="flex min-w-0 flex-1 flex-col">
+                        <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-caption text-label-3">{formatDateShort(o.tanggal)}</span>
+                          {isExpense ? (
+                            <Pill tone={o.source === "owner" ? "tint" : undefined}>
+                              {o.source === "owner" ? "Owner" : "Admin"}
+                            </Pill>
+                          ) : (
+                            <>
+                              <span className="text-caption capitalize text-label-3">{o.hari}</span>
+                              {o.bayar && (
+                                <Pill tone={o.bayar.toLowerCase().includes("cash") ? "positive" : "tint"}>
+                                  {o.bayar}
+                                </Pill>
+                              )}
+                            </>
+                          )}
+                        </div>
+                        <span className="truncate text-subhead font-medium text-label">{o.nama}</span>
+                      </div>
+                      <span className={`shrink-0 text-subhead font-semibold tabular-nums ${isExpense ? "text-negative" : "text-positive"}`}>
+                        {isExpense ? "-" : "+"}{rupiah(o.harga)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex max-h-[320px] flex-col gap-1.5 overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: "touch" }}>
+                {items.length === 0 && (
+                  <p className="py-8 text-center text-subhead text-label-3">{emptyLabel}</p>
+                )}
+                {items.map((o, idx) => {
+                  const catColor = getColor(o.kategori);
+                  return (
+                    <button
+                      type="button"
+                      key={idx}
+                      onClick={() => setSelectedCat(o.kategori)}
+                      className="flex w-full items-center justify-between gap-3 rounded-tile apple-tile apple-tile-interactive px-3.5 py-2.5 text-left ring-1 ring-edge"
+                    >
+                      <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                        <div className="h-8 w-1 shrink-0 rounded-full" style={{ backgroundColor: catColor }} />
                         <div className="flex min-w-0 flex-1 flex-col">
                           <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
                             <span className="font-mono text-caption text-label-3">{formatDateShort(o.tanggal)}</span>
@@ -916,82 +934,37 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                                 {o.source === "owner" ? "Owner" : "Admin"}
                               </Pill>
                             ) : (
-                              <>
-                                <span className="text-caption capitalize text-label-3">{o.hari}</span>
-                                {o.bayar && (
-                                  <Pill tone={o.bayar.toLowerCase().includes("cash") ? "positive" : "tint"}>
-                                    {o.bayar}
-                                  </Pill>
-                                )}
-                              </>
+                              <span className="text-caption capitalize text-label-3">{o.hari}</span>
                             )}
                           </div>
                           <span className="truncate text-subhead font-medium text-label">{o.nama}</span>
-                        </div>
-                        <span className={`shrink-0 text-subhead font-semibold tabular-nums ${isExpense ? "text-negative" : "text-positive"}`}>
-                          {isExpense ? "-" : "+"}{rupiah(o.harga)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="flex max-h-[320px] flex-col gap-1.5 overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: "touch" }}>
-                  {items.length === 0 && (
-                    <p className="py-8 text-center text-subhead text-label-3">{emptyLabel}</p>
-                  )}
-                  {items.map((o, idx) => {
-                    const catColor = getColor(o.kategori);
-                    return (
-                      <button
-                        type="button"
-                        key={idx}
-                        onClick={() => setSelectedCat(o.kategori)}
-                        className="flex w-full items-center justify-between gap-3 rounded-tile apple-tile apple-tile-interactive px-3.5 py-2.5 text-left ring-1 ring-edge"
-                      >
-                        <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                          <div className="h-8 w-1 shrink-0 rounded-full" style={{ backgroundColor: catColor }} />
-                          <div className="flex min-w-0 flex-1 flex-col">
-                            <div className="mb-0.5 flex flex-wrap items-center gap-1.5">
-                              <span className="font-mono text-caption text-label-3">{formatDateShort(o.tanggal)}</span>
-                              {isExpense ? (
-                                <Pill tone={o.source === "owner" ? "tint" : undefined}>
-                                  {o.source === "owner" ? "Owner" : "Admin"}
-                                </Pill>
-                              ) : (
-                                <span className="text-caption capitalize text-label-3">{o.hari}</span>
-                              )}
-                            </div>
-                            <span className="truncate text-subhead font-medium text-label">{o.nama}</span>
-                            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: catColor }} />
-                              <span className="text-caption text-label-2">{o.kategori}</span>
-                              {!isExpense && o.bayar && (
-                                <span className={`text-caption font-semibold ${o.bayar.toLowerCase().includes("cash") ? "text-positive" : "text-tint"}`}>
-                                  · {o.bayar}
-                                </span>
-                              )}
-                            </div>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: catColor }} />
+                            <span className="text-caption text-label-2">{o.kategori}</span>
+                            {!isExpense && o.bayar && (
+                              <span className={`text-caption font-semibold ${o.bayar.toLowerCase().includes("cash") ? "text-positive" : "text-tint"}`}>
+                                · {o.bayar}
+                              </span>
+                            )}
                           </div>
                         </div>
-                        <span className={`shrink-0 text-subhead font-semibold tabular-nums ${isExpense ? "text-negative" : "text-positive"}`}>
-                          {isExpense ? "-" : "+"}{rupiah(o.harga)}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                      </div>
+                      <span className={`shrink-0 text-subhead font-semibold tabular-nums ${isExpense ? "text-negative" : "text-positive"}`}>
+                        {isExpense ? "-" : "+"}{rupiah(o.harga)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
-      </div>,
-      document.body
+      </Sheet>
     );
   };
 
   return (
-    <div className="space-y-4 sm:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out fill-mode-both">
+    <div className={`space-y-4 sm:space-y-6 ${MOTION.panel}`}>
       {/* Menu utama pemilik — SubTabs (SSOT) */}
       <SubTabs
         ariaLabel="Menu utama pemilik"
@@ -1424,148 +1397,22 @@ const PageOwner: React.FC<PageOwnerProps> = ({
           { label: "Ruko tutup", o: req.originalData?.rukoTutup, p: req.proposedData?.rukoTutup },
           { label: "Shift", o: req.originalData?.shiftPegawai, p: req.proposedData?.shiftPegawai },
         ];
-        return typeof document !== "undefined" ? createPortal(
-          <div className="fixed inset-0 z-[600] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true">
-            <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={() => setSelectedRequest(null)} />
-            <div className="relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-sheet apple-sheet border border-white/50 dark:border-white/[0.12] shadow-float ring-1 ring-edge animate-in slide-in-from-bottom-4 duration-300 sm:max-h-[85vh] sm:w-[95%] sm:max-w-[850px] sm:rounded-[32px] sm:zoom-in-95">
-              {/* Drag Handle */}
-              <div className="flex justify-center pt-2.5 pb-1 sm:hidden">
-                <div className="h-1 w-9 rounded-full bg-fill" />
-              </div>
-
-              {/* Header */}
-              <div className="flex shrink-0 items-center justify-between border-b border-sep px-5 py-4 sm:px-6">
-                <div>
-                  <h2 className="text-title3 font-bold tracking-tight text-label">Detail perbandingan edit</h2>
-                  <p className="mt-0.5 text-footnote text-label-2">
-                    Pengirim: <span className="font-semibold text-label">{req.requestedBy}</span> · Target: <span className="font-semibold text-tint">{req.hari}, {req.tanggal}</span>
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedRequest(null)}
-                  aria-label="Tutup perbandingan"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-fill text-label-2 transition-opacity active:opacity-75"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Scrollable Content */}
-              <div className="flex-1 space-y-5 overflow-y-auto p-5 sm:p-6" style={{ WebkitOverflowScrolling: "touch" }}>
-                {/* General Info Comparison */}
-                <div className="space-y-3 rounded-tile apple-tile p-4 ring-1 ring-edge">
-                  <Eyebrow>Informasi umum</Eyebrow>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                    {infoFields.map((f, i) => (
-                      <div key={f.label} className={`flex flex-col ${i === 4 ? "col-span-2 sm:col-span-1" : ""}`}>
-                        <span className="text-caption text-label-3">{f.label}</span>
-                        <span className="truncate text-footnote text-negative line-through">{f.o || "-"}</span>
-                        <span className="truncate text-footnote font-semibold text-positive">{f.p || "-"}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="border-t border-sep pt-2.5">
-                    <span className="text-caption text-label-3">Catatan</span>
-                    <p className="text-footnote text-negative line-through">{req.originalData?.catatan || "-"}</p>
-                    <p className="text-footnote font-medium text-positive">{req.proposedData?.catatan || "-"}</p>
-                  </div>
-                </div>
-
-                {/* Categories Comparison */}
-                <div className="space-y-4">
-                  {(["harian", "jajanan", "jasaAks", "sewa", "setoran", "pengeluaran"] as const).map((cat) => {
-                    let title = "";
-                    let originalRows: any[] = [];
-                    let proposedRows: any[] = [];
-                    let renderRow = (_row: any) => "";
-
-                    if (cat === "harian") {
-                      title = "Transaksi harian (PS Main)";
-                      originalRows = req.originalData?.rowsHarian || [];
-                      proposedRows = req.proposedData?.rowsHarian || [];
-                      renderRow = (row) => `${row.jenisPS} · ${row.jumlahJam} jam · ${rupiah(row.harga)} · ${row.bayar || "Cash"}`;
-                    } else if (cat === "jajanan") {
-                      title = "Penjualan jajanan";
-                      originalRows = req.originalData?.rowsJajanan || [];
-                      proposedRows = req.proposedData?.rowsJajanan || [];
-                      renderRow = (row) => `${row.jenisJajanan} · ${row.qtyJam} qty · ${rupiah(row.harga)} · ${row.bayar || "Cash"}`;
-                    } else if (cat === "jasaAks") {
-                      title = "Pemasukan usaha";
-                      originalRows = req.originalData?.rowsJasaAks || [];
-                      proposedRows = req.proposedData?.rowsJasaAks || [];
-                      renderRow = (row) => `${row.tipe} (${row.ket}) · ${rupiah(row.harga)} · ${row.bayar || "Cash"}`;
-                    } else if (cat === "sewa") {
-                      title = "Rental sewa PS luar";
-                      originalRows = req.originalData?.rowsSewa || [];
-                      proposedRows = req.proposedData?.rowsSewa || [];
-                      renderRow = (row) => `${row.jenisPS} · ${row.lamaSewa} · ${rupiah(row.harga)} · ${row.bayar || "Cash"}${row.isOngkir === "YA" ? ` (+ Ongkir ${rupiah(row._ongkir)})` : ""}`;
-                    } else if (cat === "setoran") {
-                      title = "Setoran";
-                      originalRows = req.originalData?.rowsSetoran || [];
-                      proposedRows = req.proposedData?.rowsSetoran || [];
-                      renderRow = (row) => `${row.ket} · ${rupiah(row.harga || row.nominal)} · ${row.bayar || "Cash"}`;
-                    } else if (cat === "pengeluaran") {
-                      title = "Pengeluaran";
-                      originalRows = req.originalData?.rowsPengeluaran || [];
-                      proposedRows = req.proposedData?.rowsPengeluaran || [];
-                      renderRow = (row) => `${row.ket} · ${rupiah(row.harga || row.nominal)} · ${row.bayar || "Cash"}`;
-                    }
-
-                    const isIdentical = JSON.stringify(originalRows) === JSON.stringify(proposedRows);
-                    if (originalRows.length === 0 && proposedRows.length === 0) return null;
-
-                    return (
-                      <div key={cat} className="space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <h4 className="text-subhead font-semibold text-label">{title}</h4>
-                          <Pill tone={isIdentical ? undefined : "warning"}>
-                            {isIdentical ? "Tidak ada perubahan" : "Ada perubahan"}
-                          </Pill>
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                          {/* Original Column */}
-                          <div className={`rounded-tile p-3 ring-1 ${isIdentical ? "bg-surface-2 ring-edge" : "bg-negative/5 ring-negative/25"}`}>
-                            <Eyebrow>Original</Eyebrow>
-                            {originalRows.length === 0 ? (
-                              <p className="mt-1.5 text-footnote italic text-label-3">Tidak ada transaksi</p>
-                            ) : (
-                              <div className="mt-1.5 divide-y divide-sep">
-                                {originalRows.map((row, rIdx) => (
-                                  <div key={rIdx} className="truncate py-1 text-footnote text-label-2 line-through">
-                                    {rIdx + 1}. {renderRow(row)}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Proposed Column */}
-                          <div className={`rounded-tile p-3 ring-1 ${isIdentical ? "bg-surface-2 ring-edge" : "bg-positive/5 ring-positive/25"}`}>
-                            <Eyebrow>Usulan edit</Eyebrow>
-                            {proposedRows.length === 0 ? (
-                              <p className="mt-1.5 text-footnote italic text-label-3">Tidak ada transaksi</p>
-                            ) : (
-                              <div className="mt-1.5 divide-y divide-sep">
-                                {proposedRows.map((row, rIdx) => (
-                                  <div key={rIdx} className="truncate py-1 text-footnote font-medium text-label">
-                                    {rIdx + 1}. {renderRow(row)}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Footer Actions */}
-              {isPending ? (
-                <div className="flex shrink-0 justify-end gap-2.5 border-t border-sep apple-bar px-5 py-4 sm:px-6">
+        return (
+          <Sheet
+            open={Boolean(selectedRequest)}
+            onClose={() => setSelectedRequest(null)}
+            size="xl"
+            variant="surface"
+            zClassName="z-[600]"
+            title="Detail perbandingan edit"
+            subtitle={
+              <>
+                Pengirim: <span className="font-semibold text-label">{req.requestedBy}</span> · Target: <span className="font-semibold text-tint">{req.hari}, {req.tanggal}</span>
+              </>
+            }
+            footer={
+              isPending ? (
+                <div className="flex justify-end gap-2.5">
                   <Button type="button" variant="destructive" size="md" onClick={() => handleRejectRequest(req)}>
                     Tolak request
                   </Button>
@@ -1574,7 +1421,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                   </Button>
                 </div>
               ) : (
-                <div className="flex shrink-0 items-center justify-between border-t border-sep apple-bar px-5 py-4 sm:px-6">
+                <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-footnote text-label-2">
                     <span>Status:</span>
                     <Pill tone={req.status === "approved" ? "positive" : "negative"}>
@@ -1585,11 +1432,121 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                     Tutup
                   </Button>
                 </div>
-              )}
+              )
+            }
+          >
+            <div className="space-y-5">
+              {/* General Info Comparison */}
+              <div className="space-y-3 rounded-tile apple-tile p-4 ring-1 ring-edge">
+                <Eyebrow>Informasi umum</Eyebrow>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  {infoFields.map((f, i) => (
+                    <div key={f.label} className={`flex flex-col ${i === 4 ? "col-span-2 sm:col-span-1" : ""}`}>
+                      <span className="text-caption text-label-3">{f.label}</span>
+                      <span className="truncate text-footnote text-negative line-through">{f.o || "-"}</span>
+                      <span className="truncate text-footnote font-semibold text-positive">{f.p || "-"}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-sep pt-2.5">
+                  <span className="text-caption text-label-3">Catatan</span>
+                  <p className="text-footnote text-negative line-through">{req.originalData?.catatan || "-"}</p>
+                  <p className="text-footnote font-medium text-positive">{req.proposedData?.catatan || "-"}</p>
+                </div>
+              </div>
+
+              {/* Categories Comparison */}
+              <div className="space-y-4">
+                {(["harian", "jajanan", "jasaAks", "sewa", "setoran", "pengeluaran"] as const).map((cat) => {
+                  let title = "";
+                  let originalRows: any[] = [];
+                  let proposedRows: any[] = [];
+                  let renderRow = (_row: any) => "";
+
+                  if (cat === "harian") {
+                    title = "Transaksi harian (PS Main)";
+                    originalRows = req.originalData?.rowsHarian || [];
+                    proposedRows = req.proposedData?.rowsHarian || [];
+                    renderRow = (row) => `${row.jenisPS} · ${row.jumlahJam} jam · ${rupiah(row.harga)} · ${row.bayar || "Cash"}`;
+                  } else if (cat === "jajanan") {
+                    title = "Penjualan jajanan";
+                    originalRows = req.originalData?.rowsJajanan || [];
+                    proposedRows = req.proposedData?.rowsJajanan || [];
+                    renderRow = (row) => `${row.jenisJajanan} · ${row.qtyJam} qty · ${rupiah(row.harga)} · ${row.bayar || "Cash"}`;
+                  } else if (cat === "jasaAks") {
+                    title = "Pemasukan usaha";
+                    originalRows = req.originalData?.rowsJasaAks || [];
+                    proposedRows = req.proposedData?.rowsJasaAks || [];
+                    renderRow = (row) => `${row.tipe} (${row.ket}) · ${rupiah(row.harga)} · ${row.bayar || "Cash"}`;
+                  } else if (cat === "sewa") {
+                    title = "Rental sewa PS luar";
+                    originalRows = req.originalData?.rowsSewa || [];
+                    proposedRows = req.proposedData?.rowsSewa || [];
+                    renderRow = (row) => `${row.jenisPS} · ${row.lamaSewa} · ${rupiah(row.harga)} · ${row.bayar || "Cash"}${row.isOngkir === "YA" ? ` (+ Ongkir ${rupiah(row._ongkir)})` : ""}`;
+                  } else if (cat === "setoran") {
+                    title = "Setoran";
+                    originalRows = req.originalData?.rowsSetoran || [];
+                    proposedRows = req.proposedData?.rowsSetoran || [];
+                    renderRow = (row) => `${row.ket} · ${rupiah(row.harga || row.nominal)} · ${row.bayar || "Cash"}`;
+                  } else if (cat === "pengeluaran") {
+                    title = "Pengeluaran";
+                    originalRows = req.originalData?.rowsPengeluaran || [];
+                    proposedRows = req.proposedData?.rowsPengeluaran || [];
+                    renderRow = (row) => `${row.ket} · ${rupiah(row.harga || row.nominal)} · ${row.bayar || "Cash"}`;
+                  }
+
+                  const isIdentical = JSON.stringify(originalRows) === JSON.stringify(proposedRows);
+                  if (originalRows.length === 0 && proposedRows.length === 0) return null;
+
+                  return (
+                    <div key={cat} className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="text-subhead font-semibold text-label">{title}</h4>
+                        <Pill tone={isIdentical ? undefined : "warning"}>
+                          {isIdentical ? "Tidak ada perubahan" : "Ada perubahan"}
+                        </Pill>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {/* Original Column */}
+                        <div className={`rounded-tile p-3 ring-1 ${isIdentical ? "bg-surface-2 ring-edge" : "bg-negative/5 ring-negative/25"}`}>
+                          <Eyebrow>Original</Eyebrow>
+                          {originalRows.length === 0 ? (
+                            <p className="mt-1.5 text-footnote italic text-label-3">Tidak ada transaksi</p>
+                          ) : (
+                            <div className="mt-1.5 divide-y divide-sep">
+                              {originalRows.map((row, rIdx) => (
+                                <div key={rIdx} className="truncate py-1 text-footnote text-label-2 line-through">
+                                  {rIdx + 1}. {renderRow(row)}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Proposed Column */}
+                        <div className={`rounded-tile p-3 ring-1 ${isIdentical ? "bg-surface-2 ring-edge" : "bg-positive/5 ring-positive/25"}`}>
+                          <Eyebrow>Usulan edit</Eyebrow>
+                          {proposedRows.length === 0 ? (
+                            <p className="mt-1.5 text-footnote italic text-label-3">Tidak ada transaksi</p>
+                          ) : (
+                            <div className="mt-1.5 divide-y divide-sep">
+                              {proposedRows.map((row, rIdx) => (
+                                <div key={rIdx} className="truncate py-1 text-footnote font-medium text-label">
+                                  {rIdx + 1}. {renderRow(row)}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>,
-          document.body
-        ) : null;
+          </Sheet>
+        );
       })()}
     </div>
   );

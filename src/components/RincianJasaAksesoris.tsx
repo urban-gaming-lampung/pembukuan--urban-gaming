@@ -102,22 +102,24 @@ const DaftarNotaOwner: React.FC<{
               />
             </div>
 
-            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                <span className="font-mono text-caption text-label-2">
+            <div className="mt-1.5 flex items-center justify-between gap-3">
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="font-mono text-caption text-label-2 truncate">
                   {n.noNota} · {jam(n.ts)}
-                </span>
-                <Pill tone={isCash ? "warning" : "tint"}>
-                  {isCash ? "Belum disetor" : "TF / QRIS"}
-                </Pill>
-                {n.label && (
-                  <Pill tone={n.label === "DP" ? "warning" : n.label === "Tukar tambah" ? "tint" : "positive"}>
-                    {n.label}
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Pill tone={isCash ? "warning" : "tint"}>
+                    {isCash ? "Belum disetor" : "TF / QRIS"}
                   </Pill>
-                )}
+                  {n.label && (
+                    <Pill tone={n.label === "DP" ? "warning" : n.label === "Tukar tambah" ? "tint" : "positive"}>
+                      {n.label}
+                    </Pill>
+                  )}
+                </div>
               </div>
 
-              <div className="ml-auto flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 {!isCash && n.buktiTransfer && (
                   <UploadTransferProof value={n.buktiTransfer} onChange={() => {}} disabled />
                 )}
@@ -125,7 +127,7 @@ const DaftarNotaOwner: React.FC<{
                   type="button"
                   onClick={() => onOpenNota(n)}
                   aria-label={`Lihat nota ${n.noNota}`}
-                  className="inline-flex h-11 sm:h-9 items-center gap-1.5 rounded-full bg-tint/10 px-3.5 text-caption font-semibold text-tint transition hover:bg-tint/15 dark:bg-tint/15 active:scale-95"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-tint/10 px-3.5 text-caption font-semibold text-tint transition hover:bg-tint/15 dark:bg-tint/15 active:scale-95"
                 >
                   <Receipt size={14} />
                   <span>Nota</span>

@@ -3,7 +3,7 @@ import { X, ShoppingCart, Plus, Minus, Trash2, PlusCircle, Sparkles, Pencil, Rec
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, setDoc, deleteDoc, deleteField } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage, listGameDb } from "../lib/firebase";
-import { Button, Card, EmptyState, Eyebrow, IconBadge, Notice, Pill, SearchField, Sheet } from "../ui";
+import { Button, Card, EmptyState, Eyebrow, IconBadge, Notice, Pill, SearchField, Sheet, Toast } from "../ui";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue } from "../hooks/useStokData";
@@ -1652,15 +1652,13 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
       />
 
       {/* Peringatan stok dipesan DP */}
-      {toast && (
-        <div
-          role="status"
-          className="fixed left-1/2 -translate-x-1/2 bottom-[max(96px,calc(env(safe-area-inset-bottom)+88px))] z-[240] w-[calc(100%-32px)] max-w-sm flex items-start gap-2 rounded-card bg-action text-action-label px-4 py-3 text-footnote font-semibold leading-snug shadow-card backdrop-blur animate-in fade-in slide-in-from-bottom-2"
-        >
-          <AlertTriangle className="w-4 h-4 shrink-0 mt-px text-warning" />
-          <span>{toast}</span>
-        </div>
-      )}
+      <Toast
+        open={Boolean(toast)}
+        message={toast}
+        tone="warning"
+        onClose={() => setToast("")}
+        zClassName="z-[240]"
+      />
     </div>
   );
 }

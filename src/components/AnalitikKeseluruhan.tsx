@@ -1,16 +1,17 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from "recharts";
-import { Gamepad2, Store, BarChart3, Layers } from "lucide-react";
+import { Gamepad2, Store, BarChart3, Layers, Wallet } from "lucide-react";
 import FilterComp from "./Filter";
 import { dpHangus, gabungNota, isDpTerbuka, tanggalPenjualan, terjualDalam, totalDibayar, usePosSales, usePosSalesLunas } from "../lib/posSales";
-import { arusKasNota } from "../lib/akuntansiUsaha";
+import { arusKasNota, ringkasPosisiDana } from "../lib/akuntansiUsaha";
 import { Bisnis, bisnisOf, isBelanjaStok, pemasukanRental, pengeluaranAdminRental, periodRange, TransaksiOwner } from "../lib/keuangan";
 import type { HistoryItem } from "../lib/types";
 import { barisUsahaManual } from "../lib/pemasukanUsaha";
 import { persen, rpShort, rupiah, rupiahTanda } from "../lib/format";
 import { dariYmd, tanggalHariKerja, toLocalYmd } from "../lib/dateLocal";
-import { Amount, BarRow, Card, ChartTip, EmptyState, Footnote, Legend, LineItem, LineList, MARK, Notice, Pill, SectionHeader, sumbu, useTemaGrafik } from "../ui";
+import { Amount, BarRow, Card, ChartTip, EmptyState, Footnote, Legend, LineItem, LineList, MARK, Notice, Pill, SectionHeader, StatTile, sumbu, useTemaGrafik } from "../ui";
 import { HeroArus, KartuBisnis } from "./analitik/HeroArus";
+import { TunaiDiLuarRekeningSheet } from "./analitik/TunaiDiLuarRekeningSheet";
 
 type Props = {
   mode: string;
@@ -53,6 +54,7 @@ const TipArus: React.FC<any> = ({ active, payload }) => {
 export default function AnalitikKeseluruhan(props: Props) {
   const { mode, month, rangeStart, rangeEnd, filteredHistory, pengeluaran, pemasukan } = props;
   const tema = useTemaGrafik();
+  const [openTunaiSheet, setOpenTunaiSheet] = useState(false);
   // Hari kerja berganti -> periode "Bulan Ini" / "7 Hari" ikut bergeser
   const hariKerja = tanggalHariKerja();
   const period = useMemo(() => periodRange(mode, month, rangeStart, rangeEnd), [mode, month, rangeStart, rangeEnd, hariKerja]);
@@ -71,7 +73,7 @@ export default function AnalitikKeseluruhan(props: Props) {
       harian.set(key, x);
     };
     const r = { buku: 0, lain: 0, admin: 0, owner: 0 };
-    const u = { pos: 0, nota: 0, buku: 0, bukuN: 0, dp: 0, dpN: 0, lain: 0, stok: 0, ops: 0 };
+    const u = { pos: 0, nota: 0, dpLama: 0, buku: 0, bukuN: 0, dp: 0, dpN: 0, lain: 0, stok: 0, ops: 0 };
     const sumber = new Map<string, { label: string; sub: string; v: number }>();
     const kategori = new Map<string, { label: string; sub: string; v: number }>();
     const masukKe = (key: string, label: string, sub: string, v: number) => {
@@ -105,14 +107,15 @@ export default function AnalitikKeseluruhan(props: Props) {
     if (r.buku) masukKe("RENTAL|buku", "Pembukuan harian rental", "Rental", r.buku);
 
     // USAHA — nota POS lunas (nota DP dihitung saat pelunasan), per hari kerja (hanya uang nyata)
-    gabungNota(sales, lunas).forEach((s) => {
-      if (!terjualDalam(s, period.from, period.to)) return;
+    const posTerjual = gabungNota(sales, lunas).filter((s) => terjualDalam(s, period.from, period.to));
+    posTerjual.forEach((s) => {
       const kas = arusKasNota(s);
       const day = tanggalPenjualan(s);
       if (kas.kasMasuk > 0) {
         u.pos += kas.kasMasuk;
         tambah(day, "um", kas.kasMasuk);
       }
+      if (kas.dpSudahDiSaldo > 0) u.dpLama += kas.dpSudahDiSaldo;
       u.nota++;
       // Hanya catat uang keluar bila nilai tukar tambah melebihi total belanja sehingga URBAN menambah tunai ke pembeli
       if (kas.kasKeluar > 0) {
@@ -121,10 +124,13 @@ export default function AnalitikKeseluruhan(props: Props) {
         keluarKe("USAHA|Selisih tukar tambah", "Selisih tukar tambah (kas keluar)", LABEL_BISNIS.USAHA, kas.kasKeluar);
       }
     });
-    if (u.pos) masukKe("USAHA|pos", "Penjualan POS", `Usaha · ${u.nota} nota`, u.pos);
+    if (u.pos) {
+      const sub = `Usaha · ${u.nota} nota${u.dpLama > 0 ? ` · −${rpShort(u.dpLama)} DP lama` : ""}`;
+      masukKe("USAHA|pos", "Penjualan POS", sub, u.pos);
+    }
     // DP yang sudah diterima: masih berjalan (belum lunas) atau hangus (pembeli batal)
-    sales.forEach((s) => {
-      if (s.ts < period.from || s.ts > period.to) return;
+    const posDibuat = sales.filter((s) => s.ts >= period.from && s.ts <= period.to);
+    posDibuat.forEach((s) => {
       const v = isDpTerbuka(s) ? totalDibayar(s) : dpHangus(s);
       if (!v) return;
       u.dp += v;
@@ -158,8 +164,17 @@ export default function AnalitikKeseluruhan(props: Props) {
     const usaha = { masuk: u.pos + u.buku + u.dp + u.lain, keluar: u.stok + u.ops };
     const masuk = rental.masuk + usaha.masuk;
     const keluar = rental.keluar + usaha.keluar;
+    const net = masuk - keluar;
+    const posisi = ringkasPosisiDana({
+      netTotal: net,
+      filteredHistory,
+      posTerjual,
+      posDibuat,
+      pemasukanOwner: pemasukan,
+      pengeluaranOwner: pengeluaran,
+    });
     return {
-      harian, r, u, rental, usaha, masuk, keluar, net: masuk - keluar,
+      harian, r, u, rental, usaha, masuk, keluar, net, posisi,
       sumber: Array.from(sumber.values()).sort((a, b) => b.v - a.v),
       kategori: Array.from(kategori.values()).sort((a, b) => b.v - a.v),
     };
@@ -253,7 +268,12 @@ export default function AnalitikKeseluruhan(props: Props) {
           masuk={d.usaha.masuk}
           keluar={d.usaha.keluar}
           rows={[
-            { jenis: "masuk", label: "Penjualan POS", note: `${d.u.nota} nota`, v: d.u.pos },
+            {
+              jenis: "masuk",
+              label: "Penjualan POS",
+              note: d.u.dpLama > 0 ? `${d.u.nota} nota · −${rupiah(d.u.dpLama)} DP lama` : `${d.u.nota} nota`,
+              v: d.u.pos,
+            },
             { jenis: "masuk", label: "Rincian pembukuan", note: `${d.u.bukuN} input`, v: d.u.buku },
             ...(d.u.dp ? [{ jenis: "masuk" as const, label: "DP pembeli", note: `${d.u.dpN} nota`, v: d.u.dp }] : []),
             { jenis: "masuk", label: "Pemasukan lain", v: d.u.lain },
@@ -269,6 +289,81 @@ export default function AnalitikKeseluruhan(props: Props) {
         </EmptyState>
       ) : (
         <>
+          {/* Posisi dana: pisahkan estimasi rekening bank vs uang tunai yang masih di luar rekening */}
+          <SectionHeader title="Posisi dana" />
+          <Card
+            title="Rekening vs Tunai"
+            subtitle="Pemisahan perkiraan saldo di rekening bank dan uang tunai di luar rekening"
+            icon={<Wallet />}
+            iconColor="teal"
+          >
+            <div className="grid gap-2.5 sm:grid-cols-2">
+              <StatTile
+                accent="blue"
+                dot={MARK.transfer}
+                label="Perkiraan di rekening"
+                value={<Amount value={d.posisi.estimasiRekening} signed tone="auto" size="title2" />}
+                sub={d.posisi.tunaiDiLuarRekening !== 0 ? "Saldo bersih − tunai di luar rekening" : "Selaras dengan saldo bersih periode ini"}
+              />
+              <StatTile
+                accent="orange"
+                dot={MARK.tunai}
+                label="Tunai di luar rekening"
+                value={
+                  <Amount
+                    value={d.posisi.tunaiDiLuarRekening}
+                    tone={d.posisi.tunaiDiLuarRekening === 0 ? "neutral" : "warning"}
+                    size="title2"
+                  />
+                }
+                sub={
+                  d.posisi.itemPos.length + d.posisi.itemSetoran.length + d.posisi.itemOwner.length > 0
+                    ? "Ketuk untuk rincian nota & centang TF"
+                    : "Belum ada nota/setoran tunai tertahan"
+                }
+                onClick={() => setOpenTunaiSheet(true)}
+                ariaLabel="Lihat rincian tunai di luar rekening dan tandai sudah TF"
+              />
+            </div>
+
+            <LineList className="mt-3 border-t border-sep">
+              <LineItem
+                dot={MARK.masuk}
+                label="Saldo bersih periode ini"
+                note="Gabungan uang masuk − keluar (rekening + tunai)"
+                value={<Amount value={d.posisi.totalSaldo} signed tone="auto" />}
+              />
+              <LineItem
+                dot={MARK.tunai}
+                label="Dikurangi tunai di luar rekening"
+                note={`POS tunai ${rupiah(d.posisi.posTunaiDiLuarSetoran)} · Setoran belum TF ${rupiah(d.posisi.setoranBelumAktif)}${
+                  d.posisi.ownerTunaiNet !== 0 ? ` · Owner tunai ${rupiahTanda(d.posisi.ownerTunaiNet)}` : ""
+                } · Ketuk rincian`}
+                value={
+                  <Amount
+                    value={-d.posisi.tunaiDiLuarRekening}
+                    tone={d.posisi.tunaiDiLuarRekening === 0 ? "neutral" : "warning"}
+                  />
+                }
+                muted={d.posisi.tunaiDiLuarRekening === 0}
+                onClick={() => setOpenTunaiSheet(true)}
+              />
+              <LineItem
+                dot={MARK.transfer}
+                label="Perkiraan di rekening"
+                note="Saldo bersih − Tunai di luar rekening"
+                total
+                value={<Amount value={d.posisi.estimasiRekening} signed tone="auto" size="subhead" className="font-bold" />}
+              />
+            </LineList>
+
+            {d.posisi.setoranBelumHistoris > 0 && (
+              <p className="mt-2.5 text-caption text-label-2">
+                {rupiah(d.posisi.setoranBelumHistoris)} setoran bertanda Belum TF sebelum kalibrasi Modal Usaha ({d.posisi.modalAnchorTanggal}) tidak dikurangkan lagi agar selaras dengan saldo rekening saat kalibrasi.
+              </p>
+            )}
+          </Card>
+
           {/* Grafik arus uang */}
           <SectionHeader title="Arus uang" />
           <Card
@@ -327,11 +422,17 @@ export default function AnalitikKeseluruhan(props: Props) {
           </div>
 
           <Footnote className="pt-1">
-            Rental = pembukuan harian + transaksi owner bertanda Rental. Usaha = uang masuk nyata dari nota POS (tanpa nota batal &amp; potongan tukar tambah) + transaksi owner bertanda Usaha, termasuk belanja stok dari Input › Atur Stok.
+            Rental = pembukuan harian + transaksi owner bertanda Rental. Usaha = uang masuk nyata dari nota POS (tanpa nota batal, potongan tukar tambah, &amp; DP lama yang sudah melebur di saldo sebelumnya) + transaksi owner bertanda Usaha, termasuk belanja stok dari Input › Atur Stok.
             {d.u.stok > 0 && " Belanja stok tercatat sebagai uang keluar saat dibeli tunai/transfer, walau barangnya masih ada di toko."}
           </Footnote>
         </>
       )}
+
+      <TunaiDiLuarRekeningSheet
+        open={openTunaiSheet}
+        onClose={() => setOpenTunaiSheet(false)}
+        posisi={d.posisi}
+      />
     </div>
   );
 }

@@ -1,14 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { collection, doc, getDoc, getDocs, limit, query, where } from "firebase/firestore";
-import { ExternalLink, Image as ImageIcon, Loader2, Receipt, X } from "lucide-react";
-import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
+import { Image as ImageIcon, Receipt } from "lucide-react";
 import { db } from "../lib/firebase";
 import { rupiah } from "../lib/format";
 import { fmtJatuhTempo, fmtTanggalNota } from "../lib/posReceipt";
-import { adaTukarTambah, bayarNota, isDpTerbuka, nilaiTukarNota, pernahDp, PosSale, sisaBayar, totalDibayar } from "../lib/posSales";
-import { Amount, IconBadge, Notice, Pill } from "../ui";
-import { NotaActionButtons, NotaPreview, useNotaActions } from "./PosCheckoutSheet";
+import { adaTukarTambah, bayarNota, dpSudahDiSaldoNota, isDpTerbuka, nilaiTukarNota, pernahDp, PosSale, sisaBayar, totalDibayar } from "../lib/posSales";
+import { Amount, IconBadge, ImagePreviewModal, Notice, Pill, Sheet, Spinner } from "../ui";
+import { DpLamaEditor, NotaActionButtons, NotaPreview, useNotaActions } from "./PosCheckoutSheet";
 
 type Props = {
   open: boolean;
@@ -43,9 +41,10 @@ function kumpulBuktiTransfer(sale: PosSale): BuktiItem[] {
 
   if (sale.metode === "TRANSFER" && sale.buktiTransfer && !seen.has(sale.buktiTransfer)) {
     seen.add(sale.buktiTransfer);
+    const bayarHariIni = Math.max(0, bayarNota(sale) - dpSudahDiSaldoNota(sale));
     hasil.push({
       label: "Bukti Transfer",
-      sub: `${rupiah(Math.abs(bayarNota(sale)))} · ${fmtTanggalNota(sale.ts)}`,
+      sub: `${rupiah(dpSudahDiSaldoNota(sale) > 0 ? bayarHariIni : Math.abs(bayarNota(sale)))} · ${fmtTanggalNota(sale.ts)}`,
       url: sale.buktiTransfer,
     });
   }
@@ -66,8 +65,6 @@ function statusNota(sale: PosSale): { text: string; tone: "positive" | "warning"
 
 /** Sheet pratinjau nota POS lengkap (preview thermal, bukti transfer, cetak, PDF, & WhatsApp). */
 export const NotaPosSheet: React.FC<Props> = ({ open, saleId, noNota, initialSale, sales = [], onClose }) => {
-  useBodyScrollLock(open);
-
   const liveMatch = useMemo(() => {
     if (!open) return null;
     const targetId = (saleId || "").trim();
@@ -141,68 +138,38 @@ export const NotaPosSheet: React.FC<Props> = ({ open, saleId, noNota, initialSal
     return () => { cancelled = true; };
   }, [open, liveMatch, saleId, noNota]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (zoomUrl) setZoomUrl(null);
-        else onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, zoomUrl, onClose]);
-
   const sale = liveMatch || fetched;
   const actions = useNotaActions(sale);
-
-  if (!open) return null;
 
   const badge = sale ? statusNota(sale) : null;
   const buktiList = sale ? kumpulBuktiTransfer(sale) : [];
   const batalPakaiDp = sale ? sale.status === "BATAL_PEMBELI" || sale.status === "BATAL_URBAN" || pernahDp(sale) : false;
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-[2px] p-0 sm:p-4"
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Detail Nota ${noNota || sale?.noNota || ""}`}
-        onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-sheet sm:rounded-[32px] apple-sheet-grouped border border-white/50 dark:border-white/[0.12] text-label ring-1 ring-edge shadow-float sm:max-w-lg"
+  return (
+    <>
+      <Sheet
+        open={open}
+        onClose={() => {
+          if (zoomUrl) setZoomUrl(null);
+          else onClose();
+        }}
+        size="md"
+        zClassName="z-[260]"
+        headerLeft={
+          <IconBadge color={sale?.batal ? "gray" : sale?.metode === "TRANSFER" ? "blue" : "teal"} size="md">
+            <Receipt size={18} />
+          </IconBadge>
+        }
+        title={
+          <span className="flex flex-wrap items-center gap-1.5">
+            <span className="font-mono">{sale?.noNota || noNota || "Detail Nota POS"}</span>
+            {badge && <Pill tone={badge.tone}>{badge.text}</Pill>}
+          </span>
+        }
+        subtitle={sale ? `${sale.pembeli || "Pelanggan"} · ${fmtTanggalNota(sale.ts)}` : "Memuat informasi nota..."}
+        footer={sale && (!sale.batal || batalPakaiDp) ? <NotaActionButtons sale={sale} actions={actions} /> : undefined}
       >
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-sep apple-bar px-4 py-3.5">
-          <div className="flex min-w-0 items-center gap-3">
-            <IconBadge color={sale?.batal ? "gray" : sale?.metode === "TRANSFER" ? "blue" : "teal"} size="md">
-              <Receipt size={18} />
-            </IconBadge>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <h3 className="truncate font-mono text-headline text-label">
-                  {sale?.noNota || noNota || "Detail Nota POS"}
-                </h3>
-                {badge && <Pill tone={badge.tone}>{badge.text}</Pill>}
-              </div>
-              <p className="truncate text-caption text-label-2">
-                {sale ? `${sale.pembeli || "Pelanggan"} · ${fmtTanggalNota(sale.ts)}` : "Memuat informasi nota..."}
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Tutup detail nota"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-fill text-label-2 transition hover:text-label active:scale-95"
-          >
-            <X size={18} />
-          </button>
-        </header>
-
-        <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        <div className="space-y-4">
           {actions.msg && (
             <Notice tone="info">
               <p className="font-medium">{actions.msg}</p>
@@ -211,8 +178,7 @@ export const NotaPosSheet: React.FC<Props> = ({ open, saleId, noNota, initialSal
 
           {loading ? (
             <div className="flex flex-col items-center justify-center gap-2 rounded-tile apple-card py-12 text-label-2 ring-1 ring-edge shadow-card">
-              <Loader2 className="h-6 w-6 animate-spin text-tint" />
-              <span className="text-footnote">Memuat detail nota...</span>
+              <Spinner size="md" label="Memuat detail nota..." />
             </div>
           ) : error ? (
             <Notice tone="warning">
@@ -248,11 +214,22 @@ export const NotaPosSheet: React.FC<Props> = ({ open, saleId, noNota, initialSal
                 <Notice tone="info">
                   <p className="font-semibold">Transaksi tukar tambah</p>
                   <p className="mt-0.5 text-label-2">
-                    Potongan tukar {rupiah(nilaiTukarNota(sale))} · Nilai bayar bersih{" "}
+                    Potongan tukar {rupiah(nilaiTukarNota(sale))} · Nilai bayar{" "}
                     <Amount value={bayarNota(sale)} size="footnote" className="font-semibold" />
+                    {dpSudahDiSaldoNota(sale) > 0 && (
+                      <> · masuk hari ini <b className="font-semibold text-label">{rupiah(Math.max(0, bayarNota(sale) - dpSudahDiSaldoNota(sale)))}</b></>
+                    )}
                   </p>
                 </Notice>
               )}
+
+              <DpLamaEditor
+                sale={sale}
+                onSaved={(m, dpBaru) => {
+                  actions.setMsg(m);
+                  setFetched((cur) => (cur ? { ...cur, dpSudahDiSaldo: dpBaru } : cur));
+                }}
+              />
 
               {buktiList.length > 0 && (
                 <div className="space-y-2">
@@ -300,55 +277,16 @@ export const NotaPosSheet: React.FC<Props> = ({ open, saleId, noNota, initialSal
             </>
           ) : null}
         </div>
+      </Sheet>
 
-        {sale && (!sale.batal || batalPakaiDp) && (
-          <footer className="shrink-0 border-t border-sep apple-bar px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))]">
-            <NotaActionButtons sale={sale} actions={actions} />
-          </footer>
-        )}
-      </div>
-
-      {zoomUrl && (
-        <div
-          className="fixed inset-0 z-[120] flex flex-col items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            setZoomUrl(null);
-          }}
-        >
-          <div
-            className="w-full max-w-md overflow-hidden rounded-sheet apple-sheet border border-white/50 dark:border-white/[0.12] shadow-float ring-1 ring-edge"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-sep px-4 py-3">
-              <span className="text-subhead font-semibold text-label">Pratinjau Bukti Transfer</span>
-              <button
-                type="button"
-                onClick={() => setZoomUrl(null)}
-                aria-label="Tutup pratinjau bukti transfer"
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-fill text-label-2 hover:text-label"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="flex items-center justify-center bg-canvas p-4">
-              <img src={zoomUrl} alt="Bukti Transfer" className="max-h-[65dvh] max-w-full rounded-tile object-contain" />
-            </div>
-            <div className="flex justify-end gap-2 border-t border-sep px-4 py-3">
-              <a
-                href={zoomUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex h-11 items-center gap-1.5 rounded-field bg-tint/10 px-4 text-subhead font-semibold text-tint dark:bg-tint/15"
-              >
-                <ExternalLink size={15} />
-                <span>Buka Penuh</span>
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>,
-    document.body
+      <ImagePreviewModal
+        open={Boolean(zoomUrl)}
+        onClose={() => setZoomUrl(null)}
+        src={zoomUrl}
+        title="Pratinjau Bukti Transfer"
+        alt="Bukti Transfer"
+        zClassName="z-[280]"
+      />
+    </>
   );
 };

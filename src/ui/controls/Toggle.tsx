@@ -1,0 +1,25 @@
+import React from "react";
+import { cx } from "../foundations/cn";
+
+/** Saklar resmi Apple iOS 27 (track 64×28, pill knob 38×24). Hijau sistem saat aktif. */
+export const Toggle: React.FC<{ on: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }> = ({ on, onChange, label, disabled }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={on}
+    aria-label={label}
+    disabled={disabled}
+    onClick={() => onChange(!on)}
+    className={cx(
+      "group relative h-[28px] w-[64px] shrink-0 rounded-full transition-colors duration-200 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-tint/35",
+      on ? "bg-[#34C759] dark:bg-[#30D158]" : "bg-[#3C3C43]/30 dark:bg-[#EBEBF5]/30"
+    )}
+  >
+    <span
+      className={cx(
+        "absolute top-[2px] h-[24px] w-[38px] rounded-full bg-white shadow-[0_3px_8px_rgba(0,0,0,0.16),0_1px_1px_rgba(0,0,0,0.12)] transition-all duration-200 group-active:scale-[1.06] motion-reduce:transition-none",
+        on ? "left-[24px]" : "left-[2px]"
+      )}
+    />
+  </button>
+);

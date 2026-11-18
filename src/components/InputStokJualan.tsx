@@ -16,7 +16,7 @@ import { refAda, StokRefSelect } from "./StokRefSelect";
 import { rupiah } from "../lib/format";
 import { TukarTambah, useTukarTambah } from "../lib/tukarTambah";
 import { DaftarKonfirmasiTukar, KonfirmasiTukarSheet } from "./KonfirmasiTukarSheet";
-import { AlertDialog, Button, Card, EmptyState, Eyebrow, Footnote, Notice, Pill, SearchField, Sheet, Toggle } from "../ui";
+import { AlertDialog, Button, Card, EmptyState, Eyebrow, Footnote, Notice, Pill, SearchField, Sheet, Toast, Toggle } from "../ui";
 
 const SUBS: { key: SubKategoriJualan; label: string }[] = [
   { key: "Unit PS", label: "Unit PS" },
@@ -150,6 +150,13 @@ export default function InputStokJualan() {
 
   const tanpaModal = products.filter((p) => modalOf(p.id) === null);
   const tanpaModalSemua = semuaProduk.filter((p) => modalOf(p.id) === null);
+  const stokBelum = useMemo(
+    () =>
+      products
+        .filter((p) => stokView(p.stokRef, cats, data, minMap).tone === "belum")
+        .sort((a, b) => a.name.localeCompare(b.name, "id")),
+    [products, cats, data, minMap]
+  );
   const lihatTanpaModal = () => {
     // Halaman ini kosong tapi halaman lain punya barang tanpa modal -> pindah ke sana
     if (!tanpaModal.length) {
@@ -172,14 +179,56 @@ export default function InputStokJualan() {
     return SUBS.map((s) => ({ key: s.label, items: list.filter((p) => subOf(p) === s.key) })).filter((g) => g.items.length);
   }, [list, filter]);
   const yatimShown = yatim.filter((r) => !q || `${r.kategori} ${r.item}`.toLowerCase().includes(q));
+  const menungguShown = menunggu.filter((t) => !q || `${t.nama} ${t.sn} ${t.noNota}`.toLowerCase().includes(q));
+  const stokBelumShown = q ? stokBelum.filter((p) => p.name.toLowerCase().includes(q)) : stokBelum;
+  const konfirmasiCount = menunggu.length + stokBelum.length;
 
   const chips: { key: Filter; label: string; n?: number; warn?: boolean }[] = [
     { key: "semua", label: "Semua", n: products.length },
     ...SUBS.map((s) => ({ key: s.key as Filter, label: s.label, n: products.filter((p) => subOf(p) === s.key).length })).filter((c) => c.n > 0 || filter === c.key),
     { key: "tanpaModal", label: "Tanpa modal", n: tanpaModal.length, warn: tanpaModal.length > 0 },
-    { key: "konfirmasi", label: "Konfirmasi stok", n: menunggu.length, warn: menunggu.length > 0 },
+    { key: "konfirmasi", label: "Konfirmasi stok", n: konfirmasiCount, warn: konfirmasiCount > 0 },
     { key: "yatim", label: "Stok tanpa produk", n: yatim.length, warn: yatim.length > 0 },
   ];
+
+  const renderProdukRow = (p: ProdukJualan) => {
+    const stokQty =
+      p.stokRef && p.stokRef.item !== PILIH_SAAT_CHECKOUT
+        ? Math.max(0, Math.round(Number(data?.[p.stokRef.kategori]?.[p.stokRef.item]?.jumlah) || 0))
+        : undefined;
+    const ringModal = ringkasanModalAktifProduk(p.id, stokMasukList, stokQty, modalOf(p.id));
+    const m = ringModal ? ringModal.modalSatuan : modalOf(p.id);
+    const batchN = ringModal && ringModal.batches.length > 1 ? ringModal.batches.length : 0;
+    const untung = m !== null ? p.price - m : null;
+    return (
+      <button
+        key={p.id}
+        type="button"
+        onClick={() => setEditor({ produk: p })}
+        className="w-full flex items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-fill/40 active:bg-fill/70"
+      >
+        <Thumb url={p.imageUrl} />
+        <div className="flex-1 min-w-0">
+          <div className="text-subhead font-semibold text-label leading-snug line-clamp-2">{p.name}</div>
+          <div className="text-footnote text-label-2 mt-0.5 flex flex-wrap gap-x-1.5 tabular-nums">
+            {!p.price ? <span className="font-bold text-tint">BONUS · Rp 0</span> : <span>{rupiah(p.price)}</span>}
+            {!p.price ? (
+              m !== null ? <span>· biaya {rupiah(m)}</span> : <span className="text-warning">· modal belum diisi</span>
+            ) : m !== null ? (
+              <>
+                <span>· modal {batchN ? `rata ` : ""}{rupiah(m)}{batchN ? ` (${batchN} batch)` : ""}</span>
+                <span className={untung! >= 0 ? "text-positive" : "text-negative"}>· {untung! >= 0 ? "+" : ""}{p.price > 0 ? Math.round((untung! / p.price) * 100) : 0}%</span>
+              </>
+            ) : (
+              <span className="text-warning">· modal belum diisi</span>
+            )}
+          </div>
+        </div>
+        <StokPill v={stokView(p.stokRef, cats, data, minMap)} />
+        <ChevronRight className="w-4 h-4 text-label-3 shrink-0" />
+      </button>
+    );
+  };
 
   const [yatimTarget, setYatimTarget] = useState<StokRef | null>(null);
   const [yatimBusy, setYatimBusy] = useState(false);
@@ -303,11 +352,43 @@ export default function InputStokJualan() {
       {!loaded || !stokLoaded || !masterLoaded ? (
         <div className="py-16 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-label-3" /></div>
       ) : filter === "konfirmasi" ? (
-        <DaftarKonfirmasiTukar
-          list={menunggu.filter((t) => !q || `${t.nama} ${t.sn} ${t.noNota}`.toLowerCase().includes(q))}
-          loading={loadingTukar}
-          onPilih={setKonfirmasi}
-        />
+        <div className="space-y-4">
+          {!loadingTukar && menungguShown.length === 0 && stokBelumShown.length === 0 ? (
+            <EmptyState
+              icon={<Package />}
+              title={q ? "Tidak ditemukan." : "Semua stok & tukar tambah sudah dikonfirmasi 👍"}
+            />
+          ) : (
+            <>
+              {(loadingTukar || menungguShown.length > 0) && (
+                <div className="space-y-1.5">
+                  {stokBelumShown.length > 0 && (
+                    <div className="px-2">
+                      <Eyebrow>Tukar tambah dari kasir POS</Eyebrow>
+                    </div>
+                  )}
+                  <DaftarKonfirmasiTukar list={menungguShown} loading={loadingTukar} onPilih={setKonfirmasi} />
+                </div>
+              )}
+
+              {stokBelumShown.length > 0 && (
+                <section className="space-y-1.5">
+                  <div className="px-2">
+                    <Eyebrow>Jumlah stok belum dihitung (Stok ?)</Eyebrow>
+                  </div>
+                  <Footnote className="px-1">
+                    Produk ini sudah terhubung ke stok, tetapi jumlah fisiknya belum pernah dimasukkan. Ketuk produk untuk mengisi stok.
+                  </Footnote>
+                  <Card flush>
+                    <div className="divide-y divide-sep">
+                      {stokBelumShown.map(renderProdukRow)}
+                    </div>
+                  </Card>
+                </section>
+              )}
+            </>
+          )}
+        </div>
       ) : filter === "yatim" ? (
         <section>
           <Footnote className="px-1 pb-2">Barang ini ada di stok tapi belum dijual di POS. Jadikan produk supaya punya harga &amp; muncul di kasir, atau hapus bila sudah tidak dipakai.</Footnote>
@@ -358,44 +439,7 @@ export default function InputStokJualan() {
             )}
             <Card flush>
               <div className="divide-y divide-sep">
-                {g.items.map((p) => {
-                  const stokQty =
-                    p.stokRef && p.stokRef.item !== PILIH_SAAT_CHECKOUT
-                      ? Math.max(0, Math.round(Number(data?.[p.stokRef.kategori]?.[p.stokRef.item]?.jumlah) || 0))
-                      : undefined;
-                  const ringModal = ringkasanModalAktifProduk(p.id, stokMasukList, stokQty, modalOf(p.id));
-                  const m = ringModal ? ringModal.modalSatuan : modalOf(p.id);
-                  const batchN = ringModal && ringModal.batches.length > 1 ? ringModal.batches.length : 0;
-                  const untung = m !== null ? p.price - m : null;
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setEditor({ produk: p })}
-                      className="w-full flex items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-fill/40 active:bg-fill/70"
-                    >
-                      <Thumb url={p.imageUrl} />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-subhead font-semibold text-label leading-snug line-clamp-2">{p.name}</div>
-                        <div className="text-footnote text-label-2 mt-0.5 flex flex-wrap gap-x-1.5 tabular-nums">
-                          {!p.price ? <span className="font-bold text-tint">BONUS · Rp 0</span> : <span>{rupiah(p.price)}</span>}
-                          {!p.price ? (
-                            m !== null ? <span>· biaya {rupiah(m)}</span> : <span className="text-warning">· modal belum diisi</span>
-                          ) : m !== null ? (
-                            <>
-                              <span>· modal {batchN ? `rata ` : ""}{rupiah(m)}{batchN ? ` (${batchN} batch)` : ""}</span>
-                              <span className={untung! >= 0 ? "text-positive" : "text-negative"}>· {untung! >= 0 ? "+" : ""}{p.price > 0 ? Math.round((untung! / p.price) * 100) : 0}%</span>
-                            </>
-                          ) : (
-                            <span className="text-warning">· modal belum diisi</span>
-                          )}
-                        </div>
-                      </div>
-                      <StokPill v={stokView(p.stokRef, cats, data, minMap)} />
-                      <ChevronRight className="w-4 h-4 text-label-3 shrink-0" />
-                    </button>
-                  );
-                })}
+                {g.items.map(renderProdukRow)}
               </div>
             </Card>
           </section>
@@ -453,11 +497,13 @@ export default function InputStokJualan() {
         />
       )}
 
-      {toast && (
-        <div className="fixed left-1/2 -translate-x-1/2 bottom-[calc(24px+env(safe-area-inset-bottom))] z-[400] px-4 py-2.5 rounded-full bg-action text-action-label text-subhead font-medium shadow-float max-w-[90vw] text-center">
-          {toast}
-        </div>
-      )}
+      <Toast
+        open={Boolean(toast)}
+        message={toast}
+        tone={toast.startsWith("Gagal") ? "negative" : "positive"}
+        onClose={() => setToast("")}
+        zClassName="z-[400]"
+      />
     </div>
   );
 }

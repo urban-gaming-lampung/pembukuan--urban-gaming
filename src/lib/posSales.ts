@@ -110,6 +110,13 @@ export type PosSale = {
   tukarTambah?: TukarTambahNota[];
   /** Σ nilai barang tukar tambah (dicatat sebagai belanja stok pada tanggal nota). */
   nilaiTukar?: number;
+  /**
+   * DP terdahulu dari pembeli yang uangnya sudah masuk/melebur ke saldo kas/bank sebelumnya
+   * (belum tercatat sebagai nota DP POS), sehingga hanya sisanya yang dihitung sebagai kas masuk baru.
+   */
+  dpSudahDiSaldo?: number;
+  /** True bila kas tunai nota POS ini sudah ditandai masuk/ditransfer ke rekening pemilik. */
+  tunaiSudahSetor?: boolean;
 };
 
 /** Satu barang tukar tambah di nota (detail lengkap + foto ada di koleksi tukar_tambah/{id}). */
@@ -128,6 +135,13 @@ export const adaTukarTambah = (s: Pick<PosSale, "nilaiTukar" | "tukarTambah">) =
  * Positif = dibayar pembeli; negatif = URBAN membayar ke pembeli.
  */
 export const bayarNota = (s: Pick<PosSale, "total" | "nilaiTukar">) => (Number(s.total) || 0) - nilaiTukarNota(s);
+/** DP lama pada nota lunas yang sudah masuk ke saldo kas/bank sebelumnya (dibatasi 0 .. bayarNota). */
+export const dpSudahDiSaldoNota = (s: Pick<PosSale, "dpSudahDiSaldo" | "total" | "nilaiTukar" | "pembayaran">) => {
+  if (s.pembayaran?.length) return 0;
+  const maxBayar = Math.max(0, bayarNota(s));
+  const raw = Math.max(0, Math.round(Number(s.dpSudahDiSaldo) || 0));
+  return Math.min(maxBayar, raw);
+};
 
 export type StatusNota = "DP" | "LUNAS" | "BATAL_PEMBELI" | "BATAL_URBAN";
 export type PembayaranNota = {
@@ -520,7 +534,11 @@ export async function commitPosSale(
   }
   const nilaiTukar = tt.reduce((a, x) => a + x.nilai * x.qty, 0);
   const bayar = input.total - nilaiTukar;
-  if (input.metode === "TRANSFER" && bayar !== 0 && !input.buktiTransfer) throw new Error("Bukti transfer wajib diupload.");
+  const dpSudahDiSaldo = opsi.dp
+    ? 0
+    : Math.min(Math.max(0, bayar), Math.max(0, Math.round(Number(input.dpSudahDiSaldo) || 0)));
+  const bayarHariIni = bayar - dpSudahDiSaldo;
+  if (input.metode === "TRANSFER" && bayarHariIni !== 0 && !input.buktiTransfer) throw new Error("Bukti transfer wajib diupload.");
   const ttRefs = tt.map(() => doc(collection(db, "tukar_tambah")));
   const dp = opsi.dp ? Math.round(Number(opsi.dp.jumlah) || 0) : null;
   if (opsi.dp) {
@@ -541,14 +559,16 @@ export async function commitPosSale(
     const w = dp ? { patch: {}, logs: [] as any[] } : prepareStokWrites(jualan, changes, "terjual", `Nota ${noNota}${input.pembeli ? ` · ${input.pembeli}` : ""}`, kasir, now);
     if (!dp) writeStokInTx(tx, w as any, { noNota });
 
+    const { dpSudahDiSaldo: _dropDp, ...restInput } = input;
     const sale: PosSale = dp
       ? {
-          ...input, noNota, ts: now, tanggal, kasir, stokKurang: [],
+          ...restInput, noNota, ts: now, tanggal, kasir, stokKurang: [],
           status: "DP", dp, jatuhTempo: opsi.dp!.jatuhTempo,
           pembayaran: [{ jenis: "DP", jumlah: dp, metode: input.metode, ...(input.buktiTransfer ? { buktiTransfer: input.buktiTransfer } : {}), ts: now, oleh: kasir, olehNama: input.kasirNama }],
         }
       : {
-          ...input, noNota, ts: now, tanggal, kasir, stokKurang,
+          ...restInput, noNota, ts: now, tanggal, kasir, stokKurang,
+          ...(dpSudahDiSaldo > 0 ? { dpSudahDiSaldo } : {}),
           ...(tt.length ? { tukarTambah: tt.map((x, i) => ({ id: ttRefs[i].id, nama: x.nama, qty: x.qty, nilai: x.nilai, sn: x.sn })), nilaiTukar } : {}),
         };
     const stokSesudah = sisaSesudah(w.logs as any[]);
@@ -764,6 +784,22 @@ export async function simpanNotaOnline(sale: PosSale, file: File): Promise<strin
   const url = await getDownloadURL(r);
   if (sale.id) await updateDoc(doc(db, "pos_transaksi", sale.id), { notaUrl: url }).catch((e) => console.warn("notaUrl:", e));
   return url;
+}
+
+/** Perbarui nominal DP lama (sudah melebur ke saldo sebelumnya) pada nota lunas agar arus kas analitik akurat. */
+export async function updateDpSudahDiSaldoPos(sale: PosSale, dpSudahDiSaldo: number): Promise<number> {
+  if (!sale.id) throw new Error("ID nota tidak ditemukan.");
+  if (sale.pembayaran?.length) throw new Error("Nota sudah memakai riwayat pembayaran DP POS.");
+  const maxBayar = Math.max(0, bayarNota(sale));
+  const bersih = Math.min(maxBayar, Math.max(0, Math.round(Number(dpSudahDiSaldo) || 0)));
+  await updateDoc(doc(db, "pos_transaksi", sale.id), { dpSudahDiSaldo: bersih });
+  return bersih;
+}
+
+/** Tandai atau batalkan status setor tunai nota POS ke rekening pemilik. */
+export async function setPosTunaiSudahSetor(saleId: string, sudahSetor: boolean): Promise<void> {
+  if (!saleId) throw new Error("ID nota tidak ditemukan.");
+  await updateDoc(doc(db, "pos_transaksi", saleId), { tunaiSudahSetor: sudahSetor });
 }
 
 // ============================================================

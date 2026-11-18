@@ -1,6 +1,6 @@
 import React from "react";
 import type { Kondisi } from "../lib/posSales";
-import SubTabs from "./common/SubTabs";
+import { SubTabs } from "../ui";
 
 /** Saklar BARU / SEKEN — memakai gaya tab sub-halaman yang sama (SubTabs). */
 const KondisiSwitch: React.FC<{

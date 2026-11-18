@@ -5,6 +5,7 @@ import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { pesanPengingat } from "../lib/pengingatSewa";
 import { linkWa } from "../lib/wa";
 import type { SewaBerjalan } from "../lib/sewa";
+import { Button, MOTION } from "../ui";
 
 const KUNCI_TUNDA = "urban:tunda-pengingat-sewa";
 const TUNDA_MENIT = 30;
@@ -70,8 +71,8 @@ const PeringatanSewaHabis: React.FC<{
 
   return createPortal(
     <div className="fixed inset-0 z-[800] flex items-center justify-center p-6 font-sans" role="alertdialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/65 backdrop-blur-sm pointer-events-auto" />
-      <div className="relative w-full max-w-[340px] overflow-hidden rounded-sheet apple-sheet shadow-float border border-white/65 dark:border-white/[0.14] ring-1 ring-black/10 dark:ring-white/10 p-3.5 animate-in zoom-in-95 duration-200">
+      <div className={`absolute inset-0 bg-black/65 backdrop-blur-sm pointer-events-auto ${MOTION.backdrop}`} />
+      <div className={`relative w-full max-w-[340px] overflow-hidden rounded-sheet apple-sheet shadow-float border border-white/65 dark:border-white/[0.14] ring-1 ring-black/10 dark:ring-white/10 p-3.5 ${MOTION.dialog}`}>
         <div className="px-2 pt-2.5 pb-4 text-center flex flex-col items-center">
           <div className="mb-4 flex justify-center">
             <div className="h-16 w-16 rounded-full bg-negative/15 text-negative ring-4 ring-negative/10 flex items-center justify-center">
@@ -91,22 +92,25 @@ const PeringatanSewaHabis: React.FC<{
           </p>
         </div>
         <div className="flex flex-col gap-2.5">
-          <button
-            type="button"
+          <Button
+            variant="filled"
+            size="lg"
+            block
             onClick={() => onVerify(sumberSewa(u))}
-            className="w-full min-h-[48px] px-4 rounded-full bg-action text-action-label text-subhead font-semibold hover:opacity-90 active:opacity-80 transition-opacity shadow-card"
           >
             Ya, Sudah Habis &amp; Kembali
-          </button>
+          </Button>
           {bisaIngatkan(u) && (
-            <button
-              type="button"
+            <Button
+              variant="gray"
+              size="lg"
+              block
+              icon={<MessageCircle />}
               onClick={() => { kirimPengingatSewa(u, onPengingat); tundaPeringatan(u.uid); }}
-              className="w-full min-h-[48px] px-4 rounded-full bg-fill text-positive text-subhead font-semibold hover:bg-fill/80 transition-colors flex items-center justify-center gap-2"
+              className="!text-positive"
             >
-              <MessageCircle className="w-4 h-4 shrink-0" />
               Belum Kembali · Ingatkan via WA
-            </button>
+            </Button>
           )}
         </div>
       </div>

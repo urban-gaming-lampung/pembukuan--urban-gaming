@@ -1,13 +1,11 @@
 import React from "react";
 import { ChevronRight } from "lucide-react";
-import { AKSEN_TILE, BG_IKON, nadaKeAksen, TEKS_NADA, type Nada, type WarnaIkon } from "./tokens";
+import { cx } from "../foundations/cn";
+import { AKSEN_TILE, BG_IKON, nadaKeAksen, TEKS_NADA, type Nada, type WarnaIkon } from "../foundations/tokens";
 
 /**
- * TATA LETAK — kartu, judul seksi, daftar ala Apple iOS & macOS.
- * Semua halaman memakai potongan ini supaya jarak, sudut, material, dan hierarki seragam (src/ui/DESIGN.md).
+ * SURFACES — Kartu, judul seksi, lencana ikon, dan daftar ala Apple iOS 27 & macOS.
  */
-
-const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
 const resolveAccent = (a?: WarnaIkon | Nada): WarnaIkon => {
   if (!a) return "gray";
@@ -159,7 +157,7 @@ export const ListGroup: React.FC<{ children: React.ReactNode; className?: string
 );
 
 /**
- * Satu baris daftar (tinggi ≥ 44px). Garis pemisah mulai sesudah ikon (inset ala iOS)
+ * Satu baris daftar (tinggi >= 44px). Garis pemisah mulai sesudah ikon (inset ala iOS)
  * dan hilang otomatis di baris terakhir.
  */
 export const ListRow: React.FC<{

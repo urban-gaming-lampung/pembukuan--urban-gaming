@@ -5,18 +5,16 @@
  * harga modal otomatis = Modal Sisa Tertahan (Opsi A: HPP keluar − uang pembeli), atau Nilai Tukar Nota (Opsi B).
  */
 import React, { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
-import { ArrowLeftRight, Check, ChevronRight, ImageOff, Loader2, Package, Plus, X } from "lucide-react";
+import { ArrowLeftRight, Check, ChevronRight, ImageOff, Loader2, Package, Plus } from "lucide-react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
-import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { ModalMap, ProdukJualan, StokMasuk, useSemuaStokMasuk } from "../lib/barangJualan";
 import { bayarNota, kondisiProduk, namaJualan, nilaiTukarNota, PILIH_SAAT_CHECKOUT, PosSale, stokRefLabel, StokRef, usePosSales } from "../lib/posSales";
 import { cocokProdukSeken, konfirmasiTukarTambah, subKategoriTukar, TukarTambah, tujuanStokBaru } from "../lib/tukarTambah";
 import { hitungFifoHppPenjualan, hitungModalTertahan } from "../lib/akuntansiUsaha";
 import { persen, rupiah } from "../lib/format";
-import { Button, LineItem, LineList, Notice, Pill, SubTabs } from "../ui";
+import { Button, LineItem, LineList, Notice, Pill, Sheet, SubTabs } from "../ui";
 
 type Data = Record<string, Record<string, StokItemValue>>;
 
@@ -81,7 +79,6 @@ export const KonfirmasiTukarSheet: React.FC<{
   onClose: () => void;
   onDone: (msg: string) => void;
 }> = ({ tt, products, modalMap, stokMasukList, cats, data, onClose, onDone }) => {
-  useBodyScrollLock(true);
   const kandidat = useMemo(() => cocokProdukSeken(tt.nama, products), [tt.nama, products]);
   const seken = useMemo(() => products.filter((p) => kondisiProduk(p) === "SEKEN").sort((a, b) => a.name.localeCompare(b.name, "id")), [products]);
   const [pilih, setPilih] = useState<string>(() => (kandidat[0]?.yakin ? kandidat[0].produk.id : BARU));
@@ -190,22 +187,25 @@ export const KonfirmasiTukarSheet: React.FC<{
     </button>
   );
 
-  if (typeof document === "undefined") return null;
-
-  return createPortal(
-    <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center font-sans">
-      <div className="absolute inset-0 bg-black/45 dark:bg-black/70 backdrop-blur-[8px]" onClick={() => !saving && onClose()} />
-      <div className="relative w-full sm:max-w-md apple-sheet-grouped border border-white/50 dark:border-white/[0.12] rounded-t-sheet sm:rounded-[32px] max-h-[94vh] flex flex-col overflow-hidden shadow-float">
-        <div className="flex justify-center pt-2 sm:hidden"><div className="w-9 h-[5px] rounded-full bg-sep" /></div>
-        <div className="px-4 pt-2 pb-3 flex items-center gap-3">
-          <div className="flex-1 min-w-0">
-            <h3 className="text-title3 font-bold text-label leading-tight">Konfirmasi stok</h3>
-            <p className="text-footnote text-label-2 truncate">Tukar tambah · {tt.noNota}</p>
-          </div>
-          <button type="button" onClick={onClose} disabled={saving} aria-label="Tutup" className="w-11 h-11 rounded-full bg-fill flex items-center justify-center text-label-2 hover:text-label active:opacity-70"><X className="w-4 h-4" /></button>
+  return (
+    <Sheet
+      open
+      onClose={() => { if (!saving) onClose(); }}
+      size="md"
+      variant="grouped"
+      zClassName="z-[300]"
+      title="Konfirmasi stok"
+      subtitle={`Tukar tambah · ${tt.noNota}`}
+      footer={
+        <div className="space-y-2">
+          {err && <div className="text-footnote font-semibold text-negative bg-negative/10 rounded-field px-3 py-2">{err}</div>}
+          <Button size="lg" block disabled={saving} onClick={simpan} icon={saving ? <Loader2 className="animate-spin" /> : <Check />}>
+            {saving ? "Menyimpan…" : "Konfirmasi & tambah stok"}
+          </Button>
         </div>
-
-        <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4">
+      }
+    >
+      <div className="space-y-4">
           {/* Barang dari pembeli */}
           <div className="rounded-card apple-card ring-1 ring-edge shadow-card p-3.5">
             <div className="grid grid-cols-2 gap-2">
@@ -407,17 +407,8 @@ export const KonfirmasiTukarSheet: React.FC<{
             )}
           </div>
 
-          <Notice>Stok bertambah {qty} dan masuk sebagai batch modal {rupiah(modal)}/pcs tanpa pengeluaran kas baru — di Analitik, laba penuh baru diakui saat barang ini terjual nanti.</Notice>
-        </div>
-
-        <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] apple-bar border-t border-sep space-y-2">
-          {err && <div className="text-footnote font-semibold text-negative bg-negative/10 rounded-field px-3 py-2">{err}</div>}
-          <Button size="lg" block disabled={saving} onClick={simpan} icon={saving ? <Loader2 className="animate-spin" /> : <Check />}>
-            {saving ? "Menyimpan…" : "Konfirmasi & tambah stok"}
-          </Button>
-        </div>
+        <Notice>Stok bertambah {qty} dan masuk sebagai batch modal {rupiah(modal)}/pcs tanpa pengeluaran kas baru — di Analitik, laba penuh baru diakui saat barang ini terjual nanti.</Notice>
       </div>
-    </div>,
-    document.body
+    </Sheet>
   );
 };

@@ -12,8 +12,8 @@ Panduan tampilan aplikasi Pembukuan URBAN berbasis spesifikasi resmi **Apple iOS
 |---|---|---|
 | Token nilai & material | `src/index.css` (`:root` & `.dark`) | Variabel `--ui-*` (`--ui-card`, `--ui-tile`, `--ui-chrome`, `--ui-fill`, `--ui-sep`), `.apple-canvas`, `.apple-card`, `.apple-tile`, `.apple-glass`, `.apple-bar`, `.apple-segmented`, `.ios-slider` |
 | Token Tailwind | `tailwind.config.js` → `theme.extend` | Font San Francisco (`font-sans`, `font-display`, `font-mono`), `rounded-sheet` (`34px`), `rounded-card` (`26px`), `rounded-tile` (`16px`), `shadow-card`, `bg-action` |
-| Token JS & Palet Aksen | `src/ui/tokens.ts` | `BG_IKON` (squircle sheen), `AKSEN_TILE` (12 warna sistem iOS 27), `MARK`, `PALET_SERI`, `temaGrafik()` |
-| Komponen UI | `src/ui/*.tsx`, impor dari `src/ui` | `Card`, `kartu`, `tile`, `tileInteractive`, `IconBadge`, `ListGroup`/`ListRow`, `StatTile`, `Pill`, `Button`, `Toggle`, `Sheet`, `AlertDialog`, `AppShell`, `PageHeader`, `SubTabs` |
+| Token JS, Layout & Gerak | `src/ui/foundations/` | `tokens.ts` (`BG_IKON`, `AKSEN_TILE`, `MARK`, `PALET_SERI`, `temaGrafik()`), `layout.ts` (`LAYOUT`), `motion.ts` (`MOTION`), `cn.ts` (`cx`) |
+| Komponen UI (7 Kelompok) | `src/ui/{chrome,surfaces,controls,presentations,feedback,data}/`, impor dari `src/ui` | `AppShell`, `PageHeader`, `SubTabs`, `Card`/`kartu`/`tile`, `ListGroup`/`ListRow`, `Button`/`IconButton`, `Field`/`Stepper`, `Toggle`, `Sheet`, `AlertDialog`, `ImagePreviewModal`, `Toast`, `EmptyState`/`Spinner`, `StatTile`/`Amount`/`Pill`/`UserAvatar` |
 | Format angka | `src/lib/format.ts` | `rupiah`, `rupiahTanda`, `rpShort`, `persen` |
 
 Aturan: **jangan** menulis warna hex acak, ukuran huruf acak (`text-[13.5px]`), kartu solid `bg-white`/`bg-surface` polos, atau sudut acak (`rounded-[19px]`) di halaman. Selalu gunakan token/komponen `src/ui` (`<Card>` atau `kartu` / `tile`).
@@ -112,32 +112,49 @@ Stack `font-sans` & `font-display` mengutamakan `-apple-system, BlinkMacSystemFo
 
 ---
 
-## 5. Komponen (`import { … } from "../ui"`)
+## 5. Arsitektur 7 Kelompok Komponen (`import { … } from "../ui"`)
 
-**Shell & Navigasi Adaptif (`src/ui/shell.tsx`)**
-- `AppShell` — Adaptasi otomatis **iOS 27 vs macOS**:
-  - **Mobile (`< md`):** Edge-to-edge translucent Top Bar + **Floating Liquid Glass Capsule Tab Bar** (`rounded-full`, pill seleksi aktif `Fills/2 Secondary`, safe-area inset bottom).
-  - **Desktop / macOS (`>= md`):** **Sidebar Source-List translucent di kiri** (`244–260px`) dengan kapsul pilihan `44px` (`rounded-full`) & `IconBadge` berwarna + Toolbar atas mengambang + area konten multi-kolom.
-- `PageHeader` — Kepala halaman dengan ikon squircle, *eyebrow*, judul besar (`title2`/`title1`), subjudul, dan slot aksi kanan.
-- `SubTabs` — *UISegmentedControl* iOS 27 kapsul frosted glass (`md` `48px` untuk sub-halaman, `sm` `34px` untuk pilihan kecil di dalam kartu).
+Seluruh sistem antarmuka kini dikelompokkan mengikuti taksonomi **Apple iOS 27 UI Kit** melalui satu barrel `src/ui/index.ts`:
 
-**Tata Letak (`src/ui/layout.tsx`)**
-- `Card` — Mendukung `variant="default" | "hero" | "tinted"`, `accent`, `icon` + `iconColor` + `iconVariant`, `accessory`, `flush`.
-- `SectionHeader`, `Eyebrow`, `IconBadge` (`solid` | `tinted`, `sm` | `md`).
-- `ListGroup` + `ListRow` (tinggi `≥ 52px`, pemisah inset `Separators/Non-Opaque`, mendukung `iconVariant`, `valueTone`, `chevron`, `destructive`).
-- `LineList` + `LineItem`.
+1. **`src/ui/foundations/` (Fondasi, Margin & Gerak):**
+   - `tokens.ts` — `BG_IKON`, `AKSEN_TILE`, `MARK`, `PALET_SERI`, `temaGrafik()`.
+   - `layout.ts` — Konstanta jarak `LAYOUT` (`pagePadding`, `cardPadding`, `stackGap`, `gridGap`, `touchMin`).
+   - `motion.ts` — Kelas animasi iOS 27 nyata `MOTION` (`backdrop`, `sheet`, `dialog`, `toast`, `panel`) terhubung ke `@keyframes` di `src/index.css` (plus aturan kompatibilitas `prefers-reduced-motion: reduce`).
+   - `cn.ts` — Utilitas penggabung kelas `cx()`.
 
-**Data & Visualisasi (`src/ui/data.tsx`, `src/ui/chart.tsx`)**
-- `Amount`, `StatTile` (mendukung `accent`, `progress`, `badge`, `onClick`), `TileValue`.
-- `Pill` (mendukung `tone` semantik & `color` kategori), `StatusPill`, `Dot`, `Legend`.
-- `BarRow`, `Meter`, `SplitBar`.
-- `useTemaGrafik()`, `sumbu()`, `ChartTip`.
+2. **`src/ui/chrome/` (Navigasi & Shell Adaptif):**
+   - `AppShell` (`AppShell.tsx`) — Adaptasi otomatis **iOS 27 vs macOS**:
+     - **Mobile (`< md`):** Edge-to-edge translucent Top Bar + **Floating Liquid Glass Capsule Tab Bar** (`rounded-full`, pill seleksi aktif `Fills/2 Secondary`, safe-area inset bottom).
+     - **Desktop / macOS (`>= md`):** **Sidebar Source-List translucent di kiri** (`244–260px`) dengan kapsul pilihan `44px` (`rounded-full`) & `IconBadge` berwarna + Toolbar atas mengambang.
+   - `PageHeader` (`AppShell.tsx`) — Kepala halaman dengan ikon squircle, *eyebrow*, judul besar (`title2`/`title1`), subjudul, dan slot aksi kanan.
+   - `SubTabs` (`SubTabs.tsx`, alias `SegmentedTabs`) — *UISegmentedControl* iOS 27 kapsul frosted glass (`md` `44px` huruf besar untuk sub-halaman, `sm` `34px` untuk filter di dalam kartu).
 
-**Umpan Balik, Sheet, Kontrol & Dialog (`src/ui/feedback.tsx`)**
-- `Sheet` — Bottom Sheet (`rounded-t-[34px]`) dengan grabber 36×5px di HP ↔ Centered Sheet (`32px`) di macOS/desktop (dengan `Esc` & `useBodyScrollLock`). Pilihan isi `variant="grouped"` atau `"surface"`.
-- `AlertDialog` — Dialog konfirmasi `.apple-sheet` `rounded-[34px]` dengan tombol kapsul `48px` (`cancel` / `primary` `bg-action` hitam-putih / `destructive`). **SSOT Aksi Reset & Destruktif:** semua fungsi **Reset** (form, per-field absensi/ruko, seluruh tabel, per-baris tabel, maupun daftar harga) **wajib** memakai `AlertDialog` dengan tombol `Batal` (`cancel`) di kiri dan `Reset` (`destructive`) di kanan (sesuai urutan `Leading=Secondary/Trailing=Destructive` di Apple iOS 27 `Alerts`), **bukan** konfirmasi inline di footer dan **bukan** reset langsung tanpa konfirmasi; tombol pemicu footer memakai `Button variant="gray" size="md" icon={<RotateCcw />} />`.
-- `Button` (`filled` hitam/putih solid / `tinted` / `gray` / `plain` / `destructive`, kapsul `rounded-full`, ukuran `lg` 50px / `md` 44px / `sm` 32px, prop `loading`).
-- `SearchField` (kapsul), `Toggle` (iOS 27 `64×28` track + pill knob `38×24`), `ios-slider` (`37×24` pill knob di `src/index.css`), `EmptyState`, `Notice`, `Footnote`.
+3. **`src/ui/surfaces/` (Kartu, Permukaan & Daftar — `Card.tsx`):**
+   - `Card`, `kartu`, `tile`, `tileInteractive` — Permukaan Liquid Glass (`variant="default" | "hero" | "tinted"`, `accent`, `icon` + `iconColor` + `iconVariant`, `accessory`, `flush`).
+   - `SectionHeader`, `Eyebrow`, `IconBadge` (`solid` | `tinted`, `sm` | `md`).
+   - `ListGroup` + `ListRow` (tinggi `>= 52px`, pemisah inset `Separators/Non-Opaque`, `iconVariant`, `valueTone`, `chevron`, `destructive`).
+   - `LineList` + `LineItem`.
+
+4. **`src/ui/controls/` (Kontrol Interaktif & Form):**
+   - `Button.tsx` — `Button` (`filled` hitam/putih solid / `tinted` / `gray` / `plain` / `destructive`, kapsul `rounded-full`, ukuran `lg` 50px / `md` 44px / `sm` 32px, prop `loading`) dan `IconButton` (tombol ikon lingkaran `sm` 32px / `md` 36px / `lg` 44px dengan `label` wajib untuk aksesibilitas).
+   - `Field.tsx` — `FieldLabel`, `TextField`, `SelectField`, `TextAreaField` (`44px` `md` / `52px` `lg`, teks `16px` anti auto-zoom iOS Safari).
+   - `Stepper.tsx` — `Stepper` (kontrol `+` / `−` kapsul ala iOS 27).
+   - `SearchField.tsx` — Kolom cari kapsul dengan tombol bersihkan.
+   - `Toggle.tsx` — Saklar iOS 27 `64×28` track + pill knob `38×24`; `ios-slider` (`37×24` di `src/index.css`).
+
+5. **`src/ui/presentations/` (Pop-up, Sheet, Dialog, Preview & Toast):**
+   - `Sheet.tsx` — Bottom Sheet (`rounded-t-[34px]`) dengan grabber 36×5px di HP ↔ Centered Sheet (`32px`) di macOS/desktop (`Esc`, `useBodyScrollLock`, `MOTION.backdrop` & `MOTION.sheet`).
+   - `AlertDialog.tsx` — Dialog konfirmasi `.apple-sheet` `rounded-[34px]` dengan tombol kapsul `48px` (`cancel` / `primary` `bg-action` hitam-putih / `destructive`). **SSOT Aksi Reset & Destruktif:** semua fungsi **Reset** wajib memakai `AlertDialog` dengan tombol `Batal` (`cancel`) di kiri dan `Reset` (`destructive`) di kanan.
+   - `ImagePreviewModal.tsx` — Lightbox SSOT untuk pratinjau foto & bukti transfer (mendukung `Buka penuh` dan aksi `Hapus` opsional).
+   - `Toast.tsx` — Kapsul notifikasi mengambang `.apple-glass` (`info` | `positive` | `warning` | `negative`, `MOTION.toast`).
+
+6. **`src/ui/feedback/` (Umpan Balik & Pemuat — `Feedback.tsx`):**
+   - `EmptyState`, `Notice`, `Footnote`, dan `Spinner`.
+
+7. **`src/ui/data/` (Angka, Visualisasi, Grafik & Identitas):**
+   - `DataDisplay.tsx` — `Amount`, `StatTile` (mendukung `accent`, `progress`, `badge`, `onClick`), `TileValue`, `Pill`, `StatusPill`, `Dot`, `Legend`, `BarRow`, `Meter`, `SplitBar`.
+   - `Chart.tsx` — `useTemaGrafik()`, `sumbu()`, `ChartTip`.
+   - `UserAvatar.tsx` — `UserAvatar` & `getInitials`.
 
 ---
 

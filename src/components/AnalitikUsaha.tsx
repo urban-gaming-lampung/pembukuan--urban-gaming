@@ -1,18 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from "recharts";
 import {
-  Receipt, TrendingUp, TrendingDown, X, AlertTriangle, Users, Clock, Ban, Loader2, BadgePercent, Store, Trash2, Coins, Image as ImageIcon, Handshake, ChevronRight,
+  Receipt, TrendingUp, TrendingDown, AlertTriangle, Users, Clock, Ban, Loader2, BadgePercent, Store, Trash2, Coins, Image as ImageIcon, Handshake, ChevronRight,
 } from "lucide-react";
 import FilterComp from "./Filter";
-import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue } from "../hooks/useStokData";
 import { getMinStok, kunciStok, statusOf, useMinStok } from "../lib/stokJualan";
 import { adaTukarTambah, bayarNota, cancelPosSale, deletePosSale, gabungNota, infoNego, isDpTerbuka, PosItem, PosSale, ringkasanDp, StokRef, tanggalPenjualan, terjualDalam, usePosSales, usePosSalesLunas, waktuPenjualan } from "../lib/posSales";
 import { BatalDp } from "./NotaDpSheet";
 import { fmtTanggalNota } from "../lib/posReceipt";
-import { NotaActionButtons, NotaPreview, useNotaActions } from "./PosCheckoutSheet";
+import { NotaActionButtons, NotaPreview, useNotaActions, DpLamaEditor } from "./PosCheckoutSheet";
 import { useModalProduk, useProdukJualan, useSemuaStokMasuk } from "../lib/barangJualan";
 import { useSemuaTukarTambah } from "../lib/tukarTambah";
 import { alokasiProporsional, arusKasNota, hitungFifoHppPenjualan, ringkasanTukarUntukLaba } from "../lib/akuntansiUsaha";
@@ -21,7 +19,7 @@ import { isBelanjaStok, periodRange, TransaksiOwner } from "../lib/keuangan";
 import { tebakModalBaris, useBarisUsahaManual } from "../lib/pemasukanUsaha";
 import { pad, persen, rpShort, rupiah } from "../lib/format";
 import { dariYmd, tanggalHariKerja, toLocalYmd } from "../lib/dateLocal";
-import { Amount, BarRow, Button, Card, ChartTip, EmptyState, IconBadge, LineItem, LineList, MARK, Notice, Pill, SearchField, SectionHeader, SplitBar, StatTile, SubTabs, TileValue, sumbu, useTemaGrafik } from "../ui";
+import { Amount, BarRow, Button, Card, ChartTip, EmptyState, IconBadge, ImagePreviewModal, LineItem, LineList, MARK, Notice, Pill, SearchField, SectionHeader, Sheet, SplitBar, StatTile, SubTabs, TileValue, sumbu, useTemaGrafik } from "../ui";
 import { HeroArus } from "./analitik/HeroArus";
 
 type FilterProps = {
@@ -89,7 +87,7 @@ export default function AnalitikUsaha(props: FilterProps) {
   const adaData = cur.length > 0 || manualCur.length > 0 || dp.berjalan > 0 || dp.hangus > 0;
 
   const st = useMemo(() => {
-    let omzet = 0, qty = 0, diskon = 0, cash = 0, transfer = 0, cashN = 0, transferN = 0, nego = 0, negoN = 0, posOmzet = 0, posKasMasuk = 0, tukarKasKeluar = 0, manualOmzet = 0, tukar = 0, tukarN = 0;
+    let omzet = 0, qty = 0, diskon = 0, cash = 0, transfer = 0, cashN = 0, transferN = 0, nego = 0, negoN = 0, posOmzet = 0, posKasMasuk = 0, tukarKasKeluar = 0, manualOmzet = 0, tukar = 0, tukarN = 0, dpLama = 0;
     const byDay = new Map<string, { omzet: number; nota: number }>();
     const byCat = new Map<string, { omzet: number; qty: number }>();
     const byProduct = new Map<string, { nama: string; kategori: string; qty: number; omzet: number }>();
@@ -105,6 +103,7 @@ export default function AnalitikUsaha(props: FilterProps) {
       // Arus kas nyata (tunai / transfer = hanya uang yang benar-benar berpindah; potongan tukar tambah bukan kas masuk/keluar)
       const kas = arusKasNota(s);
       posKasMasuk += kas.kasMasuk;
+      dpLama += kas.dpSudahDiSaldo;
       tukarKasKeluar += kas.kasKeluar;
       cash += kas.cash;
       transfer += kas.transfer;
@@ -150,7 +149,7 @@ export default function AnalitikUsaha(props: FilterProps) {
     });
     const transaksi = cur.length + manualCur.length;
     return {
-      omzet, qty, diskon, nego, negoN, cash, transfer, cashN, transferN, posOmzet, posKasMasuk, tukarKasKeluar, manualOmzet, tukar, tukarN,
+      omzet, qty, diskon, nego, negoN, cash, transfer, cashN, transferN, posOmzet, posKasMasuk, dpLama, tukarKasKeluar, manualOmzet, tukar, tukarN,
       nota: cur.length, manualN: manualCur.length, transaksi, avg: transaksi ? omzet / transaksi : 0,
       byDay, byCat, byProduct, byKasir, byHour, soldStok,
     };
@@ -361,7 +360,11 @@ export default function AnalitikUsaha(props: FilterProps) {
           <LineItem
             dot={MARK.masuk}
             label="Penjualan POS"
-            note={st.tukar > 0 ? `${st.nota} nota · bruto ${rpShort(st.posOmzet)} − tukar tambah ${rpShort(st.tukar)}` : `${st.nota} nota`}
+            note={[
+              `${st.nota} nota`,
+              st.tukar > 0 && `bruto ${rpShort(st.posOmzet)} − tukar ${rpShort(st.tukar)}`,
+              st.dpLama > 0 && `DP lama di saldo −${rpShort(st.dpLama)}`,
+            ].filter(Boolean).join(" · ")}
             value={rupiah(st.posKasMasuk)}
             muted={st.posKasMasuk === 0}
           />
@@ -684,11 +687,11 @@ export default function AnalitikUsaha(props: FilterProps) {
 // Detail nota: cetak ulang / unduh / kirim / batalkan
 // ============================================================
 const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; onClose: () => void }> = ({ sale, live, onClose }) => {
-  useBodyScrollLock(!!sale);
   const actions = useNotaActions(live);
   const [busy, setBusy] = useState<"" | "batal" | "hapus">("");
   const [batalDp, setBatalDp] = useState(false);
-  useEffect(() => { setBatalDp(false); }, [sale?.id]);
+  const [zoomBukti, setZoomBukti] = useState(false);
+  useEffect(() => { setBatalDp(false); setZoomBukti(false); }, [sale?.id]);
   if (!sale || !live) return null;
   const notaDp = isDpTerbuka(live);
   const batalPakaiDp = live.status === "BATAL_PEMBELI" || live.status === "BATAL_URBAN";
@@ -726,21 +729,38 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
     }
   };
 
-  if (typeof document === "undefined") return null;
-
-  return createPortal(
-    <div className="fixed inset-0 z-[260] flex items-end sm:items-center justify-center font-sans">
-      <div className="absolute inset-0 bg-black/45 dark:bg-black/70 backdrop-blur-[8px]" onClick={onClose} />
-      <div className="relative w-full sm:max-w-md apple-sheet-grouped border border-white/50 dark:border-white/[0.12] rounded-t-sheet sm:rounded-[32px] max-h-[92vh] flex flex-col overflow-hidden shadow-float ring-1 ring-edge">
-        <div className="flex justify-center pt-2 sm:hidden"><div className="w-9 h-[5px] rounded-full bg-sep" /></div>
-        <div className="px-4 pt-2 pb-3 flex items-center gap-3">
-          <div className="flex-1 min-w-0">
-            <h3 className="text-headline font-bold text-label font-mono truncate">{live.noNota}</h3>
-            <p className="text-caption text-label-2">{fmtTanggalNota(live.ts)}</p>
+  return (
+    <>
+      <Sheet
+        open
+        onClose={() => {
+          if (zoomBukti) setZoomBukti(false);
+          else onClose();
+        }}
+        size="md"
+        variant="grouped"
+        zClassName="z-[260]"
+        title={<span className="font-mono">{live.noNota}</span>}
+        subtitle={fmtTanggalNota(live.ts)}
+        footer={
+          <div className="space-y-2">
+            {(!live.batal || batalPakaiDp) && <NotaActionButtons sale={live} actions={actions} />}
+            <div className={`grid gap-2 ${live.batal ? "grid-cols-1" : "grid-cols-[1fr_auto]"}`}>
+              {!live.batal && (
+                <Button variant="destructive" size="md" disabled={!!busy || (notaDp && batalDp)} onClick={notaDp ? () => setBatalDp(true) : batalkan}
+                  icon={busy === "batal" ? <Loader2 className="animate-spin" /> : <Ban />}>
+                  {notaDp ? "Batalkan nota DP" : "Batalkan & kembalikan stok"}
+                </Button>
+              )}
+              <Button size="md" disabled={!!busy} onClick={hapus} className="!bg-negative text-white px-4"
+                icon={busy === "hapus" ? <Loader2 className="animate-spin" /> : <Trash2 />}>
+                Hapus nota
+              </Button>
+            </div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Tutup" className="w-11 h-11 rounded-full bg-fill flex items-center justify-center text-label-2 hover:text-label active:opacity-70"><X className="w-4 h-4" /></button>
-        </div>
-        <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-3">
+        }
+      >
+        <div className="space-y-3">
           {actions.msg && <Notice tone={actions.msg.toLowerCase().includes("gagal") ? "negative" : "info"}>{actions.msg}</Notice>}
           {notaDp && batalDp && (
             <BatalDp sale={live} onKembali={() => setBatalDp(false)} onSelesai={() => { setBatalDp(false); actions.setMsg("Nota DP dibatalkan ✅"); }} />
@@ -752,14 +772,18 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
             </Notice>
           )}
           {live.buktiTransfer && (
-            <a href={live.buktiTransfer} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-card apple-card ring-1 ring-edge shadow-card p-3 active:opacity-80">
+            <button
+              type="button"
+              onClick={() => setZoomBukti(true)}
+              className="flex w-full items-center gap-3 rounded-card apple-card ring-1 ring-edge shadow-card p-3 text-left transition active:opacity-80"
+            >
               <img src={live.buktiTransfer} alt="Bukti transfer" className="w-14 h-14 rounded-field object-cover bg-fill shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="text-subhead font-semibold text-label">Bukti transfer</div>
                 <div className="text-caption text-label-2">Ketuk untuk lihat ukuran penuh</div>
               </div>
               <ImageIcon className="w-4 h-4 text-label-3 shrink-0" />
-            </a>
+            </button>
           )}
           {live.metode === "TRANSFER" && !live.buktiTransfer && (
             <Notice tone="warning">Transfer tanpa bukti (nota lama sebelum bukti transfer diwajibkan).</Notice>
@@ -769,27 +793,21 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
               Saat transaksi, stok tercatat kurang: {live.stokKurang!.map((k) => `${k.item} (terjual ${k.diminta}, tercatat ${k.tersedia})`).join(", ")}
             </Notice>
           )}
+          <DpLamaEditor sale={live} onSaved={(m) => actions.setMsg(m)} />
           <div className={`rounded-card bg-fill p-3 ${live.batal && !batalPakaiDp ? "opacity-60" : ""}`}>
             <NotaPreview sale={live} />
           </div>
         </div>
-        <div className="px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] apple-bar border-t border-sep space-y-2">
-          {(!live.batal || batalPakaiDp) && <NotaActionButtons sale={live} actions={actions} />}
-          <div className={`grid gap-2 ${live.batal ? "grid-cols-1" : "grid-cols-[1fr_auto]"}`}>
-            {!live.batal && (
-              <Button variant="destructive" size="md" disabled={!!busy || (notaDp && batalDp)} onClick={notaDp ? () => setBatalDp(true) : batalkan}
-                icon={busy === "batal" ? <Loader2 className="animate-spin" /> : <Ban />}>
-                {notaDp ? "Batalkan nota DP" : "Batalkan & kembalikan stok"}
-              </Button>
-            )}
-            <Button size="md" disabled={!!busy} onClick={hapus} className="!bg-negative text-white px-4"
-              icon={busy === "hapus" ? <Loader2 className="animate-spin" /> : <Trash2 />}>
-              Hapus nota
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>,
-    document.body
+      </Sheet>
+
+      <ImagePreviewModal
+        open={zoomBukti}
+        onClose={() => setZoomBukti(false)}
+        src={live.buktiTransfer}
+        title="Pratinjau Bukti Transfer"
+        alt="Bukti Transfer"
+        zClassName="z-[280]"
+      />
+    </>
   );
 };

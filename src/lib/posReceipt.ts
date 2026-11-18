@@ -5,7 +5,7 @@
  */
 import jsPDF from "jspdf";
 import logoBlackUrl from "../assets/urban-logo-black.png";
-import { adaTukarTambah, bayarNota, infoNego, isBonus, negoSatuan, nilaiTukarNota, pernahDp, sisaBayar, totalDibayar } from "./posSales";
+import { adaTukarTambah, bayarNota, dpSudahDiSaldoNota, infoNego, isBonus, negoSatuan, nilaiTukarNota, pernahDp, sisaBayar, totalDibayar } from "./posSales";
 import type { PosSale } from "./posSales";
 import { rupiah } from "./format";
 
@@ -60,13 +60,18 @@ export const fmtJatuhTempo = (ymd?: string) => {
 /** Rincian pembayaran nota DP (di bawah TOTAL): DP, pelunasan, sisa, jatuh tempo. */
 export function barisPembayaran(s: PosSale): { l: string; r: string; bold?: boolean }[] {
   if (!pernahDp(s)) {
-    // Tukar tambah: TOTAL = harga barang; nilai barang masuk memotong uang yang dibayar
-    if (!adaTukarTambah(s)) return [];
     const b = bayarNota(s);
-    return [
-      { l: "Potongan tukar tambah", r: `-${rupiah(nilaiTukarNota(s))}` },
-      { l: labelBayarTukar(b), r: rupiah(Math.abs(b)), bold: true },
-    ];
+    const dpLama = dpSudahDiSaldoNota(s);
+    if (!adaTukarTambah(s) && dpLama <= 0) return [];
+    const out: { l: string; r: string; bold?: boolean }[] = [];
+    if (adaTukarTambah(s)) out.push({ l: "Potongan tukar tambah", r: `-${rupiah(nilaiTukarNota(s))}` });
+    if (dpLama > 0) {
+      out.push({ l: "DP dibayar sebelumnya", r: `-${rupiah(dpLama)}` });
+      out.push({ l: "Pelunasan hari ini", r: rupiah(Math.max(0, b - dpLama)), bold: true });
+    } else {
+      out.push({ l: labelBayarTukar(b), r: rupiah(Math.abs(b)), bold: true });
+    }
+    return out;
   }
   const out: { l: string; r: string; bold?: boolean }[] = (s.pembayaran || []).map((p) => ({
     l: `${p.jenis === "DP" ? "DP" : "Pelunasan"} ${tglPendek(p.ts)} (${p.metode === "TRANSFER" ? "Transfer" : "Tunai"})`,

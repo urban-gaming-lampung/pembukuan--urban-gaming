@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import SubTabs from "./common/SubTabs";
+import { SubTabs } from "../ui";
 import StokRental from "./StokRental";
 import StokJualan from "./StokJualan";
 import { ambilPermintaanStok, EVENT_BUKA_STOK, JenisStok } from "../lib/stokRental";

@@ -6,12 +6,11 @@ import { db, firebaseConfig } from "../lib/firebase";
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { Users, Banknote, Save, Plus, ChevronDown, ChevronRight, Trash2, X, Camera, UserPlus, AlertTriangle, CalendarDays, RotateCcw, Ban } from "lucide-react";
-import UserAvatar from "./common/UserAvatar";
 import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, getTodayYmd, BULAN_NAMES, normalizeBulanTahun, normalizeDateStr } from "../lib/absenPeriod";
 import { isUrbanUserDocId } from "../lib/urbanUsers";
 import { tanggalHariKerja, toLocalYmd } from "../lib/dateLocal";
 import { rpShort, rupiah, toInt, formatRibuanInput } from "../lib/format";
-import { Amount, Button, Card, EmptyState, Eyebrow, Footnote, IconBadge, kartu, LineItem, LineList, ListGroup, Notice, Pill, SectionHeader, SubTabs, TileValue } from "../ui";
+import { Amount, Button, Card, EmptyState, Eyebrow, Footnote, IconBadge, kartu, LineItem, LineList, ListGroup, Notice, Pill, SectionHeader, SubTabs, TileValue, UserAvatar } from "../ui";
 import { ongkirPengantarTersimpan } from "../lib/sewa";
 
 // === Helper tampilan & gaji (SSOT dashboard pegawai) ===

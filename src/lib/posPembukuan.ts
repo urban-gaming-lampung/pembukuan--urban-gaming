@@ -16,7 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs, onSnapshot, orderBy, query, runTransaction, where } from "firebase/firestore";
 import { db } from "./firebase";
 import type { PosItem, PosSale } from "./posSales";
-import { nilaiTukarNota, pernahDp } from "./posSales";
+import { dpSudahDiSaldoNota, nilaiTukarNota, pernahDp } from "./posSales";
 import { rentangHariKerja, tanggalHariKerja } from "./dateLocal";
 import { toInt } from "./format";
 import { totalBaris } from "./keuangan";
@@ -129,6 +129,7 @@ export function notaBarang(s: PosSale, from = 0, to = Infinity): NotaBarang[] {
   if (s.batal || s.ts < from || s.ts > to) return [];
   const items = (s.items || []).filter((it) => !tipeJasaPos(it));
   const tukar = nilaiTukarNota(s);
+  const dpLama = dpSudahDiSaldoNota(s);
   // Hanya barang berbayar (barang bonus Rp 0 tidak perlu disetor) — kecuali ada tukar tambah
   if (!tukar && (!items.length || !items.some((it) => (Number(it.subtotal) || 0) > 0))) return [];
   return [{
@@ -138,8 +139,8 @@ export function notaBarang(s: PosSale, from = 0, to = Infinity): NotaBarang[] {
     ts: s.ts,
     pembeli: String(s.pembeli || ""),
     metode: s.metode,
-    // Nilai barang tukar tambah memotong uang barang (jasa tetap utuh di kas harian)
-    total: items.reduce((a, it) => a + (Number(it.subtotal) || 0), 0) - tukar,
+    // Nilai barang tukar tambah & DP terdahulu yg sudah masuk kas memotong setoran baru hari ini (jasa tetap utuh di kas harian)
+    total: items.reduce((a, it) => a + (Number(it.subtotal) || 0), 0) - tukar - dpLama,
     jumlah: items.reduce((a, it) => a + (Number(it.qty) || 0), 0),
     buktiTransfer: s.metode === "TRANSFER" ? s.buktiTransfer : undefined,
     ...(tukar ? { label: "Tukar tambah" as const } : {}),

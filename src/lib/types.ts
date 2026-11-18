@@ -55,6 +55,7 @@ export interface HistoryItem {
   rowsJajanan?: RowJajanan[];
   rowsJasaAks?: RowJasaAks[];
   rowsSewa?: RowSewa[];
+  rowsSetoran?: any[];
   absenPagi?: string;
   absenSiang?: string;
   rukoBuka?: string;

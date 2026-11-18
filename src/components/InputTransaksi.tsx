@@ -4,12 +4,11 @@ import { addDoc, collection, deleteDoc, doc, updateDoc } from "firebase/firestor
 import { db } from "../lib/firebase";
 import { rupiah, formatRibuanInput } from "../lib/format";
 import { toLocalYmd } from "../lib/dateLocal";
-import { Bisnis, bisnisOf, JenisTransaksi, KOLEKSI, TransaksiOwner } from "../lib/keuangan";
-import SubTabs from "./common/SubTabs";
+import { Bisnis, bisnisOf, JenisTransaksi, KOLEKSI, metodeOwner, TransaksiOwner } from "../lib/keuangan";
 import RupiahIcon from "./common/RupiahIcon";
 import StokMasukSheet from "./StokMasukSheet";
 import { ambilStokMasuk, StokMasuk, useProdukJualan } from "../lib/barangJualan";
-import { AlertDialog, Button, Card, EmptyState, Footnote, Notice, Pill } from "../ui";
+import { AlertDialog, Button, Card, EmptyState, Footnote, Notice, Pill, SubTabs, Toast } from "../ui";
 
 const TEMA = {
   PENGELUARAN: {
@@ -30,7 +29,14 @@ const TEMA = {
   },
 } as const;
 
-const kosong = (bisnis: Bisnis) => ({ nama: "", harga: "", kategori: "", tanggal: toLocalYmd(), bisnis });
+const kosong = (bisnis: Bisnis) => ({
+  nama: "",
+  harga: "",
+  kategori: "",
+  tanggal: toLocalYmd(),
+  bisnis,
+  metode: "TRANSFER" as "TRANSFER" | "CASH",
+});
 const bulanKey = (tanggal: string) => {
   const d = new Date(tanggal);
   return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getFullYear()).slice(-2)}`;
@@ -111,7 +117,7 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
   }, [manual, manualBisnis, form.kategori]);
   // Nama -> kategori & usaha yang paling sering dipakai (seri: paling baru; "Lainnya" hanya bila tak ada lain)
   const ingatan = useMemo(() => {
-    const stats = new Map<string, Map<string, { kat: string; bisnis: Bisnis; count: number; last: number }>>();
+    const stats = new Map<string, Map<string, { kat: string; bisnis: Bisnis; metode: "TRANSFER" | "CASH"; count: number; last: number }>>();
     manual.forEach((e) => {
       const nk = (e.nama || "").trim().toLowerCase();
       const kat = (e.kategori || "").trim();
@@ -120,21 +126,21 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
       if (!stats.has(nk)) stats.set(nk, new Map());
       const per = stats.get(nk)!;
       const cur = per.get(kat.toLowerCase());
-      if (cur) { cur.count++; if (ts >= cur.last) { cur.last = ts; cur.kat = kat; cur.bisnis = bisnisOf(e); } }
-      else per.set(kat.toLowerCase(), { kat, bisnis: bisnisOf(e), count: 1, last: ts });
+      if (cur) { cur.count++; if (ts >= cur.last) { cur.last = ts; cur.kat = kat; cur.bisnis = bisnisOf(e); cur.metode = metodeOwner(e); } }
+      else per.set(kat.toLowerCase(), { kat, bisnis: bisnisOf(e), metode: metodeOwner(e), count: 1, last: ts });
     });
-    const out = new Map<string, { kat: string; bisnis: Bisnis }>();
+    const out = new Map<string, { kat: string; bisnis: Bisnis; metode: "TRANSFER" | "CASH" }>();
     stats.forEach((per, nk) => {
       const ranked = Array.from(per.entries()).sort((a, b) => b[1].count - a[1].count || b[1].last - a[1].last);
       const best = ranked.find(([k]) => k !== "lainnya") || ranked[0];
-      if (best) out.set(nk, { kat: best[1].kat, bisnis: best[1].bisnis });
+      if (best) out.set(nk, { kat: best[1].kat, bisnis: best[1].bisnis, metode: best[1].metode });
     });
     return out;
   }, [manual]);
 
   const pilihNama = (n: string) => {
     const m = ingatan.get(n.trim().toLowerCase());
-    setForm((f) => ({ ...f, nama: n, kategori: m?.kat ?? f.kategori, bisnis: m?.bisnis ?? f.bisnis }));
+    setForm((f) => ({ ...f, nama: n, kategori: m?.kat ?? f.kategori, bisnis: m?.bisnis ?? f.bisnis, metode: m?.metode ?? f.metode }));
     setKategoriAuto(!!m);
   };
 
@@ -144,7 +150,14 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
     setSaving(true);
     setFormErr("");
     try {
-      const data = { nama: form.nama.trim(), harga: nominal, kategori: form.kategori.trim() || "Lainnya", tanggal: form.tanggal, bisnis: form.bisnis };
+      const data = {
+        nama: form.nama.trim(),
+        harga: nominal,
+        kategori: form.kategori.trim() || "Lainnya",
+        tanggal: form.tanggal,
+        bisnis: form.bisnis,
+        metode: form.metode,
+      };
       if (editingId) await updateDoc(doc(db, KOLEKSI[jenis], editingId), data);
       else await addDoc(collection(db, KOLEKSI[jenis]), { ...data, timestamp: Date.now() });
       tampilToast(editingId ? `${label} diperbarui` : `${label} disimpan`);
@@ -158,7 +171,7 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
   };
   const edit = (o: TransaksiOwner) => {
     setFormErr("");
-    setForm({ nama: o.nama, harga: String(o.harga), kategori: o.kategori, tanggal: o.tanggal, bisnis: bisnisOf(o) });
+    setForm({ nama: o.nama, harga: String(o.harga), kategori: o.kategori, tanggal: o.tanggal, bisnis: bisnisOf(o), metode: metodeOwner(o) });
     setEditingId(o.id);
     setKategoriAuto(false);
     document.getElementById(`input-${jenis.toLowerCase()}-section`)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -225,6 +238,18 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
                 value={form.bisnis}
                 onChange={(b) => setForm((f) => ({ ...f, bisnis: b }))}
                 options={[{ key: "RENTAL", label: "Rental" }, { key: "USAHA", label: "Usaha" }]}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className={lblCls}>Sumber dana</label>
+              <SubTabs<"TRANSFER" | "CASH">
+                ariaLabel="Sumber dana"
+                value={form.metode}
+                onChange={(m) => setForm((f) => ({ ...f, metode: m }))}
+                options={[
+                  { key: "TRANSFER", label: "Rekening (Transfer)" },
+                  { key: "CASH", label: "Tunai (Cash)" },
+                ]}
               />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -398,7 +423,10 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
                                 {kl.map((o) => (
                                   <div key={o.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-3.5 py-3">
                                     <div className="min-w-0">
-                                      <div className="text-caption font-medium text-label-3 tabular-nums">{o.tanggal}</div>
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="text-caption font-medium text-label-3 tabular-nums">{o.tanggal}</span>
+                                        {metodeOwner(o) === "CASH" && <Pill tone="warning">Tunai</Pill>}
+                                      </div>
                                       <div className="text-subhead font-semibold text-label leading-snug break-words">{o.nama}</div>
                                     </div>
                                     <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
@@ -470,11 +498,13 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
         ]}
       />
 
-      {toast && (
-        <div className="fixed left-1/2 -translate-x-1/2 bottom-[calc(86px+env(safe-area-inset-bottom))] md:bottom-6 z-[400] px-4 py-2.5 rounded-full bg-action text-action-label text-subhead font-medium shadow-float max-w-[90vw] text-center">
-          {toast}
-        </div>
-      )}
+      <Toast
+        open={Boolean(toast)}
+        message={toast}
+        tone={toast.startsWith("Gagal") ? "negative" : "positive"}
+        onClose={() => setToast("")}
+        zClassName="z-[400]"
+      />
     </div>
   );
 };

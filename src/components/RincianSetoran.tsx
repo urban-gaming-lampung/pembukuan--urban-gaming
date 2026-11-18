@@ -9,6 +9,7 @@ interface Props {
   currentDate?: string;
   currentDay?: string;
   isMobileTable?: boolean;
+  ongkirMasukGaji?: boolean;
 }
 
 const BLANK_SETORAN = { ket: "", harga: "", bayar: "" };
@@ -18,11 +19,12 @@ export default function RincianSetoran({
   setRows,
   currentDate,
   isMobileTable,
+  ongkirMasukGaji = false,
 }: Props) {
   const hintOtomatis =
-    currentDate && currentDate >= "2026-04-29"
+    currentDate && currentDate >= "2026-04-29" && ongkirMasukGaji
       ? "Kalkulasi otomatis (Total Cash - Pengeluaran Manual)"
-      : "Kalkulasi otomatis (Cash - Pengeluaran)";
+      : "Kalkulasi otomatis (Cash - Pengeluaran Cash)";
 
   return (
     <TableEditor<any>

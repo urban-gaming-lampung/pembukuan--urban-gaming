@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Loader2, Lock } from "lucide-react";
+import { Check, Lock } from "lucide-react";
 import { auth } from "../lib/firebase";
 import { verifikasiPasswordAkun } from "../lib/akun";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
-import { IconBadge } from "../ui";
+import { Button, IconBadge, MOTION } from "../ui";
 
 /**
  * Konfirmasi aksi penting dengan password akun yang sedang login (satu komponen untuk
@@ -56,20 +56,16 @@ export default function KonfirmasiAkun({
     else onBerhasil();
   };
 
-  const tombol =
-    "min-h-[48px] w-full rounded-full px-4 flex items-center justify-center text-subhead transition-all active:opacity-75 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint";
-  const warnaAksi = bahaya
-    ? "bg-negative/[0.13] text-negative dark:bg-negative/[0.22] font-semibold hover:bg-negative/[0.20]"
-    : "bg-action text-action-label font-semibold shadow-sm hover:opacity-85";
+  const tombol = "min-h-[48px] w-full flex-1";
 
   if (typeof document === "undefined") return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-6 font-sans" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/40 dark:bg-black/70 backdrop-blur-[8px]" onClick={() => !busy && onBatal()} />
+      <div className={`absolute inset-0 bg-black/40 dark:bg-black/70 backdrop-blur-[8px] ${MOTION.backdrop}`} onClick={() => !busy && onBatal()} />
       <form
         onSubmit={kirim}
-        className="relative w-full max-w-[320px] overflow-hidden rounded-sheet apple-sheet p-3.5 shadow-float border border-white/65 dark:border-white/[0.14] ring-1 ring-black/10 dark:ring-white/10 animate-in zoom-in-95 duration-200"
+        className={`relative w-full max-w-[320px] overflow-hidden rounded-sheet apple-sheet p-3.5 shadow-float border border-white/65 dark:border-white/[0.14] ring-1 ring-black/10 dark:ring-white/10 ${MOTION.dialog}`}
       >
         {terverifikasi && langkahLanjut ? (
           <div className="px-2 pt-2.5 pb-4 text-center">
@@ -108,17 +104,31 @@ export default function KonfirmasiAkun({
           </div>
         )}
         <div className="grid grid-cols-2 gap-2.5">
-          <button type="button" onClick={onBatal} disabled={busy} className={`${tombol} bg-fill text-label font-medium hover:brightness-95 dark:hover:brightness-115`}>
+          <Button type="button" variant="gray" size="lg" onClick={onBatal} disabled={busy} className={tombol}>
             Batal
-          </button>
+          </Button>
           {terverifikasi && langkahLanjut ? (
-            <button type="button" autoFocus onClick={onBerhasil} className={`${tombol} ${warnaAksi}`}>
+            <Button
+              type="button"
+              autoFocus
+              variant={bahaya ? "destructive" : "filled"}
+              size="lg"
+              onClick={onBerhasil}
+              className={tombol}
+            >
               {langkahLanjut.labelTombol}
-            </button>
+            </Button>
           ) : (
-            <button type="submit" disabled={!password || busy} className={`${tombol} ${warnaAksi}`}>
-              {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : labelTombol}
-            </button>
+            <Button
+              type="submit"
+              variant={bahaya ? "destructive" : "filled"}
+              size="lg"
+              disabled={!password || busy}
+              loading={busy}
+              className={tombol}
+            >
+              {labelTombol}
+            </Button>
           )}
         </div>
       </form>

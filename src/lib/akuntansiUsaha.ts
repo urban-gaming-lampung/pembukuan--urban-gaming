@@ -7,8 +7,10 @@
  */
 import { tanggalHariKerja } from "./dateLocal";
 import type { ModalInfo, ModalMap, ProdukJualan, StokMasuk } from "./barangJualan";
+import type { TransaksiOwner } from "./keuangan";
 import type { PosItem, PosSale } from "./posSales";
 import type { TukarTambah } from "./tukarTambah";
+import type { HistoryItem } from "./types";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 
 const STOK_VARIAN_SEMUA = "*";
@@ -19,10 +21,14 @@ export const adaTukarPos = (s: Pick<PosSale, "nilaiTukar" | "tukarTambah">) => n
 /** Uang bersih dari nota: positif = diterima URBAN, negatif = dibayar URBAN ke pembeli. */
 export const bayarNotaPos = (s: Pick<PosSale, "total" | "nilaiTukar">) => (Number(s.total) || 0) - nilaiTukarPos(s);
 
-/** Pecahan arus kas nyata satu nota lunas: kas masuk, kas keluar (bila URBAN nombok), dan split Tunai / Transfer. */
-export function arusKasNota(s: Pick<PosSale, "total" | "nilaiTukar" | "metode" | "pembayaran" | "tukarTambah">) {
+/** Pecahan arus kas nyata satu nota lunas: kas masuk baru, DP lama di saldo, kas keluar (bila URBAN nombok), dan split Tunai / Transfer. */
+export function arusKasNota(s: Pick<PosSale, "total" | "nilaiTukar" | "metode" | "pembayaran" | "tukarTambah" | "dpSudahDiSaldo">) {
   const bayar = bayarNotaPos(s);
-  const kasMasuk = Math.max(0, bayar);
+  const kasMasukTotal = Math.max(0, bayar);
+  const dpSudahDiSaldo = s.pembayaran?.length
+    ? 0
+    : Math.min(kasMasukTotal, Math.max(0, Math.round(Number(s.dpSudahDiSaldo) || 0)));
+  const kasMasuk = kasMasukTotal - dpSudahDiSaldo;
   const kasKeluar = Math.max(0, -bayar);
   const tukar = adaTukarPos(s);
   let cash = 0;
@@ -47,7 +53,7 @@ export function arusKasNota(s: Pick<PosSale, "total" | "nilaiTukar" | "metode" |
       if (s.pembayaran[s.pembayaran.length - 1].metode === "TRANSFER") transferN = 1;
       else cashN = 1;
     }
-  } else if (bayar > 0) {
+  } else if (kasMasuk > 0) {
     if (s.metode === "TRANSFER") {
       transfer = kasMasuk;
       transferN = 1;
@@ -59,6 +65,8 @@ export function arusKasNota(s: Pick<PosSale, "total" | "nilaiTukar" | "metode" |
 
   return {
     bayar,
+    kasMasukTotal,
+    dpSudahDiSaldo,
     kasMasuk,
     kasKeluar,
     cash,
@@ -538,4 +546,250 @@ export function alokasiProporsional(weights: number[], totalDelta: number): numb
   });
   if (lastPositive >= 0) out[lastPositive] = totalDelta - assigned;
   return out;
+}
+
+const roundNum = (v: unknown): number => {
+  if (typeof v === "number") return Number.isFinite(v) ? Math.round(v) : 0;
+  const s = String(v ?? "").replace(/[^\d-]/g, "");
+  return s ? Number(s) : 0;
+};
+
+export type ItemTunaiPos = {
+  id: string;
+  noNota: string;
+  tanggal: string;
+  ts: number;
+  pembeli: string;
+  ringkas: string;
+  jenis: "PENJUALAN" | "DP" | "BATAL_PEMBELI";
+  nominal: number;
+  sudahTf: boolean;
+  adaJasa: boolean;
+};
+
+export type ItemSetoranBelum = {
+  historyId: string;
+  tanggal: string;
+  rowIndex: number;
+  ket: string;
+  nominal: number;
+};
+
+export type ItemOwnerTunai = {
+  id: string;
+  jenis: "PEMASUKAN" | "PENGELUARAN";
+  tanggal: string;
+  nama: string;
+  kategori: string;
+  nominal: number;
+};
+
+export type PosisiDana = {
+  totalSaldo: number;
+  estimasiRekening: number;
+  tunaiDiLuarRekening: number;
+  posTunaiDiLuarSetoran: number;
+  setoranBelumAktif: number;
+  setoranBelumHistoris: number;
+  ownerTunaiMasuk: number;
+  ownerTunaiKeluar: number;
+  ownerTunaiNet: number;
+  modalAnchorTanggal: string | null;
+  itemPos: ItemTunaiPos[];
+  itemSetoran: ItemSetoranBelum[];
+  itemOwner: ItemOwnerTunai[];
+};
+
+const ringkasBarangPos = (items?: Pick<PosItem, "nama" | "qty">[]): string =>
+  (items || []).map((it) => ((Number(it.qty) || 1) > 1 ? `${it.nama} ×${it.qty}` : it.nama)).join(", ") || "Transaksi POS";
+
+const adaItemJasaPos = (items?: Pick<PosItem, "kategori">[]): boolean =>
+  (items || []).some((it) => it.kategori === "ISI GAME" || it.kategori === "SERVIS" || it.kategori === "RENTAL");
+
+/**
+ * Pisahkan saldo total (Masuk - Keluar) menjadi perkiraan uang di Rekening vs Tunai di luar rekening
+ * tanpa menggandakan catatan lama sebelum kalibrasi Modal Usaha (bila Modal ada dalam periode).
+ */
+export function ringkasPosisiDana(params: {
+  netTotal: number;
+  filteredHistory: (Pick<HistoryItem, "tanggal" | "rowsSetoran" | "rowsJasaAks"> & { id?: string })[];
+  posTerjual: (Pick<PosSale, "noNota" | "ts" | "lunasTs" | "total" | "nilaiTukar" | "metode" | "pembayaran" | "tukarTambah" | "dpSudahDiSaldo" | "batal" | "status"> &
+    Partial<Pick<PosSale, "id" | "tanggal" | "pembeli" | "tunaiSudahSetor">> & { items?: Pick<PosItem, "nama" | "qty" | "kategori">[] })[];
+  posDibuat: (Pick<PosSale, "noNota" | "ts" | "lunasTs" | "total" | "nilaiTukar" | "metode" | "pembayaran" | "dp" | "status" | "batal"> &
+    Partial<Pick<PosSale, "id" | "tanggal" | "pembeli" | "tunaiSudahSetor">> & { items?: Pick<PosItem, "nama" | "qty" | "kategori">[] })[];
+  pemasukanOwner: (Pick<TransaksiOwner, "harga" | "kategori" | "nama" | "tanggal" | "timestamp" | "metode"> & { id?: string })[];
+  pengeluaranOwner: (Pick<TransaksiOwner, "harga" | "tanggal" | "timestamp" | "metode"> &
+    Partial<Pick<TransaksiOwner, "id" | "nama" | "kategori">>)[];
+}): PosisiDana {
+  const { netTotal, filteredHistory, posTerjual, posDibuat, pemasukanOwner, pengeluaranOwner } = params;
+
+  const modalItems = pemasukanOwner.filter((o) => {
+    const kat = String(o.kategori || "").trim().toLowerCase();
+    const nm = String(o.nama || "").trim().toLowerCase();
+    return kat === "modal" || nm.includes("modal usaha");
+  });
+  const modalAnchorTs = modalItems.length
+    ? Math.max(...modalItems.map((o) => Number(o.timestamp) || Date.parse(o.tanggal) || 0))
+    : 0;
+  const modalAnchorTanggal = modalAnchorTs > 0 ? tanggalHariKerja(modalAnchorTs) : null;
+
+  const syncedNotaCash = new Map<string, number>();
+  const itemPos: ItemTunaiPos[] = [];
+  const itemSetoran: ItemSetoranBelum[] = [];
+  const itemOwner: ItemOwnerTunai[] = [];
+  let setoranBelumAktif = 0;
+  let setoranBelumHistoris = 0;
+
+  filteredHistory.forEach((h) => {
+    ((h as any).rowsJasaAks || []).forEach((r: any) => {
+      if (!(r?._nota || r?._sumber === "pos")) return;
+      if (!String(r?.bayar || "").toLowerCase().includes("cash")) return;
+      const val = Math.max(0, roundNum(r.harga));
+      if (val > 0 && r._nota) syncedNotaCash.set(r._nota, (syncedNotaCash.get(r._nota) || 0) + val);
+    });
+    ((h as any).rowsSetoran || []).forEach((s: any, idx: number) => {
+      const val = Math.max(0, roundNum(s?.harga ?? s?.nominal));
+      if (val <= 0) return;
+      const belum = s?.bayar === "Belum" || s?.isTransfer === "Belum";
+      if (!belum) return;
+      if (modalAnchorTanggal && String(h.tanggal || "") < modalAnchorTanggal) {
+        setoranBelumHistoris += val;
+      } else {
+        setoranBelumAktif += val;
+        itemSetoran.push({
+          historyId: String(h.id || ""),
+          tanggal: String(h.tanggal || ""),
+          rowIndex: idx,
+          ket: String(s?.ket || "Setoran harian"),
+          nominal: val,
+        });
+      }
+    });
+  });
+
+  let posTunaiDiLuarSetoran = 0;
+  posTerjual.forEach((s) => {
+    const kas = arusKasNota(s);
+    if (kas.cash <= 0) return;
+    let cashAktif = kas.cash;
+    if (modalAnchorTs > 0) {
+      if (s.pembayaran?.length) {
+        cashAktif = s.pembayaran
+          .filter((p) => p.metode === "CASH" && (Number(p.ts) || 0) >= modalAnchorTs)
+          .reduce((a, p) => a + Math.max(0, roundNum(p.jumlah)), 0);
+        cashAktif = Math.min(kas.cash, cashAktif);
+      } else {
+        const txTs = Number(s.lunasTs) || Number(s.ts) || 0;
+        if (txTs > 0 && txTs < modalAnchorTs) return;
+      }
+    }
+    const synced = syncedNotaCash.get(s.noNota) || 0;
+    const diLuarSetoran = Math.max(0, cashAktif - synced);
+    if (diLuarSetoran <= 0) return;
+    const sudahTf = Boolean(s.tunaiSudahSetor);
+    if (!sudahTf) posTunaiDiLuarSetoran += diLuarSetoran;
+    const tsNota = Number(s.lunasTs) || Number(s.ts) || 0;
+    itemPos.push({
+      id: String(s.id || s.noNota),
+      noNota: s.noNota,
+      tanggal: s.tanggal || (tsNota ? tanggalHariKerja(tsNota) : ""),
+      ts: tsNota,
+      pembeli: String(s.pembeli || "-"),
+      ringkas: ringkasBarangPos(s.items),
+      jenis: "PENJUALAN",
+      nominal: diLuarSetoran,
+      sudahTf,
+      adaJasa: adaItemJasaPos(s.items),
+    });
+  });
+
+  posDibuat.forEach((s) => {
+    const openOrHangus = (s.status === "DP" && !s.batal) || s.status === "BATAL_PEMBELI";
+    if (!openOrHangus) return;
+    let cashAktif = 0;
+    if (s.pembayaran?.length) {
+      s.pembayaran.forEach((p) => {
+        if (p.metode !== "CASH") return;
+        if (modalAnchorTs > 0 && (Number(p.ts) || 0) < modalAnchorTs) return;
+        cashAktif += Math.max(0, roundNum(p.jumlah));
+      });
+    } else if (s.metode === "CASH") {
+      if (modalAnchorTs > 0 && (Number(s.ts) || 0) < modalAnchorTs) return;
+      cashAktif = Math.max(0, roundNum(s.dp ?? s.total));
+    }
+    if (cashAktif <= 0) return;
+    const sudahTf = Boolean(s.tunaiSudahSetor);
+    if (!sudahTf) posTunaiDiLuarSetoran += cashAktif;
+    const tsNota = Number(s.ts) || 0;
+    itemPos.push({
+      id: String(s.id || s.noNota),
+      noNota: s.noNota,
+      tanggal: s.tanggal || (tsNota ? tanggalHariKerja(tsNota) : ""),
+      ts: tsNota,
+      pembeli: String(s.pembeli || "-"),
+      ringkas: ringkasBarangPos(s.items),
+      jenis: s.status === "DP" ? "DP" : "BATAL_PEMBELI",
+      nominal: cashAktif,
+      sudahTf,
+      adaJasa: false,
+    });
+  });
+
+  let ownerTunaiMasuk = 0;
+  pemasukanOwner.forEach((o) => {
+    if (o.metode !== "CASH") return;
+    const ts = Number(o.timestamp) || Date.parse(o.tanggal) || 0;
+    if (modalAnchorTs > 0 && ts > 0 && ts < modalAnchorTs) return;
+    const nominal = Math.max(0, roundNum(o.harga));
+    if (nominal <= 0) return;
+    ownerTunaiMasuk += nominal;
+    itemOwner.push({
+      id: String(o.id || ""),
+      jenis: "PEMASUKAN",
+      tanggal: String(o.tanggal || ""),
+      nama: String(o.nama || o.kategori || "-"),
+      kategori: String(o.kategori || "Lainnya"),
+      nominal,
+    });
+  });
+
+  let ownerTunaiKeluar = 0;
+  pengeluaranOwner.forEach((o) => {
+    if (o.metode !== "CASH") return;
+    const ts = Number(o.timestamp) || Date.parse(o.tanggal) || 0;
+    if (modalAnchorTs > 0 && ts > 0 && ts < modalAnchorTs) return;
+    const nominal = Math.max(0, roundNum(o.harga));
+    if (nominal <= 0) return;
+    ownerTunaiKeluar += nominal;
+    itemOwner.push({
+      id: String(o.id || ""),
+      jenis: "PENGELUARAN",
+      tanggal: String(o.tanggal || ""),
+      nama: String(o.nama || o.kategori || "-"),
+      kategori: String(o.kategori || "Lainnya"),
+      nominal,
+    });
+  });
+
+  itemPos.sort((a, b) => b.ts - a.ts);
+  itemSetoran.sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+  itemOwner.sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+
+  const ownerTunaiNet = ownerTunaiMasuk - ownerTunaiKeluar;
+  const tunaiDiLuarRekening = posTunaiDiLuarSetoran + setoranBelumAktif + ownerTunaiNet;
+  return {
+    totalSaldo: netTotal,
+    estimasiRekening: netTotal - tunaiDiLuarRekening,
+    tunaiDiLuarRekening,
+    posTunaiDiLuarSetoran,
+    setoranBelumAktif,
+    setoranBelumHistoris,
+    ownerTunaiMasuk,
+    ownerTunaiKeluar,
+    ownerTunaiNet,
+    modalAnchorTanggal,
+    itemPos,
+    itemSetoran,
+    itemOwner,
+  };
 }

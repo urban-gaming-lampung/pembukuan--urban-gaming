@@ -54,6 +54,7 @@ import {
   Notice,
   Pill,
   SectionHeader,
+  Toast,
   Toggle,
 } from "../ui";
 import type { WarnaIkon } from "../ui";
@@ -2289,11 +2290,13 @@ const Pengaturan: React.FC<Props> = ({
         ]}
       />
 
-      {toast && (
-        <div className="fixed left-1/2 -translate-x-1/2 bottom-[calc(24px+env(safe-area-inset-bottom))] z-[400] px-4 py-2.5 rounded-full bg-action text-action-label text-subhead font-medium shadow-float max-w-[90vw] text-center">
-          {toast}
-        </div>
-      )}
+      <Toast
+        open={Boolean(toast)}
+        message={toast}
+        tone={toast.startsWith("Gagal") || toast.startsWith("Login") ? "negative" : "positive"}
+        onClose={() => setToast("")}
+        zClassName="z-[400]"
+      />
     </div>
   );
 };

@@ -5,7 +5,7 @@
  * Setiap transaksi milik salah satu model usaha: RENTAL atau USAHA (toko / jualan).
  */
 import { useEffect, useState } from "react";
-import { collection, doc, onSnapshot, orderBy, query, setDoc, where } from "firebase/firestore";
+import { collection, doc, getDoc, onSnapshot, orderBy, query, setDoc, updateDoc, where } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { dariYmd, rentangHariKerja, resolveMonthYear, tanggalHariKerja, toLocalYmd } from "./dateLocal";
 import { toInt } from "./format";
@@ -28,7 +28,45 @@ export type TransaksiOwner = {
   sumber?: string;
   produkId?: string;
   stokMasukId?: string;
+  /** Sumber/tujuan dana transaksi owner: Transfer (Rekening) atau Tunai (Cash). Kosong pada data lama dianggap TRANSFER. */
+  metode?: "TRANSFER" | "CASH";
 };
+
+/** Metode dana transaksi owner (default TRANSFER / Rekening untuk data lama agar konsisten dengan kalibrasi rekening). */
+export const metodeOwner = (o: Pick<TransaksiOwner, "metode">): "TRANSFER" | "CASH" =>
+  o.metode === "CASH" ? "CASH" : "TRANSFER";
+
+/** Ubah metode dana transaksi owner antara TRANSFER (Rekening) dan CASH (Tunai). */
+export async function updateMetodeOwner(
+  jenis: JenisTransaksi,
+  id: string,
+  metode: "TRANSFER" | "CASH"
+): Promise<void> {
+  if (!id) throw new Error("ID transaksi tidak ditemukan.");
+  await updateDoc(doc(db, KOLEKSI[jenis], id), { metode });
+}
+
+/** Tandai baris setoran harian pada history_pembukuan sebagai Sudah di-TF ("Ya") atau "Belum". */
+export async function updateSetoranBayarHarian(
+  historyId: string,
+  rowIndex: number,
+  sudahTf: boolean
+): Promise<void> {
+  if (!historyId) throw new Error("ID pembukuan harian tidak ditemukan.");
+  const ref = doc(db, "history_pembukuan", historyId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error("Dokumen pembukuan tidak ditemukan.");
+  const rows = Array.isArray(snap.data()?.rowsSetoran) ? [...snap.data().rowsSetoran] : [];
+  if (rowIndex < 0 || rowIndex >= rows.length) throw new Error("Baris setoran tidak ditemukan.");
+  const nextStatus = sudahTf ? "Ya" : "Belum";
+  const cur = rows[rowIndex] || {};
+  rows[rowIndex] = {
+    ...cur,
+    bayar: nextStatus,
+    ...(cur.isTransfer !== undefined ? { isTransfer: nextStatus } : {}),
+  };
+  await updateDoc(ref, { rowsSetoran: rows });
+}
 
 /** Pengeluaran belanja stok barang jualan (dibuat otomatis dari Input › Atur Stok, atau kategori "Stok Jualan"). */
 export const isBelanjaStok = (o: Pick<TransaksiOwner, "sumber" | "kategori">) => o.sumber === "input_stok" || o.kategori === "Stok Jualan";

@@ -1,14 +1,12 @@
 import React from "react";
 import { ChevronRight, Scale, TrendingDown, TrendingUp } from "lucide-react";
-import { rpShort, rupiah, rupiahTanda } from "../lib/format";
-import { AKSEN_TILE, nadaAngka, PILL_NADA, TEKS_NADA, type Nada, type WarnaIkon } from "./tokens";
+import { rpShort, rupiah, rupiahTanda } from "../../lib/format";
+import { cx } from "../foundations/cn";
+import { AKSEN_TILE, nadaAngka, PILL_NADA, TEKS_NADA, type Nada, type WarnaIkon } from "../foundations/tokens";
 
 /**
- * ANGKA & DATA — nominal, tile ringkasan, pill status, batang proporsi.
- * Angka selalu tabular-nums; warna hanya untuk makna (surplus / minus / peringatan).
+ * DATA — Nominal rupiah, tile ringkasan, pill status, batang proporsi, dan meter.
  */
-
-const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
 const UKURAN = {
   display: "text-display",
@@ -20,7 +18,7 @@ const UKURAN = {
   footnote: "text-footnote font-semibold",
 } as const;
 export type UkuranAngka = keyof typeof UKURAN;
-/** Ukuran satu tingkat lebih kecil untuk angka yang panjang (supaya tidak terpotong di HP). */
+
 const LEBIH_KECIL: Record<UkuranAngka, UkuranAngka> = {
   display: "title1",
   title1: "title2",
@@ -31,11 +29,7 @@ const LEBIH_KECIL: Record<UkuranAngka, UkuranAngka> = {
   footnote: "footnote",
 };
 
-/**
- * Nominal rupiah. `signed` menampilkan +/− ; `tone="auto"` mewarnai sesuai tanda
- * (hijau surplus, merah minus). `short` = ringkas (1,2 jt). `fitAt` = jumlah karakter
- * sebelum ukuran diturunkan satu tingkat.
- */
+/** Nominal rupiah dengan dukungan format ringkas, tanda +/−, dan adaptasi ukuran layar. */
 export const Amount: React.FC<{
   value: number;
   signed?: boolean;
@@ -83,7 +77,7 @@ export const Pill: React.FC<{
   </span>
 );
 
-/** Status hasil: SURPLUS / MINUS / IMBANG — selalu ikon + teks, tidak hanya warna. */
+/** Status hasil: SURPLUS / MINUS / IMBANG — selalu ikon + teks. */
 export const StatusPill: React.FC<{ net: number; className?: string }> = ({ net, className }) => {
   const s =
     net > 0
@@ -98,12 +92,7 @@ export const StatusPill: React.FC<{ net: number; className?: string }> = ({ net,
   );
 };
 
-/**
- * Tile ringkasan di dalam kartu (sudut 16px — frosted glass nested pane).
- * - Tanpa `accent`: latar kaca netral `.apple-tile` (selaras dengan Input).
- * - Dengan `accent` (`blue`, `teal`, `orange`, dll.): latar tinted lembut ala Apple Health + backdrop blur + lencana ikon berwarna, angka tetap kontras tinggi.
- * - `progress` (0..1): bar kemajuan tipis di dasar tile.
- */
+/** Tile ringkasan di dalam kartu (sudut 16px — frosted glass nested pane). */
 export const StatTile: React.FC<{
   label: React.ReactNode;
   dot?: string;
@@ -182,10 +171,7 @@ export const TileValue: React.FC<{ children: React.ReactNode; tone?: Nada }> = (
   <span className={cx("text-headline font-bold tabular-nums", TEKS_NADA[tone])}>{children}</span>
 );
 
-/**
- * Baris batang horizontal (rincian kategori / produk / unit) — gaya Screen Time.
- * `fraction` 0..1 terhadap nilai terbesar; warna batang = makna seri, teks tetap warna teks.
- */
+/** Baris batang horizontal (rincian kategori / produk / unit) — gaya Screen Time. */
 export const BarRow: React.FC<{
   label: React.ReactNode;
   value: React.ReactNode;

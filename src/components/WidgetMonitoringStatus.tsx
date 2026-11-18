@@ -1,10 +1,9 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { Clock, Monitor, Gamepad2, Smartphone, ShieldCheck, Settings2, MessageCircle } from "lucide-react";
 import { doc, setDoc, onSnapshot } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
 import { HistoryItem, RowSewa } from "../lib/types";
-import { Button, Card, Eyebrow, Pill } from "../ui";
+import { Button, Card, Eyebrow, Pill, Sheet } from "../ui";
 import { buildSewaTable } from "../lib/priceLists";
 import { formatK } from "../lib/format";
 import { formatWa } from "../lib/wa";
@@ -403,53 +402,20 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
         </div>
       </Card>
 
-      {selectedUnit && typeof document !== "undefined" && (() => {
+      {selectedUnit && (() => {
         const sel: KartuUnit = activeRentals.find((r) => r.uid === selectedUnit.uid) || selectedUnit;
         const tarif = tarifTelatPerJam(sel.jenis);
         const adaReminder = bisaIngatkan(sel) && !sel.isVerified;
-        return createPortal(
-          <div className="fixed inset-0 z-[700] flex items-center justify-center p-4" role="dialog" aria-modal="true">
-            <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" onClick={() => setSelectedUnit(null)} />
-            <div className="relative z-10 w-full max-w-sm rounded-sheet apple-sheet border border-white/50 dark:border-white/[0.12] p-5 shadow-float ring-1 ring-edge animate-in zoom-in-95 duration-200 sm:p-6">
-              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-fill" />
-
-              <h3 className="text-center text-title3 font-bold text-label">{sel.jenis}</h3>
-              <p className="mt-1 text-center text-subhead font-semibold text-tint">{sel.namaPenyewa}</p>
-              <p className={`mt-1 text-center font-mono text-footnote font-medium ${sel.waPenyewa ? "text-label-2" : "text-negative"}`}>
-                {sel.waPenyewa ? `WA ${formatWa(sel.waPenyewa)}` : "No. WA penyewa belum diisi"}
-              </p>
-              <p className="mt-1 text-center text-caption font-medium text-label-3">
-                Admin: {sel.addedBy ? sel.addedBy.split("@")[0].toUpperCase() : "UNKNOWN"}
-              </p>
-
-              <div className="mt-3 mb-4 flex flex-wrap items-center justify-center gap-1.5">
-                {sel.diantarOleh && (
-                  <Pill tone="tint">Diantar oleh: {sel.diantarOleh.split("@")[0]}</Pill>
-                )}
-                {!sel.diantarOleh && sel.isOngkir === "TIDAK" && (
-                  <Pill tone="positive">Diambil sendiri</Pill>
-                )}
-                {sel.isPaid === "TIDAK" && (
-                  <Pill tone="negative">
-                    Belum dibayar {sel._nominalBelumBayar ? `(Rp ${formatK(sel._nominalBelumBayar)})` : ""}
-                  </Pill>
-                )}
-                {sel.isPaid === "YA" && (
-                  <Pill tone="positive">Sudah dibayar</Pill>
-                )}
-              </div>
-
-              <div className="mb-5 rounded-tile apple-tile p-4 text-center ring-1 ring-edge">
-                <p className="text-callout font-medium leading-relaxed text-label">
-                  {teksPerkiraanKembali(sel.endMs)}
-                </p>
-                {sel.endMs && (
-                  <p className="mt-1.5 text-footnote text-label-2">
-                    Batas kembali {waktuRelatif(batasKembali(sel.endMs), now)}{tarif ? ` · telat Rp${formatK(tarif).replace("k", "rb")}/jam` : ""}
-                  </p>
-                )}
-              </div>
-
+        return (
+          <Sheet
+            open={Boolean(selectedUnit)}
+            onClose={() => setSelectedUnit(null)}
+            size="sm"
+            variant="surface"
+            zClassName="z-[700]"
+            title={sel.jenis}
+            subtitle={sel.namaPenyewa}
+            footer={
               <div className="flex flex-col gap-2.5">
                 {adaReminder && (
                   <Button
@@ -474,9 +440,45 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
                   Tutup
                 </Button>
               </div>
+            }
+          >
+            <div className="text-center">
+              <p className={`font-mono text-footnote font-medium ${sel.waPenyewa ? "text-label-2" : "text-negative"}`}>
+                {sel.waPenyewa ? `WA ${formatWa(sel.waPenyewa)}` : "No. WA penyewa belum diisi"}
+              </p>
+              <p className="mt-1 text-caption font-medium text-label-3">
+                Admin: {sel.addedBy ? sel.addedBy.split("@")[0].toUpperCase() : "UNKNOWN"}
+              </p>
+
+              <div className="mt-3 mb-4 flex flex-wrap items-center justify-center gap-1.5">
+                {sel.diantarOleh && (
+                  <Pill tone="tint">Diantar oleh: {sel.diantarOleh.split("@")[0]}</Pill>
+                )}
+                {!sel.diantarOleh && sel.isOngkir === "TIDAK" && (
+                  <Pill tone="positive">Diambil sendiri</Pill>
+                )}
+                {sel.isPaid === "TIDAK" && (
+                  <Pill tone="negative">
+                    Belum dibayar {sel._nominalBelumBayar ? `(Rp ${formatK(sel._nominalBelumBayar)})` : ""}
+                  </Pill>
+                )}
+                {sel.isPaid === "YA" && (
+                  <Pill tone="positive">Sudah dibayar</Pill>
+                )}
+              </div>
+
+              <div className="rounded-tile apple-tile p-4 text-center ring-1 ring-edge">
+                <p className="text-callout font-medium leading-relaxed text-label">
+                  {teksPerkiraanKembali(sel.endMs)}
+                </p>
+                {sel.endMs && (
+                  <p className="mt-1.5 text-footnote text-label-2">
+                    Batas kembali {waktuRelatif(batasKembali(sel.endMs), now)}{tarif ? ` · telat Rp${formatK(tarif).replace("k", "rb")}/jam` : ""}
+                  </p>
+                )}
+              </div>
             </div>
-          </div>,
-          document.body
+          </Sheet>
         );
       })()}
 

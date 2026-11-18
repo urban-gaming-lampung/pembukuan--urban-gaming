@@ -1,14 +1,11 @@
 import React from "react";
-import { IconBadge } from "./layout";
-import { AKSEN_TILE, type WarnaIkon } from "./tokens";
+import { cx } from "../foundations/cn";
+import { AKSEN_TILE, type WarnaIkon } from "../foundations/tokens";
+import { IconBadge } from "../surfaces/Card";
 
 /**
- * SHELL ADAPTIF APPLE — iOS (mobile) & macOS (desktop).
- * - Desktop (md+): Sidebar navigasi kiri bergaya Source List macOS + Toolbar atas translucent.
- * - Mobile (< md): Navigation Bar atas edge-to-edge + Bottom Tab Bar iOS dengan safe-area inset.
+ * CHROME — Shell adaptif Apple (iOS Top Bar + Bottom Tab Bar / macOS Sidebar Source List + Header Halaman).
  */
-
-const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
 export type NavItem = {
   key: string;

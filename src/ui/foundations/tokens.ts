@@ -1,7 +1,6 @@
 /**
- * URBAN Design System — token versi JavaScript (untuk grafik & warna yang tidak bisa memakai kelas Tailwind).
- * Token warna utama ada di src/index.css (CSS variable) dan dipetakan di tailwind.config.js.
- * Aturan lengkap: src/ui/DESIGN.md
+ * URBAN Design System — token warna & grafik Apple iOS 27 UI Kit.
+ * Token permukaan ada di src/index.css (CSS variable) dan dipetakan di tailwind.config.js.
  */
 
 /** Nada makna. Warna hanya dipakai untuk makna, bukan hiasan. */

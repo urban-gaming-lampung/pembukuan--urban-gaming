@@ -10,6 +10,7 @@ import { rpShort, rupiah } from "../lib/format";
 import { totalPemasukanHarian } from "../lib/keuangan";
 import { buatLaporanHarian, laporanUntukPdf } from "../lib/laporan";
 import { toAscii } from "../lib/posReceipt";
+import { MOTION } from "../ui";
 
 type ImageQuality = "Tinggi" | "Hemat";
 
@@ -444,8 +445,8 @@ const PdfExporter = forwardRef<PdfExporterHandle, Props>(function PdfExporter({ 
       
       {isGenerating && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative w-full max-w-sm apple-glass rounded-card p-7 shadow-float flex flex-col items-center text-center animate-in zoom-in-95 duration-200 ring-1 ring-black/10 dark:ring-white/15">
+          <div className={`absolute inset-0 bg-black/60 backdrop-blur-sm ${MOTION.backdrop}`} />
+          <div className={`relative w-full max-w-sm apple-glass rounded-card p-7 shadow-float flex flex-col items-center text-center ring-1 ring-black/10 dark:ring-white/15 ${MOTION.dialog}`}>
             <div className="w-14 h-14 mb-5 flex items-center justify-center rounded-tile bg-tint/15 text-tint">
               <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/>

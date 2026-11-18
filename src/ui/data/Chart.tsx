@@ -1,10 +1,9 @@
 import React from "react";
-import { useIsDark } from "../hooks/useIsDark";
-import { temaGrafik } from "./tokens";
+import { useIsDark } from "../../hooks/useIsDark";
+import { temaGrafik } from "../foundations/tokens";
 
 /**
  * GRAFIK — tema sumbu & tooltip bersama untuk semua grafik recharts.
- * Aturan: satu sumbu Y, garis grid samar, label sumbu 10px abu, tooltip satu gaya.
  */
 
 /** Warna sumbu / grid / kursor mengikuti mode terang-gelap secara realtime. */

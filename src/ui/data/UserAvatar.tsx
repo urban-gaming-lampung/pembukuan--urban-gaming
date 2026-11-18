@@ -1,4 +1,5 @@
 import React from "react";
+import { cx } from "../foundations/cn";
 
 export function getInitials(nameOrEmail?: string): string {
   if (!nameOrEmail) return "U";
@@ -37,7 +38,7 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
   size = "md",
   className = "",
   showStatusBadge = false,
-  statusBadgeColor = "bg-[#34C759] dark:bg-[#30D158]",
+  statusBadgeColor = "bg-positive",
   statusBadgeActive = true,
 }) => {
   const [imgError, setImgError] = React.useState(false);
@@ -52,9 +53,12 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
   const showImage = Boolean(photoUrl && !imgError);
 
   return (
-    <div className={`relative shrink-0 ${className}`}>
+    <div className={cx("relative shrink-0", className)}>
       <div
-        className={`${sizeClasses} rounded-full overflow-hidden flex items-center justify-center border border-black/10 dark:border-white/10 shadow-sm`}
+        className={cx(
+          sizeClasses,
+          "rounded-full overflow-hidden flex items-center justify-center border border-black/10 dark:border-white/10 shadow-sm"
+        )}
         style={{ backgroundColor: showImage ? undefined : bgColor }}
       >
         {showImage ? (
@@ -73,7 +77,10 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
 
       {showStatusBadge && (
         <div
-          className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full ${statusBadgeActive ? statusBadgeColor : "bg-[#8E8E93]"} border-2 border-surface`}
+          className={cx(
+            "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-surface",
+            statusBadgeActive ? statusBadgeColor : "bg-label-3"
+          )}
         />
       )}
     </div>

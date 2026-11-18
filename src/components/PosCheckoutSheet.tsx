@@ -3,7 +3,7 @@ import { X, CheckCircle2, Download, Printer, Share2, AlertTriangle, Package, Loa
 import logoBlack from "../assets/urban-logo-black.png";
 import { Button, Card, Eyebrow, Notice, Pill, Sheet } from "../ui";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
-import { adaTukarTambah, bayarNota, commitPosSale, infoNego, nilaiTukarNota, isBonus, Kondisi, negoSatuan, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, sisaBayar, StokRef } from "../lib/posSales";
+import { adaTukarTambah, bayarNota, commitPosSale, dpSudahDiSaldoNota, infoNego, nilaiTukarNota, isBonus, Kondisi, negoSatuan, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, sisaBayar, StokRef, updateDpSudahDiSaldoPos } from "../lib/posSales";
 import { UploadTransferProof } from "./TableEditor";
 import { barangTukarTambah, barisPembayaran, belumDibayar, belumLunas, statusTegas, buildNotaPdf, fmtTanggalNota, isNotaSewa, judulNota, KETENTUAN_DP, kotakSyarat, labelPembeli, notaFileName, preloadNotaAssets, printNotaThermal, STORE, teksPembayaran, teksPenutup, teksStatusBayar } from "../lib/posReceipt";
 import { rupiah } from "../lib/format";
@@ -355,6 +355,8 @@ const PosCheckoutSheet: React.FC<Props> = ({
   // Cara bayar: lunas sekarang, atau DP (stok baru berkurang saat pelunasan)
   const [caraBayar, setCaraBayar] = useState<"LUNAS" | "DP">("LUNAS");
   const [dpStr, setDpStr] = useState("");
+  const [adaDpLama, setAdaDpLama] = useState(false);
+  const [dpLamaStr, setDpLamaStr] = useState("");
   const [jatuhTempo, setJatuhTempo] = useState(() => tanggalNanti(JATUH_TEMPO_BAWAAN));
   // Tukar tambah: barang pembeli yang masuk sebagai potongan (null = lembar tertutup, "" = barang baru)
   const [tukar, setTukar] = useState<DraftTukar[]>([]);
@@ -366,7 +368,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
   const reset = () => {
     setPembeli(""); setPembeliWa(""); setVariant({}); setBukti(""); setError(""); setSale(null); setSaving(""); actions.setMsg("");
     setHargaNego({}); setEditHarga(null); setDraftHarga("");
-    setCaraBayar("LUNAS"); setDpStr(""); setJatuhTempo(tanggalNanti(JATUH_TEMPO_BAWAAN));
+    setCaraBayar("LUNAS"); setDpStr(""); setAdaDpLama(false); setDpLamaStr(""); setJatuhTempo(tanggalNanti(JATUH_TEMPO_BAWAAN));
     setTukar([]); setUbahTukar(null);
   };
 
@@ -448,7 +450,10 @@ const PosCheckoutSheet: React.FC<Props> = ({
   const adaTukar = bisaTukar && tukar.length > 0;
   const nilaiTukar = adaTukar ? tukar.reduce((a, t) => a + t.nilai * t.qty, 0) : 0;
   const bayar = hitung.total - nilaiTukar; // negatif = URBAN membayar ke pembeli
-  const tanpaUang = adaTukar && bayar === 0;
+  const nominalDpLama = !isDp && adaDpLama && bayar > 0 ? Math.round(Number(dpLamaStr.replace(/[^\d]/g, "")) || 0) : 0;
+  const dpLamaSalah = !isDp && adaDpLama && bayar > 0 && (nominalDpLama <= 0 || nominalDpLama > bayar);
+  const bayarHariIni = nominalDpLama > 0 && nominalDpLama <= bayar ? bayar - nominalDpLama : bayar;
+  const tanpaUang = !isDp && ((adaTukar && bayar === 0) || bayarHariIni === 0);
   const butuhBukti = metode === "TRANSFER" && !bukti && !tanpaUang;
   const nominalDp = Math.round(Number(dpStr.replace(/[^\d]/g, "")) || 0);
   const dpSalah = isDp && (!(nominalDp > 0) || nominalDp >= hitung.total);
@@ -460,6 +465,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
     if (belumPilih.length) { setError(`Pilih varian stok untuk "${belumPilih[0].line.name}".`); return; }
     if (butuhBukti) { setError("Upload foto bukti transfer dulu."); return; }
     if (editHarga) { setError("Selesaikan ubah harga dulu (ketuk OK)."); return; }
+    if (dpLamaSalah) { setError(`DP lama tidak boleh lebih dari ${rupiah(bayar)} (atau Rp 0 jika aktif).`); return; }
     if (dpSalah) { setError(`Nominal DP harus lebih dari Rp 0 dan kurang dari total ${rupiah(hitung.total)}.`); return; }
     if (jatuhTempoSalah) { setError("Pilih tanggal jatuh tempo pelunasan (hari ini atau sesudahnya)."); return; }
     setSaving(mode);
@@ -494,6 +500,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
         diskonPersen: hitung.discountPercent,
         diskon: hitung.discountAmount,
         total: hitung.total,
+        ...(!isDp && nominalDpLama > 0 ? { dpSudahDiSaldo: nominalDpLama } : {}),
       }, isDp ? { dp: { jumlah: nominalDp, jatuhTempo } } : adaTukar ? { tukarTambah: tukar.map(({ key, ...t }) => t) } : {});
     } catch (e: any) {
       setError("Transaksi gagal disimpan: " + (e?.message || e) + ". Stok tidak berubah, coba lagi.");
@@ -527,7 +534,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
           variant="filled"
           size="lg"
           loading={saving === "thermal"}
-          disabled={!!saving || !lines.length || butuhBukti || dpSalah || jatuhTempoSalah}
+          disabled={!!saving || !lines.length || butuhBukti || dpSalah || dpLamaSalah || jatuhTempoSalah}
           icon={<Printer />}
           onClick={() => simpan("thermal")}
         >
@@ -537,7 +544,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
           variant="destructive"
           size="lg"
           loading={saving === "pdf"}
-          disabled={!!saving || !lines.length || butuhBukti || dpSalah || jatuhTempoSalah}
+          disabled={!!saving || !lines.length || butuhBukti || dpSalah || dpLamaSalah || jatuhTempoSalah}
           icon={<Download />}
           onClick={() => simpan("pdf")}
           className="!bg-negative !text-white hover:opacity-90"
@@ -549,7 +556,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
         variant="plain"
         size="sm"
         block
-        disabled={!!saving || !lines.length || butuhBukti || dpSalah || jatuhTempoSalah}
+        disabled={!!saving || !lines.length || butuhBukti || dpSalah || dpLamaSalah || jatuhTempoSalah}
         onClick={() => simpan("none")}
         className="text-label-2"
       >
@@ -611,14 +618,19 @@ const PosCheckoutSheet: React.FC<Props> = ({
             {/* Total */}
             <div className="rounded-card bg-action text-action-label px-4 py-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
               <div className="text-[11px] font-semibold uppercase tracking-[0.06em] opacity-70">
-                {adaTukar ? labelBayarTukar(bayar) : "Total Bayar"}
+                {nominalDpLama > 0 ? "Pelunasan Hari Ini" : adaTukar ? labelBayarTukar(bayar) : "Total Bayar"}
               </div>
               <div className="text-display font-mono tracking-tight leading-none mt-1 tabular-nums">
-                {rupiah(adaTukar ? Math.abs(bayar) : hitung.total)}
+                {rupiah(nominalDpLama > 0 ? Math.max(0, bayarHariIni) : adaTukar ? Math.abs(bayar) : hitung.total)}
               </div>
               {adaTukar && (
                 <div className="text-footnote mt-1.5 opacity-85">
                   Total barang {rupiah(hitung.total)} · tukar tambah −{rupiah(nilaiTukar)}
+                </div>
+              )}
+              {nominalDpLama > 0 && (
+                <div className="text-footnote mt-1 opacity-85">
+                  Sudah DP sebelumnya −{rupiah(nominalDpLama)} (tidak dihitung dobel)
                 </div>
               )}
               {adaNego && (
@@ -680,6 +692,52 @@ const PosCheckoutSheet: React.FC<Props> = ({
                 <p className="text-caption text-label-2">
                   Nota tukar tambah harus lunas — DP belum bisa dipakai.
                 </p>
+              )}
+              {!isDp && bayar > 0 && (
+                <div className="pt-1 border-t border-sep space-y-2">
+                  <label className="flex items-center justify-between gap-3 cursor-pointer py-0.5">
+                    <span className="text-caption font-semibold text-label-2">
+                      Pembeli sudah titip DP sebelumnya (uangnya sudah di saldo kemarin)?
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={adaDpLama}
+                      onChange={(e) => {
+                        setAdaDpLama(e.target.checked);
+                        if (!e.target.checked) setDpLamaStr("");
+                        setError("");
+                      }}
+                      className="h-4 w-4 accent-tint shrink-0"
+                    />
+                  </label>
+                  {adaDpLama && (
+                    <div className="space-y-1.5">
+                      <div
+                        className={`flex items-center h-11 px-3.5 rounded-field bg-fill transition-all focus-within:bg-surface focus-within:ring-2 focus-within:ring-tint/35 ${
+                          dpLamaStr && dpLamaSalah ? "ring-2 ring-negative/50" : ""
+                        }`}
+                      >
+                        <span className="text-subhead font-semibold text-label-3 mr-1.5">Rp</span>
+                        <input
+                          inputMode="numeric"
+                          autoComplete="off"
+                          value={dpLamaStr}
+                          onChange={(e) => {
+                            setDpLamaStr(ribuan(e.target.value));
+                            setError("");
+                          }}
+                          placeholder="Nominal DP yg sudah diterima kemarin"
+                          className="flex-1 min-w-0 bg-transparent text-[16px] sm:text-subhead font-semibold tabular-nums text-label placeholder:text-label-3 focus:outline-none"
+                        />
+                      </div>
+                      <p className="text-caption text-label-2">
+                        {dpLamaSalah
+                          ? `Harus di antara Rp 1 dan ${rupiah(bayar)}.`
+                          : "Hanya pelunasan hari ini yang masuk arus kas baru agar DP lama tidak terhitung ganda."}
+                      </p>
+                    </div>
+                  )}
+                </div>
               )}
               {isDp && (
                 <div className="space-y-3 pt-0.5">
@@ -1093,6 +1151,91 @@ const PosCheckoutSheet: React.FC<Props> = ({
         );
       })()}
     </>
+  );
+};
+
+/** Kontrol ringkas untuk mencatat/mengoreksi DP lama yang sudah masuk kas sebelumnya pada nota lunas. */
+export const DpLamaEditor: React.FC<{ sale: PosSale; onSaved?: (msg: string, dpBaru: number) => void }> = ({ sale, onSaved }) => {
+  const maxBayar = Math.max(0, bayarNota(sale));
+  const awal = dpSudahDiSaldoNota(sale);
+  const [buka, setBuka] = useState(false);
+  const [draft, setDraft] = useState(() => (awal > 0 ? ribuan(String(awal)) : ""));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    setDraft(awal > 0 ? ribuan(String(awal)) : "");
+    setBuka(false);
+    setErr("");
+  }, [sale.id, awal]);
+
+  if (sale.batal || sale.status === "DP" || sale.pembayaran?.length || maxBayar <= 0) return null;
+
+  const nominal = Math.round(Number(draft.replace(/[^\d]/g, "")) || 0);
+  const salah = nominal > maxBayar;
+
+  const simpan = async () => {
+    if (busy || salah) return;
+    setBusy(true);
+    setErr("");
+    try {
+      const bersih = await updateDpSudahDiSaldoPos(sale, nominal);
+      setBuka(false);
+      onSaved?.(
+        bersih > 0
+          ? `DP sebelumnya diset ${rupiah(bersih)} · kas masuk nota ini ${rupiah(maxBayar - bersih)} ✅`
+          : "Potongan DP sebelumnya dihapus ✅",
+        bersih
+      );
+    } catch (e: any) {
+      setErr(e?.message || "Gagal memperbarui DP sebelumnya.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-tile apple-tile px-3.5 py-2.5 ring-1 ring-edge space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-caption font-semibold text-label">DP lama (sudah melebur di saldo kemarin)</div>
+          <div className="text-caption text-label-2 tabular-nums">
+            {awal > 0
+              ? `Terpotong ${rupiah(awal)} · uang masuk hari ini ${rupiah(maxBayar - awal)}`
+              : "Tidak ada · seluruh pembayaran dihitung masuk pada tanggal nota"}
+          </div>
+        </div>
+        <Button size="sm" variant="tinted" onClick={() => setBuka((v) => !v)}>
+          {buka ? "Tutup" : awal > 0 ? "Ubah" : "Catat DP"}
+        </Button>
+      </div>
+      {buka && (
+        <div className="space-y-2 pt-1.5 border-t border-sep">
+          <div className="flex items-center gap-2">
+            <div className={`flex-1 flex items-center h-10 px-3 rounded-field bg-fill ${salah ? "ring-2 ring-negative/50" : ""}`}>
+              <span className="text-footnote font-semibold text-label-3 mr-1">Rp</span>
+              <input
+                inputMode="numeric"
+                autoComplete="off"
+                value={draft}
+                onChange={(e) => {
+                  setDraft(ribuan(e.target.value));
+                  setErr("");
+                }}
+                placeholder="0"
+                className="flex-1 min-w-0 bg-transparent text-[16px] sm:text-subhead font-semibold tabular-nums text-label placeholder:text-label-3 focus:outline-none"
+              />
+            </div>
+            <Button size="sm" variant="filled" loading={busy} disabled={busy || salah} onClick={simpan}>
+              Simpan
+            </Button>
+          </div>
+          <p className="text-caption2 text-label-2">
+            {err || (salah ? `Maksimal ${rupiah(maxBayar)}.` : `Sisanya (${rupiah(Math.max(0, maxBayar - nominal))}) yang dihitung masuk ke Rekening/Kas pada nota ini.`)}
+          </p>
+        </div>
+      )}
+    </div>
   );
 };
 
