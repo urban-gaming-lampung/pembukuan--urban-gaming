@@ -565,6 +565,13 @@ export type ItemTunaiPos = {
   nominal: number;
   sudahTf: boolean;
   adaJasa: boolean;
+  /**
+   * Tunai jasa nota ini sudah ikut Setoran harian (pembukuan disimpan). Nota tetap ditampilkan sebagai
+   * bukti, statusnya mengikuti centang setoran hari itu & tidak dihitung dua kali.
+   */
+  viaSetoran?: { tanggal: string; nominal: number; sudah: boolean };
+  /** Seluruh tunai nota sudah tercakup Setoran harian (hanya bukti, tidak menambah total tunai luar). */
+  hanyaSetoran?: boolean;
 };
 
 export type ItemSetoranBelum = {
@@ -573,6 +580,8 @@ export type ItemSetoranBelum = {
   rowIndex: number;
   ket: string;
   nominal: number;
+  /** Setoran sudah ditandai "Ya" (masuk rekening) — tampil sebagai bukti yang sudah dicoret. */
+  sudah?: boolean;
 };
 
 export type ItemOwnerTunai = {
@@ -597,8 +606,24 @@ export type PosisiDana = {
   modalAnchorTanggal: string | null;
   itemPos: ItemTunaiPos[];
   itemSetoran: ItemSetoranBelum[];
+  /** Setoran harian yang sudah di-TF (bukti, tidak dihitung). */
+  itemSetoranSudah: ItemSetoranBelum[];
   itemOwner: ItemOwnerTunai[];
 };
+
+/**
+ * Tunai nota DP (per pembayaran, sesudah kalibrasi Modal) yang BELUM disetor ke rekening.
+ * Data lama tanpa status per pembayaran mengikuti tanda `tunaiSudahSetor` nota.
+ */
+const cashPembayaranBelumSetor = (
+  s: Pick<PosSale, "pembayaran" | "tunaiSudahSetor">,
+  modalAnchorTs: number,
+): number =>
+  (s.pembayaran || [])
+    .filter((p) => p.metode === "CASH")
+    .filter((p) => !(modalAnchorTs > 0 && (Number(p.ts) || 0) < modalAnchorTs))
+    .filter((p) => !(typeof p.sudahSetor === "boolean" ? p.sudahSetor : Boolean(s.tunaiSudahSetor)))
+    .reduce((a, p) => a + Math.max(0, roundNum(p.jumlah)), 0);
 
 const ringkasBarangPos = (items?: Pick<PosItem, "nama" | "qty">[]): string =>
   (items || []).map((it) => ((Number(it.qty) || 1) > 1 ? `${it.nama} ×${it.qty}` : it.nama)).join(", ") || "Transaksi POS";
@@ -634,24 +659,46 @@ export function ringkasPosisiDana(params: {
   const modalAnchorTanggal = modalAnchorTs > 0 ? tanggalHariKerja(modalAnchorTs) : null;
 
   const syncedNotaCash = new Map<string, number>();
+  /** Nota jasa tunai -> pembukuan (setoran) yang memuatnya */
+  const notaSetoran = new Map<string, { tanggal: string; sudah: boolean }>();
   const itemPos: ItemTunaiPos[] = [];
   const itemSetoran: ItemSetoranBelum[] = [];
+  const itemSetoranSudah: ItemSetoranBelum[] = [];
   const itemOwner: ItemOwnerTunai[] = [];
   let setoranBelumAktif = 0;
   let setoranBelumHistoris = 0;
 
   filteredHistory.forEach((h) => {
+    const setoranIsi = ((h as any).rowsSetoran || []).filter((s: any) => Math.max(0, roundNum(s?.harga ?? s?.nominal)) > 0);
+    const setoranLunas = setoranIsi.length > 0 && setoranIsi.every((s: any) => !(s?.bayar === "Belum" || s?.isTransfer === "Belum"));
     ((h as any).rowsJasaAks || []).forEach((r: any) => {
       if (!(r?._nota || r?._sumber === "pos")) return;
       if (!String(r?.bayar || "").toLowerCase().includes("cash")) return;
       const val = Math.max(0, roundNum(r.harga));
-      if (val > 0 && r._nota) syncedNotaCash.set(r._nota, (syncedNotaCash.get(r._nota) || 0) + val);
+      if (val > 0 && r._nota) {
+        syncedNotaCash.set(r._nota, (syncedNotaCash.get(r._nota) || 0) + val);
+        notaSetoran.set(r._nota, { tanggal: String(h.tanggal || ""), sudah: setoranLunas });
+      }
     });
     ((h as any).rowsSetoran || []).forEach((s: any, idx: number) => {
       const val = Math.max(0, roundNum(s?.harga ?? s?.nominal));
       if (val <= 0) return;
       const belum = s?.bayar === "Belum" || s?.isTransfer === "Belum";
-      if (!belum) return;
+      if (!belum) {
+        // Sudah di-TF: tetap tampil di rincian sebagai bukti yang sudah dicoret
+        const sudah = s?.bayar === "Ya" || s?.isTransfer === "Ya";
+        if (sudah && !(modalAnchorTanggal && String(h.tanggal || "") < modalAnchorTanggal)) {
+          itemSetoranSudah.push({
+            historyId: String(h.id || ""),
+            tanggal: String(h.tanggal || ""),
+            rowIndex: idx,
+            ket: String(s?.ket || "Setoran harian"),
+            nominal: val,
+            sudah: true,
+          });
+        }
+        return;
+      }
       if (modalAnchorTanggal && String(h.tanggal || "") < modalAnchorTanggal) {
         setoranBelumHistoris += val;
       } else {
@@ -685,10 +732,35 @@ export function ringkasPosisiDana(params: {
     }
     const synced = syncedNotaCash.get(s.noNota) || 0;
     const diLuarSetoran = Math.max(0, cashAktif - synced);
-    if (diLuarSetoran <= 0) return;
-    const sudahTf = Boolean(s.tunaiSudahSetor);
-    if (!sudahTf) posTunaiDiLuarSetoran += diLuarSetoran;
+    const infoSetoran = synced > 0 ? notaSetoran.get(s.noNota) : undefined;
+    const viaSetoran = infoSetoran ? { ...infoSetoran, nominal: Math.min(synced, cashAktif) } : undefined;
     const tsNota = Number(s.lunasTs) || Number(s.ts) || 0;
+    if (diLuarSetoran <= 0) {
+      // Seluruh tunai nota sudah ikut Setoran harian: tetap tampil sebagai bukti (tidak dihitung dua kali)
+      if (viaSetoran && viaSetoran.nominal > 0) {
+        itemPos.push({
+          id: String(s.id || s.noNota),
+          noNota: s.noNota,
+          tanggal: s.tanggal || (tsNota ? tanggalHariKerja(tsNota) : ""),
+          ts: tsNota,
+          pembeli: String(s.pembeli || "-"),
+          ringkas: ringkasBarangPos(s.items),
+          jenis: "PENJUALAN",
+          nominal: viaSetoran.nominal,
+          sudahTf: viaSetoran.sudah,
+          adaJasa: adaItemJasaPos(s.items),
+          viaSetoran,
+          hanyaSetoran: true,
+        });
+      }
+      return;
+    }
+    // Nota DP: status setor per pembayaran (pelunasan tunai baru tetap "belum" walau DP sudah dicoret)
+    const belum = s.pembayaran?.length
+      ? Math.min(diLuarSetoran, cashPembayaranBelumSetor(s, modalAnchorTs))
+      : s.tunaiSudahSetor ? 0 : diLuarSetoran;
+    const sudahTf = belum <= 0;
+    posTunaiDiLuarSetoran += belum;
     itemPos.push({
       id: String(s.id || s.noNota),
       noNota: s.noNota,
@@ -697,9 +769,10 @@ export function ringkasPosisiDana(params: {
       pembeli: String(s.pembeli || "-"),
       ringkas: ringkasBarangPos(s.items),
       jenis: "PENJUALAN",
-      nominal: diLuarSetoran,
+      nominal: belum > 0 ? belum : diLuarSetoran,
       sudahTf,
       adaJasa: adaItemJasaPos(s.items),
+      ...(viaSetoran ? { viaSetoran } : {}),
     });
   });
 
@@ -718,8 +791,11 @@ export function ringkasPosisiDana(params: {
       cashAktif = Math.max(0, roundNum(s.dp ?? s.total));
     }
     if (cashAktif <= 0) return;
-    const sudahTf = Boolean(s.tunaiSudahSetor);
-    if (!sudahTf) posTunaiDiLuarSetoran += cashAktif;
+    const belum = s.pembayaran?.length
+      ? Math.min(cashAktif, cashPembayaranBelumSetor(s, modalAnchorTs))
+      : s.tunaiSudahSetor ? 0 : cashAktif;
+    const sudahTf = belum <= 0;
+    posTunaiDiLuarSetoran += belum;
     const tsNota = Number(s.ts) || 0;
     itemPos.push({
       id: String(s.id || s.noNota),
@@ -729,7 +805,7 @@ export function ringkasPosisiDana(params: {
       pembeli: String(s.pembeli || "-"),
       ringkas: ringkasBarangPos(s.items),
       jenis: s.status === "DP" ? "DP" : "BATAL_PEMBELI",
-      nominal: cashAktif,
+      nominal: belum > 0 ? belum : cashAktif,
       sudahTf,
       adaJasa: false,
     });
@@ -773,6 +849,7 @@ export function ringkasPosisiDana(params: {
 
   itemPos.sort((a, b) => b.ts - a.ts);
   itemSetoran.sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+  itemSetoranSudah.sort((a, b) => b.tanggal.localeCompare(a.tanggal));
   itemOwner.sort((a, b) => b.tanggal.localeCompare(a.tanggal));
 
   const ownerTunaiNet = ownerTunaiMasuk - ownerTunaiKeluar;
@@ -790,6 +867,7 @@ export function ringkasPosisiDana(params: {
     modalAnchorTanggal,
     itemPos,
     itemSetoran,
+    itemSetoranSudah,
     itemOwner,
   };
 }

@@ -3,7 +3,7 @@ import { X, CheckCircle2, Download, Printer, Share2, AlertTriangle, Package, Loa
 import logoBlack from "../assets/urban-logo-black.png";
 import { Button, Card, Eyebrow, Notice, Pill, Sheet } from "../ui";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
-import { adaTukarTambah, bayarNota, commitPosSale, dpSudahDiSaldoNota, infoNego, nilaiTukarNota, isBonus, Kondisi, kondisiProduk, negoSatuan, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, sisaBayar, StokRef, updateDpSudahDiSaldoPos } from "../lib/posSales";
+import { adaTukarTambah, bayarNota, commitPosSale, dpSudahDiSaldoNota, infoNego, nilaiTukarNota, isBonus, Kondisi, kondisiProduk, negoSatuan, notaUrlValid, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, sisaBayar, StokRef, updateDpSudahDiSaldoPos } from "../lib/posSales";
 import { alokasiBonusPsFifo, type PsBonusBatch } from "../lib/psBonusFifo";
 import { UploadTransferProof } from "./TableEditor";
 import { barangTukarTambah, barisPembayaran, belumDibayar, belumLunas, statusTegas, buildNotaPdf, fmtTanggalNota, isNotaSewa, judulNota, KETENTUAN_DP, kotakSyarat, labelPembeli, notaFileName, preloadNotaAssets, printNotaThermal, STORE, teksPembayaran, teksPenutup, teksStatusBayar } from "../lib/posReceipt";
@@ -159,7 +159,7 @@ export function useNotaActions(sale: PosSale | null) {
   const uploading = React.useRef<Promise<string> | null>(null);
   useEffect(() => {
     setPdfFile(null);
-    setNotaUrl(sale?.notaUrl || "");
+    setNotaUrl(notaUrlValid(sale));
     uploading.current = null;
     if (!sale) return;
     let alive = true;
@@ -170,7 +170,7 @@ export function useNotaActions(sale: PosSale | null) {
         const file = new File([p.output("blob")], notaFileName(sale), { type: "application/pdf" });
         setPdfFile(file);
         // Ada nomor WA pembeli -> PDF langsung diunggah supaya "Kirim WA" instan
-        if (sale.pembeliWa && !sale.notaUrl && !uploading.current) {
+        if (sale.pembeliWa && !notaUrlValid(sale) && !uploading.current) {
           uploading.current = simpanNotaOnline(sale, file);
           uploading.current.then((u) => { if (alive) setNotaUrl(u); }).catch(() => { uploading.current = null; });
         }
@@ -248,7 +248,7 @@ export function useNotaActions(sale: PosSale | null) {
       `IG ${STORE.ig} · WA ${STORE.wa}`,
     ].join("\n");
     const waLink = (link: string) => linkWa(sale.pembeliWa, pesan(link));
-    const siap = notaUrl || sale.notaUrl;
+    const siap = notaUrl || notaUrlValid(sale);
     if (siap) { window.open(waLink(siap), "_blank"); return; }
     // Buka tab dulu (masih dalam ketukan pengguna), isi alamatnya setelah PDF terunggah
     const w = window.open("", "_blank");

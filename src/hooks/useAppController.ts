@@ -1079,15 +1079,15 @@ export default function useAppController() {
   const manualPengeluaranCash = useMemo(() => rowsPengeluaran.reduce((sum, r: any) => (r.bayar === "Cash" && !r._autoOngkirKey ? sum + toInt(r.harga) : sum), 0), [rowsPengeluaran]);
 
   useEffect(() => {
-    // Ongkir bagi hasil: bila masuk gaji bulanan, bagian pengantar tidak dipotong dari kas harian
+    // Ongkir bagi hasil: SEMUA uang cash disetor dulu ke owner — bagian ongkir pengantar TIDAK diambil
+    // dari kas harian (owner membayarkannya ke pengantar sesudah setor / lewat gaji). Yang memotong setoran
+    // hanya pengeluaran cash manual.
     const isNewPolicy = tanggal >= ONGKIR_BAGI_HASIL_SEJAK;
 
     let sisaKas: number;
 
     if (isNewPolicy) {
-      sisaKas = ongkirConfig.masukGaji
-        ? Math.max(0, totalCash - manualPengeluaranCash)
-        : Math.max(0, totalCash - totalPengeluaranCash);
+      sisaKas = Math.max(0, totalCash - manualPengeluaranCash);
     } else {
       const ongkirIncomeCash = rowsSewa.reduce((sum, r: any) => (bayarCash(r.bayar) ? sum + ongkirBaris(r) : sum), 0);
       const ongkirExpenseCash = rowsSewa.reduce((sum, r: any) => (r._bayarOngkir === "Cash" ? sum + ongkirPengantar(r, ongkirConfig.pegawaiPersen) : sum), 0);
@@ -1110,7 +1110,7 @@ export default function useAppController() {
   }, [totalCash, totalPengeluaranCash, manualPengeluaranCash, rowsSewa, ongkirConfig.pegawaiPersen, ongkirConfig.masukGaji, tanggal]);
 
   useEffect(() => {
-     const ongkirEntries: { key: string; ket: string; harga: number; bayar: string; _namaPengantar?: string }[] = [];
+     const ongkirEntries: { key: string; ket: string; harga: number; bayar: string; _namaPengantar?: string; buktiSewa?: string }[] = [];
 
      rowsSewa.forEach((r) => {
        // Pelunasan sewa dari hari lain: ongkir pengantarnya sudah dicatat di pembukuan hari sewa
@@ -1129,6 +1129,8 @@ export default function useAppController() {
            harga: pegawaiNominal,
            bayar: (r as any)._bayarOngkir || "",
            _namaPengantar: namaPengantar,
+           // Ongkir & sewa sama-sama Transfer -> bukti TF penyewa di Rincian Sewa dipakai juga untuk baris ongkir
+           buktiSewa: bayarTransfer((r as any).bayar) && (r as any).buktiTransfer ? String((r as any).buktiTransfer) : "",
          });
        }
      });
@@ -1144,7 +1146,7 @@ export default function useAppController() {
              ket: e.ket,
              harga: e.harga,
              bayar: e.bayar,
-             ...(e.bayar === "Transfer" && old?.buktiTransfer ? { buktiTransfer: old.buktiTransfer } : {}),
+             ...(e.bayar === "Transfer" && (e.buktiSewa || old?.buktiTransfer) ? { buktiTransfer: e.buktiSewa || old.buktiTransfer } : {}),
              _autoOngkirKey: e.key,
              _namaPengantar: e._namaPengantar,
            };

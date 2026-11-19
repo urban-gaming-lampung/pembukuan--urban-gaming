@@ -36,8 +36,8 @@ const BarisCentangTunai: React.FC<{
     disabled={busy || disabled}
     onClick={onToggle}
     aria-pressed={checked}
-    className={`w-full apple-tile ring-1 ring-black/[0.04] dark:ring-white/[0.06] px-3.5 py-3 flex items-start gap-3 text-left transition-all min-h-[44px] hover:bg-fill/60 active:scale-[0.99] disabled:opacity-60 ${
-      checked ? "opacity-75" : ""
+    className={`w-full apple-tile ring-1 ring-black/[0.04] dark:ring-white/[0.06] px-3.5 py-3 flex items-start gap-3 text-left transition-all min-h-[44px] enabled:hover:bg-fill/60 enabled:active:scale-[0.99] ${
+      checked || disabled ? "opacity-75" : ""
     }`}
   >
     <span
@@ -139,11 +139,15 @@ export const TunaiDiLuarRekeningSheet: React.FC<Props> = ({ open, onClose, posis
     }
   };
 
-  // Gabungkan setoran aktif (Belum) + yang baru dicentang agar bisa langsung diklik ulang untuk batal
+  // Setoran Belum + yang baru dicentang (menunggu data realtime) + yang sudah di-TF (tetap tampil sebagai bukti)
   const aktifSetoranKeys = new Set(posisi.itemSetoran.map(setoranKey));
+  const sudahSetoranKeys = new Set(posisi.itemSetoranSudah.map(setoranKey));
   const semuaSetoran = [
     ...posisi.itemSetoran.map((r) => ({ row: r, checked: false })),
     ...Array.from(toggledSetoran.values())
+      .filter((r) => !aktifSetoranKeys.has(setoranKey(r)) && !sudahSetoranKeys.has(setoranKey(r)))
+      .map((r) => ({ row: r, checked: true })),
+    ...posisi.itemSetoranSudah
       .filter((r) => !aktifSetoranKeys.has(setoranKey(r)))
       .map((r) => ({ row: r, checked: true })),
   ];
@@ -157,7 +161,7 @@ export const TunaiDiLuarRekeningSheet: React.FC<Props> = ({ open, onClose, posis
   ];
 
   const kosong = posisi.itemPos.length === 0 && semuaSetoran.length === 0 && semuaOwner.length === 0;
-  const jumlahBelumPos = posisi.itemPos.filter((x) => !x.sudahTf).length;
+  const jumlahBelumPos = posisi.itemPos.filter((x) => !x.sudahTf && !x.hanyaSetoran).length;
 
   return (
     <Sheet
@@ -219,6 +223,7 @@ export const TunaiDiLuarRekeningSheet: React.FC<Props> = ({ open, onClose, posis
                       key={item.id}
                       checked={item.sudahTf}
                       busy={busyKey === `pos:${item.id}`}
+                      disabled={item.hanyaSetoran}
                       judul={item.noNota}
                       badge={
                         <>
@@ -226,6 +231,7 @@ export const TunaiDiLuarRekeningSheet: React.FC<Props> = ({ open, onClose, posis
                             <Pill tone="neutral">{item.jenis === "DP" ? "DP" : "DP Hangus"}</Pill>
                           )}
                           {item.adaJasa && <Pill tone="tint">Jasa</Pill>}
+                          {item.hanyaSetoran && <Pill tone="neutral">Via setoran</Pill>}
                         </>
                       }
                       sub={
@@ -233,8 +239,14 @@ export const TunaiDiLuarRekeningSheet: React.FC<Props> = ({ open, onClose, posis
                           <span className="font-medium text-label">{item.pembeli}</span> · {item.ringkas}
                           <br />
                           <span>{fmtTgl(item.tanggal)}</span>
-                          {item.adaJasa && !item.sudahTf && (
-                            <span> · otomatis pindah ke Setoran saat pembukuan disimpan</span>
+                          {item.viaSetoran ? (
+                            <span>
+                              {" · "}
+                              {item.hanyaSetoran ? "Tunai" : `Jasa ${rupiah(item.viaSetoran.nominal)}`} ikut Setoran harian {fmtTgl(item.viaSetoran.tanggal)}
+                              {item.hanyaSetoran ? " — status mengikuti centang setoran" : ""}
+                            </span>
+                          ) : (
+                            item.adaJasa && !item.sudahTf && <span> · otomatis pindah ke Setoran saat pembukuan disimpan</span>
                           )}
                         </>
                       }

@@ -102,6 +102,8 @@ export type NotaBarang = {
   jumlah: number;
   buktiTransfer?: string;
   label?: "DP" | "Pelunasan" | "Tukar tambah";
+  /** Tunai nota sudah disetor ke rekening owner (dicentang di Analitik › Tunai di luar rekening). */
+  sudahSetor?: boolean;
 };
 export function notaBarang(s: PosSale, from = 0, to = Infinity): NotaBarang[] {
   if (!s) return [];
@@ -124,6 +126,7 @@ export function notaBarang(s: PosSale, from = 0, to = Infinity): NotaBarang[] {
         jumlah: (s.items || []).reduce((a, it) => a + (Number(it.qty) || 0), 0),
         buktiTransfer: p.metode === "TRANSFER" ? p.buktiTransfer : undefined,
         label: p.jenis === "DP" ? ("DP" as const) : ("Pelunasan" as const),
+        sudahSetor: typeof p.sudahSetor === "boolean" ? p.sudahSetor : Boolean(s.tunaiSudahSetor),
       }));
   }
   if (s.batal || s.ts < from || s.ts > to) return [];
@@ -144,6 +147,7 @@ export function notaBarang(s: PosSale, from = 0, to = Infinity): NotaBarang[] {
     jumlah: items.reduce((a, it) => a + (Number(it.qty) || 0), 0),
     buktiTransfer: s.metode === "TRANSFER" ? s.buktiTransfer : undefined,
     ...(tukar ? { label: "Tukar tambah" as const } : {}),
+    sudahSetor: Boolean(s.tunaiSudahSetor),
   }];
 }
 
@@ -205,11 +209,28 @@ export function patchPembukuanDenganNota(data: any, barisBaru: BarisNota[]): Rec
   if (tandaBaris(lama) === tandaBaris(barisBaru)) return null;
   const a = totalBaris(lama);
   const b = totalBaris(barisBaru);
+  // Tunai jasa yang berubah sesudah tutup buku ikut mengubah Setoran (kalau tidak, uangnya "hilang" dari
+  // Setoran sekaligus dari daftar Tunai di luar rekening karena dianggap sudah tercakup pembukuan).
+  const deltaCash = b.cash - a.cash;
+  const setoranLama = Array.isArray(data?.rowsSetoran) ? data.rowsSetoran : null;
+  let rowsSetoran: any[] | null = null;
+  if (deltaCash !== 0 && setoranLama && setoranLama.length) {
+    const baru: any[] = setoranLama.map((r: any) => ({ ...r }));
+    const utama = baru[0];
+    if (deltaCash > 0 && (utama?.bayar === "Ya" || utama?.isTransfer === "Ya")) {
+      // Setoran utama sudah di-TF: tambahan tunai dicatat sebagai baris setoran baru berstatus Belum
+      baru.push({ ket: "Tambahan nota POS sesudah tutup buku", harga: deltaCash, bayar: "Belum" });
+    } else {
+      baru[0] = { ...utama, harga: Math.max(0, toInt(utama?.harga) + deltaCash) };
+    }
+    rowsSetoran = baru;
+  }
   return {
     rowsJasaAks: JSON.parse(JSON.stringify([...manual, ...barisBaru])),
     totalJasaAks: Math.max(0, toInt(data?.totalJasaAks) - a.total + b.total),
     totalCash: Math.max(0, toInt(data?.totalCash) - a.cash + b.cash),
     totalTransfer: Math.max(0, toInt(data?.totalTransfer) - a.transfer + b.transfer),
+    ...(rowsSetoran ? { rowsSetoran: JSON.parse(JSON.stringify(rowsSetoran)) } : {}),
   };
 }
 

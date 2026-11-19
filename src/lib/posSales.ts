@@ -159,7 +159,13 @@ export type PembayaranNota = {
   ts: number;
   oleh: string;
   olehNama?: string;
+  /** Pembayaran CASH ini sudah disetor ke rekening owner (per pembayaran, supaya pelunasan tunai tidak ikut tercoret DP). */
+  sudahSetor?: boolean;
 };
+
+/** Status setor tunai satu pembayaran nota (data lama tanpa field per pembayaran mengikuti tanda nota). */
+export const pembayaranSudahSetor = (s: Pick<PosSale, "tunaiSudahSetor">, p: Pick<PembayaranNota, "sudahSetor">): boolean =>
+  typeof p.sudahSetor === "boolean" ? p.sudahSetor : Boolean(s.tunaiSudahSetor);
 
 // ============================================================
 // DP — SSOT status & angka (dipakai nota, POS, pembukuan & analitik)
@@ -774,10 +780,12 @@ export async function lunasiNotaDp(
         tx.set(fifoRef, { batches: aloc.nextBatches, usedBySale: nextUsed }, { merge: true });
       }
     }
+    // Status setor tunai dicatat per pembayaran: DP tunai yang sudah dicoret tetap tercoret, pelunasan tunai baru = belum disetor
     const pembayaran: PembayaranNota[] = [
-      ...(cur.pembayaran || []),
-      { jenis: "PELUNASAN", jumlah: sisa, metode: bayar.metode, ...(bayar.buktiTransfer ? { buktiTransfer: bayar.buktiTransfer } : {}), ts: now, oleh, olehNama: bayar.kasirNama },
+      ...(cur.pembayaran || []).map((p) => (p.metode === "CASH" && typeof p.sudahSetor !== "boolean" ? { ...p, sudahSetor: Boolean(cur.tunaiSudahSetor) } : p)),
+      { jenis: "PELUNASAN", jumlah: sisa, metode: bayar.metode, ...(bayar.buktiTransfer ? { buktiTransfer: bayar.buktiTransfer } : {}), ...(bayar.metode === "CASH" ? { sudahSetor: false } : {}), ts: now, oleh, olehNama: bayar.kasirNama },
     ];
+    // (tunaiSudahSetor tingkat nota tidak diubah di sini: aturan Firestore kasir hanya mengizinkan field pelunasan)
     const patch = { status: "LUNAS" as StatusNota, lunasTs: now, lunasOleh: oleh, pembayaran, stokKurang };
     tx.update(saleRef, JSON.parse(JSON.stringify(patch)));
     return { ...cur, ...patch, stokSesudah: sisaSesudah(w.logs) };
@@ -834,6 +842,25 @@ export function useNotaDp(): { list: PosSale[]; loading: boolean } {
   return { list, loading };
 }
 
+/**
+ * Link PDF nota yang masih SESUAI isi nota sekarang. Nama file PDF memuat waktu unggah (`…_<ms>.pdf`);
+ * bila nota berubah sesudahnya (dilunasi / pembayaran baru / dibatalkan), PDF lama berstatus DP dianggap
+ * usang ("") supaya PDF dibuat & diunggah ulang sebelum dikirim ke WhatsApp pembeli.
+ */
+export function notaUrlValid(s: PosSale | null | undefined): string {
+  if (!s?.notaUrl) return "";
+  let path = s.notaUrl;
+  try { path = decodeURIComponent(s.notaUrl); } catch { /* biarkan */ }
+  const m = path.match(/_(\d{12,14})\.pdf/);
+  const terakhirBerubah = Math.max(
+    Number(s.lunasTs) || 0,
+    Number(s.batalTs) || 0,
+    ...(s.pembayaran || []).map((p) => Number(p.ts) || 0),
+  );
+  if (!m) return !s.batal && !pernahDp(s) ? s.notaUrl : "";
+  return Number(m[1]) >= terakhirBerubah ? s.notaUrl : "";
+}
+
 /** Unggah PDF nota ke Storage (link untuk WhatsApp pembeli) & simpan link-nya di transaksi. */
 export async function simpanNotaOnline(sale: PosSale, file: File): Promise<string> {
   const d = new Date(sale.ts);
@@ -858,7 +885,17 @@ export async function updateDpSudahDiSaldoPos(sale: PosSale, dpSudahDiSaldo: num
 /** Tandai atau batalkan status setor tunai nota POS ke rekening pemilik. */
 export async function setPosTunaiSudahSetor(saleId: string, sudahSetor: boolean): Promise<void> {
   if (!saleId) throw new Error("ID nota tidak ditemukan.");
-  await updateDoc(doc(db, "pos_transaksi", saleId), { tunaiSudahSetor: sudahSetor });
+  const ref = doc(db, "pos_transaksi", saleId);
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error("Nota tidak ditemukan.");
+    const cur = snap.data() as PosSale;
+    // Nota DP: semua pembayaran tunai yang ADA saat ini ikut ditandai (pelunasan tunai berikutnya tetap belum disetor)
+    const pembayaran = Array.isArray(cur.pembayaran) && cur.pembayaran.length
+      ? cur.pembayaran.map((p) => (p.metode === "CASH" ? { ...p, sudahSetor } : p))
+      : null;
+    tx.update(ref, { tunaiSudahSetor: sudahSetor, ...(pembayaran ? { pembayaran: JSON.parse(JSON.stringify(pembayaran)) } : {}) });
+  });
 }
 
 // ============================================================

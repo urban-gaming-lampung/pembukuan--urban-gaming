@@ -1,7 +1,8 @@
 import React from "react";
 import { Calculator, Check, X } from "lucide-react";
 import TableEditor, { AutoFitInput } from "./TableEditor";
-import { toInt, formatRibuanInput } from "../lib/format";
+import { toInt, formatRibuanInput, rupiah } from "../lib/format";
+import { ONGKIR_BAGI_HASIL_SEJAK } from "../lib/sewa";
 
 interface Props {
   rows: any[];
@@ -10,6 +11,10 @@ interface Props {
   currentDay?: string;
   isMobileTable?: boolean;
   ongkirMasukGaji?: boolean;
+  /** Total pemasukan tunai hari ini (untuk rincian hitungan setoran) */
+  totalCash?: number;
+  /** Baris Rincian Pengeluaran (untuk rincian potongan cash) */
+  rowsPengeluaran?: any[];
 }
 
 const BLANK_SETORAN = { ket: "", harga: "", bayar: "" };
@@ -20,15 +25,53 @@ export default function RincianSetoran({
   currentDate,
   isMobileTable,
   ongkirMasukGaji = false,
+  totalCash,
+  rowsPengeluaran = [],
 }: Props) {
-  const hintOtomatis =
-    currentDate && currentDate >= "2026-04-29" && ongkirMasukGaji
-      ? "Kalkulasi otomatis (Total Cash - Pengeluaran Manual)"
-      : "Kalkulasi otomatis (Cash - Pengeluaran Cash)";
+  const sistemBaru = !!currentDate && currentDate >= ONGKIR_BAGI_HASIL_SEJAK;
+  const hintOtomatis = sistemBaru
+    ? "Kalkulasi otomatis (Semua Cash - Pengeluaran Cash manual)"
+    : "Kalkulasi otomatis (Cash - Pengeluaran Cash)";
+  void ongkirMasukGaji;
+
+  // Rincian hitungan: semua cash masuk − pengeluaran cash manual (ongkir pengantar dibayar owner sesudah setor)
+  const potongan = sistemBaru
+    ? rowsPengeluaran
+        .filter((r) => r?.bayar === "Cash" && toInt(r?.harga) > 0 && !r?._autoOngkirKey)
+        .map((r) => ({ ket: String(r?.ket || "Pengeluaran").trim(), harga: toInt(r?.harga) }))
+    : [];
+  const ongkirPengantarCash = sistemBaru
+    ? rowsPengeluaran.filter((r) => r?._autoOngkirKey && r?.bayar === "Cash").reduce((a, r) => a + toInt(r?.harga), 0)
+    : 0;
+  const rincianHitung =
+    sistemBaru && typeof totalCash === "number" && totalCash > 0 ? (
+      <div className="rounded-tile apple-tile ring-1 ring-black/[0.03] dark:ring-white/[0.04] px-3.5 py-2.5 text-caption text-label-2 space-y-1">
+        <div className="flex items-center justify-between gap-3">
+          <span>Pemasukan cash</span>
+          <span className="font-mono tabular-nums text-label">{rupiah(totalCash)}</span>
+        </div>
+        {potongan.map((p, i) => (
+          <div key={i} className="flex items-center justify-between gap-3">
+            <span className="min-w-0 truncate">− {p.ket}</span>
+            <span className="shrink-0 font-mono tabular-nums text-negative">−{rupiah(p.harga)}</span>
+          </div>
+        ))}
+        <div className="flex items-center justify-between gap-3 border-t border-sep pt-1 font-semibold text-label">
+          <span>Setoran</span>
+          <span className="font-mono tabular-nums">{rupiah(Math.max(0, totalCash - potongan.reduce((a, p) => a + p.harga, 0)))}</span>
+        </div>
+        {ongkirPengantarCash > 0 && (
+          <p className="text-caption2 text-label-3 pt-0.5">
+            Bagian ongkir pengantar {rupiah(ongkirPengantarCash)} tidak dipotong — ikut disetor, lalu dibayarkan owner ke pengantar.
+          </p>
+        )}
+      </div>
+    ) : undefined;
 
   return (
     <TableEditor<any>
       title="Rincian Setoran Hari Ini"
+      slotBawahTable={rincianHitung}
       subtitle={hintOtomatis}
       totalLabel="Total Setoran"
       columns={["No.", "Keterangan (Wajib)", "Nominal (Rp)"]}

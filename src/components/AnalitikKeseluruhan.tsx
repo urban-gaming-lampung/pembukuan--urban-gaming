@@ -317,7 +317,7 @@ export default function AnalitikKeseluruhan(props: Props) {
                   />
                 }
                 sub={
-                  d.posisi.itemPos.length + d.posisi.itemSetoran.length + d.posisi.itemOwner.length > 0
+                  d.posisi.itemPos.length + d.posisi.itemSetoran.length + d.posisi.itemSetoranSudah.length + d.posisi.itemOwner.length > 0
                     ? "Ketuk untuk rincian nota & centang TF"
                     : "Belum ada nota/setoran tunai tertahan"
                 }

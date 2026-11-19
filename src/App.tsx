@@ -514,6 +514,8 @@ export default function App() {
                     currentDate={tanggal} currentDay={hari}
                     isMobileTable={isMobileTable}
                     ongkirMasukGaji={Boolean(ongkirConfig?.masukGaji)}
+                    totalCash={totalCash}
+                    rowsPengeluaran={rowsPengeluaran}
                  />
               </div>}
             </div>

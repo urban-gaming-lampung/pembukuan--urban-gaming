@@ -98,7 +98,7 @@ const DaftarNotaOwner: React.FC<{
                 value={n.total}
                 size="subhead"
                 tone={n.total < 0 ? "negative" : "neutral"}
-                className="shrink-0 font-bold whitespace-nowrap"
+                className={`shrink-0 font-bold whitespace-nowrap ${isCash && n.sudahSetor ? "line-through opacity-60" : ""}`}
               />
             </div>
 
@@ -108,8 +108,8 @@ const DaftarNotaOwner: React.FC<{
                   {n.noNota} · {jam(n.ts)}
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <Pill tone={isCash ? "warning" : "tint"}>
-                    {isCash ? "Belum disetor" : "TF / QRIS"}
+                  <Pill tone={isCash ? (n.sudahSetor ? "positive" : "warning") : "tint"}>
+                    {isCash ? (n.sudahSetor ? "Sudah disetor" : "Belum disetor") : "TF / QRIS"}
                   </Pill>
                   {n.label && (
                     <Pill tone={n.label === "DP" ? "warning" : n.label === "Tukar tambah" ? "tint" : "positive"}>
@@ -150,9 +150,13 @@ const SetorBarangOwner: React.FC<{
 
   const listCash = nota.filter((n) => n.metode !== "TRANSFER");
   const listTf = nota.filter((n) => n.metode === "TRANSFER");
-  const totalCash = listCash.reduce((a, n) => a + n.total, 0);
+  // Cash yang sudah dicentang "Sudah di-TF" di Analitik tidak lagi dihitung sebagai belum disetor
+  const cashBelum = listCash.filter((n) => !n.sudahSetor);
+  const totalCash = cashBelum.reduce((a, n) => a + n.total, 0);
+  const totalCashSemua = listCash.reduce((a, n) => a + n.total, 0);
+  const jmlCashSudah = listCash.length - cashBelum.length;
   const totalTf = listTf.reduce((a, n) => a + n.total, 0);
-  const totalSemua = totalCash + totalTf;
+  const totalSemua = totalCashSemua + totalTf;
   const adaDp = nota.some((n) => n.label === "DP" || n.label === "Pelunasan");
   const adaKePembeli = nota.some((n) => n.total < 0);
 
@@ -167,7 +171,7 @@ const SetorBarangOwner: React.FC<{
           <Amount value={totalSemua} size="subhead" className="font-bold text-label whitespace-nowrap" />
         </div>
         <p className="mt-1 text-caption leading-relaxed text-label-2">
-          Tidak masuk pembukuan kas harian. <span className="font-semibold text-label">Cash berstatus belum disetor</span> ke owner, sedangkan Transfer/QRIS langsung masuk rekening.
+          Tidak masuk pembukuan kas harian. <span className="font-semibold text-label">Cash berstatus belum disetor</span> sampai owner mencentang Sudah di-TF di Analitik, sedangkan Transfer/QRIS langsung masuk rekening.
           {adaKePembeli ? " Nilai minus = tukar tambah dibayar URBAN ke pembeli." : ""}
         </p>
       </Notice>
@@ -181,7 +185,13 @@ const SetorBarangOwner: React.FC<{
               <Amount value={totalCash} size="headline" fitAt={11} />
             </TileValue>
           }
-          sub={listCash.length ? `${listCash.length} nota · perlu disetor` : "Tidak ada cash"}
+          sub={
+            !listCash.length
+              ? "Tidak ada cash"
+              : cashBelum.length
+                ? `${cashBelum.length} nota · perlu disetor${jmlCashSudah ? ` · ${jmlCashSudah} sudah` : ""}`
+                : `${listCash.length} nota · semua sudah disetor`
+          }
         />
         <StatTile
           dot={MARK.transfer}
@@ -196,9 +206,9 @@ const SetorBarangOwner: React.FC<{
       </div>
 
       <DaftarNotaOwner
-        judul="Cash · Belum disetor ke owner"
+        judul={cashBelum.length ? "Cash · Setor ke owner" : "Cash · Sudah disetor ke owner"}
         dotColor={MARK.tunai}
-        subtotal={totalCash}
+        subtotal={totalCashSemua}
         items={listCash}
         isCash
         onOpenNota={onOpenNota}
