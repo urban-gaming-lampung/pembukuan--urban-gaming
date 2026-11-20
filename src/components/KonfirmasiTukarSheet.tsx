@@ -149,8 +149,12 @@ export const KonfirmasiTukarSheet: React.FC<{
 
   // Barang stok tujuan
   const tujuan: { ref: StokRef | null; baru: boolean } = produk
-    ? { ref: produk.stokRef || tujuanStokBaru(produk.name, cats)?.ref || null, baru: !produk.stokRef && !!tujuanStokBaru(produk.name, cats)?.baru }
-    : (() => { const x = tujuanStokBaru(namaBaru, cats); return { ref: x?.ref || null, baru: !!x?.baru }; })();
+    ? (() => {
+        if (produk.stokRef) return { ref: produk.stokRef, baru: false };
+        const x = tujuanStokBaru(produk.name, cats, products.filter((p) => p.id !== produk.id));
+        return { ref: x?.ref || null, baru: !!x?.baru };
+      })()
+    : (() => { const x = tujuanStokBaru(namaBaru, cats, products); return { ref: x?.ref || null, baru: !!x?.baru }; })();
   const varianList = tujuan.ref?.item === PILIH_SAAT_CHECKOUT ? cats.find((c) => c.kategori === tujuan.ref!.kategori)?.items || [] : [];
   const jumlahDi = (r: StokRef | null) => (r && r.item !== PILIH_SAAT_CHECKOUT ? Math.max(0, Math.round(Number(data?.[r.kategori]?.[r.item]?.jumlah) || 0)) : null);
   const sekarang = jumlahDi(tujuan.ref);

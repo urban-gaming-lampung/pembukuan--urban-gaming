@@ -553,7 +553,7 @@ export default function AnalitikUsaha(props: FilterProps) {
                   </div>
                 </div>
               ))}
-              <p className="px-4 pb-3.5 pt-1 text-caption text-label-2">Atur batas minimum & restock di menu Stok.</p>
+              <p className="px-4 pb-3.5 pt-1 text-caption text-label-2">Atur batas minimum di menu Stok; restock lewat Input › Atur Stok.</p>
             </Card>
           )}
 

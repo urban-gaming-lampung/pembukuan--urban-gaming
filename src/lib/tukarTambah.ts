@@ -19,7 +19,7 @@ import { auth, db, storage } from "./firebase";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { prepareStokWrites, writeStokInTx } from "./stokJualan";
 import { kompresFoto, ModalMap, pratinjauOtomatis, ProdukJualan, simpanBarangJualan, sinkronModalProdukDariStok } from "./barangJualan";
-import { kondisiProduk, namaJualan, PILIH_SAAT_CHECKOUT, produkSubKategori, StokRef, SubKategoriJualan, tokenize } from "./posSales";
+import { angkaBeda, kondisiProduk, namaJualan, PILIH_SAAT_CHECKOUT, produkSubKategori, ProdukSync, StokRef, SubKategoriJualan, tokenize } from "./posSales";
 import { tanggalHariKerja } from "./dateLocal";
 import { rupiah } from "./format";
 
@@ -70,7 +70,8 @@ export type KandidatProduk = { produk: ProdukJualan; skor: number; yakin: boolea
 
 /**
  * Produk jualan SEKEN yang paling mirip dengan nama barang tukar tambah (MURNI).
- * `yakin` = cukup jelas untuk dipilih otomatis (nama sama / semua kata produk ada di nama barang).
+ * `yakin` = cukup jelas untuk dipilih otomatis (nama sama / semua kata produk ada di nama barang)
+ * DAN angka pembedanya sama ("SERI 21" tidak pernah otomatis masuk ke produk "SERI 25").
  */
 export function cocokProdukSeken(nama: string, products: ProdukJualan[]): KandidatProduk[] {
   const t = new Set(tokenInti(nama));
@@ -85,7 +86,7 @@ export function cocokProdukSeken(nama: string, products: ProdukJualan[]): Kandid
     const gabung = new Set([...pt, ...t]).size;
     const skor = sama / gabung;
     const semuaKataProduk = sama === pt.length;
-    const yakin = skor >= 0.999 || (semuaKataProduk && skor >= 0.6);
+    const yakin = !angkaBeda(nama, p.name) && (skor >= 0.999 || (semuaKataProduk && skor >= 0.6));
     if (skor >= 0.34 || semuaKataProduk) out.push({ produk: p, skor, yakin });
   });
   out.sort((a, b) => Number(b.yakin) - Number(a.yakin) || b.skor - a.skor || a.produk.name.localeCompare(b.produk.name, "id"));
@@ -94,9 +95,9 @@ export function cocokProdukSeken(nama: string, products: ProdukJualan[]): Kandid
   return out.slice(0, 4);
 }
 
-/** Barang stok yang akan dipakai bila dibuat sebagai produk baru (SEKEN). */
-export function tujuanStokBaru(nama: string, master: StokKategori[]) {
-  return pratinjauOtomatis(nama, subKategoriTukar(nama), "SEKEN", master);
+/** Barang stok yang akan dipakai bila dibuat sebagai produk baru (SEKEN). `produkLain` = produk yang barang stoknya sudah terpakai. */
+export function tujuanStokBaru(nama: string, master: StokKategori[], produkLain: ProdukSync[] = []) {
+  return pratinjauOtomatis(nama, subKategoriTukar(nama), "SEKEN", master, produkLain);
 }
 
 /** Unggah foto tukar tambah (kompres 1280 px). Disimpan di folder bukti transfer (boleh semua staf). */

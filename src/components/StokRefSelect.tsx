@@ -20,6 +20,8 @@ export const refAda = (r: StokRef, categories: StokKategori[]) => {
 /**
  * Pilihan barang stok (dipakai di form produk & lembar Hubungkan Stok).
  * `allowAuto`: tampilkan opsi "Otomatis" (value undefined = sistem yang menentukan / membuat barang stok).
+ * `dipakai`: "KATEGORI||ITEM" -> nama produk lain yang sudah memakai barang itu. Barang tersebut tidak bisa
+ *   dipilih (1 produk = 1 barang stok), kecuali yang sedang terpilih.
  */
 export const StokRefSelect: React.FC<{
   value?: StokRef | null;
@@ -28,7 +30,8 @@ export const StokRefSelect: React.FC<{
   data?: Record<string, Record<string, StokItemValue>>;
   className?: string;
   allowAuto?: boolean;
-}> = ({ value, onChange, categories, data, className, allowAuto }) => (
+  dipakai?: Record<string, string>;
+}> = ({ value, onChange, categories, data, className, allowAuto, dipakai }) => (
   <select
     value={value === undefined && allowAuto ? AUTO : encode(value)}
     onChange={(e) => onChange(e.target.value === AUTO ? undefined : decode(e.target.value))}
@@ -41,9 +44,12 @@ export const StokRefSelect: React.FC<{
         <option value={`${c.kategori}||${PILIH_SAAT_CHECKOUT}`}>{c.kategori} › pilih varian saat checkout</option>
         {c.items.map((it) => {
           const n = data?.[c.kategori]?.[it]?.jumlah;
+          const k = `${c.kategori}||${it}`;
+          const milik = dipakai?.[k];
+          const terpilih = encode(value) === k;
           return (
-            <option key={it} value={`${c.kategori}||${it}`}>
-              {c.kategori} › {it}{typeof n === "number" ? ` (sisa ${n})` : " (belum dihitung)"}
+            <option key={it} value={k} disabled={!!milik && !terpilih}>
+              {c.kategori} › {it}{typeof n === "number" ? ` (sisa ${n})` : " (belum dihitung)"}{milik ? ` · dipakai ${milik}` : ""}
             </option>
           );
         })}

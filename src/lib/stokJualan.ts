@@ -167,7 +167,7 @@ export type StokPatch = Record<string, Record<string, Partial<StokItemValue> & {
 
 /**
  * Hitung perubahan stok dari data server terbaru (MURNI, tanpa Firebase) — dipakai di dalam
- * transaksi oleh Update Stok, Tempel Laporan, dan POS supaya aturannya satu.
+ * transaksi oleh Atur Stok (stok masuk / koreksi) dan POS supaya aturannya satu.
  * Delta dihitung dari angka server, jadi perubahan dari HP lain tidak tertimpa.
  */
 export function prepareStokWrites(
@@ -287,30 +287,195 @@ export async function removeJualanItem(kategori: string, item: string) {
 }
 
 /**
- * Ganti nama barang stok jualan (master, jumlah, & stok minimum ikut pindah).
- * Riwayat lama tetap memakai nama lama. Mengembalikan nama baru, atau null bila tidak ada perubahan.
+ * Ganti nama barang stok jualan. Semua rujukannya ikut (lihat pindahStok), jadi riwayat stok masuk,
+ * modal, dan nota tetap nyambung. Mengembalikan nama baru, atau null bila tidak ada perubahan.
  */
 export async function renameJualanItem(kategori: string, lama: string, baru: string): Promise<string | null> {
-  const nama = String(baru || "").replace(/\s+/g, " ").trim();
+  const nama = rapikanNamaStok(baru);
   if (!nama || nama === lama) return null;
-  const nk = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const [hasil] = await pindahStok([{ dari: { kategori, item: lama }, ke: { kategori, item: nama } }]);
+  return hasil ? hasil.item : null;
+}
+
+// ============================================================
+// Pindah barang ke kategori lain & ganti nama kategori (Owner › Stok › Stok Jualan)
+// ============================================================
+
+type RefStok = { kategori: string; item: string };
+const nkStok = (s: string) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+/** Nama kategori / barang stok: spasi dirapikan, HURUF BESAR (sama dengan nama barang jualan). */
+export const rapikanNamaStok = (s: string) => String(s || "").replace(/\s+/g, " ").trim().toUpperCase();
+
+/**
+ * Pindahkan / ganti nama barang stok jualan dalam SATU transaksi. Semua yang merujuk barang itu
+ * ikut pindah supaya jumlah, modal (HPP FIFO), dan nota tetap nyambung: master, jumlah, stok minimum,
+ * produk, catatan stok masuk, pengeluaran stok, batch bonus PS Baru, tukar tambah, dan nota POS.
+ * Riwayat stok ikut sesudahnya (hanya sejarah, gagal = tidak fatal).
+ * `gantiKategori` = seluruh kategori ganti nama: produk "pilih varian saat checkout" ikut.
+ * Kategori yang jadi kosong karena perpindahan ini dihapus dari master.
+ */
+async function pindahStok(daftar: { dari: RefStok; ke: RefStok }[], gantiKategori?: { lama: string; baru: string }): Promise<RefStok[]> {
   const mRef = doc(db, "data", "master_stok_categories");
   const sRef = doc(db, "data", "stok");
   const cRef = doc(db, "data", "stok_config");
-  return runTransaction(db, async (tx) => {
-    const [m, s, c] = await Promise.all([tx.get(mRef), tx.get(sRef), tx.get(cRef)]);
+  const fRef = doc(db, "data", "ps_bonus_fifo");
+  const kunci = (r: RefStok) => `${r.kategori}||${r.item}`;
+
+  // 0. Rapikan nama tujuan: kategori yang sudah ada dipakai persis namanya
+  const master0 = readMasterJualan((await getDocFromServer(mRef)).data()?.jualan);
+  const namaKategori = (s: string) => master0.find((c) => nkStok(c.kategori) === nkStok(s))?.kategori || rapikanNamaStok(s);
+  const moves = daftar
+    .map((m) => ({ dari: m.dari, ke: { kategori: namaKategori(m.ke.kategori), item: rapikanNamaStok(m.ke.item) } }))
+    .filter((m) => m.ke.kategori && m.ke.item && kunci(m.dari) !== kunci(m.ke));
+  const ganti = gantiKategori ? { lama: gantiKategori.lama, baru: rapikanNamaStok(gantiKategori.baru) } : undefined;
+  if (!moves.length && !ganti) return [];
+  const peta = new Map(moves.map((m) => [kunci(m.dari), m.ke]));
+  const tujuanDari = (r?: { kategori?: string; item?: string } | null): RefStok | null => {
+    if (!r || !r.kategori || !r.item) return null;
+    const hit = peta.get(kunci(r as RefStok));
+    if (hit) return hit;
+    if (ganti && r.kategori === ganti.lama) return { kategori: ganti.baru, item: r.item }; // "*" varian
+    return null;
+  };
+  const katAsal = [...new Set(moves.map((m) => m.dari.kategori))];
+
+  // 1. Dokumen yang merujuk (dibaca ulang di dalam transaksi)
+  const [prodSnap, ttSnap, posSnap, ...masukSnaps] = await Promise.all([
+    getDocs(collection(db, "products")),
+    getDocs(collection(db, "tukar_tambah")),
+    getDocs(collection(db, "pos_transaksi")),
+    ...katAsal.map((kat) => getDocs(query(collection(db, "stok_masuk"), where("kategori", "==", kat)))),
+  ]);
+  const expSnap = await getDocs(query(collection(db, "owner_expenses"), where("kategori", "==", "Stok Jualan"))).catch(() => null);
+  type Jenis = "produk" | "tt" | "pos" | "exp" | "masuk";
+  const target: { jenis: Jenis; ref: any }[] = [
+    ...prodSnap.docs.filter((d) => tujuanDari(d.data()?.stokRef)).map((d) => ({ jenis: "produk" as Jenis, ref: d.ref })),
+    ...ttSnap.docs.filter((d) => tujuanDari(d.data()?.stokRef)).map((d) => ({ jenis: "tt" as Jenis, ref: d.ref })),
+    ...posSnap.docs
+      .filter((d) => {
+        const s = d.data() as any;
+        return (s?.items || []).some((it: any) => tujuanDari(it?.stokRef)) || (s?.stokKurang || []).some((x: any) => tujuanDari(x));
+      })
+      .map((d) => ({ jenis: "pos" as Jenis, ref: d.ref })),
+    ...(expSnap?.docs || []).filter((d) => tujuanDari(d.data()?.stok)).map((d) => ({ jenis: "exp" as Jenis, ref: d.ref })),
+    ...masukSnaps.flatMap((s) => s.docs.filter((d) => peta.has(kunci(d.data() as RefStok))).map((d) => ({ jenis: "masuk" as Jenis, ref: d.ref }))),
+  ];
+  if (target.length > 420) throw new Error("Data yang merujuk barang ini terlalu banyak untuk dipindah sekaligus.");
+
+  await runTransaction(db, async (tx) => {
+    const [m, s, c, f] = await Promise.all([tx.get(mRef), tx.get(sRef), tx.get(cRef), tx.get(fRef)]);
+    const snaps = await Promise.all(target.map((t) => tx.get(t.ref)));
+
+    // Master: keluarkan dari kategori asal, masukkan ke tujuan (kategori baru di posisi kategori asal)
     const jualan = readMasterJualan(m.data()?.jualan);
-    const cat = jualan.find((x) => x.kategori === kategori);
-    if (!cat || !cat.items.includes(lama)) return null;
-    if (cat.items.some((i) => i !== lama && nk(i) === nk(nama))) throw new Error(`"${nama}" sudah ada di ${kategori}.`);
-    cat.items = cat.items.map((i) => (i === lama ? nama : i));
-    tx.set(mRef, { jualan }, { merge: true });
-    const val = s.data()?.jualan?.[kategori]?.[lama];
-    if (val !== undefined) tx.update(sRef, new FieldPath("jualan", kategori, nama), val, new FieldPath("jualan", kategori, lama), deleteField());
-    const min = c.data()?.minStok?.[kategori]?.[lama];
-    if (min !== undefined) tx.update(cRef, new FieldPath("minStok", kategori, nama), min, new FieldPath("minStok", kategori, lama), deleteField());
-    return nama;
+    moves.forEach((mv) => {
+      const asal = jualan.find((x) => x.kategori === mv.dari.kategori);
+      if (!asal || !asal.items.includes(mv.dari.item)) throw new Error(`"${mv.dari.item}" sudah tidak ada di ${mv.dari.kategori}. Muat ulang halaman.`);
+    });
+    const keluar = new Set(moves.map((mv) => kunci(mv.dari)));
+    jualan.forEach((cat) => { cat.items = cat.items.filter((i) => !keluar.has(`${cat.kategori}||${i}`)); });
+    moves.forEach((mv) => {
+      let tujuan = jualan.find((x) => x.kategori === mv.ke.kategori);
+      if (!tujuan) {
+        tujuan = { kategori: mv.ke.kategori, items: [] };
+        const posAsal = jualan.findIndex((x) => x.kategori === mv.dari.kategori);
+        jualan.splice(posAsal >= 0 ? posAsal + 1 : jualan.length, 0, tujuan);
+      }
+      if (tujuan.items.some((i) => nkStok(i) === nkStok(mv.ke.item))) throw new Error(`"${mv.ke.item}" sudah ada di ${tujuan.kategori}.`);
+      tujuan.items.push(mv.ke.item);
+    });
+    let masterBaru = jualan.filter((cat) => cat.items.length > 0 || !katAsal.includes(cat.kategori));
+    if (ganti) {
+      // Kategori kosong yang diganti namanya tetap ada dengan nama baru
+      masterBaru = masterBaru.map((cat) => (cat.kategori === ganti.lama ? { ...cat, kategori: ganti.baru } : cat));
+    }
+    tx.set(mRef, { jualan: masterBaru }, { merge: true });
+
+    // Jumlah & stok minimum: tulis ulang per kategori yang terkena (path tidak saling tumpang)
+    const pindahPeta = (asal: Record<string, Record<string, unknown>> | undefined) => {
+      const out: Record<string, Record<string, unknown>> = {};
+      const ambil = (kat: string) => (out[kat] ||= { ...((asal || {})[kat] || {}) });
+      let ada = false;
+      moves.forEach((mv) => {
+        const dari = ambil(mv.dari.kategori);
+        const val = dari[mv.dari.item];
+        delete dari[mv.dari.item];
+        if (val !== undefined) { ambil(mv.ke.kategori)[mv.ke.item] = val; ada = true; }
+      });
+      return ada ? out : null;
+    };
+    const tulisPeta = (ref: typeof sRef, akar: string, out: Record<string, Record<string, unknown>> | null) => {
+      if (!out) return;
+      const args: unknown[] = [];
+      Object.entries(out).forEach(([kat, isi]) => args.push(new FieldPath(akar, kat), Object.keys(isi).length ? isi : deleteField()));
+      if (args.length) tx.update(ref, args[0] as FieldPath, args[1], ...args.slice(2));
+    };
+    if (s.exists()) tulisPeta(sRef, "jualan", pindahPeta(s.data()?.jualan));
+    if (c.exists()) tulisPeta(cRef, "minStok", pindahPeta(c.data()?.minStok));
+
+    // Batch bonus PS Baru
+    const batches = f.exists() && Array.isArray((f.data() as any)?.batches) ? ((f.data() as any).batches as RefStok[]) : [];
+    if (batches.some((b) => peta.has(kunci(b)))) {
+      tx.set(fRef, { batches: batches.map((b) => { const ke = peta.get(kunci(b)); return ke ? { ...b, kategori: ke.kategori, item: ke.item } : b; }) }, { merge: true });
+    }
+
+    // Rujukan lain
+    snaps.forEach((snap, i) => {
+      if (!snap.exists()) return;
+      const d = snap.data() as any;
+      const t = target[i];
+      if (t.jenis === "produk" || t.jenis === "tt") {
+        const ke = tujuanDari(d.stokRef);
+        if (ke) tx.update(t.ref, { stokRef: ke });
+      } else if (t.jenis === "pos") {
+        const items = (d.items || []).map((it: any) => { const ke = tujuanDari(it?.stokRef); return ke ? { ...it, stokRef: ke } : it; });
+        const kurang = Array.isArray(d.stokKurang) ? d.stokKurang.map((x: any) => { const ke = tujuanDari(x); return ke ? { ...x, kategori: ke.kategori, item: ke.item } : x; }) : undefined;
+        tx.update(t.ref, kurang ? { items, stokKurang: kurang } : { items });
+      } else if (t.jenis === "exp") {
+        const ke = tujuanDari(d.stok);
+        if (ke) tx.update(t.ref, { stok: ke, nama: String(d.nama || "").replace(` (${d.stok.item}) ×`, ` (${ke.item}) ×`) });
+      } else {
+        const ke = peta.get(kunci(d));
+        if (ke) tx.update(t.ref, { kategori: ke.kategori, item: ke.item });
+      }
+    });
   });
+
+  // Riwayat stok ikut pindah supaya riwayat & "laku 30 hari" tetap utuh
+  try {
+    for (const kat of katAsal) {
+      const snap = await getDocs(query(collection(db, "stok_log"), where("kategori", "==", kat)));
+      const kena = snap.docs.filter((d) => peta.has(kunci(d.data() as RefStok)));
+      for (let i = 0; i < kena.length; i += 400) {
+        const b = writeBatch(db);
+        kena.slice(i, i + 400).forEach((d) => { const ke = peta.get(kunci(d.data() as RefStok))!; b.update(d.ref, { kategori: ke.kategori, item: ke.item }); });
+        await b.commit();
+      }
+    }
+  } catch (e) {
+    console.warn("Pindah riwayat stok gagal:", e);
+  }
+  return moves.map((m) => m.ke);
+}
+
+/** Pindahkan satu barang stok ke kategori lain (nama barang boleh ikut diganti). Mengembalikan rujukan barunya. */
+export async function pindahBarangStok(dari: RefStok, ke: RefStok): Promise<RefStok | null> {
+  const [hasil] = await pindahStok([{ dari, ke }]);
+  return hasil || null;
+}
+
+/** Ganti nama kategori stok jualan: semua barangnya (dan produk "pilih varian saat checkout") ikut. */
+export async function gantiNamaKategoriStok(lama: string, baru: string, items: string[]): Promise<string> {
+  const nama = rapikanNamaStok(baru);
+  if (!nama) throw new Error("Nama kategori wajib diisi.");
+  if (nama === lama) return lama;
+  if (nkStok(nama) === nkStok(lama)) throw new Error("Nama baru terlalu mirip dengan nama lama.");
+  const master = readMasterJualan((await getDocFromServer(doc(db, "data", "master_stok_categories"))).data()?.jualan);
+  if (master.some((c) => c.kategori !== lama && nkStok(c.kategori) === nkStok(nama))) {
+    throw new Error(`Kategori "${nama}" sudah ada. Pindahkan barangnya satu per satu bila ingin digabung.`);
+  }
+  await pindahStok(items.map((item) => ({ dari: { kategori: lama, item }, ke: { kategori: nama, item } })), { lama, baru: nama });
+  return nama;
 }
 
 export function useMinStok(): MinStokMap {

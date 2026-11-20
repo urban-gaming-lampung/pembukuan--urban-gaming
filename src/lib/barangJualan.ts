@@ -15,7 +15,7 @@ import { applyMasterChanges, commitStokChanges, prepareStokWrites, renameJualanI
 import type { StokItemValue } from "../hooks/useStokData";
 import { rupiah } from "./format";
 import {
-  hapusStokOtomatisBilaYatim, Kondisi, namaJualan, PILIH_SAAT_CHECKOUT, planStokSync, ProdukSync, StokRef, stokBaruUntukProduk, SubKategoriJualan,
+  hapusStokOtomatisBilaYatim, Kondisi, kondisiProduk, kunciNamaProduk, namaJualan, PILIH_SAAT_CHECKOUT, planStokSync, ProdukSync, StokRef, stokBaruUntukProduk, SubKategoriJualan,
 } from "./posSales";
 import { ringkasanModalAktifProduk } from "./akuntansiUsaha";
 import {
@@ -131,10 +131,13 @@ export async function uploadFotoProduk(file: File): Promise<string> {
   return getDownloadURL(r);
 }
 
-/** Pratinjau: barang stok mana yang akan dipakai bila "Otomatis". */
-export function pratinjauOtomatis(nama: string, sub: SubKategoriJualan, kondisi: Kondisi, master: StokKategori[]): { ref: StokRef; baru: boolean } | null {
+/**
+ * Pratinjau: barang stok mana yang akan dipakai bila "Otomatis".
+ * `produkLain` = produk lain (barang stoknya tidak boleh ikut dipakai: 1 produk = 1 barang stok).
+ */
+export function pratinjauOtomatis(nama: string, sub: SubKategoriJualan, kondisi: Kondisi, master: StokKategori[], produkLain: ProdukSync[] = []): { ref: StokRef; baru: boolean } | null {
   if (!nama.trim()) return null;
-  const plan = planStokSync([{ id: "_", name: namaJualan(nama), category: "JUALAN", subcategory: sub, kondisi, stokRef: undefined }], master);
+  const plan = planStokSync([{ id: "_", name: namaJualan(nama), category: "JUALAN", subcategory: sub, kondisi, stokRef: undefined }], master, produkLain);
   return plan.links[0] ? { ref: plan.links[0].ref, baru: plan.links[0].baru } : null;
 }
 
@@ -168,6 +171,10 @@ export async function simpanBarangJualan(
   // Produk Rp 0 bonus dihapus — bonus stik dikelola otomatis lewat batch PS Baru
   if (!Number.isFinite(input.hargaJual) || input.hargaJual <= 0) throw new Error("Harga jual wajib lebih dari Rp 0.");
   const lain = semuaProduk.filter((p) => p.id !== input.id);
+  // Produk dobel (kata sama walau urutan beda, kondisi sama) membuat stok & riwayat tercampur
+  const kunciNama = kunciNamaProduk(nama);
+  const kembar = lain.find((p) => p.category === "JUALAN" && kunciNamaProduk(p.name) === kunciNama && kondisiProduk(p) === input.kondisi);
+  if (kembar) throw new Error(`Produk "${kembar.name}" sudah ada. Buka produk itu untuk menambah stok, atau bedakan namanya.`);
 
   // 1. Tentukan barang stok
   let ref: StokRef | null = input.stokRef === undefined ? null : input.stokRef;
@@ -178,7 +185,7 @@ export async function simpanBarangJualan(
     const snap = await getDocFromServer(doc(db, "data", "master_stok_categories"));
     const master = snap.data()?.jualan;
     if (!Array.isArray(master)) throw new Error("Master stok belum terbaca, coba lagi.");
-    const plan = planStokSync([{ id: "_", name: nama, category: "JUALAN", subcategory: input.subkategori, kondisi: input.kondisi, stokRef: undefined }], master as StokKategori[]);
+    const plan = planStokSync([{ id: "_", name: nama, category: "JUALAN", subcategory: input.subkategori, kondisi: input.kondisi, stokRef: undefined }], master as StokKategori[], lain);
     const l = plan.links[0];
     ref = l.ref;
     dibuat = l.baru;
@@ -685,7 +692,7 @@ export async function kurangiStokMasukSalahInput(ref: StokRef, kurang: number, n
 
 /** Samakan jumlah stok dengan hitungan fisik (koreksi). */
 export async function koreksiJumlahStok(ref: StokRef, jumlah: number, nama: string): Promise<void> {
-  if (ref.item === PILIH_SAAT_CHECKOUT) throw new Error("Atur jumlah per varian di menu Stok.");
+  if (ref.item === PILIH_SAAT_CHECKOUT) throw new Error("Pilih varian dulu, lalu ubah jumlahnya.");
   await commitStokChanges([{ kategori: ref.kategori, item: ref.item, setTo: Math.max(0, Math.round(jumlah)), touch: true }], "koreksi", `Koreksi lewat Input Stok · ${nama}`);
 }
 

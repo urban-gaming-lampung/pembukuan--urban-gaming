@@ -321,10 +321,24 @@ export function tokenize(s: string): string[] {
 
 const hintOf = (tokens: string[]) => HINTS.find((h) => tokens.includes(h)) || null;
 
+/** Kunci nama produk untuk mendeteksi produk dobel: kata inti tanpa urutan, tanpa Baru/Seken ("SERI 21 500GB" = "500GB SERI 21"). */
+export const kunciNamaProduk = (name: string) =>
+  Array.from(new Set(tokenize(name).filter((t) => !HINTS.includes(t as any)))).sort().join(" ");
+
+/** Dua nama punya angka pembeda yang tidak sama (seri, kapasitas, jumlah stik)? Mis. "SERI 21" vs "SERI 25". */
+export function angkaBeda(a: string, b: string): boolean {
+  const angka = (s: string) => new Set(tokenize(s).filter((t) => /\d/.test(t)));
+  const x = angka(a);
+  const y = angka(b);
+  if (x.size !== y.size) return true;
+  for (const t of x) if (!y.has(t)) return true;
+  return false;
+}
+
 export type StokSuggestion = { ref: StokRef; yakin: boolean } | null;
 
 /**
- * Sarankan barang stok untuk nama produk. Mengembalikan:
+ * Sarankan barang stok untuk nama produk (sekarang hanya dipakai produk "SEMUA WARNA" -> varian saat checkout). Mengembalikan:
  * - barang tertentu bila satu kandidat jelas paling cocok,
  * - `{kategori, item:"*"}` bila beberapa varian di kategori yang sama sama cocoknya (mis. warna),
  * - null bila tidak ada yang meyakinkan.
@@ -443,34 +457,54 @@ export function stokBaruUntukProduk(p: Pick<ProdukSync, "name" | "subcategory"> 
 }
 
 /**
- * Rencana sinkron untuk produk JUALAN yang belum pernah diatur (stokRef belum ada):
- * - cocok jelas dengan barang stok -> dihubungkan,
- * - tidak ada padanannya -> barang stok baru dibuat (stokAuto) lalu dihubungkan.
+ * Rencana hubungan stok untuk produk JUALAN yang belum diatur (stokRef belum ada).
+ * Aturan: 1 produk = 1 barang stok, supaya jumlah & riwayat tiap produk tidak tercampur.
+ * - Produk "SEMUA WARNA / VARIAN" -> kategori stiknya, varian dipilih saat checkout.
+ * - Barang stok bernama sama yang BELUM dipakai produk lain (mis. "Stok tanpa produk") dipakai ulang.
+ * - Selain itu dibuat barang stok baru khusus produk ini (stokAuto).
+ * Nama yang hanya MIRIP tidak lagi disambung: dulu "PS3 SLIM 500GB" menelan "SERI 21" & "SERI 25".
+ * `produkLain` = produk lain yang sudah punya hubungan stok (barangnya dianggap terpakai).
  * Produk yang sengaja di-set "Tidak dihubungkan" (null) tidak disentuh.
  */
-export function planStokSync(products: ProdukSync[], master: StokKategori[]) {
+export function planStokSync(products: ProdukSync[], master: StokKategori[], produkLain: ProdukSync[] = []) {
   const nk = (s: string) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   const cats = master.map((c) => ({ kategori: c.kategori, items: [...(c.items || [])] }));
   const links: { id: string; ref: StokRef; baru: boolean }[] = [];
   const add: Record<string, string[]> = {};
+  const kunciNk = (kategori: string, item: string) => `${nk(kategori)}||${nk(item)}`;
+  const terpakai = new Set<string>();
+  [...produkLain, ...products].forEach((p) => {
+    if (p.stokRef && p.stokRef.item !== PILIH_SAAT_CHECKOUT) terpakai.add(kunciNk(p.stokRef.kategori, p.stokRef.item));
+  });
   products
     .filter((p) => p.category === "JUALAN" && p.stokRef === undefined)
     .sort((a, b) => a.name.localeCompare(b.name, "id"))
     .forEach((p) => {
-      // Kondisi ikut dipakai untuk memilih Unit Baru / Unit Seken
-      const k = kondisiProduk(p);
-      const s = suggestStokRef(RE_SEKEN.test(p.name) || /\bBARU\b/i.test(p.name) ? p.name : `${p.name} ${k}`, cats);
-      if (s && (s.yakin || s.ref.item === PILIH_SAAT_CHECKOUT)) {
-        links.push({ id: p.id, ref: s.ref, baru: false });
-        return;
+      // "SEMUA WARNA" = satu produk untuk semua varian di kategorinya
+      if (/\bSEMUA\b/i.test(p.name)) {
+        const s = suggestStokRef(RE_SEKEN.test(p.name) || /\bBARU\b/i.test(p.name) ? p.name : `${p.name} ${kondisiProduk(p)}`, cats);
+        if (s && s.ref.item === PILIH_SAAT_CHECKOUT) {
+          links.push({ id: p.id, ref: s.ref, baru: false });
+          return;
+        }
       }
       const want = stokBaruUntukProduk(p);
       let cat = cats.find((c) => nk(c.kategori) === nk(want.kategori));
       if (!cat) { cat = { kategori: want.kategori, items: [] }; cats.push(cat); }
-      const exist = cat.items.find((i) => nk(i) === nk(want.item));
-      const item = exist || want.item;
-      if (!exist) { cat.items.push(item); (add[cat.kategori] ||= []).push(item); }
-      links.push({ id: p.id, ref: { kategori: cat.kategori, item }, baru: !exist });
+      const kat = cat;
+      const exist = kat.items.find((i) => nk(i) === nk(want.item));
+      if (exist && !terpakai.has(kunciNk(kat.kategori, exist))) {
+        terpakai.add(kunciNk(kat.kategori, exist));
+        links.push({ id: p.id, ref: { kategori: kat.kategori, item: exist }, baru: false });
+        return;
+      }
+      // Nama sudah dipakai produk lain -> barang stok sendiri dengan nomor urut
+      let item = want.item;
+      for (let n = 2; kat.items.some((i) => nk(i) === nk(item)); n++) item = `${want.item} (${n})`;
+      kat.items.push(item);
+      (add[kat.kategori] ||= []).push(item);
+      terpakai.add(kunciNk(kat.kategori, item));
+      links.push({ id: p.id, ref: { kategori: kat.kategori, item }, baru: true });
     });
   return { links, add };
 }

@@ -474,7 +474,7 @@ export default function InputStokJualan() {
       )}
 
       <Footnote className="px-1">
-        Ini satu-satunya tempat menambah &amp; mengubah barang jualan. POS hanya menjual, menu Stok hanya menghitung jumlah. Harga modal hanya terlihat oleh owner &amp; super admin.
+        Ini satu-satunya tempat menambah barang &amp; mengubah jumlah stok jualan. POS hanya menjual, menu Stok untuk memantau &amp; mengatur kategori. Harga modal hanya terlihat oleh owner &amp; super admin.
       </Footnote>
 
       <AlertDialog
@@ -587,7 +587,14 @@ const BarangJualanSheet: React.FC<{
   const modalN = modal === "" ? null : Number(modal);
   const untung = modalN !== null && jualN > 0 ? jualN - modalN : null;
   const modalMasukN = modalMasuk === "" ? modalN || 0 : Number(modalMasuk);
-  const preview = useMemo(() => (ref === undefined ? pratinjauOtomatis(nama, sub, kondisiB, cats) : null), [ref, nama, sub, kondisiB, cats]);
+  // 1 produk = 1 barang stok: barang milik produk lain tidak ikut dipakai / dipilih
+  const produkLain = useMemo(() => products.filter((x) => x.id !== p?.id), [products, p?.id]);
+  const dipakaiMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    produkLain.forEach((x) => { if (x.stokRef && x.stokRef.item !== PILIH_SAAT_CHECKOUT) m[kunciStok(x.stokRef)] = x.name; });
+    return m;
+  }, [produkLain]);
+  const preview = useMemo(() => (ref === undefined ? pratinjauOtomatis(nama, sub, kondisiB, cats, produkLain) : null), [ref, nama, sub, kondisiB, cats, produkLain]);
   const efektif = ref === undefined ? preview?.ref || null : ref;
   const isPsBaru = sub === "Unit PS" && kondisiB === "BARU";
   const stikList = useMemo(() => buildStikOpsi(products, cats, data), [products, cats, data]);
@@ -595,7 +602,9 @@ const BarangJualanSheet: React.FC<{
   const sv = stokView(efektif, cats, data, minMap);
   const varianList = efektif?.item === PILIH_SAAT_CHECKOUT ? cats.find((c) => c.kategori === efektif.kategori)?.items || [] : [];
   // Produk lain yang menghitung barang stok yang sama (termasuk lewat "pilih varian saat checkout")
-  const dipakaiLain = efektif ? products.filter((x) => x.id !== p?.id && stokBeririsan(x.stokRef, efektif)) : [];
+  const dipakaiLain = efektif ? produkLain.filter((x) => stokBeririsan(x.stokRef, efektif)) : [];
+  // Barang stok yang sama persis dipakai produk lain = stok tercampur (bukan varian)
+  const stokTercampur = !!efektif && efektif.item !== PILIH_SAAT_CHECKOUT && dipakaiLain.some((x) => x.stokRef?.item === efektif.item);
 
   // Riwayat stok masuk (catatan yang bisa diedit) + stok masuk lama dari menu Stok (hanya dilihat)
   // Catatan stok masuk menempel pada barang stoknya (termasuk dari produk lain / yang sudah dihapus)
@@ -815,6 +824,7 @@ const BarangJualanSheet: React.FC<{
                 onChange={setRef}
                 categories={cats}
                 data={data}
+                dipakai={dipakaiMap}
                 className="w-full h-11 px-3 rounded-field bg-fill text-[16px] sm:text-subhead text-label focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"
               />
               {ref === undefined && preview && (
@@ -824,9 +834,14 @@ const BarangJualanSheet: React.FC<{
                     : <>Akan memakai stok: <b className="text-label">{preview.ref.kategori} › {preview.ref.item === PILIH_SAAT_CHECKOUT ? "pilih varian saat checkout" : preview.ref.item}</b></>}
                 </Footnote>
               )}
-              {dipakaiLain.length > 0 && (
-                <Footnote className="px-0.5 leading-snug">Stok ini dipakai bersama: {dipakaiLain.map((x) => x.name).join(", ")}</Footnote>
-              )}
+              {stokTercampur ? (
+                <p className="flex items-start gap-1.5 text-caption text-warning px-0.5">
+                  <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  Stok ini juga dihitung untuk {dipakaiLain.map((x) => x.name).join(", ")}. Pilih ✨ Otomatis supaya produk ini punya stok sendiri.
+                </p>
+              ) : dipakaiLain.length > 0 ? (
+                <Footnote className="px-0.5 leading-snug">Varian di kategori ini juga dijual sebagai: {dipakaiLain.map((x) => x.name).join(", ")}</Footnote>
+              ) : null}
               {ref === null && <p className="text-caption text-warning px-0.5">Stok tidak akan berkurang saat barang ini terjual.</p>}
               {efektif && /\b(BARU|SEKEN)\b/.test(efektif.kategori) && !efektif.kategori.includes(kondisiB) && (
                 <p className="flex items-start gap-1.5 text-caption text-warning px-0.5">

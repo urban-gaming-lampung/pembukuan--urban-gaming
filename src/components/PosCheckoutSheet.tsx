@@ -1107,7 +1107,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
                       {ref && sisa !== null && !data?.[ref.kategori]?.[ref.item] && (
                         <div className="mt-2">
                           <Pill tone="neutral" icon={<Package />}>
-                            Stok {ref.item} belum dihitung — isi di menu Stok
+                            Stok {ref.item} belum dihitung — diisi owner di Atur Stok
                           </Pill>
                         </div>
                       )}

@@ -1,24 +1,26 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle, Check, Clock, ClipboardPaste, Copy, History, Loader2, Minus, Plus, ShoppingCart, TrendingUp, X } from "lucide-react";
-import useStokData from "../hooks/useStokData";
+import { AlertCircle, CheckCircle, ChevronRight, Clock, Copy, History, Loader2, Minus, Plus, ShoppingCart, TrendingUp, X } from "lucide-react";
+import useStokData, { type StokKategori } from "../hooks/useStokData";
 import { Kondisi, kondisiStok, stokBeririsan } from "../lib/posSales";
 import { useProdukJualan } from "../lib/barangJualan";
 import KondisiSwitch from "./KondisiSwitch";
-import StokReportPaste from "./StokReportPaste";
-import { Button, Card, EmptyState, Eyebrow, Pill, SearchField, Sheet, SubTabs } from "../ui";
-import { KartuStok, StatusChip, StepperStok, TileStok, LABEL_STATUS, DOT_STATUS } from "./common/StokUI";
+import { Button, Card, EmptyState, Eyebrow, Pill, SearchField, SelectField, Sheet, SubTabs, TextField } from "../ui";
+import { KartuStok, StatusChip, TileStok, LABEL_STATUS, DOT_STATUS } from "./common/StokUI";
 import {
-  ALASAN_LABEL, ALASAN_SHORT, StokAlasan, StokLog, StokRow, StokStatus, buildStokRows, commitStokChanges, defaultMinStok, fmtWaktu, isStale,
-  pulihkanStokJualanDariRiwayat, restockText, saveMinStok, shortName, soldMap, useMinStok, useStokLog, STALE_DAYS, kunciStok } from "../lib/stokJualan";
+  ALASAN_SHORT, StokLog, StokRow, StokStatus, buildStokRows, defaultMinStok, fmtWaktu, gantiNamaKategoriStok, isStale, pindahBarangStok,
+  pulihkanStokJualanDariRiwayat, rapikanNamaStok, restockText, saveMinStok, shortName, soldMap, useMinStok, useStokLog, STALE_DAYS, kunciStok } from "../lib/stokJualan";
 import { buildStokReport } from "../lib/stokReport";
 
 /**
- * STOK JUALAN — satu halaman untuk owner & admin (mobile-first):
- * pantau (habis / menipis / aman), ubah jumlah (draft lalu simpan sekali dengan jenis perubahan),
- * tempel / salin laporan WhatsApp, daftar belanja, dan riwayat.
+ * STOK JUALAN — pantau & atur kategori (owner & admin, mobile-first).
+ *
+ * Jumlah stok TIDAK diubah di halaman ini. Satu jalur: Owner › Input › Atur Stok (stok masuk dengan
+ * modal & pengeluaran, koreksi) dan otomatis berkurang dari penjualan kasir — supaya stok, modal,
+ * dan pengeluaran selalu sinkron.
+ * Di sini: ringkasan habis / menipis / aman, daftar belanja, salin laporan, riwayat, stok minimum,
+ * dan (owner) pindah barang ke kategori lain / ganti nama kategori.
  */
 type Filter = "semua" | StokStatus | "cek";
-type Draft = { delta: number; setTo?: number };
 const STATUS_RANK: Record<StokStatus, number> = { habis: 0, menipis: 1, aman: 2 };
 const ALASAN_COLOR: Record<string, string> = {
   masuk: "text-positive",
@@ -73,16 +75,9 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
   const [filter, setFilter] = useState<Filter>("semua");
   const [cari, setCari] = useState("");
   const [selected, setSelected] = useState<StokRow | null>(null);
-  const [pasteOpen, setPasteOpen] = useState(false);
+  const [ubahKategori, setUbahKategori] = useState<string | null>(null);
 
-  // Draft perubahan jumlah (disimpan sekali lewat bar Simpan)
-  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [alasan, setAlasan] = useState<StokAlasan | null>(null);
-  const [catatanSimpan, setCatatanSimpan] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const kategoriJualan = Array.isArray(masterCategories?.jualan) ? masterCategories.jualan : [];
+  const kategoriJualan: StokKategori[] = Array.isArray(masterCategories?.jualan) ? masterCategories.jualan : [];
   const dataJualan = (stokState?.jualan || {}) as Record<string, Record<string, any>>;
 
   const { products, loaded: productsLoaded } = useProdukJualan();
@@ -94,69 +89,13 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
   }, [isOwner, stokLoaded, masterLoaded, productsLoaded, dataJualan, products]);
   const [kondisi, setKondisi] = useState<Kondisi>("BARU");
   const rowsAll = useMemo(() => buildStokRows(kategoriJualan, dataJualan, minMap), [kategoriJualan, dataJualan, minMap]);
-  // Halaman Baru / Seken (draft di halaman lain tetap ikut tersimpan)
+  // Halaman Baru / Seken
   const kondisiOf = (r: { kategori: string; item: string }) => kondisiStok(r.kategori, r.item, products);
   const rows = useMemo(() => rowsAll.filter((r) => kondisiOf(r) === kondisi), [rowsAll, products, kondisi]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Barang stok yang belum dijual di POS (sama dengan "Stok tanpa produk" di Input › Atur Stok)
-  const tanpaProduk = (r: { kategori: string; item: string }) => !products.some((p) => stokBeririsan(p.stokRef, r));
+  // Produk kasir yang memakai barang stok ini (kosong = "Stok tanpa produk" di Input › Atur Stok)
+  const produkDari = (r: { kategori: string; item: string }) => products.filter((p) => stokBeririsan(p.stokRef, r)).map((p) => p.name);
   const sold30 = useMemo(() => soldMap(logs, 30), [logs]);
   const catatanOf = (r: { kategori: string; item: string }) => String(dataJualan?.[r.kategori]?.[r.item]?.catatan || "");
-
-  // ---------- Draft ----------
-  const nextQty = (r: StokRow) => {
-    const d = drafts[kunciStok(r)];
-    if (!d) return r.jumlah;
-    return Math.max(0, (typeof d.setTo === "number" ? d.setTo : r.jumlah) + d.delta);
-  };
-  const bump = (r: StokRow, step: number) =>
-    setDrafts((prev) => {
-      const k = kunciStok(r);
-      const cur = prev[k] || { delta: 0 };
-      const base = typeof cur.setTo === "number" ? cur.setTo : r.jumlah;
-      const delta = Math.max(-base, cur.delta + step);
-      const next = { ...prev, [k]: { ...cur, delta } };
-      if (delta === 0 && typeof cur.setTo !== "number") delete next[k];
-      return next;
-    });
-  const setJumlah = (r: StokRow, n: number) =>
-    setDrafts((prev) => {
-      const next = { ...prev };
-      if (n === r.jumlah) delete next[kunciStok(r)];
-      else next[kunciStok(r)] = { delta: 0, setTo: n };
-      return next;
-    });
-  const changed = rowsAll.filter((r) => drafts[kunciStok(r)] && nextQty(r) !== r.jumlah);
-  const autoAlasan: StokAlasan = (() => {
-    if (changed.some((r) => typeof drafts[kunciStok(r)]?.setTo === "number")) return "koreksi";
-    const ups = changed.filter((r) => nextQty(r) > r.jumlah).length;
-    if (ups === changed.length) return "masuk";
-    if (ups === 0) return "terjual";
-    return "koreksi";
-  })();
-  const simpan = async () => {
-    setSaving(true);
-    try {
-      const n = await commitStokChanges(
-        changed.map((r) => {
-          const d = drafts[kunciStok(r)];
-          return typeof d.setTo === "number"
-            ? { kategori: r.kategori, item: r.item, setTo: Math.max(0, d.setTo + d.delta) }
-            : { kategori: r.kategori, item: r.item, delta: d.delta };
-        }),
-        alasan || autoAlasan,
-        catatanSimpan
-      );
-      setDrafts({});
-      setSheetOpen(false);
-      setAlasan(null);
-      setCatatanSimpan("");
-      alert(`Stok tersimpan (${n} barang) ✅`);
-    } catch (e: any) {
-      alert("Gagal menyimpan stok: " + (e?.message || e) + "\nPerubahan Anda masih ada, coba simpan lagi.");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   // ---------- Ringkasan & daftar ----------
   const cocokFilter = (r: StokRow, f: Filter = filter) => (f === "semua" ? true : f === "cek" ? isStale(r.lastTs) : r.status === f);
@@ -197,7 +136,7 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
 
   const q = cari.trim().toLowerCase();
   const visible = rows
-    .filter((r) => cocokFilter(r) || !!drafts[kunciStok(r)])
+    .filter((r) => cocokFilter(r))
     .filter((r) => !q || r.item.toLowerCase().includes(q) || r.kategori.toLowerCase().includes(q));
   const grouped = kategoriJualan
     .map((c) => ({
@@ -221,15 +160,17 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
     { key: "habis", title: "Habis", value: count.habis, sub: "harus beli", cls: "text-negative", icon: <AlertCircle className="w-4 h-4" /> },
     { key: "menipis", title: "Menipis", value: count.menipis, sub: "di bawah minimum", cls: "text-warning", icon: <AlertCircle className="w-4 h-4" /> },
     { key: "aman", title: "Aman", value: count.aman, sub: "stok cukup", cls: "text-positive", icon: <CheckCircle className="w-4 h-4" /> },
-    { key: "cek", title: "Perlu dicek", value: count.cek, sub: `> ${STALE_DAYS} hari tak diupdate`, cls: "text-label", icon: <Clock className="w-4 h-4" /> },
+    { key: "cek", title: "Perlu dicek", value: count.cek, sub: `> ${STALE_DAYS} hari tak berubah`, cls: "text-label", icon: <Clock className="w-4 h-4" /> },
   ];
 
   if (!stokLoaded || !masterLoaded) {
     return <div className="py-16 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-label-3" /></div>;
   }
 
+  const rowTerpilih = selected ? rowsAll.find((r) => kunciStok(r) === kunciStok(selected)) || selected : null;
+
   return (
-    <div className={`space-y-4 ${changed.length ? "pb-24" : ""}`}>
+    <div className="space-y-4">
       {/* Ringkasan seluruh barang jualan (baru + seken) */}
       <div className="grid grid-cols-2 gap-2.5">
         {tiles.map((t) => (
@@ -261,29 +202,17 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
         >
           Daftar Belanja ({perluBeli.length} barang)
         </Button>
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            variant="tinted"
-            size="lg"
-            block
-            icon={<ClipboardPaste />}
-            onClick={() => setPasteOpen(true)}
-          >
-            Tempel Laporan
-          </Button>
-          <Button
-            variant="gray"
-            size="lg"
-            block
-            icon={<Copy />}
-            onClick={() => shareOrCopy(buildStokReport(kategoriJualan, dataJualan as any), "Laporan stok disalin 📋")}
-            className="bg-surface ring-1 ring-edge"
-          >
-            Salin Laporan
-          </Button>
-        </div>
+        <Button
+          variant="gray"
+          size="md"
+          block
+          icon={<Copy />}
+          onClick={() => shareOrCopy(buildStokReport(kategoriJualan, dataJualan as any), "Laporan stok disalin 📋")}
+          className="bg-surface ring-1 ring-edge"
+        >
+          Salin Laporan Stok
+        </Button>
       </div>
-      <StokReportPaste open={pasteOpen} onClose={() => setPasteOpen(false)} categories={kategoriJualan} data={dataJualan as any} isOwner={isOwner} />
 
       {/* Barang / Riwayat */}
       <SubTabs
@@ -333,36 +262,64 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
             />
           ) : (
             grouped.map((g) => (
-              <KartuStok key={g.kategori} judul={g.kategori} kanan={`${g.items.reduce((s, r) => s + r.jumlah, 0)} pcs`}>
-                {g.items.map((r) => {
-                  const sold = sold30.get(kunciStok(r)) || 0;
-                  const note = catatanOf(r);
-                  const nq = nextQty(r);
-                  const diff = nq - r.jumlah;
-                  return (
-                    <div key={kunciStok(r)} className={`pl-4 pr-3 py-2.5 flex items-center gap-2 border-t border-sep ${diff ? "bg-tint/[0.06] dark:bg-tint/10" : ""}`}>
-                      <button type="button" onClick={() => setSelected(r)} className="flex-1 min-w-0 text-left py-0.5 active:opacity-70">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className={`w-2 h-2 rounded-full shrink-0 ${DOT_STATUS[r.status]}`} aria-hidden />
-                          <span className="text-subhead font-semibold text-label truncate">{r.item}</span>
-                        </div>
-                        {note && <div className="text-caption2 italic text-warning truncate pl-4">“{note}”</div>}
-                        <div className="mt-0.5 pl-4 flex items-center gap-1.5 min-w-0">
-                          {r.status !== "aman" && <StatusChip status={r.status} kurang={r.kurang} />}
-                          <span className="text-caption2 text-label-3 truncate">
-                            min {r.min}{sold ? ` · ${sold} laku/30h` : ""} · <span className={isStale(r.lastTs) ? "text-warning" : ""}>{fmtWaktu(r.lastTs)}</span>
-                            {isOwner && tanpaProduk(r) ? " · tanpa produk" : ""}
-                          </span>
-                        </div>
+              <KartuStok
+                key={g.kategori}
+                judul={g.kategori}
+                kanan={
+                  <span className="flex items-center gap-1">
+                    <span className="tabular-nums">{g.items.reduce((s, r) => s + r.jumlah, 0)} pcs</span>
+                    {isOwner && (
+                      <button
+                        type="button"
+                        onClick={() => setUbahKategori(g.kategori)}
+                        aria-label={`Ganti nama kategori ${g.kategori}`}
+                        className="-my-3 -mr-2 h-11 px-2 text-caption font-semibold text-tint active:opacity-60"
+                      >
+                        Ubah
                       </button>
-                      <StepperStok value={nq} diff={diff} nama={r.item} onStep={(s) => bump(r, s)} onSet={(n) => setJumlah(r, n)} />
-                    </div>
-                  );
-                })}
+                    )}
+                  </span>
+                }
+              >
+                <div className="divide-y divide-sep">
+                  {g.items.map((r) => {
+                    const sold = sold30.get(kunciStok(r)) || 0;
+                    const note = catatanOf(r);
+                    return (
+                      <button
+                        key={kunciStok(r)}
+                        type="button"
+                        onClick={() => setSelected(r)}
+                        className="w-full min-h-[56px] pl-4 pr-3 py-2.5 flex items-center gap-3 text-left active:bg-fill transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${DOT_STATUS[r.status]}`} aria-hidden />
+                            <span className="text-subhead font-semibold text-label truncate">{r.item}</span>
+                          </div>
+                          {note && <div className="text-caption2 italic text-warning truncate pl-4">“{note}”</div>}
+                          <div className="mt-0.5 pl-4 flex items-center gap-1.5 min-w-0">
+                            {r.status !== "aman" && <StatusChip status={r.status} kurang={r.kurang} />}
+                            <span className="text-caption2 text-label-3 truncate">
+                              min {r.min}{sold ? ` · ${sold} laku/30h` : ""} · <span className={isStale(r.lastTs) ? "text-warning" : ""}>{fmtWaktu(r.lastTs)}</span>
+                              {isOwner && !produkDari(r).length ? " · tanpa produk" : ""}
+                            </span>
+                          </div>
+                        </div>
+                        <span className={`text-headline font-semibold tabular-nums ${r.jumlah > 0 ? "text-label" : "text-label-3"}`}>{r.jumlah}</span>
+                        <ChevronRight className="w-4 h-4 text-label-3 shrink-0" aria-hidden />
+                      </button>
+                    );
+                  })}
+                </div>
               </KartuStok>
             ))
           )}
-          <p className="text-center text-caption text-label-3 px-4">Ketuk nama barang untuk lihat riwayat{isOwner ? " & atur stok minimum" : ""}. Ubah jumlah dengan − / +, lalu tekan Simpan.</p>
+          <p className="text-center text-caption text-label-3 px-4 leading-snug">
+            {isOwner
+              ? "Ketuk barang untuk lihat riwayat, atur stok minimum, atau pindah kategori. Jumlah stok diubah lewat Input › Atur Stok."
+              : "Ketuk barang untuk lihat riwayat. Stok berkurang otomatis dari kasir; penambahan & koreksi diatur owner."}
+          </p>
         </>
       ) : (
         <div className="space-y-3">
@@ -370,7 +327,7 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
             <div className="text-center text-footnote text-label-2 py-10">Memuat riwayat…</div>
           ) : logsByDay.length === 0 ? (
             <EmptyState icon={<History />} title="Belum ada riwayat">
-              Riwayat tercatat setiap kali stok jualan diubah, terjual di POS, atau dari tempel laporan.
+              Riwayat tercatat setiap kali stok masuk atau dikoreksi di Atur Stok, dan saat terjual di kasir.
             </EmptyState>
           ) : (
             logsByDay.map(([day, list]) => (
@@ -387,120 +344,55 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
         </div>
       )}
 
-      {/* Bar simpan (muncul bila ada perubahan) */}
-      {changed.length > 0 && !sheetOpen && (
-        <div className="fixed inset-x-0 bottom-0 z-[300] px-3 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] apple-bar border-t border-sep shadow-[0_-8px_30px_rgba(0,0,0,0.08)]">
-          <div className="max-w-xl mx-auto flex items-center gap-2">
-            <div className="flex-1 min-w-0">
-              <div className="text-footnote font-bold text-label">{changed.length} barang diubah</div>
-              <div className="text-caption2 text-label-2 truncate">Belum tersimpan</div>
-            </div>
-            <Button variant="gray" size="md" onClick={() => setDrafts({})}>
-              Batal
-            </Button>
-            <Button variant="filled" size="md" onClick={() => setSheetOpen(true)}>
-              Simpan
-            </Button>
-          </div>
-        </div>
+      {selected && rowTerpilih && (
+        <ItemSheet
+          row={rowTerpilih}
+          catatan={catatanOf(rowTerpilih)}
+          logs={logs.filter((l) => l.kategori === rowTerpilih.kategori && l.item === rowTerpilih.item)}
+          produk={produkDari(rowTerpilih)}
+          cats={kategoriJualan}
+          isOwner={isOwner}
+          onPindah={(ke) => setSelected({ ...rowTerpilih, ...ke })}
+          onClose={() => setSelected(null)}
+        />
       )}
 
-      {/* Lembar konfirmasi simpan */}
-      <Sheet
-        open={sheetOpen}
-        onClose={() => !saving && setSheetOpen(false)}
-        title="Simpan Perubahan Stok"
-        size="sm"
-        variant="grouped"
-        zClassName="z-[310]"
-        footer={
-          <Button variant="filled" size="lg" block loading={saving} onClick={simpan}>
-            {saving ? "Menyimpan…" : `Simpan ${changed.length} perubahan`}
-          </Button>
-        }
-      >
-        <div className="space-y-3.5">
-          <Card flush bodyClassName="divide-y divide-sep">
-            {changed.map((r) => {
-              const nq = nextQty(r);
-              const d = nq - r.jumlah;
-              return (
-                <div key={kunciStok(r)} className="px-3.5 py-2.5 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-footnote font-semibold text-label truncate">{r.item}</div>
-                    <div className="text-caption2 text-label-3 truncate">{r.kategori}</div>
-                  </div>
-                  <div className="text-footnote font-semibold tabular-nums shrink-0 text-label">
-                    {r.jumlah} → {nq}{" "}
-                    <span className={d > 0 ? "text-positive" : "text-negative"}>({d > 0 ? `+${d}` : d})</span>
-                  </div>
-                </div>
-              );
-            })}
-          </Card>
-
-          <Card bodyClassName="space-y-3">
-            <div>
-              <div className="mb-2">
-                <Eyebrow>Jenis Perubahan</Eyebrow>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {(Object.keys(ALASAN_LABEL) as StokAlasan[]).map((a) => {
-                  const active = (alasan || autoAlasan) === a;
-                  return (
-                    <button
-                      key={a}
-                      type="button"
-                      onClick={() => setAlasan(a)}
-                      className={`min-h-[44px] px-3 py-2 rounded-field text-caption font-semibold text-left flex items-center gap-2 transition-all ring-1 ${
-                        active
-                          ? "ring-2 ring-action bg-action/[0.06] text-label"
-                          : "ring-edge bg-fill/50 text-label-2 hover:text-label"
-                      }`}
-                    >
-                      {active && <Check className="w-4 h-4 shrink-0 text-label" />}
-                      {ALASAN_LABEL[a]}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
-              <div className="mb-1.5">
-                <Eyebrow>Catatan (opsional)</Eyebrow>
-              </div>
-              <input
-                value={catatanSimpan}
-                onChange={(e) => setCatatanSimpan(e.target.value)}
-                placeholder="Mis. restock dari supplier, dijual ke Budi…"
-                className="w-full h-11 px-3.5 rounded-field bg-fill text-[16px] sm:text-footnote text-label placeholder:text-label-3 focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"
-              />
-            </div>
-          </Card>
-        </div>
-      </Sheet>
-
-      {selected && (
-        <ItemSheet
-          row={rowsAll.find((r) => kunciStok(r) === kunciStok(selected)) || selected}
-          catatan={catatanOf(selected)}
-          logs={logs.filter((l) => l.kategori === selected.kategori && l.item === selected.item)}
-          isOwner={isOwner}
-          onClose={() => setSelected(null)}
+      {ubahKategori && (
+        <KategoriSheet
+          kategori={ubahKategori}
+          items={kategoriJualan.find((c) => c.kategori === ubahKategori)?.items || []}
+          onClose={() => setUbahKategori(null)}
         />
       )}
     </div>
   );
 };
 
-const ItemSheet: React.FC<{ row: StokRow; catatan: string; logs: StokLog[]; isOwner?: boolean; onClose: () => void }> = ({ row, catatan, logs, isOwner, onClose }) => {
+const KATEGORI_BARU = "__baru__";
+
+const ItemSheet: React.FC<{
+  row: StokRow;
+  catatan: string;
+  logs: StokLog[];
+  produk: string[];
+  cats: StokKategori[];
+  isOwner?: boolean;
+  onPindah: (ke: { kategori: string; item: string }) => void;
+  onClose: () => void;
+}> = ({ row, catatan, logs, produk, cats, isOwner, onPindah, onClose }) => {
   const [min, setMin] = useState(row.min);
   const [saving, setSaving] = useState(false);
+  const [tujuan, setTujuan] = useState(row.kategori);
+  const [namaBaru, setNamaBaru] = useState("");
+  const [pindahSaving, setPindahSaving] = useState(false);
+  const [errPindah, setErrPindah] = useState("");
+  useEffect(() => { setTujuan(row.kategori); setNamaBaru(""); setErrPindah(""); }, [row.kategori]);
   const since = Date.now() - 30 * 86400000;
   const recent = logs.filter((l) => l.ts >= since);
   const terjual = recent.filter((l) => l.alasan === "terjual").reduce((s, l) => s - Math.min(0, l.delta), 0);
   const masuk = recent.filter((l) => l.alasan === "masuk").reduce((s, l) => s + Math.max(0, l.delta), 0);
+  const kategoriTujuan = tujuan === KATEGORI_BARU ? rapikanNamaStok(namaBaru) : tujuan;
+  const bisaPindah = !!kategoriTujuan && kategoriTujuan !== row.kategori;
 
   const simpanMin = async () => {
     setSaving(true);
@@ -509,10 +401,25 @@ const ItemSheet: React.FC<{ row: StokRow; catatan: string; logs: StokLog[]; isOw
     finally { setSaving(false); }
   };
 
+  const pindah = async () => {
+    if (!bisaPindah) return;
+    setPindahSaving(true);
+    setErrPindah("");
+    try {
+      const ke = await pindahBarangStok({ kategori: row.kategori, item: row.item }, { kategori: kategoriTujuan, item: row.item });
+      if (ke) onPindah(ke);
+      alert(`Dipindah ke ${ke?.kategori || kategoriTujuan} ✅`);
+    } catch (e: any) {
+      setErrPindah(e?.message || String(e));
+    } finally {
+      setPindahSaving(false);
+    }
+  };
+
   return (
     <Sheet
       open
-      onClose={onClose}
+      onClose={() => !pindahSaving && onClose()}
       title={row.item}
       subtitle={catatan ? `${row.kategori} · “${catatan}”` : row.kategori}
       size="sm"
@@ -538,6 +445,19 @@ const ItemSheet: React.FC<{ row: StokRow; catatan: string; logs: StokLog[]; isOw
             <div className="text-caption2 font-semibold text-label-2 mt-1">masuk 30h</div>
           </div>
         </div>
+
+        <Card>
+          <div className="text-footnote font-bold text-label">Dijual di kasir sebagai</div>
+          {produk.length ? (
+            <div className="mt-1 space-y-0.5">
+              {produk.map((n) => <div key={n} className="text-subhead text-label">{n}</div>)}
+            </div>
+          ) : (
+            <div className="mt-1 text-caption text-warning">
+              Belum ada produknya, jadi barang ini belum bisa dijual.{isOwner ? " Buat lewat Input › Atur Stok › Stok tanpa produk." : ""}
+            </div>
+          )}
+        </Card>
 
         <Card>
           <div className="text-footnote font-bold text-label">Stok minimum</div>
@@ -581,6 +501,35 @@ const ItemSheet: React.FC<{ row: StokRow; catatan: string; logs: StokLog[]; isOw
           )}
         </Card>
 
+        {isOwner && (
+          <Card>
+            <div className="text-footnote font-bold text-label">Kategori</div>
+            <div className="text-caption text-label-2 mb-3">
+              Pindahkan barang ini ke kategori lain. Jumlah, produk, riwayat, modal, dan nota ikut pindah.
+            </div>
+            <SelectField value={tujuan} onChange={(e) => { setTujuan(e.target.value); setErrPindah(""); }} aria-label="Kategori tujuan">
+              {cats.map((c) => (
+                <option key={c.kategori} value={c.kategori}>{c.kategori}</option>
+              ))}
+              <option value={KATEGORI_BARU}>+ Kategori baru…</option>
+            </SelectField>
+            {tujuan === KATEGORI_BARU && (
+              <TextField
+                wrapperClassName="mt-2"
+                value={namaBaru}
+                onChange={(e) => setNamaBaru(e.target.value.toUpperCase())}
+                placeholder="NAMA KATEGORI BARU"
+                autoCapitalize="characters"
+                aria-label="Nama kategori baru"
+              />
+            )}
+            {errPindah && <p className="mt-2 text-caption font-medium text-negative">{errPindah}</p>}
+            <Button variant="tinted" size="md" block className="mt-3" loading={pindahSaving} disabled={!bisaPindah || pindahSaving} onClick={pindah}>
+              {bisaPindah ? `Pindahkan ke ${kategoriTujuan}` : "Pindahkan"}
+            </Button>
+          </Card>
+        )}
+
         <div>
           <div className="mb-2 px-1">
             <Eyebrow>Riwayat barang ini</Eyebrow>
@@ -603,12 +552,63 @@ const ItemSheet: React.FC<{ row: StokRow; catatan: string; logs: StokLog[]; isOw
           )}
         </div>
 
-        {isOwner && (
-          <p className="text-center text-caption text-label-3 leading-snug px-2">
-            Ubah nama, harga, atau hapus barang lewat Owner › Input › Atur Stok.
-          </p>
-        )}
+        <p className="text-center text-caption text-label-3 leading-snug px-2">
+          {isOwner
+            ? "Jumlah stok, nama, harga, dan hapus barang diatur lewat Input › Atur Stok."
+            : "Stok berkurang otomatis dari kasir. Penambahan & koreksi diatur owner."}
+        </p>
       </div>
+    </Sheet>
+  );
+};
+
+/** Ganti nama satu kategori stok jualan (owner). */
+const KategoriSheet: React.FC<{ kategori: string; items: string[]; onClose: () => void }> = ({ kategori, items, onClose }) => {
+  const [nama, setNama] = useState(kategori);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const rapi = rapikanNamaStok(nama);
+
+  const simpan = async () => {
+    setSaving(true);
+    setErr("");
+    try {
+      const baru = await gantiNamaKategoriStok(kategori, nama, items);
+      onClose();
+      alert(`Nama kategori jadi ${baru} ✅`);
+    } catch (e: any) {
+      setErr(e?.message || String(e));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Sheet
+      open
+      onClose={() => !saving && onClose()}
+      title="Ganti nama kategori"
+      subtitle={`${kategori} · ${items.length} barang`}
+      size="sm"
+      variant="grouped"
+      zClassName="z-[320]"
+      footer={
+        <Button variant="filled" size="lg" block loading={saving} disabled={saving || !rapi || rapi === kategori} onClick={simpan}>
+          Simpan
+        </Button>
+      }
+    >
+      <Card>
+        <TextField
+          label="Nama kategori"
+          value={nama}
+          onChange={(e) => { setNama(e.target.value.toUpperCase()); setErr(""); }}
+          autoCapitalize="characters"
+          error={err || undefined}
+        />
+        <p className="mt-2 text-caption text-label-2 leading-snug">
+          Semua barang, produk, riwayat, dan nota di kategori ini ikut memakai nama baru. Kata BARU / SEKEN di nama kategori menentukan halaman Baru / Seken.
+        </p>
+      </Card>
     </Sheet>
   );
 };
