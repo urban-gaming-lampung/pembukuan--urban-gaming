@@ -436,6 +436,38 @@ export const KATEGORI_KASET_BD = "KASET BD";
 /** Nama barang jualan & barang stok jualan selalu HURUF BESAR (mudah dibaca, konsisten). */
 export const namaJualan = (s: string) => String(s || "").replace(/\s+/g, " ").trim().toUpperCase();
 
+// ------------------------------------------------------------
+// Seri unit PlayStation (PS1, PS2, PS3, PS4, PS5, …): disimpan di judul produk,
+// mis. "PS3 SLIM 500GB SERI 21 - SEKEN". Beda seri = produk & barang stok sendiri.
+// ------------------------------------------------------------
+const RE_SERI = /\s*\bSERI\s+[A-Z0-9]+(?:[./-][A-Z0-9]*\d[A-Z0-9]*)*/;
+/** Unit PlayStation (PS1–PS5 dst.) memakai kolom Seri. */
+export const produkPakaiSeri = (nama: string, sub?: string | null) =>
+  (sub || produkSubKategori(nama)) === "Unit PS" && /^\s*(?:PS\s?\d|PLAYSTATION\s?\d)/i.test(nama);
+/** Rapikan isian seri: "seri 21" -> "21". */
+export const rapikanSeri = (s: string) => namaJualan(s).replace(/^SERI\s*/, "").replace(/[^A-Z0-9./-]/g, "").slice(0, 12);
+/** Seri yang tertulis di judul produk ("" bila belum ada). */
+export const ambilSeri = (nama: string) => namaJualan(nama).match(/\bSERI\s+([A-Z0-9]+(?:[./-][A-Z0-9]*\d[A-Z0-9]*)*)/)?.[1] || "";
+/** Judul tanpa seri. */
+export const lepasSeri = (nama: string) => namaJualan(namaJualan(nama).replace(RE_SERI, ""));
+/**
+ * Pasang seri ke judul: sesudah kapasitas ("500GB SERI 21"), atau sebelum "- SEKEN / - BARU",
+ * atau di akhir. Seri kosong = judul apa adanya.
+ */
+export function pasangSeri(nama: string, seri: string): string {
+  const s = rapikanSeri(seri);
+  const n = namaJualan(nama);
+  if (!s) return n;
+  const dasar = lepasSeri(n);
+  const tag = `SERI ${s}`;
+  const sisip = (i: number) => namaJualan(`${dasar.slice(0, i)} ${tag} ${dasar.slice(i)}`);
+  const kap = dasar.match(/\b\d+(?:\/\d+)?\s?(?:GB|TB)\b/);
+  if (kap?.index !== undefined) return sisip(kap.index + kap[0].length);
+  const kond = dasar.match(/\s*[-–—]\s*(?:BARU|SEKEN|SECOND|BEKAS)\s*$/);
+  if (kond?.index !== undefined) return sisip(kond.index);
+  return `${dasar} ${tag}`;
+}
+
 /** Kategori & nama barang stok baru untuk produk yang belum punya padanan di stok. */
 export function stokBaruUntukProduk(p: Pick<ProdukSync, "name" | "subcategory"> & { kondisi?: Kondisi | null }): StokRef {
   const name = namaJualan(p.name);

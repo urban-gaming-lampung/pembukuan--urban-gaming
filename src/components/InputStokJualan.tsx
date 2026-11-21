@@ -4,7 +4,7 @@ import useStokData from "../hooks/useStokData";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { toLocalYmd } from "../lib/dateLocal";
 import { getMinStok, pulihkanStokJualanDariRiwayat, removeJualanItem, statusOf, StokLog, useMinStok, useStokLog, kunciStok } from "../lib/stokJualan";
-import { Kondisi, kondisiProduk, kondisiStok, PILIH_SAAT_CHECKOUT, produkSubKategori, stokBeririsan, StokRef, SubKategoriJualan, syncProdukKeStok } from "../lib/posSales";
+import { ambilSeri, Kondisi, kondisiProduk, kondisiStok, lepasSeri, namaJualan, pasangSeri, PILIH_SAAT_CHECKOUT, produkPakaiSeri, produkSubKategori, rapikanSeri, stokBeririsan, StokRef, SubKategoriJualan, syncProdukKeStok } from "../lib/posSales";
 import KondisiSwitch from "./KondisiSwitch";
 import {
   bersihkanProdukBonusLama, hapusBarangJualan, KATEGORI_PENGELUARAN_STOK, koreksiJumlahStok, kurangiStokMasukSalahInput, ModalMap, pratinjauOtomatis, ProdukJualan, PsBonusBatch, rencanaKurangiStokMasuk,
@@ -552,8 +552,13 @@ const BarangJualanSheet: React.FC<{
 }> = ({ init, products, modalMap, psBonusBatches, cats, data, minMap, onClose, onDone }) => {
   const p = init.produk;
   const modalAwal = p ? modalMap[p.id]?.hargaModal ?? null : null;
-  const [nama, setNama] = useState(p?.name || init.nama || "");
-  const [sub, setSub] = useState<SubKategoriJualan>(p ? subOf(p) : init.sub || produkSubKategori(init.nama || ""));
+  // Unit PlayStation: seri diisi di kolom sendiri lalu otomatis masuk ke judul ("… 500GB SERI 21 - SEKEN")
+  const namaAwal = p?.name || init.nama || "";
+  const subAwal: SubKategoriJualan = p ? subOf(p) : init.sub || produkSubKategori(namaAwal);
+  const seriAwal = produkPakaiSeri(namaAwal, subAwal) ? ambilSeri(namaAwal) : "";
+  const [nama, setNama] = useState(seriAwal ? lepasSeri(namaAwal) : namaAwal);
+  const [seri, setSeri] = useState(seriAwal);
+  const [sub, setSub] = useState<SubKategoriJualan>(subAwal);
   const [subManual, setSubManual] = useState(!!p || !!init.sub);
   const [kondisiB, setKondisiB] = useState<Kondisi>(p ? kondisiProduk(p) : init.kondisi || "BARU");
   const [kondisiManual, setKondisiManual] = useState(!!p);
@@ -583,6 +588,8 @@ const BarangJualanSheet: React.FC<{
   useEffect(() => { if (!kondisiManual && /\b(SEKEN|SECOND|BEKAS)\b|LIKE NEW/i.test(nama)) setKondisiB("SEKEN"); }, [nama, kondisiManual]);
   useEffect(() => () => { if (foto && fotoPreview.startsWith("blob:")) URL.revokeObjectURL(fotoPreview); }, [foto, fotoPreview]);
 
+  const pakaiSeri = produkPakaiSeri(nama, sub);
+  const namaFinal = pakaiSeri ? pasangSeri(nama, seri) : namaJualan(nama);
   const jualN = Number(jual || 0);
   const modalN = modal === "" ? null : Number(modal);
   const untung = modalN !== null && jualN > 0 ? jualN - modalN : null;
@@ -594,7 +601,7 @@ const BarangJualanSheet: React.FC<{
     produkLain.forEach((x) => { if (x.stokRef && x.stokRef.item !== PILIH_SAAT_CHECKOUT) m[kunciStok(x.stokRef)] = x.name; });
     return m;
   }, [produkLain]);
-  const preview = useMemo(() => (ref === undefined ? pratinjauOtomatis(nama, sub, kondisiB, cats, produkLain) : null), [ref, nama, sub, kondisiB, cats, produkLain]);
+  const preview = useMemo(() => (ref === undefined ? pratinjauOtomatis(namaFinal, sub, kondisiB, cats, produkLain) : null), [ref, namaFinal, sub, kondisiB, cats, produkLain]);
   const efektif = ref === undefined ? preview?.ref || null : ref;
   const isPsBaru = sub === "Unit PS" && kondisiB === "BARU";
   const stikList = useMemo(() => buildStikOpsi(products, cats, data), [products, cats, data]);
@@ -663,7 +670,7 @@ const BarangJualanSheet: React.FC<{
 
   const simpan = async () => {
     setErr("");
-    if (!nama.trim()) return setErr("Nama barang wajib diisi.");
+    if (!namaFinal.trim()) return setErr("Nama barang wajib diisi.");
     if (jual === "" || !(jualN > 0)) return setErr("Harga jual wajib lebih dari Rp 0.");
     if (qty > 0 && varianList.length && !varian) return setErr("Pilih varian untuk stok masuk.");
     if (qty > 0 && ref === null) return setErr("Barang tidak dihubungkan ke stok, jadi stok masuk tidak bisa dicatat.");
@@ -673,7 +680,7 @@ const BarangJualanSheet: React.FC<{
       const imageUrl = foto ? await uploadFotoProduk(foto) : p?.imageUrl || "";
       const jumlah = (r: StokRef) => data?.[r.kategori]?.[r.item]?.jumlah;
       const r = await simpanBarangJualan(
-        { id: p?.id, nama, subkategori: sub, kondisi: kondisiB, hargaJual: jualN, hargaModal: modalN, imageUrl, stokRef: ref },
+        { id: p?.id, nama: namaFinal, subkategori: sub, kondisi: kondisiB, hargaJual: jualN, hargaModal: modalN, imageUrl, stokRef: ref },
         p,
         products,
         modalAwal,
@@ -753,6 +760,27 @@ const BarangJualanSheet: React.FC<{
               </div>
             </div>
           </Card>
+
+          {/* Seri (khusus unit PlayStation) */}
+          {pakaiSeri && (
+            <div>
+              <label htmlFor="seri-ps" className={label}>Seri PS</label>
+              <input
+                id="seri-ps"
+                value={seri}
+                onChange={(e) => setSeri(rapikanSeri(e.target.value))}
+                autoCapitalize="characters"
+                autoComplete="off"
+                placeholder="Contoh: 21 · kosongkan bila belum tahu"
+                className={field}
+              />
+              <p className="mt-1.5 px-0.5 text-caption text-label-2 leading-snug">
+                {rapikanSeri(seri)
+                  ? <>Nama di kasir: <b className="font-semibold text-label">{namaFinal}</b></>
+                  : "Seri otomatis masuk ke nama barang. Unit beda seri jadi produk sendiri supaya stoknya tidak tercampur."}
+              </p>
+            </div>
+          )}
 
           {/* Kondisi */}
           <div>
