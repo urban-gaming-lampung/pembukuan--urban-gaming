@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { doc, setDoc, onSnapshot, deleteDoc, updateDoc } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
-import { Button, Card, EmptyState, Eyebrow, IconBadge, MOTION, Pill, Sheet, SubTabs, TextAreaField } from "../ui";
+import { Button, Card, cx, EmptyState, Eyebrow, IconBadge, ListGroup, MOTION, Pill, Sheet, Stepper, SubTabs, TextAreaField, tile, type WarnaIkon } from "../ui";
 
 import useStokData, { RegisteredDevice, DeviceType } from "../hooks/useStokData";
 import { toLocalYmd } from "../lib/dateLocal";
@@ -25,6 +25,17 @@ const DEVICE_LABELS: Record<DeviceType, string> = {
   tv: "TV MONITOR",
   playbox: "PLAYBOX / PORTABEL"
 };
+
+/** Tampilan ringkas di halaman Kondisi (label stiker & PDF tetap DEVICE_LABELS). */
+const JENIS_ALAT: { type: DeviceType; label: string; color: WarnaIkon }[] = [
+  { type: "ps3", label: "PS3", color: "gray" },
+  { type: "ps4", label: "PS4", color: "blue" },
+  { type: "stik_ps3", label: "Stik PS3", color: "gray" },
+  { type: "stik_ps4", label: "Stik PS4", color: "blue" },
+  { type: "tv", label: "TV", color: "orange" },
+  { type: "playbox", label: "Playbox / portabel", color: "teal" },
+];
+const ikonAlat = (type: DeviceType) => (type === "tv" ? <Monitor /> : type === "playbox" ? <Smartphone /> : <Gamepad2 />);
 
 const PRESET_COLORS = [
   { name: "Cyber Black", bg: "#000000", text: "#ffffff" },
@@ -776,6 +787,29 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
     return { total: capacity, baik: baikCount, rusak: rusakCount };
   };
 
+  /** Unit terdaftar per "jenis#nomor" (urutan sama dengan find(): yang pertama dipakai). */
+  const perNomor = useMemo(() => {
+    const m = new Map<string, RegisteredDevice>();
+    devices.forEach((d) => { const k = `${d.type}#${d.number}`; if (!m.has(k)) m.set(k, d); });
+    return m;
+  }, [devices]);
+  const statsJenis = JENIS_ALAT.map((j) => ({ ...j, stats: getDeviceStats(j.type) }));
+  const totalAlat = statsJenis.reduce((a, j) => a + j.stats.total, 0);
+  const totalBaik = statsJenis.reduce((a, j) => a + j.stats.baik, 0);
+  const totalRusak = statsJenis.reduce((a, j) => a + j.stats.rusak, 0);
+  /** Tutup lembar kapasitas tanpa menyimpan: isian kembali ke angka tersimpan. */
+  const batalEditMaster = () => {
+    setTempCapacities({
+      ps3: String(masterCapacities.ps3),
+      ps4: String(masterCapacities.ps4),
+      stik_ps3: String(masterCapacities.stik_ps3),
+      stik_ps4: String(masterCapacities.stik_ps4),
+      tv: String(masterCapacities.tv),
+      playbox: String(masterCapacities.playbox),
+    });
+    setIsEditingMaster(false);
+  };
+
   // QR Code creation string helper
   const qrUrl = useMemo(() => {
     const numValue = genNumber === "" ? 1 : genNumber;
@@ -785,8 +819,13 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
   return (
     <>
-      <Card title="Monitoring kondisi alat" icon={<QrCode />} iconColor="teal">
-        <div className="flex flex-col gap-5">
+      <Card
+        title="Monitoring kondisi alat"
+        subtitle={totalAlat ? `${totalBaik} baik · ${totalRusak} rusak · ${totalAlat} alat` : "Kapasitas alat belum diatur"}
+        icon={<QrCode />}
+        iconColor="teal"
+      >
+        <div className="flex flex-col gap-4">
           {/* Sub halaman owner — gaya SubTabs (SSOT) */}
           {isOwner && (
             <SubTabs
@@ -795,199 +834,91 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
               value={activeSubTab}
               onChange={(k) => { setActiveSubTab(k); if (k === "generator") setEditingStickerId(null); }}
               options={[
-                { key: "kondisi", label: "Kondisi Device" },
-                { key: "generator", label: "Sticker Generator" },
-                { key: "history", label: "Riwayat Sticker" },
+                { key: "kondisi", label: "Kondisi" },
+                { key: "generator", label: "Buat stiker" },
+                { key: "history", label: "Riwayat" },
               ]}
             />
           )}
 
-          {/* Tab 1: Kondisi Device (Visible to Admin & Owner) */}
+          {/* Tab 1: Kondisi Device (Visible to Admin & Owner) — padat untuk mobile */}
           {(!isOwner || activeSubTab === "kondisi") && (
-            <div className="flex w-full flex-col gap-5 animate-in fade-in duration-300">
-              {/* Camera Scanner Trigger Card */}
-              <div className="flex flex-col items-start justify-between gap-4 rounded-tile apple-tile p-4 ring-1 ring-edge md:flex-row md:items-center sm:p-5">
-                <div className="flex items-start gap-3.5 text-left sm:items-center">
-                  <IconBadge color="teal" size="md">
-                    <QrCode />
-                  </IconBadge>
-                  <div>
-                    <h4 className="text-subhead font-semibold text-label">Scan QR code device</h4>
-                    <p className="mt-0.5 max-w-md text-footnote text-label-2">
-                      Gunakan kamera HP/laptop untuk memindai kode QR stiker unit secara instan, atau unggah foto QR code.
-                    </p>
-                  </div>
-                </div>
+            <div className="flex w-full flex-col gap-3">
+              {/* Aksi scan: kamera / foto QR */}
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant="filled" size="md" block icon={<Camera />} onClick={startScanning}>
+                  Scan QR
+                </Button>
+                <label className="inline-flex h-11 cursor-pointer items-center justify-center gap-1.5 rounded-full bg-fill px-4 text-subhead font-semibold text-label transition-opacity active:opacity-70">
+                  <Upload className="h-4 w-4 text-label-2" aria-hidden />
+                  Unggah foto
+                  <input type="file" accept="image/*" onChange={handleUploadScanFile} className="hidden" />
+                </label>
+              </div>
 
-                <div className="grid w-full shrink-0 grid-cols-1 gap-2 sm:flex sm:w-auto sm:items-center">
-                  <Button
-                    type="button"
-                    variant="filled"
-                    size="md"
-                    block
-                    icon={<Camera />}
-                    onClick={startScanning}
-                    className="sm:w-auto"
-                  >
-                    Buka kamera scan
+              <div className="flex items-center justify-between gap-2 px-0.5">
+                <Eyebrow>Kondisi per alat</Eyebrow>
+                {isOwner && (
+                  <Button type="button" variant="tinted" size="sm" onClick={() => setIsEditingMaster(true)}>
+                    Atur kapasitas
                   </Button>
-
-                  <label className="inline-flex h-11 cursor-pointer items-center justify-center gap-1.5 rounded-full bg-fill px-4 text-subhead font-semibold text-label transition-all hover:brightness-[0.95] dark:hover:brightness-115 active:opacity-70">
-                    <Upload className="h-4 w-4 text-label-2" />
-                    Unggah foto QR
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleUploadScanFile}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
+                )}
               </div>
 
-              {/* Master Inventaris Card (Visible to both Owner and Admin) */}
-              <div className="w-full rounded-tile apple-tile p-4 ring-1 ring-edge sm:p-5">
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Save className="h-4 w-4 text-tint" />
-                    <Eyebrow>Master inventaris device</Eyebrow>
-                  </div>
-                  {isOwner && (
-                    <Button
-                      type="button"
-                      variant={isEditingMaster ? "filled" : "tinted"}
-                      size="sm"
-                      onClick={() => {
-                        if (isEditingMaster) handleSaveMaster();
-                        else setIsEditingMaster(true);
-                      }}
-                      className="min-h-[44px] sm:min-h-[32px]"
-                    >
-                      {isEditingMaster ? "Simpan" : "Edit"}
-                    </Button>
-                  )}
+              {totalAlat === 0 ? (
+                <div className={cx(tile, "px-4 py-5 text-center text-footnote text-label-2")}>
+                  {isOwner ? "Ketuk Atur kapasitas untuk mengisi jumlah alat." : "Kapasitas alat belum diatur owner."}
                 </div>
-
-                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
-                  {(Object.keys(DEVICE_LABELS) as DeviceType[]).map((type) => {
-                    const InputIcon = type === "tv" ? Monitor : type === "playbox" ? Smartphone : Gamepad2;
-                    return (
-                      <div key={type} className="flex flex-col items-center justify-center gap-1.5 rounded-tile apple-card p-3 ring-1 ring-edge">
-                        <div className="flex w-full items-center justify-center gap-1 truncate text-center text-caption2 font-semibold uppercase tracking-wide text-label-3">
-                          <InputIcon className="h-3.5 w-3.5 shrink-0 text-label-3" />
-                          <span className="truncate">{DEVICE_LABELS[type]}</span>
-                        </div>
-                        {isEditingMaster && isOwner ? (
-                          <input
-                            type="number"
-                            inputMode="numeric"
-                            min="0"
-                            value={tempCapacities[type]}
-                            onChange={(e) => setTempCapacities({ ...tempCapacities, [type]: e.target.value })}
-                            className="w-full min-h-[44px] rounded-control bg-surface-2 px-2 py-1 text-center font-mono text-[16px] font-semibold tabular-nums text-label ring-1 ring-edge focus:outline-none focus:ring-2 focus:ring-tint"
-                          />
-                        ) : (
-                          <div className="w-full select-none py-1 text-center font-mono text-callout font-bold tabular-nums text-label">
-                            {masterCapacities[type]}
-                          </div>
-                        )}
+              ) : (
+                <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                  {statsJenis.filter((j) => j.stats.total > 0).map(({ type, label, color, stats }) => (
+                    <section key={type} className={cx(tile, "min-w-0 p-3")} aria-label={`${label}: ${stats.baik} baik, ${stats.rusak} rusak`}>
+                      <div className="flex items-center gap-2.5">
+                        <IconBadge color={color} size="sm">{ikonAlat(type)}</IconBadge>
+                        <h3 className="min-w-0 flex-1 truncate text-subhead font-semibold text-label">{label}</h3>
+                        <span className="shrink-0 text-caption font-medium tabular-nums text-label-2">
+                          <b className="font-semibold text-positive">{stats.baik}</b> baik ·{" "}
+                          <b className={cx("font-semibold", stats.rusak ? "text-negative" : "text-label-2")}>{stats.rusak}</b> rusak
+                        </span>
                       </div>
-                    );
-                  })}
+                      <div className="mt-2.5 grid grid-cols-[repeat(auto-fill,minmax(44px,1fr))] gap-1.5">
+                        {Array.from({ length: stats.total }, (_, index) => {
+                          const badgeNum = index + 1;
+                          const deviceId = `${type}_${String(badgeNum).padStart(2, "0")}`;
+                          const registered = perNomor.get(`${type}#${badgeNum}`);
+                          const gaya = !registered
+                            ? "border border-dashed border-sep text-label-3"
+                            : registered.status === "rusak"
+                              ? "bg-negative/10 text-negative ring-1 ring-inset ring-negative/30"
+                              : "bg-positive/10 text-positive ring-1 ring-inset ring-positive/25";
+                          return (
+                            <button
+                              type="button"
+                              key={deviceId}
+                              onClick={() => handleScannedId(deviceId)}
+                              className={cx(
+                                "flex h-10 min-w-0 flex-col items-center justify-center rounded-control font-mono text-footnote font-semibold leading-none tabular-nums transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
+                                gaya
+                              )}
+                              title={registered?.status === "rusak" ? `Rusak: ${registered.keterangan}` : registered ? "Kondisi normal" : "Belum didata"}
+                              aria-label={`${label} nomor ${badgeNum}: ${registered ? (registered.status === "rusak" ? "rusak" : "baik") : "belum didata"}`}
+                            >
+                              {String(badgeNum).padStart(2, "0")}
+                              {registered?.stikType && <span className="mt-0.5 text-caption2 font-semibold leading-none opacity-80">{registered.stikType}</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ))}
                 </div>
-              </div>
+              )}
 
-              {/* Status Grid Cards */}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {(Object.keys(DEVICE_LABELS) as DeviceType[]).map((type) => {
-                  const stats = getDeviceStats(type);
-                  const registeredForType = devices.filter(d => d.type === type);
-                  const displayLimit = stats.total;
-                  const DevIcon = type === "tv" ? Monitor : type === "playbox" ? Smartphone : Gamepad2;
-
-                  return (
-                    <div
-                      key={type}
-                      className="flex min-h-[170px] flex-col justify-between rounded-tile apple-tile p-4 ring-1 ring-edge"
-                    >
-                      <div>
-                        {/* Header */}
-                        <div className="mb-3 flex items-center justify-between gap-2 border-b border-sep pb-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-tile bg-surface text-tint ring-1 ring-edge">
-                              <DevIcon className="h-5 w-5" />
-                            </div>
-                            <div className="text-left">
-                              <h3 className="text-subhead font-semibold text-label">{DEVICE_LABELS[type]}</h3>
-                              <p className="text-caption text-label-3 tabular-nums">
-                                Kapasitas: {stats.total} unit
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Mini Stats Pill */}
-                          <div className="inline-flex shrink-0 items-center gap-2 rounded-full bg-surface px-2.5 py-1 text-caption font-semibold tabular-nums ring-1 ring-edge">
-                            <span className="inline-flex items-center gap-1 text-positive">
-                              <span className="h-1.5 w-1.5 rounded-full bg-positive" />
-                              {stats.baik}
-                            </span>
-                            <span className="text-label-3">|</span>
-                            <span className="inline-flex items-center gap-1 text-negative">
-                              <span className="h-1.5 w-1.5 rounded-full bg-negative" />
-                              {stats.rusak}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Badges Grid */}
-                        {displayLimit > 0 ? (
-                          <div className="flex flex-wrap justify-start gap-2 pt-1">
-                            {Array.from({ length: displayLimit }).map((_, index) => {
-                              const badgeNum = index + 1;
-                              const deviceId = `${type}_${String(badgeNum).padStart(2, "0")}`;
-                              const registered = registeredForType.find(d => d.number === badgeNum);
-
-                              let badgeStyle = "border border-dashed border-sep bg-surface text-label-3 hover:bg-fill";
-                              let labelSuffix = "";
-
-                              if (registered) {
-                                if (registered.status === "rusak") {
-                                  badgeStyle = "bg-negative/10 text-negative ring-1 ring-negative/30 hover:bg-negative/20";
-                                } else {
-                                  badgeStyle = "bg-positive/10 text-positive ring-1 ring-positive/30 hover:bg-positive/20";
-                                }
-                                if (registered.stikType) {
-                                  labelSuffix = registered.stikType;
-                                }
-                              }
-
-                              return (
-                                <button
-                                  type="button"
-                                  key={deviceId}
-                                  onClick={() => handleScannedId(deviceId)}
-                                  className={`relative min-h-[40px] min-w-[44px] rounded-control px-2.5 py-1.5 font-mono text-footnote font-semibold tabular-nums transition-transform active:scale-95 ${badgeStyle}`}
-                                  title={registered?.status === "rusak" ? `Rusak: ${registered.keterangan}` : "Kondisi normal"}
-                                >
-                                  {String(badgeNum).padStart(2, "0")}
-                                  {labelSuffix && (
-                                    <span className="block text-[9px] font-semibold leading-none opacity-80">
-                                      {labelSuffix}
-                                    </span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="rounded-tile border border-dashed border-sep bg-surface py-6 text-center text-footnote text-label-3">
-                            Belum ada unit terdaftar.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-0.5 text-caption text-label-2" aria-hidden>
+                <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-positive/25 ring-1 ring-inset ring-positive/40" />Baik</span>
+                <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-negative/20 ring-1 ring-inset ring-negative/40" />Rusak</span>
+                <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm border border-dashed border-label-3" />Belum didata</span>
+                <span className="text-label-3">Ketuk nomor untuk ubah kondisi.</span>
               </div>
             </div>
           )}
@@ -1681,6 +1612,46 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
           )}
         </div>
       </Sheet>
+
+      {/* Lembar kapasitas alat (owner) */}
+      {isOwner && (
+        <Sheet
+          open={isEditingMaster}
+          onClose={batalEditMaster}
+          size="sm"
+          variant="grouped"
+          zClassName="z-[9999]"
+          title="Atur kapasitas"
+          subtitle="Jumlah alat yang punya stiker per jenis"
+          footer={
+            <Button type="button" variant="filled" size="lg" block onClick={handleSaveMaster}>
+              Simpan
+            </Button>
+          }
+        >
+          <ListGroup>
+            {JENIS_ALAT.map(({ type, label, color }) => (
+              <div key={type} className="group/row flex items-center gap-3 pl-4 pr-3.5 sm:pr-4">
+                <IconBadge color={color}>{ikonAlat(type)}</IconBadge>
+                <div className="flex min-h-[52px] min-w-0 flex-1 items-center gap-3 border-b border-sep py-2.5 group-last/row:border-b-0">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-callout text-label">{label}</div>
+                    <div className="truncate text-footnote text-label-2">{getDeviceStats(type).rusak} rusak</div>
+                  </div>
+                  <Stepper
+                    value={parseInt(tempCapacities[type]) || 0}
+                    min={0}
+                    max={999}
+                    onChange={(n) => setTempCapacities((prev) => ({ ...prev, [type]: String(n) }))}
+                    ariaLabel={`kapasitas ${label}`}
+                  />
+                </div>
+              </div>
+            ))}
+          </ListGroup>
+          <p className="mt-2 px-4 text-footnote leading-snug text-label-2">Nomor 01 sampai kapasitas tampil di halaman Kondisi. Alat tanpa catatan rusak dihitung baik.</p>
+        </Sheet>
+      )}
 
       {/* Modal 2: Status Update Modal (UDS Sheet) */}
       <Sheet
