@@ -1,9 +1,9 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { Clock, Monitor, Gamepad2, Smartphone, ShieldCheck, Settings2, MessageCircle } from "lucide-react";
+import { CheckCircle2, ChevronRight, Clock, Gamepad2, MessageCircle, Monitor, Smartphone } from "lucide-react";
 import { doc, setDoc, onSnapshot } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
 import { HistoryItem, RowSewa } from "../lib/types";
-import { Button, Card, Eyebrow, Pill, Sheet } from "../ui";
+import { Button, Card, cx, EmptyState, IconBadge, LineItem, LineList, ListGroup, Meter, Pill, SectionHeader, Sheet, StatTile, Stepper, type WarnaIkon } from "../ui";
 import { buildSewaTable } from "../lib/priceLists";
 import { formatK } from "../lib/format";
 import { formatWa } from "../lib/wa";
@@ -11,6 +11,11 @@ import { daftarSewaBerjalan, jenisUnit, perluKonfirmasiKembali, SewaBerjalan, ta
 import { batasKembali, INGATKAN_SEBELUM_MENIT, labelPengingat, tarifTelatPerJam, waktuRelatif } from "../lib/pengingatSewa";
 import PeringatanSewaHabis, { bisaIngatkan, kirimPengingatSewa, sumberSewa } from "./PeringatanSewaHabis";
 
+/**
+ * MONITORING STATUS UNIT — tampilan iOS 27 (mobile-first 390px).
+ * Ringkasan jalan / ready + ketersediaan per jenis unit (titik per unit), lalu daftar sewa
+ * berjalan bergaya Grouped List (baris 68px + progress 4px). Logika data tidak berubah.
+ */
 type WidgetMonitoringStatusProps = {
   history: HistoryItem[];
   rowsSewa: RowSewa[];
@@ -27,6 +32,13 @@ type WidgetMonitoringStatusProps = {
 type KartuUnit = SewaBerjalan & { id: number; end: string; progress: number; _nominalBelumBayar: number };
 
 const jamMenit = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+const namaAkun = (email?: string | null) => (email ? email.split("@")[0] : "");
+const WARNA_TINT = "rgb(var(--ui-tint))";
+const WARNA_WARNING = "rgb(var(--ui-warning))";
+const WARNA_JALAN = "rgb(var(--ui-negative))";
+const WARNA_READY = "rgb(var(--ui-positive))";
+/** Unit sebanyak ini ke bawah digambar satu titik per unit; lebih dari itu pakai bar. */
+const SLOT_MAKS = 24;
 
 const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
   history,
@@ -94,9 +106,20 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
     setDoc(doc(db, "data", "master_unit"), { ps3, ps4, ps5, tv, portabel }, { merge: true });
     setIsEditingMaster(false);
   };
+  /** Tutup lembar jumlah unit tanpa menyimpan: isian kembali ke angka tersimpan. */
+  const batalEditMaster = () => {
+    setTempPs3(String(masterUnit.ps3));
+    setTempPs4(String(masterUnit.ps4));
+    setTempPs5(String(masterUnit.ps5));
+    setTempTv(String(masterUnit.tv));
+    setTempPortabel(String(masterUnit.portabel));
+    setIsEditingMaster(false);
+  };
+
+  // Tabel harga hanya dibangun ulang saat harga berubah (bukan tiap 15 detik)
+  const sewaTable = useMemo(() => buildSewaTable(hargaItems), [hargaItems]);
 
   const { activeRentals, rentedPS3, rentedPS4, rentedPS5, rentedPortabel, rentedTV, readyPS3, readyPS4, readyPS5, readyPortabel, readyTV } = useMemo(() => {
-    const sewaTable = buildSewaTable(hargaItems);
     const nowD = new Date(now);
     let rPS3 = 0, rPS4 = 0, rPS5 = 0, rPortabel = 0, rTV = 0;
     // Satu sumber data unit berjalan (sama dengan peringatan "waktu sewa habis" di halaman Usaha Rental)
@@ -139,7 +162,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
       readyPortabel: Math.max(0, masterUnit.portabel - rPortabel),
       readyTV: Math.max(0, masterUnit.tv - rTV)
     };
-  }, [rowsSewa, history, activeDate, now, masterUnit, hargaItems]);
+  }, [rowsSewa, history, activeDate, now, masterUnit, hargaItems, sewaTable]);
 
   // Notifikasi browser sekali per unit saat waktunya habis
   useEffect(() => {
@@ -172,120 +195,112 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
     return `Unit diperkirakan kembali ${waktuRelatif(endMs, now)}.`;
   };
 
-  const masterItems = [
-    { key: "ps3", label: "PS3", Icon: Gamepad2, total: masterUnit.ps3, temp: tempPs3, setTemp: setTempPs3, ready: readyPS3, rented: rentedPS3, readyTitle: "PS3 ready" },
-    { key: "ps4", label: "PS4", Icon: Gamepad2, total: masterUnit.ps4, temp: tempPs4, setTemp: setTempPs4, ready: readyPS4, rented: rentedPS4, readyTitle: "PS4 ready" },
-    { key: "ps5", label: "PS5", Icon: Gamepad2, total: masterUnit.ps5, temp: tempPs5, setTemp: setTempPs5, ready: readyPS5, rented: rentedPS5, readyTitle: "PS5 ready" },
-    { key: "portabel", label: "PTB", Icon: Smartphone, total: masterUnit.portabel, temp: tempPortabel, setTemp: setTempPortabel, ready: readyPortabel, rented: rentedPortabel, readyTitle: "Portabel ready" },
-    { key: "tv", label: "TV", Icon: Monitor, total: masterUnit.tv, temp: tempTv, setTemp: setTempTv, ready: readyTV, rented: rentedTV, readyTitle: "TV ready" },
+  const masterItems: { key: string; label: string; nama: string; icon: React.ReactNode; color: WarnaIkon; total: number; temp: string; setTemp: (v: string) => void; ready: number; rented: number }[] = [
+    { key: "ps3", label: "PS3", nama: "PlayStation 3", icon: <Gamepad2 />, color: "gray", total: masterUnit.ps3, temp: tempPs3, setTemp: setTempPs3, ready: readyPS3, rented: rentedPS3 },
+    { key: "ps4", label: "PS4", nama: "PlayStation 4", icon: <Gamepad2 />, color: "blue", total: masterUnit.ps4, temp: tempPs4, setTemp: setTempPs4, ready: readyPS4, rented: rentedPS4 },
+    { key: "ps5", label: "PS5", nama: "PlayStation 5", icon: <Gamepad2 />, color: "indigo", total: masterUnit.ps5, temp: tempPs5, setTemp: setTempPs5, ready: readyPS5, rented: rentedPS5 },
+    { key: "portabel", label: "Portabel", nama: "PS portabel", icon: <Smartphone />, color: "teal", total: masterUnit.portabel, temp: tempPortabel, setTemp: setTempPortabel, ready: readyPortabel, rented: rentedPortabel },
+    { key: "tv", label: "TV", nama: "Televisi", icon: <Monitor />, color: "orange", total: masterUnit.tv, temp: tempTv, setTemp: setTempTv, ready: readyTV, rented: rentedTV },
   ];
+  const jenisTampil = masterItems.filter((it) => it.total > 0 || it.rented > 0);
+  const totalUnit = masterItems.reduce((s, it) => s + it.total, 0);
+  const totalJalan = masterItems.reduce((s, it) => s + it.rented, 0);
+  const totalReady = masterItems.reduce((s, it) => s + it.ready, 0);
+
+  // Urutan tampil: perlu konfirmasi dulu, lalu yang paling cepat selesai (nomor biling tetap)
+  const daftarJalan = useMemo(
+    () =>
+      [...activeRentals].sort(
+        (a, b) => Number(b.isDone && !b.isVerified) - Number(a.isDone && !a.isVerified) || (a.endMs ?? Infinity) - (b.endMs ?? Infinity) || a.id - b.id
+      ),
+    [activeRentals]
+  );
 
   return (
     <>
-      <Card title="Monitoring status unit" icon={<Monitor />} iconColor="indigo">
-        <div className="flex flex-col gap-6 lg:flex-row lg:gap-6">
-          {/* Kolom kiri: Master inventaris & ringkasan Ready/Jalan */}
-          <div className="flex flex-col gap-4 lg:w-5/12">
-            <div className="rounded-tile apple-tile p-4 ring-1 ring-edge">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Settings2 className="h-4 w-4 text-tint" />
-                  <Eyebrow>Master inventaris</Eyebrow>
-                </div>
-                {isOwner && (
-                  <Button
-                    variant={isEditingMaster ? "filled" : "tinted"}
-                    size="sm"
-                    onClick={() => {
-                      if (isEditingMaster) handleSaveMaster();
-                      else setIsEditingMaster(true);
-                    }}
-                    className="min-h-[44px] sm:min-h-[32px]"
-                  >
-                    {isEditingMaster ? "Simpan" : "Edit"}
-                  </Button>
-                )}
-              </div>
-
-              <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
-                {masterItems.map((it) => {
-                  const ItemIcon = it.Icon;
-                  return (
-                    <div key={it.key} className="flex min-w-0 flex-col gap-1.5">
-                      <label
-                        htmlFor={`master-unit-${it.key}`}
-                        className="truncate text-center text-caption2 font-semibold uppercase tracking-wide text-label-3"
-                      >
-                        {it.label}
-                      </label>
-                      {isEditingMaster && isOwner ? (
-                        <input
-                          id={`master-unit-${it.key}`}
-                          type="number"
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          min="0"
-                          value={it.temp}
-                          onChange={(e) => it.setTemp(e.target.value)}
-                          className="w-full min-h-[44px] rounded-control bg-surface px-1 py-2 text-center font-mono text-[16px] font-semibold tabular-nums text-label ring-1 ring-edge focus:outline-none focus:ring-2 focus:ring-tint"
-                        />
-                      ) : (
-                        <div className="flex min-h-[44px] w-full items-center justify-center gap-1 rounded-control bg-surface px-1 py-2 font-mono text-callout font-bold tabular-nums text-label ring-1 ring-edge">
-                          <ItemIcon className="h-3.5 w-3.5 shrink-0 text-label-3" />
-                          {it.total}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="grid w-full grid-cols-2 gap-2 min-[480px]:grid-cols-5">
-              {masterItems.map((it) => (
-                <div
-                  key={`ready-stat-${it.key}`}
-                  className="flex flex-col items-center justify-center gap-0.5 rounded-tile bg-positive/10 px-2 py-2.5 text-center"
-                >
-                  <span className="text-caption2 font-semibold leading-tight text-positive">{it.label} Ready</span>
-                  <span className="text-title3 font-bold tabular-nums text-positive">{it.ready}</span>
-                </div>
-              ))}
-              {masterItems.map((it) => (
-                <div
-                  key={`rented-stat-${it.key}`}
-                  className="flex flex-col items-center justify-center gap-0.5 rounded-tile bg-negative/10 px-2 py-2.5 text-center"
-                >
-                  <span className="whitespace-nowrap text-caption2 font-semibold leading-tight text-negative">{it.label} Jalan</span>
-                  <span className="text-title3 font-bold tabular-nums text-negative">{it.rented}</span>
-                </div>
-              ))}
-            </div>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-start">
+        {/* Ringkasan & ketersediaan per jenis unit */}
+        <Card
+          title="Status unit"
+          subtitle={totalUnit ? `${totalUnit} unit rental` : "Jumlah unit belum diatur"}
+          icon={<Monitor />}
+          iconColor="indigo"
+          accessory={
+            isOwner ? (
+              <Button variant="tinted" size="sm" onClick={() => setIsEditingMaster(true)}>
+                Atur unit
+              </Button>
+            ) : undefined
+          }
+        >
+          <div className="grid grid-cols-2 gap-2">
+            <StatTile
+              label="Jalan"
+              dot={WARNA_JALAN}
+              value={<span className="text-title1 font-bold tabular-nums text-label">{totalJalan}</span>}
+              sub={totalUnit ? `dari ${totalUnit} unit` : "unit disewa"}
+            />
+            <StatTile
+              label="Ready"
+              dot={WARNA_READY}
+              value={<span className="text-title1 font-bold tabular-nums text-label">{totalReady}</span>}
+              sub="siap disewa"
+            />
           </div>
 
-          {/* Kolom kanan: Status unit aktif & ready */}
-          <div className="w-full rounded-tile apple-tile p-4 ring-1 ring-edge lg:w-7/12">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Monitor className="h-4 w-4 text-tint" />
-                <Eyebrow>Status unit</Eyebrow>
-              </div>
-              <div className="flex items-center gap-3 text-caption font-medium text-label-2">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-negative animate-pulse" />
-                  Jalan
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-positive" />
-                  Ready
-                </span>
-              </div>
+          {jenisTampil.length > 0 ? (
+            <div className="mt-3 divide-y divide-sep">
+              {jenisTampil.map((it) => {
+                const slot = Math.max(it.total, it.rented);
+                return (
+                  <div key={it.key} className="flex min-h-[52px] items-center gap-3 py-3">
+                    <IconBadge color={it.color}>{it.icon}</IconBadge>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="truncate text-callout font-semibold text-label">{it.label}</span>
+                        <span className="shrink-0 text-footnote tabular-nums text-label-2">
+                          <b className="font-semibold text-positive">{it.ready}</b> ready · <b className="font-semibold text-label">{it.rented}</b> jalan
+                        </span>
+                      </div>
+                      {slot <= SLOT_MAKS ? (
+                        <div className="mt-1.5 flex flex-wrap gap-1" role="img" aria-label={`${it.label}: ${it.rented} jalan, ${it.ready} ready dari ${it.total} unit`}>
+                          {Array.from({ length: slot }, (_, i) => (
+                            <span key={i} className={cx("h-2 w-2 rounded-full", i < it.rented ? "bg-negative" : "bg-positive/70")} />
+                          ))}
+                        </div>
+                      ) : (
+                        <Meter size="sm" className="mt-2" fraction={it.rented / slot} color={WARNA_JALAN} label={`${it.label} jalan`} />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
+          ) : (
+            <p className="mt-3 text-footnote text-label-2">
+              {isOwner ? "Ketuk Atur unit untuk mengisi jumlah PS, portabel, dan TV yang dimiliki." : "Jumlah unit belum diatur owner."}
+            </p>
+          )}
 
-            <div className="grid max-h-[600px] w-full grid-cols-[repeat(auto-fill,minmax(132px,1fr))] items-start gap-3 overflow-x-hidden overflow-y-auto pr-1 custom-scrollbar">
-              {activeRentals.map((u) => {
-                const adminName = u.addedBy ? u.addedBy.split("@")[0].toUpperCase() : "ADMIN";
+          <div className="mt-3 flex items-center gap-4 text-caption text-label-2" aria-hidden>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-negative" />Jalan</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-positive/70" />Ready</span>
+          </div>
+        </Card>
+
+        {/* Daftar sewa berjalan */}
+        <section aria-label="Sedang jalan" className="min-w-0">
+          <SectionHeader title="Sedang jalan" accessory={daftarJalan.length ? `${daftarJalan.length} biling` : undefined} className="pt-1 lg:pt-0" />
+          {daftarJalan.length === 0 ? (
+            <EmptyState icon={<CheckCircle2 />} title="Tidak ada unit jalan">
+              Semua unit sedang ready di toko.
+            </EmptyState>
+          ) : (
+            <ListGroup>
+              {daftarJalan.map((u) => {
                 const isWarning = u.isDone && !u.isVerified;
+                const admin = namaAkun(u.addedBy) || "admin";
+                const ingatkan = waktunyaIngatkan(u);
                 return (
                   <div
                     key={u.uid}
@@ -298,123 +313,141 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
                         setSelectedUnit(u);
                       }
                     }}
-                    className={`relative flex min-w-0 max-w-full cursor-pointer flex-col overflow-hidden rounded-tile apple-card p-3 pt-3.5 text-center shadow-card ring-1 transition-all hover:-translate-y-0.5 active:scale-[0.98] ${
-                      isWarning ? "ring-warning/60" : "ring-edge"
-                    }`}
+                    className="group/row flex cursor-pointer items-start gap-3 pl-4 pr-3.5 text-left transition-colors hover:bg-fill/55 active:bg-fill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-tint sm:pr-4"
                   >
-                    <div className="absolute top-0 left-0 h-1 w-full bg-fill">
-                      <div
-                        className={`h-full transition-all duration-1000 ease-linear ${isWarning ? "bg-warning" : "bg-negative"}`}
-                        style={{ width: `${u.progress}%` }}
-                      />
-                    </div>
-
-                    <div className="flex justify-center">
-                      <Pill tone={isWarning ? "warning" : "negative"}>Biling {u.id}</Pill>
-                    </div>
-
-                    <h4 className="mt-1.5 truncate text-subhead font-semibold text-label" title={u.jenis}>
-                      {u.jenis}
-                    </h4>
-
-                    <div className="mt-1.5 flex flex-col items-center gap-1 text-center">
-                      <p className="w-full truncate px-1 text-caption font-semibold text-tint">{u.namaPenyewa}</p>
-                      {u.waPenyewa && (
-                        <p className="w-full truncate font-mono text-caption2 text-label-3">{formatWa(u.waPenyewa)}</p>
+                    <span
+                      className={cx(
+                        "mt-3.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-footnote font-semibold tabular-nums",
+                        isWarning ? "bg-warning/15 text-warning" : "bg-fill text-label"
                       )}
-
-                      <span className="inline-block rounded-full bg-fill px-2 py-0.5 text-caption2 font-medium text-label-2">
-                        By: {adminName}
-                      </span>
-
-                      {u.diantarOleh && (
-                        <Pill tone="tint">Diantar: {u.diantarOleh.split("@")[0]}</Pill>
-                      )}
-                      {!u.diantarOleh && u.isOngkir === "TIDAK" && (
-                        <Pill tone="positive">Diambil sendiri</Pill>
-                      )}
-                      {u.isPaid === "TIDAK" && (
-                        <div className="flex flex-col items-center gap-0.5">
-                          <Pill tone="negative">Belum dibayar</Pill>
-                          {u._nominalBelumBayar ? (
-                            <span className="text-caption2 font-semibold tabular-nums text-negative">
-                              Rp {formatK(u._nominalBelumBayar)}
+                      aria-label={`Biling ${u.id}`}
+                    >
+                      {u.id}
+                    </span>
+                    <div className="min-w-0 flex-1 border-b border-sep py-3 group-last/row:border-b-0">
+                      <div className="flex items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline gap-2">
+                            <span className="min-w-0 flex-1 truncate text-callout font-semibold text-label">{u.jenis}</span>
+                            <span className={cx("inline-flex shrink-0 items-center gap-1 text-subhead font-semibold tabular-nums", isWarning ? "text-warning" : "text-label")}>
+                              <Clock className="h-3.5 w-3.5" aria-hidden />
+                              {u.end}
                             </span>
-                          ) : null}
+                          </div>
+                          <div className="mt-0.5 flex items-baseline gap-2 text-footnote text-label-2">
+                            <span className="min-w-0 flex-1 truncate">{u.namaPenyewa || "Tanpa nama"} · {admin}</span>
+                            <span className="shrink-0 tabular-nums text-label-3">mulai {u.start}</span>
+                          </div>
                         </div>
-                      )}
-                      {u.isPaid === "YA" && (
-                        <Pill tone="positive">Sudah dibayar</Pill>
+                        <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-label-3" aria-hidden />
+                      </div>
+
+                      <Meter
+                        size="sm"
+                        className="mt-2.5 mr-6"
+                        fraction={u.progress / 100}
+                        color={isWarning ? WARNA_WARNING : WARNA_TINT}
+                        label={`Waktu sewa berjalan ${Math.round(u.progress)} persen`}
+                      />
+
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {isWarning && <Pill tone="warning">Perlu konfirmasi</Pill>}
+                        {u.isPaid === "TIDAK" && (
+                          <Pill tone="negative">Belum bayar{u._nominalBelumBayar ? ` · Rp ${formatK(u._nominalBelumBayar)}` : ""}</Pill>
+                        )}
+                        {u.isPaid === "YA" && <Pill tone="positive">Sudah dibayar</Pill>}
+                        {u.diantarOleh ? (
+                          <Pill tone="tint">Diantar {namaAkun(u.diantarOleh)}</Pill>
+                        ) : u.isOngkir === "TIDAK" ? (
+                          <Pill tone="neutral">Diambil sendiri</Pill>
+                        ) : null}
+                      </div>
+
+                      {u.diingatkan?.length > 0 && (
+                        <p className="mt-1.5 truncate text-caption font-medium text-positive">{labelPengingat(u.diingatkan)}</p>
                       )}
 
-                      {waktunyaIngatkan(u) && (
-                        <button
-                          type="button"
+                      {ingatkan && (
+                        <Button
+                          variant="tinted"
+                          size="md"
+                          icon={<MessageCircle />}
+                          className="mt-2.5"
                           onClick={(e) => {
                             e.stopPropagation();
                             kirimPengingat(u);
                           }}
-                          className="mt-1 inline-flex min-h-[36px] w-full items-center justify-center gap-1 rounded-full bg-positive px-2.5 text-caption font-semibold text-white transition-opacity active:opacity-80"
                         >
-                          <MessageCircle className="h-3.5 w-3.5 shrink-0" />
-                          Ingatkan
-                        </button>
-                      )}
-
-                      {u.diingatkan?.length > 0 && (
-                        <p className="w-full truncate text-caption2 font-medium text-positive">
-                          {labelPengingat(u.diingatkan)}
-                        </p>
-                      )}
-
-                      {isWarning ? (
-                        <div className="mt-1">
-                          <Pill tone="warning">Perlu konfirmasi</Pill>
-                        </div>
-                      ) : (
-                        <div className="mt-1 flex flex-col items-center font-mono tabular-nums">
-                          <span className="text-caption2 font-medium text-label-3">{u.start}</span>
-                          <span className="inline-flex items-center gap-1 text-caption font-bold text-negative">
-                            <Clock className="h-3 w-3 shrink-0" />
-                            {u.end}
-                          </span>
-                        </div>
+                          Ingatkan via WA
+                        </Button>
                       )}
                     </div>
                   </div>
                 );
               })}
+            </ListGroup>
+          )}
+        </section>
+      </div>
 
-              {masterItems.flatMap((it) => {
-                const ReadyIcon = it.key === "portabel" ? Smartphone : it.key === "tv" ? Monitor : ShieldCheck;
-                return Array.from({ length: it.ready }).map((_, i) => (
-                  <div
-                    key={`ready-${it.key}-${i}`}
-                    className="flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-tile bg-positive/10 p-3 text-center ring-1 ring-positive/20"
-                  >
-                    <ReadyIcon className="h-7 w-7 text-positive" />
-                    <span className="text-caption font-semibold text-positive">{it.readyTitle}</span>
+      {/* Lembar jumlah unit (owner) */}
+      {isOwner && (
+        <Sheet
+          open={isEditingMaster}
+          onClose={batalEditMaster}
+          size="sm"
+          variant="grouped"
+          zClassName="z-[700]"
+          title="Atur unit"
+          subtitle="Jumlah unit rental yang dimiliki toko"
+          footer={
+            <Button variant="filled" size="lg" block onClick={handleSaveMaster}>
+              Simpan
+            </Button>
+          }
+        >
+          <ListGroup>
+            {masterItems.map((it) => {
+              const nilai = parseInt(it.temp) || 0;
+              return (
+                <div key={it.key} className="group/row flex items-center gap-3 pl-4 pr-3.5 sm:pr-4">
+                  <IconBadge color={it.color}>{it.icon}</IconBadge>
+                  <div className="flex min-h-[52px] min-w-0 flex-1 items-center gap-3 border-b border-sep py-2.5 group-last/row:border-b-0">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-callout text-label">{it.label}</div>
+                      <div className="truncate text-footnote text-label-2">{it.rented} sedang jalan</div>
+                    </div>
+                    <Stepper
+                      value={nilai}
+                      min={0}
+                      max={999}
+                      onChange={(n) => it.setTemp(String(n))}
+                      ariaLabel={`jumlah ${it.nama}`}
+                    />
                   </div>
-                ));
-              })}
-            </div>
-          </div>
-        </div>
-      </Card>
+                </div>
+              );
+            })}
+          </ListGroup>
+          <p className="mt-2 px-4 text-footnote text-label-2 leading-snug">Unit ready = jumlah unit dikurangi yang sedang jalan.</p>
+        </Sheet>
+      )}
 
+      {/* Rincian satu biling */}
       {selectedUnit && (() => {
         const sel: KartuUnit = activeRentals.find((r) => r.uid === selectedUnit.uid) || selectedUnit;
         const tarif = tarifTelatPerJam(sel.jenis);
         const adaReminder = bisaIngatkan(sel) && !sel.isVerified;
+        const isWarning = sel.isDone && !sel.isVerified;
         return (
           <Sheet
             open={Boolean(selectedUnit)}
             onClose={() => setSelectedUnit(null)}
             size="sm"
-            variant="surface"
+            variant="grouped"
             zClassName="z-[700]"
             title={sel.jenis}
-            subtitle={sel.namaPenyewa}
+            subtitle={`Biling ${sel.id} · ${sel.namaPenyewa || "Tanpa nama"}`}
             footer={
               <div className="flex flex-col gap-2.5">
                 {adaReminder && (
@@ -442,41 +475,60 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
               </div>
             }
           >
-            <div className="text-center">
-              <p className={`font-mono text-footnote font-medium ${sel.waPenyewa ? "text-label-2" : "text-negative"}`}>
-                {sel.waPenyewa ? `WA ${formatWa(sel.waPenyewa)}` : "No. WA penyewa belum diisi"}
-              </p>
-              <p className="mt-1 text-caption font-medium text-label-3">
-                Admin: {sel.addedBy ? sel.addedBy.split("@")[0].toUpperCase() : "UNKNOWN"}
-              </p>
+            <div className="space-y-3">
+              <Card>
+                <div className="flex items-end justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className={cx("text-caption font-semibold", isWarning ? "text-warning" : "text-label-2")}>{isWarning ? "Waktu habis" : "Selesai"}</div>
+                    <div className="text-title1 font-bold tabular-nums text-label">{sel.end}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-caption font-semibold text-label-2">Mulai</div>
+                    <div className="text-headline font-semibold tabular-nums text-label">{sel.start || "-"}</div>
+                  </div>
+                </div>
+                <Meter
+                  size="sm"
+                  className="mt-3"
+                  fraction={sel.progress / 100}
+                  color={isWarning ? WARNA_WARNING : WARNA_TINT}
+                  label={`Waktu sewa berjalan ${Math.round(sel.progress)} persen`}
+                />
+                <p className="mt-2.5 text-footnote leading-snug text-label-2">{teksPerkiraanKembali(sel.endMs)}</p>
+              </Card>
 
-              <div className="mt-3 mb-4 flex flex-wrap items-center justify-center gap-1.5">
-                {sel.diantarOleh && (
-                  <Pill tone="tint">Diantar oleh: {sel.diantarOleh.split("@")[0]}</Pill>
-                )}
-                {!sel.diantarOleh && sel.isOngkir === "TIDAK" && (
-                  <Pill tone="positive">Diambil sendiri</Pill>
-                )}
-                {sel.isPaid === "TIDAK" && (
-                  <Pill tone="negative">
-                    Belum dibayar {sel._nominalBelumBayar ? `(Rp ${formatK(sel._nominalBelumBayar)})` : ""}
-                  </Pill>
-                )}
-                {sel.isPaid === "YA" && (
-                  <Pill tone="positive">Sudah dibayar</Pill>
-                )}
-              </div>
-
-              <div className="rounded-tile apple-tile p-4 text-center ring-1 ring-edge">
-                <p className="text-callout font-medium leading-relaxed text-label">
-                  {teksPerkiraanKembali(sel.endMs)}
-                </p>
-                {sel.endMs && (
-                  <p className="mt-1.5 text-footnote text-label-2">
-                    Batas kembali {waktuRelatif(batasKembali(sel.endMs), now)}{tarif ? ` · telat Rp${formatK(tarif).replace("k", "rb")}/jam` : ""}
-                  </p>
-                )}
-              </div>
+              <Card>
+                <LineList>
+                  <LineItem
+                    label="WhatsApp"
+                    value={sel.waPenyewa ? formatWa(sel.waPenyewa) : "Belum diisi"}
+                    tone={sel.waPenyewa ? undefined : "negative"}
+                  />
+                  <LineItem label="Dicatat oleh" value={namaAkun(sel.addedBy).toUpperCase() || "UNKNOWN"} />
+                  <LineItem
+                    label="Pengantaran"
+                    value={sel.diantarOleh ? `Diantar ${namaAkun(sel.diantarOleh)}` : sel.isOngkir === "TIDAK" ? "Diambil sendiri" : "-"}
+                  />
+                  <LineItem
+                    label="Pembayaran"
+                    value={
+                      sel.isPaid === "TIDAK"
+                        ? `Belum dibayar${sel._nominalBelumBayar ? ` · Rp ${formatK(sel._nominalBelumBayar)}` : ""}`
+                        : sel.isPaid === "YA"
+                          ? "Sudah dibayar"
+                          : "-"
+                    }
+                    tone={sel.isPaid === "TIDAK" ? "negative" : sel.isPaid === "YA" ? "positive" : undefined}
+                  />
+                  {sel.endMs ? (
+                    <LineItem
+                      label="Batas kembali"
+                      note={tarif ? `Telat Rp${formatK(tarif).replace("k", "rb")}/jam` : undefined}
+                      value={waktuRelatif(batasKembali(sel.endMs), now)}
+                    />
+                  ) : null}
+                </LineList>
+              </Card>
             </div>
           </Sheet>
         );

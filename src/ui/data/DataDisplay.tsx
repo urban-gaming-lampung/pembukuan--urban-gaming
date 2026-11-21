@@ -212,8 +212,9 @@ export const BarRow: React.FC<{
 };
 
 /** Bar kemajuan (utilisasi, rasio). `marker` = garis target 0..1. */
-export const Meter: React.FC<{ fraction: number; color: string; marker?: number; className?: string; label?: string }> = ({ fraction, color, marker, className, label }) => (
-  <div className={cx("relative h-2 rounded-full bg-fill", className)} role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fraction * 100)}>
+/** Bar kemajuan. `size="sm"` = 4px (Progress Indicator iOS 27 di baris daftar), `md` = 8px. */
+export const Meter: React.FC<{ fraction: number; color: string; marker?: number; className?: string; label?: string; size?: "sm" | "md" }> = ({ fraction, color, marker, className, label, size = "md" }) => (
+  <div className={cx("relative rounded-full bg-fill", size === "sm" ? "h-1" : "h-2", className)} role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fraction * 100)}>
     <div
       className="h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none"
       style={{ width: `${Math.max(fraction > 0 ? 2 : 0, Math.min(100, fraction * 100))}%`, background: color }}
