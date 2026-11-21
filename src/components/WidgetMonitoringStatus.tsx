@@ -1,9 +1,9 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { Clock, Monitor, Gamepad2, Smartphone, ShieldCheck, Settings2, MessageCircle } from "lucide-react";
+import { Clock, Gamepad2, MessageCircle, Monitor, Smartphone } from "lucide-react";
 import { doc, setDoc, onSnapshot } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
 import { HistoryItem, RowSewa } from "../lib/types";
-import { Button, Card, cx, Eyebrow, LineItem, LineList, Meter, Pill, Sheet } from "../ui";
+import { Button, Card, cx, Eyebrow, IconBadge, LineItem, LineList, ListGroup, Meter, Pill, Sheet, Stepper, tile, tileInteractive, type WarnaIkon } from "../ui";
 import { buildSewaTable } from "../lib/priceLists";
 import { formatK } from "../lib/format";
 import { formatWa } from "../lib/wa";
@@ -11,6 +11,11 @@ import { daftarSewaBerjalan, jenisUnit, perluKonfirmasiKembali, SewaBerjalan, ta
 import { batasKembali, INGATKAN_SEBELUM_MENIT, labelPengingat, tarifTelatPerJam, waktuRelatif } from "../lib/pengingatSewa";
 import PeringatanSewaHabis, { bisaIngatkan, kirimPengingatSewa, sumberSewa } from "./PeringatanSewaHabis";
 
+/**
+ * MONITORING STATUS UNIT — iOS 27, padat untuk mobile (390px).
+ * Satu kartu: strip ready / total per jenis unit (satu baris), lalu kartu biling 2 kolom
+ * (progress 4px, status ringkas). Jumlah unit diatur lewat lembar (owner). Logika data tetap.
+ */
 type WidgetMonitoringStatusProps = {
   history: HistoryItem[];
   rowsSewa: RowSewa[];
@@ -30,6 +35,8 @@ const jamMenit = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String
 const namaAkun = (email?: string | null) => (email ? email.split("@")[0] : "");
 const WARNA_TINT = "rgb(var(--ui-tint))";
 const WARNA_WARNING = "rgb(var(--ui-warning))";
+/** Kolom strip per jenis unit (sesuai jumlah jenis yang tampil). */
+const KOLOM: Record<number, string> = { 1: "grid-cols-1", 2: "grid-cols-2", 3: "grid-cols-3", 4: "grid-cols-4", 5: "grid-cols-5" };
 
 const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
   history,
@@ -95,6 +102,15 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
     const tv = parseInt(tempTv) || 0;
     const portabel = parseInt(tempPortabel) || 0;
     setDoc(doc(db, "data", "master_unit"), { ps3, ps4, ps5, tv, portabel }, { merge: true });
+    setIsEditingMaster(false);
+  };
+  /** Tutup lembar jumlah unit tanpa menyimpan: isian kembali ke angka tersimpan. */
+  const batalEditMaster = () => {
+    setTempPs3(String(masterUnit.ps3));
+    setTempPs4(String(masterUnit.ps4));
+    setTempPs5(String(masterUnit.ps5));
+    setTempTv(String(masterUnit.tv));
+    setTempPortabel(String(masterUnit.portabel));
     setIsEditingMaster(false);
   };
 
@@ -177,235 +193,207 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
     return `Unit diperkirakan kembali ${waktuRelatif(endMs, now)}.`;
   };
 
-  const masterItems = [
-    { key: "ps3", label: "PS3", Icon: Gamepad2, total: masterUnit.ps3, temp: tempPs3, setTemp: setTempPs3, ready: readyPS3, rented: rentedPS3, readyTitle: "PS3 ready" },
-    { key: "ps4", label: "PS4", Icon: Gamepad2, total: masterUnit.ps4, temp: tempPs4, setTemp: setTempPs4, ready: readyPS4, rented: rentedPS4, readyTitle: "PS4 ready" },
-    { key: "ps5", label: "PS5", Icon: Gamepad2, total: masterUnit.ps5, temp: tempPs5, setTemp: setTempPs5, ready: readyPS5, rented: rentedPS5, readyTitle: "PS5 ready" },
-    { key: "portabel", label: "PTB", Icon: Smartphone, total: masterUnit.portabel, temp: tempPortabel, setTemp: setTempPortabel, ready: readyPortabel, rented: rentedPortabel, readyTitle: "Portabel ready" },
-    { key: "tv", label: "TV", Icon: Monitor, total: masterUnit.tv, temp: tempTv, setTemp: setTempTv, ready: readyTV, rented: rentedTV, readyTitle: "TV ready" },
+  const masterItems: { key: string; label: string; nama: string; icon: React.ReactNode; color: WarnaIkon; total: number; temp: string; setTemp: (v: string) => void; ready: number; rented: number }[] = [
+    { key: "ps3", label: "PS3", nama: "PlayStation 3", icon: <Gamepad2 />, color: "gray", total: masterUnit.ps3, temp: tempPs3, setTemp: setTempPs3, ready: readyPS3, rented: rentedPS3 },
+    { key: "ps4", label: "PS4", nama: "PlayStation 4", icon: <Gamepad2 />, color: "blue", total: masterUnit.ps4, temp: tempPs4, setTemp: setTempPs4, ready: readyPS4, rented: rentedPS4 },
+    { key: "ps5", label: "PS5", nama: "PlayStation 5", icon: <Gamepad2 />, color: "indigo", total: masterUnit.ps5, temp: tempPs5, setTemp: setTempPs5, ready: readyPS5, rented: rentedPS5 },
+    { key: "portabel", label: "PTB", nama: "PS portabel", icon: <Smartphone />, color: "teal", total: masterUnit.portabel, temp: tempPortabel, setTemp: setTempPortabel, ready: readyPortabel, rented: rentedPortabel },
+    { key: "tv", label: "TV", nama: "Televisi", icon: <Monitor />, color: "orange", total: masterUnit.tv, temp: tempTv, setTemp: setTempTv, ready: readyTV, rented: rentedTV },
   ];
+  const jenisTampil = masterItems.filter((it) => it.total > 0 || it.rented > 0);
+  const totalUnit = masterItems.reduce((s, it) => s + it.total, 0);
+  const totalJalan = masterItems.reduce((s, it) => s + it.rented, 0);
+  const totalReady = masterItems.reduce((s, it) => s + it.ready, 0);
+
+  // Urutan tampil: perlu konfirmasi dulu, lalu yang paling cepat selesai (nomor biling tetap)
+  const daftarJalan = useMemo(
+    () =>
+      [...activeRentals].sort(
+        (a, b) => Number(b.isDone && !b.isVerified) - Number(a.isDone && !a.isVerified) || (a.endMs ?? Infinity) - (b.endMs ?? Infinity) || a.id - b.id
+      ),
+    [activeRentals]
+  );
 
   return (
     <>
-      <Card title="Monitoring status unit" icon={<Monitor />} iconColor="indigo">
-        <div className="flex flex-col gap-6 lg:flex-row lg:gap-6">
-          {/* Kolom kiri: Master inventaris & ringkasan Ready/Jalan */}
-          <div className="flex flex-col gap-4 lg:w-5/12">
-            <div className="rounded-tile apple-tile p-4 ring-1 ring-edge">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Settings2 className="h-4 w-4 text-tint" />
-                  <Eyebrow>Master inventaris</Eyebrow>
+      <Card
+        title="Status unit"
+        subtitle={totalUnit ? `${totalReady} ready · ${totalJalan} jalan · ${totalUnit} unit` : "Jumlah unit belum diatur"}
+        icon={<Monitor />}
+        iconColor="indigo"
+        accessory={
+          isOwner ? (
+            <Button variant="tinted" size="sm" onClick={() => setIsEditingMaster(true)}>
+              Atur unit
+            </Button>
+          ) : undefined
+        }
+      >
+        {/* Strip ketersediaan: angka besar = ready, kecil = total unit */}
+        {jenisTampil.length > 0 ? (
+          <div className={cx("grid gap-1.5", KOLOM[jenisTampil.length] || "grid-cols-5")}>
+            {jenisTampil.map((it) => (
+              <div
+                key={it.key}
+                className={cx(tile, "min-w-0 px-1.5 py-2.5 text-center")}
+                aria-label={`${it.label}: ${it.ready} ready, ${it.rented} jalan dari ${it.total} unit`}
+              >
+                <div className="truncate text-caption2 font-semibold uppercase tracking-wide text-label-2">{it.label}</div>
+                <div className="mt-1 leading-none tabular-nums">
+                  <span className={cx("text-title2 font-bold", it.ready > 0 ? "text-positive" : "text-label-3")}>{it.ready}</span>
+                  <span className="text-caption font-medium text-label-3">/{it.total}</span>
                 </div>
-                {isOwner && (
-                  <Button
-                    variant={isEditingMaster ? "filled" : "tinted"}
-                    size="sm"
-                    onClick={() => {
-                      if (isEditingMaster) handleSaveMaster();
-                      else setIsEditingMaster(true);
-                    }}
-                    className="min-h-[44px] sm:min-h-[32px]"
-                  >
-                    {isEditingMaster ? "Simpan" : "Edit"}
-                  </Button>
-                )}
+                <div className={cx("mt-1 truncate text-caption2 font-medium tabular-nums", it.rented > 0 ? "text-negative" : "text-label-3")}>
+                  {it.rented} jalan
+                </div>
               </div>
-
-              <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
-                {masterItems.map((it) => {
-                  const ItemIcon = it.Icon;
-                  return (
-                    <div key={it.key} className="flex min-w-0 flex-col gap-1.5">
-                      <label
-                        htmlFor={`master-unit-${it.key}`}
-                        className="truncate text-center text-caption2 font-semibold uppercase tracking-wide text-label-3"
-                      >
-                        {it.label}
-                      </label>
-                      {isEditingMaster && isOwner ? (
-                        <input
-                          id={`master-unit-${it.key}`}
-                          type="number"
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          min="0"
-                          value={it.temp}
-                          onChange={(e) => it.setTemp(e.target.value)}
-                          className="w-full min-h-[44px] rounded-control bg-surface px-1 py-2 text-center font-mono text-[16px] font-semibold tabular-nums text-label ring-1 ring-edge focus:outline-none focus:ring-2 focus:ring-tint"
-                        />
-                      ) : (
-                        <div className="flex min-h-[44px] w-full items-center justify-center gap-1 rounded-control bg-surface px-1 py-2 font-mono text-callout font-bold tabular-nums text-label ring-1 ring-edge">
-                          <ItemIcon className="h-3.5 w-3.5 shrink-0 text-label-3" />
-                          {it.total}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="grid w-full grid-cols-2 gap-2 min-[480px]:grid-cols-5">
-              {masterItems.map((it) => (
-                <div
-                  key={`ready-stat-${it.key}`}
-                  className="flex flex-col items-center justify-center gap-0.5 rounded-tile bg-positive/10 px-2 py-2.5 text-center"
-                >
-                  <span className="text-caption2 font-semibold leading-tight text-positive">{it.label} Ready</span>
-                  <span className="text-title3 font-bold tabular-nums text-positive">{it.ready}</span>
-                </div>
-              ))}
-              {masterItems.map((it) => (
-                <div
-                  key={`rented-stat-${it.key}`}
-                  className="flex flex-col items-center justify-center gap-0.5 rounded-tile bg-negative/10 px-2 py-2.5 text-center"
-                >
-                  <span className="whitespace-nowrap text-caption2 font-semibold leading-tight text-negative">{it.label} Jalan</span>
-                  <span className="text-title3 font-bold tabular-nums text-negative">{it.rented}</span>
-                </div>
-              ))}
-            </div>
+            ))}
           </div>
+        ) : (
+          <p className="text-footnote text-label-2">
+            {isOwner ? "Ketuk Atur unit untuk mengisi jumlah PS, portabel, dan TV yang dimiliki." : "Jumlah unit belum diatur owner."}
+          </p>
+        )}
 
-          {/* Kolom kanan: Status unit aktif & ready */}
-          <div className="w-full rounded-tile apple-tile p-4 ring-1 ring-edge lg:w-7/12">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Monitor className="h-4 w-4 text-tint" />
-                <Eyebrow>Status unit</Eyebrow>
-              </div>
-              <div className="flex items-center gap-3 text-caption font-medium text-label-2">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-negative" />
-                  Jalan
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-positive" />
-                  Ready
-                </span>
-              </div>
-            </div>
-
-            <div className="grid max-h-[600px] w-full grid-cols-[repeat(auto-fill,minmax(132px,1fr))] items-start gap-3 overflow-x-hidden overflow-y-auto pr-1 custom-scrollbar">
-              {activeRentals.map((u) => {
-                const adminName = u.addedBy ? u.addedBy.split("@")[0].toUpperCase() : "ADMIN";
-                const isWarning = u.isDone && !u.isVerified;
-                return (
-                  <div
-                    key={u.uid}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setSelectedUnit(u)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setSelectedUnit(u);
-                      }
-                    }}
-                    className={`relative flex min-w-0 max-w-full cursor-pointer flex-col overflow-hidden rounded-tile apple-card p-3 pt-3.5 text-center shadow-card ring-1 transition-transform duration-150 active:scale-[0.98] ${
-                      isWarning ? "ring-warning/60" : "ring-edge"
-                    }`}
-                  >
-                    <div className="absolute top-0 left-0 h-1 w-full bg-fill">
-                      <div
-                        className={`h-full transition-[width] duration-500 ease-out motion-reduce:transition-none ${isWarning ? "bg-warning" : "bg-negative"}`}
-                        style={{ width: `${u.progress}%` }}
-                      />
-                    </div>
-
-                    <div className="flex justify-center">
-                      <Pill tone={isWarning ? "warning" : "negative"}>Biling {u.id}</Pill>
-                    </div>
-
-                    <h4 className="mt-1.5 truncate text-subhead font-semibold text-label" title={u.jenis}>
-                      {u.jenis}
-                    </h4>
-
-                    <div className="mt-1.5 flex flex-col items-center gap-1 text-center">
-                      <p className="w-full truncate px-1 text-caption font-semibold text-tint">{u.namaPenyewa}</p>
-                      {u.waPenyewa && (
-                        <p className="w-full truncate font-mono text-caption2 text-label-3">{formatWa(u.waPenyewa)}</p>
-                      )}
-
-                      <span className="inline-block rounded-full bg-fill px-2 py-0.5 text-caption2 font-medium text-label-2">
-                        By: {adminName}
-                      </span>
-
-                      {u.diantarOleh && (
-                        <Pill tone="tint">Diantar: {u.diantarOleh.split("@")[0]}</Pill>
-                      )}
-                      {!u.diantarOleh && u.isOngkir === "TIDAK" && (
-                        <Pill tone="positive">Diambil sendiri</Pill>
-                      )}
-                      {u.isPaid === "TIDAK" && (
-                        <div className="flex flex-col items-center gap-0.5">
-                          <Pill tone="negative">Belum dibayar</Pill>
-                          {u._nominalBelumBayar ? (
-                            <span className="text-caption2 font-semibold tabular-nums text-negative">
-                              Rp {formatK(u._nominalBelumBayar)}
-                            </span>
-                          ) : null}
-                        </div>
-                      )}
-                      {u.isPaid === "YA" && (
-                        <Pill tone="positive">Sudah dibayar</Pill>
-                      )}
-
-                      {waktunyaIngatkan(u) && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            kirimPengingat(u);
-                          }}
-                          className="mt-1 inline-flex min-h-[36px] w-full items-center justify-center gap-1 rounded-full bg-positive px-2.5 text-caption font-semibold text-white transition-opacity active:opacity-80"
-                        >
-                          <MessageCircle className="h-3.5 w-3.5 shrink-0" />
-                          Ingatkan
-                        </button>
-                      )}
-
-                      {u.diingatkan?.length > 0 && (
-                        <p className="w-full truncate text-caption2 font-medium text-positive">
-                          {labelPengingat(u.diingatkan)}
-                        </p>
-                      )}
-
-                      {isWarning ? (
-                        <div className="mt-1">
-                          <Pill tone="warning">Perlu konfirmasi</Pill>
-                        </div>
-                      ) : (
-                        <div className="mt-1 flex flex-col items-center font-mono tabular-nums">
-                          <span className="text-caption2 font-medium text-label-3">{u.start}</span>
-                          <span className="inline-flex items-center gap-1 text-caption font-bold text-negative">
-                            <Clock className="h-3 w-3 shrink-0" />
-                            {u.end}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {masterItems.flatMap((it) => {
-                const ReadyIcon = it.key === "portabel" ? Smartphone : it.key === "tv" ? Monitor : ShieldCheck;
-                return Array.from({ length: it.ready }).map((_, i) => (
-                  <div
-                    key={`ready-${it.key}-${i}`}
-                    className="flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-tile bg-positive/10 p-3 text-center ring-1 ring-positive/20"
-                  >
-                    <ReadyIcon className="h-7 w-7 text-positive" />
-                    <span className="text-caption font-semibold text-positive">{it.readyTitle}</span>
-                  </div>
-                ));
-              })}
-            </div>
-          </div>
+        {/* Biling berjalan: 2 kolom, yang perlu konfirmasi & paling cepat selesai di depan */}
+        <div className="mt-4 mb-2 flex items-center justify-between gap-2 px-0.5">
+          <Eyebrow>Sedang jalan</Eyebrow>
+          {daftarJalan.length > 0 && <span className="text-caption font-medium text-label-2 tabular-nums">{daftarJalan.length} biling</span>}
         </div>
+        {daftarJalan.length === 0 ? (
+          <div className={cx(tile, "px-4 py-5 text-center text-footnote text-label-2")}>Tidak ada unit jalan. Semua unit ready di toko.</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            {daftarJalan.map((u) => {
+              const isWarning = u.isDone && !u.isVerified;
+              const ingatkan = waktunyaIngatkan(u);
+              return (
+                <div
+                  key={u.uid}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Biling ${u.id}, ${u.jenis}, ${u.namaPenyewa || "tanpa nama"}`}
+                  onClick={() => setSelectedUnit(u)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedUnit(u);
+                    }
+                  }}
+                  className={cx(
+                    tileInteractive,
+                    "flex min-w-0 cursor-pointer flex-col p-3 text-left active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
+                    isWarning && "ring-warning/50 dark:ring-warning/50"
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-1.5">
+                    <span
+                      className={cx(
+                        "flex h-6 min-w-[24px] items-center justify-center rounded-full px-1.5 text-caption2 font-bold tabular-nums",
+                        isWarning ? "bg-warning/15 text-warning" : "bg-fill text-label-2"
+                      )}
+                    >
+                      {u.id}
+                    </span>
+                    <span className={cx("inline-flex min-w-0 items-center gap-1 truncate text-footnote font-semibold tabular-nums", isWarning ? "text-warning" : "text-label")}>
+                      <Clock className="h-3 w-3 shrink-0" aria-hidden />
+                      {u.end}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 truncate text-subhead font-semibold text-label">{u.jenis}</div>
+                  <div className="truncate text-caption text-label-2">{u.namaPenyewa || "Tanpa nama"}</div>
+                  <div className="truncate text-caption2 text-label-3 tabular-nums">
+                    {namaAkun(u.addedBy) || "admin"} · mulai {u.start}
+                  </div>
+
+                  <Meter
+                    size="sm"
+                    className="mt-2"
+                    fraction={u.progress / 100}
+                    color={isWarning ? WARNA_WARNING : WARNA_TINT}
+                    label={`Waktu sewa berjalan ${Math.round(u.progress)} persen`}
+                  />
+
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {isWarning && <Pill tone="warning">Konfirmasi</Pill>}
+                    {u.isPaid === "TIDAK" && <Pill tone="negative">Belum{u._nominalBelumBayar ? ` Rp ${formatK(u._nominalBelumBayar)}` : " bayar"}</Pill>}
+                    {u.isPaid === "YA" && <Pill tone="positive">Lunas</Pill>}
+                    {u.diantarOleh ? (
+                      <Pill tone="tint">Antar {namaAkun(u.diantarOleh)}</Pill>
+                    ) : u.isOngkir === "TIDAK" ? (
+                      <Pill tone="neutral">Ambil</Pill>
+                    ) : null}
+                  </div>
+
+                  {u.diingatkan?.length > 0 && (
+                    <p className="mt-1.5 truncate text-caption2 font-medium text-positive">{labelPengingat(u.diingatkan)}</p>
+                  )}
+
+                  {ingatkan && (
+                    <Button
+                      variant="filled"
+                      size="md"
+                      block
+                      icon={<MessageCircle />}
+                      className="mt-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        kirimPengingat(u);
+                      }}
+                    >
+                      Ingatkan
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </Card>
+
+      {/* Lembar jumlah unit (owner) */}
+      {isOwner && (
+        <Sheet
+          open={isEditingMaster}
+          onClose={batalEditMaster}
+          size="sm"
+          variant="grouped"
+          zClassName="z-[700]"
+          title="Atur unit"
+          subtitle="Jumlah unit rental yang dimiliki toko"
+          footer={
+            <Button variant="filled" size="lg" block onClick={handleSaveMaster}>
+              Simpan
+            </Button>
+          }
+        >
+          <ListGroup>
+            {masterItems.map((it) => {
+              const nilai = parseInt(it.temp) || 0;
+              return (
+                <div key={it.key} className="group/row flex items-center gap-3 pl-4 pr-3.5 sm:pr-4">
+                  <IconBadge color={it.color}>{it.icon}</IconBadge>
+                  <div className="flex min-h-[52px] min-w-0 flex-1 items-center gap-3 border-b border-sep py-2.5 group-last/row:border-b-0">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-callout text-label">{it.label}</div>
+                      <div className="truncate text-footnote text-label-2">{it.rented} sedang jalan</div>
+                    </div>
+                    <Stepper
+                      value={nilai}
+                      min={0}
+                      max={999}
+                      onChange={(n) => it.setTemp(String(n))}
+                      ariaLabel={`jumlah ${it.nama}`}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </ListGroup>
+          <p className="mt-2 px-4 text-footnote text-label-2 leading-snug">Unit ready = jumlah unit dikurangi yang sedang jalan.</p>
+        </Sheet>
+      )}
 
       {/* Rincian satu biling */}
       {selectedUnit && (() => {
