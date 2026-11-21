@@ -1,5 +1,5 @@
 /**
- * STOK RENTAL — aturan bersama halaman Stok (Page Owner › Stok & Update Stok admin).
+ * STOK RENTAL — aturan bersama halaman Stok (tab Stok, semua akun).
  *
  * - Kategori "UPDATE STIK / KONSOL / DEVICE" dihitung otomatis dari Monitoring (stiker perangkat).
  * - Kategori lain (mis. JAJANAN) diisi manual dan tersimpan langsung.
@@ -84,7 +84,7 @@ export type JenisStok = "RENTAL" | "JUALAN";
 export const EVENT_BUKA_STOK = "urban:buka-stok";
 let permintaan: JenisStok | null = null;
 
-/** Minta halaman Stok terbuka di sub halaman tertentu (dipakai Page Owner & Update Stok admin). */
+/** Minta halaman Stok terbuka di sub halaman tertentu (tab Stok, semua akun). */
 export function bukaHalamanStok(tab: JenisStok = "RENTAL") {
   permintaan = tab;
   window.dispatchEvent(new CustomEvent(EVENT_BUKA_STOK, { detail: tab }));

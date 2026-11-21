@@ -4,7 +4,7 @@ import useStokData, { type StokKategori } from "../hooks/useStokData";
 import { Kondisi, kondisiStok, stokBeririsan } from "../lib/posSales";
 import { useProdukJualan } from "../lib/barangJualan";
 import KondisiSwitch from "./KondisiSwitch";
-import { Button, Card, EmptyState, Eyebrow, Pill, SearchField, SelectField, Sheet, SubTabs, TextField } from "../ui";
+import { Button, Card, EmptyState, Eyebrow, Pill, SearchField, SelectField, Sheet, TextField } from "../ui";
 import { KartuStok, StatusChip, TileStok, LABEL_STATUS, DOT_STATUS } from "./common/StokUI";
 import {
   ALASAN_SHORT, StokLog, StokRow, StokStatus, buildStokRows, defaultMinStok, fmtWaktu, gantiNamaKategoriStok, isStale, pindahBarangStok,
@@ -14,7 +14,7 @@ import { buildStokReport } from "../lib/stokReport";
 /**
  * STOK JUALAN — pantau & atur kategori (owner & admin, mobile-first).
  *
- * Jumlah stok TIDAK diubah di halaman ini. Satu jalur: Owner › Input › Atur Stok (stok masuk dengan
+ * Jumlah stok TIDAK diubah di halaman ini. Satu jalur: Stok › Atur stok (owner; stok masuk dengan
  * modal & pengeluaran, koreksi) dan otomatis berkurang dari penjualan kasir — supaya stok, modal,
  * dan pengeluaran selalu sinkron.
  * Di sini: ringkasan habis / menipis / aman, daftar belanja, salin laporan, riwayat, stok minimum,
@@ -67,11 +67,12 @@ const LogRow: React.FC<{ l: StokLog; showItem?: boolean }> = ({ l, showItem = tr
   </div>
 );
 
-const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
+const StokJualan: React.FC<{ isOwner?: boolean; onAturStok?: () => void }> = ({ isOwner, onAturStok }) => {
   const { stokState, stokLoaded, masterLoaded, masterCategories } = useStokData();
   const minMap = useMinStok();
   const { logs, loading: logsLoading } = useStokLog(400);
-  const [tab, setTab] = useState<"barang" | "riwayat">("barang");
+  // Riwayat perubahan stok dibuka sebagai lembar (bukan segmen kedua) — satu lapis navigasi
+  const [riwayatOpen, setRiwayatOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>("semua");
   const [cari, setCari] = useState("");
   const [selected, setSelected] = useState<StokRow | null>(null);
@@ -92,14 +93,14 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
   // Halaman Baru / Seken
   const kondisiOf = (r: { kategori: string; item: string }) => kondisiStok(r.kategori, r.item, products);
   const rows = useMemo(() => rowsAll.filter((r) => kondisiOf(r) === kondisi), [rowsAll, products, kondisi]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Produk kasir yang memakai barang stok ini (kosong = "Stok tanpa produk" di Input › Atur Stok)
+  // Produk kasir yang memakai barang stok ini (kosong = "Stok tanpa produk" di Stok › Atur stok)
   const produkDari = (r: { kategori: string; item: string }) => products.filter((p) => stokBeririsan(p.stokRef, r)).map((p) => p.name);
   const sold30 = useMemo(() => soldMap(logs, 30), [logs]);
   const catatanOf = (r: { kategori: string; item: string }) => String(dataJualan?.[r.kategori]?.[r.item]?.catatan || "");
 
   // ---------- Ringkasan & daftar ----------
   const cocokFilter = (r: StokRow, f: Filter = filter) => (f === "semua" ? true : f === "cek" ? isStale(r.lastTs) : r.status === f);
-  // Ringkasan = SELURUH barang jualan (baru + seken), sama seperti Input › Atur Stok
+  // Ringkasan = SELURUH barang jualan (baru + seken), sama seperti Stok › Atur stok
   const count = {
     habis: rowsAll.filter((r) => cocokFilter(r, "habis")).length,
     menipis: rowsAll.filter((r) => cocokFilter(r, "menipis")).length,
@@ -114,7 +115,6 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
   const pilihFilter = (f: Filter) => {
     const next = filter === f ? "semua" : f;
     setFilter(next);
-    setTab("barang");
     // Halaman ini tidak punya barang dengan status itu tapi halaman lain punya -> pindah ke sana
     if (next !== "semua") {
       const lain: Kondisi = kondisi === "BARU" ? "SEKEN" : "BARU";
@@ -202,28 +202,24 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
         >
           Daftar Belanja ({perluBeli.length} barang)
         </Button>
-        <Button
-          variant="gray"
-          size="md"
-          block
-          icon={<Copy />}
-          onClick={() => shareOrCopy(buildStokReport(kategoriJualan, dataJualan as any), "Laporan stok disalin")}
-          className="bg-surface ring-1 ring-edge"
-        >
-          Salin Laporan Stok
-        </Button>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="gray"
+            size="md"
+            block
+            icon={<Copy />}
+            onClick={() => shareOrCopy(buildStokReport(kategoriJualan, dataJualan as any), "Laporan stok disalin")}
+            className="bg-surface ring-1 ring-edge"
+          >
+            Salin laporan
+          </Button>
+          <Button variant="gray" size="md" block icon={<History />} onClick={() => setRiwayatOpen(true)} className="bg-surface ring-1 ring-edge">
+            Riwayat
+          </Button>
+        </div>
       </div>
 
-      {/* Barang / Riwayat */}
-      <SubTabs
-        ariaLabel="Halaman stok jualan"
-        value={tab}
-        onChange={setTab}
-        options={[{ key: "barang", label: "Barang" }, { key: "riwayat", label: "Riwayat" }]}
-      />
-
-      {tab === "barang" ? (
-        <>
+      <>
           {terlaris.length > 0 && filter === "semua" && !q && (
             <Card>
               <div className="mb-2.5">
@@ -316,12 +312,30 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
             ))
           )}
           <p className="text-center text-caption text-label-3 px-4 leading-snug">
-            {isOwner
-              ? "Ketuk barang untuk lihat riwayat, atur stok minimum, atau pindah kategori. Jumlah stok diubah lewat Input › Atur Stok."
-              : "Ketuk barang untuk lihat riwayat. Stok berkurang otomatis dari kasir; penambahan & koreksi diatur owner."}
+            {isOwner ? (
+              <>
+                Ketuk barang untuk lihat riwayat, atur stok minimum, atau pindah kategori. Jumlah stok diubah lewat{" "}
+                {onAturStok ? (
+                  <button type="button" onClick={onAturStok} className="font-semibold text-tint active:opacity-60">Atur stok</button>
+                ) : (
+                  "Atur stok"
+                )}
+                .
+              </>
+            ) : (
+              "Ketuk barang untuk lihat riwayat. Stok berkurang otomatis dari kasir; penambahan & koreksi diatur owner."
+            )}
           </p>
-        </>
-      ) : (
+      </>
+
+      <Sheet
+        open={riwayatOpen}
+        onClose={() => setRiwayatOpen(false)}
+        size="lg"
+        variant="grouped"
+        title="Riwayat stok jualan"
+        subtitle="Stok masuk, koreksi, dan terjual di kasir"
+      >
         <div className="space-y-3">
           {logsLoading ? (
             <div className="text-center text-footnote text-label-2 py-10">Memuat riwayat…</div>
@@ -342,7 +356,7 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
             ))
           )}
         </div>
-      )}
+      </Sheet>
 
       {selected && rowTerpilih && (
         <ItemSheet
@@ -454,7 +468,7 @@ const ItemSheet: React.FC<{
             </div>
           ) : (
             <div className="mt-1 text-caption text-warning">
-              Belum ada produknya, jadi barang ini belum bisa dijual.{isOwner ? " Buat lewat Input › Atur Stok › Stok tanpa produk." : ""}
+              Belum ada produknya, jadi barang ini belum bisa dijual.{isOwner ? " Buat lewat Stok › Atur stok › Stok tanpa produk." : ""}
             </div>
           )}
         </Card>
@@ -554,7 +568,7 @@ const ItemSheet: React.FC<{
 
         <p className="text-center text-caption text-label-3 leading-snug px-2">
           {isOwner
-            ? "Jumlah stok, nama, harga, dan hapus barang diatur lewat Input › Atur Stok."
+            ? "Jumlah stok, nama, harga, dan hapus barang diatur lewat Stok › Atur stok."
             : "Stok berkurang otomatis dari kasir. Penambahan & koreksi diatur owner."}
         </p>
       </div>

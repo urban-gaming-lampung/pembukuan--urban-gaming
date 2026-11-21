@@ -469,7 +469,7 @@ export default function AnalitikUsaha(props: FilterProps) {
             )}
             {laba.qtyTanpa > 0 && (
               <Notice tone="warning" className="mt-3">
-                {laba.qtyTanpa} barang terjual ({rupiah(laba.penjualanTanpaModal)}) belum punya harga modal / tidak dikenali, tidak ikut dihitung laba. Isi di Owner › Input › Atur Stok.
+                {laba.qtyTanpa} barang terjual ({rupiah(laba.penjualanTanpaModal)}) belum punya harga modal / tidak dikenali, tidak ikut dihitung laba. Isi di Stok › Atur stok.
               </Notice>
             )}
             {laba.perkiraan > 0 && (
@@ -553,7 +553,7 @@ export default function AnalitikUsaha(props: FilterProps) {
                   </div>
                 </div>
               ))}
-              <p className="px-4 pb-3.5 pt-1 text-caption text-label-2">Atur batas minimum di menu Stok; restock lewat Input › Atur Stok.</p>
+              <p className="px-4 pb-3.5 pt-1 text-caption text-label-2">Atur batas minimum di menu Stok; restock lewat Stok › Atur stok.</p>
             </Card>
           )}
 

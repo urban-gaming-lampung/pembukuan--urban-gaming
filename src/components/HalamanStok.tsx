@@ -1,17 +1,20 @@
-import React, { useEffect, useState } from "react";
+import React, { lazy, Suspense, useEffect, useState } from "react";
 import { SubTabs } from "../ui";
 import StokRental from "./StokRental";
 import StokJualan from "./StokJualan";
 import { ambilPermintaanStok, EVENT_BUKA_STOK, JenisStok } from "../lib/stokRental";
 
+// Atur stok (stok masuk, koreksi, produk kasir) khusus owner — dimuat hanya saat dibuka
+const InputStokJualan = lazy(() => import("./InputStokJualan"));
+
+type SegmenStok = JenisStok | "ATUR";
+
 /**
- * HALAMAN STOK — satu UI untuk semua akun:
- * - Super admin / owner: Dashboard › STOK
- * - Admin: tab UPDATE STOK
- * Sub halaman: STOK RENTAL · STOK JUALAN.
+ * HALAMAN STOK — satu UI untuk semua akun (tab bar › Stok).
+ * Segmen: Rental · Jualan (+ Atur stok khusus owner / super admin).
  */
 const HalamanStok: React.FC<{ isOwner?: boolean; tampilJajanan: boolean }> = ({ isOwner, tampilJajanan }) => {
-  const [tab, setTab] = useState<JenisStok>(() => ambilPermintaanStok() || "RENTAL");
+  const [tab, setTab] = useState<SegmenStok>(() => ambilPermintaanStok() || "RENTAL");
 
   // Dibuka dari tempat lain (mis. cek stok sebelum kirim laporan PDF)
   useEffect(() => {
@@ -24,15 +27,35 @@ const HalamanStok: React.FC<{ isOwner?: boolean; tampilJajanan: boolean }> = ({ 
     return () => window.removeEventListener(EVENT_BUKA_STOK, buka);
   }, []);
 
+  const aktif: SegmenStok = !isOwner && tab === "ATUR" ? "RENTAL" : tab;
+
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
-      <SubTabs
-        ariaLabel="Jenis stok"
-        value={tab}
+      <SubTabs<SegmenStok>
+        ariaLabel="Halaman stok"
+        value={aktif}
         onChange={setTab}
-        options={[{ key: "RENTAL", label: "Stok Rental" }, { key: "JUALAN", label: "Stok Jualan" }]}
+        options={[
+          { key: "RENTAL", label: "Rental" },
+          { key: "JUALAN", label: "Jualan" },
+          ...(isOwner ? [{ key: "ATUR" as const, label: "Atur stok" }] : []),
+        ]}
       />
-      {tab === "RENTAL" ? <StokRental isOwner={isOwner} tampilJajanan={tampilJajanan} /> : <StokJualan isOwner={isOwner} />}
+      {aktif === "RENTAL" ? (
+        <StokRental isOwner={isOwner} tampilJajanan={tampilJajanan} />
+      ) : aktif === "JUALAN" ? (
+        <StokJualan isOwner={isOwner} onAturStok={isOwner ? () => setTab("ATUR") : undefined} />
+      ) : (
+        <Suspense
+          fallback={
+            <div className="py-16 flex items-center justify-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-tint border-t-transparent" />
+            </div>
+          }
+        >
+          <InputStokJualan />
+        </Suspense>
+      )}
     </div>
   );
 };

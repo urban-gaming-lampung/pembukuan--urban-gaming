@@ -924,7 +924,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             {isSuperAdminOrOwner && activeSub === "JUALAN" && (
               <p className="mt-2.5 text-caption leading-snug text-label-2">
                 Tambah & ubah barang jualan (harga, modal, stok) di{" "}
-                <b className="text-label">Dashboard › Input › Atur Stok</b>.
+                <b className="text-label">Stok › Atur stok</b>.
               </p>
             )}
             {isSuperAdminOrOwner && activeSub === "SERVIS" && (
@@ -1166,7 +1166,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                       : `Belum ada produk di kategori ${activeSub}.`}
                     {isSuperAdminOrOwner &&
                       (activeSub === "JUALAN"
-                        ? " Tambahkan lewat Dashboard › Input › Atur Stok."
+                        ? " Tambahkan lewat Stok › Atur stok."
                         : " Klik tombol di bawah untuk menambahkan produk.")}
                   </p>
                   {isSuperAdminOrOwner && activeSub === "SERVIS" && (

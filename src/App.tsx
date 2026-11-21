@@ -21,8 +21,10 @@ const HalamanStok = lazy(() => import("./components/HalamanStok"));
 const PageOwner = lazy(() => import("./components/PageOwner"));
 const POSModal = lazy(() => import("./components/POSModal"));
 const GalleryModal = lazy(() => import("./components/GalleryModal"));
-const WidgetMonitoringStatus = lazy(() => import("./components/WidgetMonitoringStatus"));
-const WidgetMonitoringDevice = lazy(() => import("./components/WidgetMonitoringDevice"));
+const HalamanMonitoring = lazy(() => import("./components/HalamanMonitoring"));
+import HalamanLainnyaDaftar, { JUDUL_LAINNYA, KembaliLainnya, MENU_LAINNYA } from "./components/HalamanLainnya";
+import useRequestEditPending from "./hooks/useRequestEditPending";
+import type { HalamanLainnya, TabUtama } from "./lib/navigasi";
 import LiveCursors from "./components/LiveCursors";
 import Login from "./components/Login";
 import versionData from "./version.json";
@@ -32,18 +34,19 @@ import {
   Activity,
   AlertCircle,
   AlertTriangle,
+  BarChart3,
   BookOpen,
   Bot,
   CheckCircle2,
+  Ellipsis,
   Info,
-  LayoutDashboard,
   Package,
   Save,
   User,
 } from "lucide-react";
 import { GAME_NAMES_ID } from "./games/constants";
 import useAppController from "./hooks/useAppController";
-import { AlertDialog, AppShell, Button, IconBadge, type NavItem, type NavSection, SubTabs, warnaPengguna } from "./ui";
+import { AlertDialog, AppShell, Button, IconBadge, type NavItem, type NavSection, warnaPengguna } from "./ui";
 import { petaWaPenyewa } from "./lib/pengingatSewa";
 import PeringatanSewaHabis from "./components/PeringatanSewaHabis";
 import { totalPemasukanHarian } from "./lib/keuangan";
@@ -225,26 +228,55 @@ export default function App() {
   // Saran isi cepat No. WA penyewa dari riwayat sewa (nama penyewa -> WA terakhir)
   const waPenyewaTerakhir = useMemo(() => petaWaPenyewa(history), [history]);
 
+  // ===== NAVIGASI SATU LAPIS (lihat src/lib/navigasi.ts) =====
+  const [halLainnya, setHalLainnya] = useState<HalamanLainnya | null>(null);
+  const requestPending = useRequestEditPending(isSuperAdminOrOwner);
+
   const navItems = useMemo<NavItem[]>(() => {
-    const items: NavItem[] = [];
-    if (!isSuperAdminOrOwner) {
-      items.push({ key: "MONITORING", label: "Monitoring", shortLabel: "Monitoring", icon: <Activity />, color: "teal" });
-    } else {
-      items.push({ key: "PAGE OWNER", label: "Dashboard", shortLabel: "Dashboard", icon: <LayoutDashboard />, color: "indigo" });
-    }
-    items.push({ key: "USAHA RENTAL", label: "Pembukuan", shortLabel: "Pembukuan", icon: <BookOpen />, color: "blue" });
-    if (!isSuperAdminOrOwner) {
-      items.push({ key: "UPDATE STOK", label: "Update Stok", shortLabel: "Stok", icon: <Package />, color: "orange" });
+    const items: NavItem[] = [
+      { key: "MONITORING", label: "Monitoring", icon: <Activity />, color: "teal" },
+      { key: "USAHA RENTAL", label: "Pembukuan", icon: <BookOpen />, color: "blue" },
+      { key: "UPDATE STOK", label: "Stok", icon: <Package />, color: "orange" },
+    ];
+    if (isSuperAdminOrOwner) {
+      items.push({ key: "ANALITIK", label: "Analitik", icon: <BarChart3 />, color: "indigo" });
+      items.push({ key: "LAINNYA", label: "Lainnya", icon: <Ellipsis />, color: "gray", dot: requestPending > 0 });
     }
     return items;
-  }, [isSuperAdminOrOwner]);
+  }, [isSuperAdminOrOwner, requestPending]);
 
-  const sidebarSections = useMemo<NavSection[]>(
-    () => [{ title: "Menu Utama", items: navItems }],
-    [navItems]
-  );
+  // Laptop: isi menu Lainnya tampil langsung di sidebar (tanpa halaman daftar)
+  const sidebarSections = useMemo<NavSection[]>(() => {
+    if (!isSuperAdminOrOwner) return [{ title: "Menu utama", items: navItems }];
+    return [
+      { title: "Menu utama", items: navItems.filter((n) => n.key !== "LAINNYA") },
+      {
+        title: "Lainnya",
+        items: MENU_LAINNYA.map((m) => ({
+          key: `LAINNYA:${m.key}`,
+          label: m.judul,
+          icon: m.icon,
+          color: m.warna,
+          badge: m.key === "REQUEST" && requestPending > 0 ? requestPending : undefined,
+        })),
+      },
+    ];
+  }, [isSuperAdminOrOwner, navItems, requestPending]);
 
-  const activeNavLabel = navItems.find((n) => n.key === activeTab)?.label ?? "Pembukuan Digital";
+  const pilihTab = (k: string) => {
+    if (k.startsWith("LAINNYA:")) {
+      setHalLainnya(k.slice(8) as HalamanLainnya);
+      setActiveTab("LAINNYA");
+      return;
+    }
+    // Ketuk tab Lainnya yang sedang aktif = kembali ke daftar (seperti iOS)
+    if (k === "LAINNYA" && activeTab === "LAINNYA") setHalLainnya(null);
+    setActiveTab(k as TabUtama);
+  };
+
+  const subLainnya = isSuperAdminOrOwner && activeTab === "LAINNYA" ? halLainnya : null;
+  const sidebarKey = subLainnya ? `LAINNYA:${subLainnya}` : activeTab;
+  const activeNavLabel = subLainnya ? JUDUL_LAINNYA[subLainnya] : navItems.find((n) => n.key === activeTab)?.label ?? "Pembukuan Digital";
 
   if (authLoading || (user && !userProfileLoaded && !isDeactivated)) {
     return (
@@ -291,8 +323,9 @@ export default function App() {
 
         <div className="relative z-10">
           <AppShell
-            activeKey={activeTab}
-            onSelectKey={(k) => setActiveTab(k as typeof activeTab)}
+            activeKey={sidebarKey}
+            mobileActiveKey={activeTab}
+            onSelectKey={pilihTab}
             sidebarSections={sidebarSections}
             mobileTabs={navItems}
             sidebarHeader={
@@ -371,70 +404,53 @@ export default function App() {
             floatingTopBar
           >
 
-            {activeTab === "PAGE OWNER" && isSuperAdminOrOwner ? (
+            {activeTab === "MONITORING" ? (
               <Suspense fallback={tabFallback}>
-                <PageOwner
-                  totalHarian={totalHarian} totalJajanan={totalJajanan}
-                  totalJasaAks={totalJasaAks} totalSewa={totalSewa}
-                  totalCash={totalCash} 
-                  totalTransfer={totalTransfer}
-                  totalPengeluaran={totalPengeluaran}
-                  pendapatanBersih={totalPemasukanHarian({ totalHarian, totalJajanan, totalJasaAks, totalSewa }) - totalPengeluaran}
-                  history={history}
+                <HalamanMonitoring
+                  isOwner={isSuperAdminOrOwner}
+                  segmen={adminMonitoringTab}
+                  onSegmen={setAdminMonitoringTab}
+                  history={history || []}
                   rowsSewa={rowsSewa}
                   activeDate={tanggal}
                   onVerifyActiveRental={handleVerifyReturn}
-                  onPengingatSewa={handleCatatPengingat}
+                  onPengingat={handleCatatPengingat}
                   hargaItems={hargaSewa}
-                  filterMode={filter}
-                  setFilterMode={setFilter}
-                  filterMonth={filterMonth}
-                  setFilterMonth={setFilterMonth}
-                  rangeStart={rangeStart}
-                  setRangeStart={setRangeStart}
-                  rangeEnd={rangeEnd}
-                  setRangeEnd={setRangeEnd}
-                  filteredHistory={filteredHistory}
                   isVerifyingPayment={!!paymentVerifyPrompt}
-                  tampilJajanan={rincianVisibility.jajanan !== false}
                 />
               </Suspense>
-            ) : activeTab === "MONITORING" && !isSuperAdminOrOwner ? (
-              <div className="flex flex-col gap-4">
-                <SubTabs
-                  ariaLabel="Halaman monitoring"
-                  value={adminMonitoringTab}
-                  onChange={setAdminMonitoringTab}
-                  options={[{ key: "status", label: "Status Unit" }, { key: "device", label: "Kondisi Unit" }]}
-                />
-
-                {adminMonitoringTab === "status" ? (
-                  <div className="animate-in fade-in duration-200">
-                    <Suspense fallback={tabFallback}>
-                      <WidgetMonitoringStatus 
-                        history={history || []} 
-                        rowsSewa={rowsSewa} 
-                        activeDate={tanggal} 
-                        onVerifyActiveRental={handleVerifyReturn} 
-                        onPengingat={handleCatatPengingat}
-                        isOwner={isSuperAdminOrOwner} 
-                        hargaItems={hargaSewa}
-                        isVerifyingPayment={!!paymentVerifyPrompt}
-                      />
-                    </Suspense>
-                  </div>
-                ) : (
-                  <div className="animate-in fade-in duration-200">
-                    <Suspense fallback={tabFallback}>
-                      <WidgetMonitoringDevice isOwner={isSuperAdminOrOwner} />
-                    </Suspense>
-                  </div>
-                )}
-              </div>
-            ) : activeTab === "UPDATE STOK" && !isSuperAdminOrOwner ? (
+            ) : activeTab === "UPDATE STOK" ? (
               <Suspense fallback={tabFallback}>
-                <HalamanStok isOwner={false} tampilJajanan={rincianVisibility.jajanan !== false} />
+                <HalamanStok isOwner={isSuperAdminOrOwner} tampilJajanan={rincianVisibility.jajanan !== false} />
               </Suspense>
+            ) : isSuperAdminOrOwner && activeTab === "LAINNYA" && !subLainnya ? (
+              <HalamanLainnyaDaftar pending={requestPending} onBuka={setHalLainnya} onPengaturan={() => setOpenSettings(true)} />
+            ) : isSuperAdminOrOwner && (activeTab === "ANALITIK" || activeTab === "LAINNYA") ? (
+              <div className="space-y-3">
+                {subLainnya && <KembaliLainnya onKembali={() => setHalLainnya(null)} />}
+                <Suspense fallback={tabFallback}>
+                  <PageOwner
+                    bagian={subLainnya ?? "ANALITIK"}
+                    totalHarian={totalHarian} totalJajanan={totalJajanan}
+                    totalJasaAks={totalJasaAks} totalSewa={totalSewa}
+                    totalCash={totalCash}
+                    totalTransfer={totalTransfer}
+                    totalPengeluaran={totalPengeluaran}
+                    pendapatanBersih={totalPemasukanHarian({ totalHarian, totalJajanan, totalJasaAks, totalSewa }) - totalPengeluaran}
+                    history={history}
+                    rowsSewa={rowsSewa}
+                    filterMode={filter}
+                    setFilterMode={setFilter}
+                    filterMonth={filterMonth}
+                    setFilterMonth={setFilterMonth}
+                    rangeStart={rangeStart}
+                    setRangeStart={setRangeStart}
+                    rangeEnd={rangeEnd}
+                    setRangeEnd={setRangeEnd}
+                    filteredHistory={filteredHistory}
+                  />
+                </Suspense>
+              </div>
             ) : (
               <div className="space-y-5 sm:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out fill-mode-both">
                 <div id="section-input">

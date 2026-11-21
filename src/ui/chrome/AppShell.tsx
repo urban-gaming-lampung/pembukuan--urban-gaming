@@ -32,6 +32,8 @@ const MAX_LEBAR = {
 /** Pembungkus halaman utama adaptif (macOS Sidebar + Toolbar / iOS Top Bar + Bottom Tab Bar). */
 export const AppShell: React.FC<{
   activeKey: string;
+  /** Kunci aktif untuk tab bar bawah bila berbeda dari sidebar (mis. sidebar memilih sub-menu). */
+  mobileActiveKey?: string;
   onSelectKey: (key: string) => void;
   sidebarSections?: NavSection[];
   sidebarHeader?: React.ReactNode;
@@ -43,6 +45,7 @@ export const AppShell: React.FC<{
   children: React.ReactNode;
 }> = ({
   activeKey,
+  mobileActiveKey,
   onSelectKey,
   sidebarSections = [],
   sidebarHeader,
@@ -148,9 +151,10 @@ export const AppShell: React.FC<{
           className="md:hidden fixed inset-x-0 bottom-0 z-40 px-4 pt-1 pb-[max(10px,env(safe-area-inset-bottom))] pointer-events-none select-none"
         >
           <div className="mx-auto max-w-md pointer-events-auto rounded-full apple-glass border border-[var(--ui-glass-border)] shadow-float p-1">
-            <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${mobileTabs.length}, minmax(0, 1fr))` }}>
+            {/* 5 tab: celah & padding dirapatkan supaya label (Monitoring, Pembukuan) tetap utuh di HP 360px */}
+            <div className={cx("grid", mobileTabs.length >= 5 ? "gap-0.5" : "gap-1")} style={{ gridTemplateColumns: `repeat(${mobileTabs.length}, minmax(0, 1fr))` }}>
               {mobileTabs.map((item) => {
-                const active = item.key === activeKey;
+                const active = item.key === (mobileActiveKey ?? activeKey);
                 return (
                   <button
                     key={item.key}
@@ -158,7 +162,9 @@ export const AppShell: React.FC<{
                     onClick={() => onSelectKey(item.key)}
                     aria-current={active ? "page" : undefined}
                     className={cx(
-                      "relative flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-full px-2 py-1 transition duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
+                      "relative flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-full py-1 transition duration-200",
+                      mobileTabs.length >= 5 ? "px-0" : "px-2",
+                      " active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
                       active
                         ? "bg-[var(--ui-fill-2)] text-tint shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]"
                         : "text-label-2 hover:text-label"

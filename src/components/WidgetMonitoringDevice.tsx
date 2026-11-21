@@ -8,13 +8,15 @@ import {
 } from "lucide-react";
 import { doc, setDoc, onSnapshot, deleteDoc, updateDoc } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
-import { Button, Card, cx, EmptyState, Eyebrow, IconBadge, konfirmasi, ListGroup, MOTION, Pill, Sheet, Stepper, SubTabs, TextAreaField, tile, type WarnaIkon } from "../ui";
+import { Button, Card, cx, EmptyState, Eyebrow, IconBadge, konfirmasi, ListGroup, MOTION, Pill, Sheet, Stepper, TextAreaField, tile, type WarnaIkon } from "../ui";
 
 import useStokData, { RegisteredDevice, DeviceType } from "../hooks/useStokData";
 import { toLocalYmd } from "../lib/dateLocal";
 
 interface WidgetMonitoringDeviceProps {
   isOwner?: boolean;
+  /** Dipilih dari segmen halaman Monitoring: "kondisi" (semua akun) atau "stiker" (owner: buat + daftar stiker). */
+  halaman?: "kondisi" | "stiker";
 }
 
 const DEVICE_LABELS: Record<DeviceType, string> = {
@@ -75,9 +77,10 @@ const preloadQrCode = (id: string): Promise<string> => {
   });
 };
 
-const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner = false }) => {
-  // Navigation sub-tabs for owner
-  const [activeSubTab, setActiveSubTab] = useState<"kondisi" | "generator" | "history">("kondisi");
+const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner = false, halaman = "kondisi" }) => {
+  // Satu lapis navigasi: segmen dipilih di halaman Monitoring, bukan tab di dalam kartu ini
+  const hal = isOwner ? halaman : "kondisi";
+  const formStikerRef = useRef<HTMLFormElement>(null);
 
   // Auth State
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
@@ -585,7 +588,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
     setGenBgColor(dev.stickerColor);
     setGenTextColor(dev.fontColor);
     setEditingStickerId(dev.id);
-    setActiveSubTab("generator");
+    // Form & daftar ada di halaman yang sama → gulir ke form
+    requestAnimationFrame(() => formStikerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
   };
 
   // Delete device registration
@@ -820,29 +824,18 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
   return (
     <>
       <Card
-        title="Monitoring kondisi alat"
-        subtitle={totalAlat ? `${totalBaik} baik · ${totalRusak} rusak · ${totalAlat} alat` : "Kapasitas alat belum diatur"}
-        icon={<QrCode />}
-        iconColor="teal"
+        title={hal === "stiker" ? "Stiker unit" : "Monitoring kondisi alat"}
+        subtitle={
+          hal === "stiker"
+            ? `${devices.length} unit terdaftar`
+            : totalAlat ? `${totalBaik} baik · ${totalRusak} rusak · ${totalAlat} alat` : "Kapasitas alat belum diatur"
+        }
+        icon={hal === "stiker" ? <Sparkles /> : <QrCode />}
+        iconColor={hal === "stiker" ? "indigo" : "teal"}
       >
         <div className="flex flex-col gap-4">
-          {/* Sub halaman owner — gaya SubTabs (SSOT) */}
-          {isOwner && (
-            <SubTabs
-              className="w-full"
-              ariaLabel="Halaman device"
-              value={activeSubTab}
-              onChange={(k) => { setActiveSubTab(k); if (k === "generator") setEditingStickerId(null); }}
-              options={[
-                { key: "kondisi", label: "Kondisi" },
-                { key: "generator", label: "Buat stiker" },
-                { key: "history", label: "Riwayat" },
-              ]}
-            />
-          )}
-
-          {/* Tab 1: Kondisi Device (Visible to Admin & Owner) — padat untuk mobile */}
-          {(!isOwner || activeSubTab === "kondisi") && (
+          {/* Kondisi alat (semua akun) — padat untuk mobile */}
+          {hal === "kondisi" && (
             <div className="flex w-full flex-col gap-3">
               {/* Aksi scan: kamera / foto QR */}
               <div className="grid grid-cols-2 gap-2">
@@ -923,19 +916,24 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
             </div>
           )}
 
-          {/* Tab 2: Sticker Generator (Owner Only) */}
-          {isOwner && activeSubTab === "generator" && (
+          {/* Stiker (owner): buat / ubah stiker, lalu daftar unit terdaftar di bawahnya */}
+          {hal === "stiker" && (
             <div className="flex w-full flex-col gap-6 lg:flex-row animate-in fade-in duration-300">
               {/* Generator Configuration Panel */}
               <div className="flex flex-col gap-5 lg:w-1/2">
-                <form onSubmit={handleSaveSticker} className="flex flex-col gap-4 rounded-tile apple-tile p-4 ring-1 ring-edge sm:p-5">
+                <form ref={formStikerRef} onSubmit={handleSaveSticker} className="flex scroll-mt-[calc(var(--app-header-height,148px)+16px)] flex-col gap-4 rounded-tile apple-tile p-4 ring-1 ring-edge sm:p-5">
                   <div className="mb-1 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-tint" />
                       <Eyebrow>Desain stiker unit</Eyebrow>
                     </div>
                     {editingStickerId && (
-                      <Pill tone="tint">Mode edit: {editingStickerId}</Pill>
+                      <span className="flex items-center gap-1">
+                        <Pill tone="tint">Ubah {editingStickerId}</Pill>
+                        <Button type="button" variant="plain" size="sm" onClick={() => setEditingStickerId(null)}>
+                          Batal
+                        </Button>
+                      </span>
                     )}
                   </div>
 
@@ -1315,8 +1313,8 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
             </div>
           )}
 
-          {/* Tab 3: History & Master Settings (Owner Only) */}
-          {isOwner && activeSubTab === "history" && (
+          {/* Daftar unit terdaftar (owner) — satu halaman dengan pembuat stiker */}
+          {hal === "stiker" && (
             <div className="flex w-full flex-col gap-6 animate-in fade-in duration-300">
               {/* History Section */}
               <div className="flex flex-col gap-4 text-left">

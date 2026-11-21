@@ -298,7 +298,7 @@ export async function renameJualanItem(kategori: string, lama: string, baru: str
 }
 
 // ============================================================
-// Pindah barang ke kategori lain & ganti nama kategori (Owner › Stok › Stok Jualan)
+// Pindah barang ke kategori lain & ganti nama kategori (Stok › Jualan)
 // ============================================================
 
 type RefStok = { kategori: string; item: string };

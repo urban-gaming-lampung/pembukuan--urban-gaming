@@ -85,7 +85,7 @@ const StokRental: React.FC<{ isOwner?: boolean; tampilJajanan: boolean }> = ({ i
               ))}
             </KartuStok>
           ))}
-          <p className="text-caption text-label-3 px-1 leading-snug">Jumlah dihitung dari stiker perangkat. Ubah kondisi bagus / rusak lewat Monitoring › Kondisi Unit.</p>
+          <p className="text-caption text-label-3 px-1 leading-snug">Jumlah dihitung dari stiker perangkat. Ubah kondisi bagus / rusak lewat Monitoring › Kondisi alat.</p>
         </div>
       )}
 

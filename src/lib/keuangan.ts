@@ -24,7 +24,7 @@ export type TransaksiOwner = {
   tanggal: string; // YYYY-MM-DD
   timestamp?: number;
   bisnis?: Bisnis;
-  /** "input_stok" = dibuat otomatis dari stok masuk (diubah lewat Input › Atur Stok) */
+  /** "input_stok" = dibuat otomatis dari stok masuk (diubah lewat Stok › Atur stok) */
   sumber?: string;
   produkId?: string;
   stokMasukId?: string;
@@ -68,7 +68,7 @@ export async function updateSetoranBayarHarian(
   await updateDoc(ref, { rowsSetoran: rows });
 }
 
-/** Pengeluaran belanja stok barang jualan (dibuat otomatis dari Input › Atur Stok, atau kategori "Stok Jualan"). */
+/** Pengeluaran belanja stok barang jualan (dibuat otomatis dari Stok › Atur stok, atau kategori "Stok Jualan"). */
 export const isBelanjaStok = (o: Pick<TransaksiOwner, "sumber" | "kategori">) => o.sumber === "input_stok" || o.kategori === "Stok Jualan";
 
 /** Model usaha sebuah transaksi. Data lama tanpa field `bisnis`: stok jualan = USAHA, sisanya RENTAL. */
@@ -147,7 +147,7 @@ export function saringPeriode<T extends { tanggal: string }>(items: T[], mode: s
 
 /**
  * Transaksi owner (realtime). Bulan Ini / 7 Hari mengambil 60 hari terakhir (daftar di
- * Input › Transaksi ikut menampilkan bulan lalu); analitik menyaringnya dengan `saringPeriode`.
+ * Lainnya › Transaksi ikut menampilkan bulan lalu); analitik menyaringnya dengan `saringPeriode`.
  */
 export function useTransaksiOwner(jenis: JenisTransaksi, mode: string, month: number, rangeStart: string, rangeEnd: string): TransaksiOwner[] {
   const [items, setItems] = useState<TransaksiOwner[]>([]);

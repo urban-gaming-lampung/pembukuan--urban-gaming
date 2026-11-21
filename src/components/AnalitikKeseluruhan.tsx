@@ -140,7 +140,7 @@ export default function AnalitikKeseluruhan(props: Props) {
     if (u.dp) masukKe("USAHA|dp", "DP pembeli", `Usaha · ${u.dpN} nota belum lunas / hangus`, u.dp);
     if (u.buku) masukKe("USAHA|buku", "Rincian pemasukan usaha", `Usaha · ${u.bukuN} input pembukuan`, u.buku);
 
-    // Transaksi owner (Input › Transaksi)
+    // Transaksi owner (Lainnya › Transaksi)
     pemasukan.forEach((o) => {
       const b = bisnisOf(o);
       if (b === "RENTAL") { r.lain += o.harga; tambah(o.tanggal, "rm", o.harga); }
@@ -285,7 +285,7 @@ export default function AnalitikKeseluruhan(props: Props) {
 
       {kosong ? (
         <EmptyState icon={<BarChart3 />} title="Belum ada transaksi di periode ini">
-          Pembukuan rental, nota POS, dan transaksi di Input › Transaksi otomatis terhitung di sini.
+          Pembukuan rental, nota POS, dan transaksi di Lainnya › Transaksi otomatis terhitung di sini.
         </EmptyState>
       ) : (
         <>
@@ -422,7 +422,7 @@ export default function AnalitikKeseluruhan(props: Props) {
           </div>
 
           <Footnote className="pt-1">
-            Rental = pembukuan harian + transaksi owner bertanda Rental. Usaha = uang masuk nyata dari nota POS (tanpa nota batal, potongan tukar tambah, &amp; DP lama yang sudah melebur di saldo sebelumnya) + transaksi owner bertanda Usaha, termasuk belanja stok dari Input › Atur Stok.
+            Rental = pembukuan harian + transaksi owner bertanda Rental. Usaha = uang masuk nyata dari nota POS (tanpa nota batal, potongan tukar tambah, &amp; DP lama yang sudah melebur di saldo sebelumnya) + transaksi owner bertanda Usaha, termasuk belanja stok dari Stok › Atur stok.
             {d.u.stok > 0 && " Belanja stok tercatat sebagai uang keluar saat dibeli tunai/transfer, walau barangnya masih ada di toko."}
           </Footnote>
         </>

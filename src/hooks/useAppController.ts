@@ -1,6 +1,7 @@
 import { runSalaryTransaction } from "../lib/salaryPersistence";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { konfirmasi } from "../ui/presentations/Pemberitahuan";
+import type { SegmenMonitoring, TabUtama } from "../lib/navigasi";
 import { runTransaction, collection, doc, setDoc, deleteDoc, onSnapshot, addDoc, updateDoc, query, getDocs, getDoc, where, orderBy, serverTimestamp, arrayUnion } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth, listGameDb, storage } from "../lib/firebase";
@@ -163,7 +164,7 @@ export default function useAppController() {
       if (currentUser?.email) {
           const email = currentUser.email.toLowerCase().trim();
           if (email === "owner@gmail.com") {
-              setActiveTab("PAGE OWNER");
+              setActiveTab("MONITORING");
           } else {
               try {
                   const logRef = doc(db, "pegawai_logs", email);
@@ -195,9 +196,6 @@ export default function useAppController() {
              setUserProfilePic(data.photoUrl || null);
              if (data.role) {
                 setUserRole(data.role);
-                if (data.role === "super admin") {
-                   setActiveTab((prev) => prev === "MONITORING" ? "PAGE OWNER" : prev);
-                 }
              } else {
                 setUserRole("admin");
              }
@@ -317,23 +315,20 @@ export default function useAppController() {
   }, [gantiTanggalOtomatis]);
 
   // ===== TAB STATE =====
-  const [activeTab, setActiveTab] = useState<"USAHA RENTAL" | "UPDATE STOK" | "PAGE OWNER" | "MONITORING">("USAHA RENTAL");
-  const [adminMonitoringTab, setAdminMonitoringTab] = useState<"status" | "device">("status");
-  // Super admin tidak punya tab UPDATE STOK lagi (stok ada di Page Owner › STOK)
+  // Tab bar utama (satu lapis). Admin: Monitoring · Pembukuan · Stok.
+  // Owner / super admin: Monitoring · Pembukuan · Stok · Analitik · Lainnya.
+  const [activeTab, setActiveTab] = useState<TabUtama>("USAHA RENTAL");
+  // Segmen halaman Monitoring (sama untuk semua akun; "stiker" khusus owner)
+  const [adminMonitoringTab, setAdminMonitoringTab] = useState<SegmenMonitoring>("status");
+  // Tab khusus owner tidak boleh tertinggal saat akun turun jadi admin
   useEffect(() => {
-    if (isSuperAdminOrOwner && activeTab === "UPDATE STOK") {
-      setActiveTab("PAGE OWNER");
-      setTimeout(() => bukaHalamanStok("RENTAL"), 50);
-    }
-  }, [isSuperAdminOrOwner, activeTab]);
+    if (!isSuperAdminOrOwner && (activeTab === "ANALITIK" || activeTab === "LAINNYA")) setActiveTab("USAHA RENTAL");
+    if (!isSuperAdminOrOwner && adminMonitoringTab === "stiker") setAdminMonitoringTab("device");
+  }, [isSuperAdminOrOwner, activeTab, adminMonitoringTab]);
 
   const handleOpenScan = () => {
-    if (isSuperAdminOrOwner) {
-      setActiveTab("PAGE OWNER");
-    } else {
-      setActiveTab("MONITORING");
-      setAdminMonitoringTab("device");
-    }
+    setActiveTab("MONITORING");
+    setAdminMonitoringTab("device");
     setTimeout(() => {
       window.dispatchEvent(new CustomEvent("trigger-device-scan"));
     }, 100);
@@ -1481,14 +1476,9 @@ export default function useAppController() {
         return;
     }
 
-    // Cek stok dulu: super admin -> Page Owner › STOK, admin -> UPDATE STOK (sub halaman STOK RENTAL)
-    if (isSuperAdminOrOwner) {
-      setActiveTab("PAGE OWNER");
-      setTimeout(() => bukaHalamanStok("RENTAL"), 100);
-    } else {
-      bukaHalamanStok("RENTAL");
-      setActiveTab("UPDATE STOK");
-    }
+    // Cek stok dulu: tab Stok (segmen Rental) — sama untuk semua akun
+    bukaHalamanStok("RENTAL");
+    setActiveTab("UPDATE STOK");
     setShowStokConfirmation(true);
   };
 

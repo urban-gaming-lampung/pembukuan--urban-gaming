@@ -7,11 +7,7 @@ import { HistoryItem, RowSewa } from "../lib/types";
 import { rupiah, formatDateShort, toInt } from "../lib/format";
 import { Amount, Button, Card, ChartTip, EmptyState, Eyebrow, konfirmasi, MOTION, notify, Pill, Sheet, SubTabs } from "../ui";
 import TabPegawai from "./TabPegawai";
-import WidgetMonitoringStatus from "./WidgetMonitoringStatus";
-import HalamanStok from "./HalamanStok";
-import { adaPermintaanStok, EVENT_BUKA_STOK } from "../lib/stokRental";
 import AnalitikUsaha from "./AnalitikUsaha";
-import InputStokJualan from "./InputStokJualan";
 import InputTransaksi from "./InputTransaksi";
 import AnalitikKeseluruhan from "./AnalitikKeseluruhan";
 import AnalitikRental, { type RekomendasiRental } from "./AnalitikRental";
@@ -19,11 +15,14 @@ import { bisnisOf, catatLogPembukuan, JenisTransaksi, pemasukanRental, pengeluar
 import { kasUsahaHarian } from "../lib/pemasukanUsaha";
 import { isPelunasanSewa, jenisUnit, ongkirBaris, tanpaUnitKeluar } from "../lib/sewa";
 import { sinkronNotaKePembukuan } from "../lib/posPembukuan";
-import WidgetMonitoringDevice from "./WidgetMonitoringDevice";
 import { ResponsiveContainer, Tooltip, Cell, PieChart, Pie } from "recharts";
 import { toLocalYmd } from "../lib/dateLocal";
 
+/** Bagian halaman owner yang ditampilkan (dipilih dari tab bar › Analitik / Lainnya). */
+export type BagianOwner = "ANALITIK" | "TRANSAKSI" | "PEGAWAI" | "REQUEST" | "LOG";
+
 type PageOwnerProps = {
+  bagian: BagianOwner;
   totalHarian: number;
   totalJajanan: number;
   totalJasaAks: number;
@@ -34,10 +33,6 @@ type PageOwnerProps = {
   pendapatanBersih?: number;
   history: HistoryItem[];
   rowsSewa: RowSewa[];
-  activeDate?: string;
-  onVerifyActiveRental?: (idx: number) => void;
-  /** Catat pengingat WA penyewa (status unit) */
-  onPengingatSewa?: (item: any) => void;
   // Filter Props
   filterMode: string;
   setFilterMode: (m: string) => void;
@@ -48,14 +43,11 @@ type PageOwnerProps = {
   rangeEnd: string;
   setRangeEnd: (val: string) => void;
   filteredHistory: HistoryItem[];
-  hargaItems?: any[];
-  isVerifyingPayment?: boolean;
-  /** Stok jajanan ikut pengaturan "Tampilkan Tabel › Pemasukan Jajanan" */
-  tampilJajanan?: boolean;
 };
 
 
 const PageOwner: React.FC<PageOwnerProps> = ({
+  bagian,
   totalHarian,
   totalJajanan,
   totalJasaAks,
@@ -66,23 +58,10 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   pendapatanBersih = 0,
   history,
   rowsSewa,
-  activeDate,
-  onVerifyActiveRental,
-  onPengingatSewa,
   filterMode, setFilterMode, filterMonth, setFilterMonth,
   rangeStart, setRangeStart, rangeEnd, setRangeEnd, filteredHistory,
-  hargaItems,
-  isVerifyingPayment = false,
-  tampilJajanan = true,
 }) => {
 
-  const [activeTabOwner, setActiveTabOwner] = useState<"MONITORING" | "ANALITIK" | "INPUT PENGELUARAN" | "STOK" | "PEGAWAI">(() => (adaPermintaanStok() ? "STOK" : "MONITORING"));
-  // Dibuka dari luar (mis. cek stok sebelum kirim laporan PDF)
-  useEffect(() => {
-    const buka = () => setActiveTabOwner("STOK");
-    window.addEventListener(EVENT_BUKA_STOK, buka);
-    return () => window.removeEventListener(EVENT_BUKA_STOK, buka);
-  }, []);
   // Transaksi owner (pengeluaran & pemasukan) — satu sumber: lib/keuangan
   const ownerExpenses = useTransaksiOwner("PENGELUARAN", filterMode, filterMonth, rangeStart, rangeEnd);
   const ownerIncomes = useTransaksiOwner("PEMASUKAN", filterMode, filterMonth, rangeStart, rangeEnd);
@@ -93,7 +72,6 @@ const PageOwner: React.FC<PageOwnerProps> = ({
 
   // States for Analitik Sub-tabs and Logging
   const [analitikSubTab, setAnalitikSubTab] = useState<"KESELURUHAN" | "PEMBUKUAN" | "USAHA">("KESELURUHAN");
-  const [inputSubTab, setInputSubTab] = useState<"TRANSAKSI" | "STOK">("TRANSAKSI");
   const [transaksiSubTab, setTransaksiSubTab] = useState<JenisTransaksi>("PENGELUARAN");
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
@@ -101,7 +79,6 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   const [filterAction, setFilterAction] = useState<string>("Semua");
 
   // States for Pegawai Sub-tabs and Requests
-  const [pegawaiSubTab, setPegawaiSubTab] = useState<"DASHBOARD" | "REQUEST" | "LOGGING">("DASHBOARD");
   const [editRequests, setEditRequests] = useState<any[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
@@ -174,7 +151,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   };
 
   useEffect(() => {
-    if (activeTabOwner !== "PEGAWAI" || pegawaiSubTab !== "REQUEST") return;
+    if (bagian !== "REQUEST") return;
     
     setLoadingRequests(true);
     const q = query(collection(db, "edit_requests"), orderBy("requestedAt", "desc"));
@@ -187,7 +164,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
       setLoadingRequests(false);
     });
     return () => unsub();
-  }, [activeTabOwner, pegawaiSubTab]);
+  }, [bagian]);
 
   const formatDayLabel = (date: Date) => {
     const days = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
@@ -196,7 +173,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   };
 
   useEffect(() => {
-    if (activeTabOwner !== "PEGAWAI" || pegawaiSubTab !== "LOGGING") return;
+    if (bagian !== "LOG") return;
     
     setLoadingLogs(true);
     const q = query(collection(db, "pembukuan_logs"), orderBy("timestamp", "desc"));
@@ -209,7 +186,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
       setLoadingLogs(false);
     });
     return () => unsub();
-  }, [activeTabOwner, pegawaiSubTab]);
+  }, [bagian]);
 
   const filteredOwnerExpenses = useMemo(() => saringPeriode(ownerExpenses, filterMode, filterMonth, rangeStart, rangeEnd), [filterMode, ownerExpenses, filterMonth, rangeStart, rangeEnd]);
   const filteredOwnerIncomes = useMemo(() => saringPeriode(ownerIncomes, filterMode, filterMonth, rangeStart, rangeEnd), [filterMode, ownerIncomes, filterMonth, rangeStart, rangeEnd]);
@@ -965,45 +942,16 @@ const PageOwner: React.FC<PageOwnerProps> = ({
 
   return (
     <div className={`space-y-4 sm:space-y-6 ${MOTION.panel}`}>
-      {/* Menu utama pemilik — SubTabs (SSOT) */}
-      <SubTabs
-        ariaLabel="Menu utama pemilik"
-        value={activeTabOwner}
-        onChange={setActiveTabOwner}
-        options={[
-          { key: "MONITORING", label: "Unit" },
-          { key: "INPUT PENGELUARAN", label: "Input" },
-          { key: "ANALITIK", label: "Analitik" },
-          { key: "PEGAWAI", label: "Pegawai" },
-          { key: "STOK", label: "Stok" },
-        ]}
-      />
-
-      {activeTabOwner === "INPUT PENGELUARAN" && (
-        <div className="space-y-4">
-          <SubTabs
-            ariaLabel="Halaman input"
-            value={inputSubTab}
-            onChange={setInputSubTab}
-            options={[{ key: "TRANSAKSI", label: "Transaksi" }, { key: "STOK", label: "Atur Stok" }]}
-          />
-          {inputSubTab === "TRANSAKSI" ? (
-            <InputTransaksi
-              jenis={transaksiSubTab}
-              onJenisChange={setTransaksiSubTab}
-              items={transaksiSubTab === "PENGELUARAN" ? ownerExpenses : ownerIncomes}
-            />
-          ) : (
-            <InputStokJualan />
-          )}
-        </div>
+      {/* Lainnya › Transaksi: pengeluaran & pemasukan owner */}
+      {bagian === "TRANSAKSI" && (
+        <InputTransaksi
+          jenis={transaksiSubTab}
+          onJenisChange={setTransaksiSubTab}
+          items={transaksiSubTab === "PENGELUARAN" ? ownerExpenses : ownerIncomes}
+        />
       )}
 
-      {activeTabOwner === "MONITORING" && (
-        <UnitStatusWidget rowsSewa={rowsSewa} history={history} activeDate={activeDate} onVerifyActiveRental={onVerifyActiveRental} onPengingat={onPengingatSewa} hargaItems={hargaItems} isVerifyingPayment={isVerifyingPayment} />
-      )}
-
-      {activeTabOwner === "ANALITIK" && (
+      {bagian === "ANALITIK" && (
         <div className="space-y-4">
           <SubTabs
             ariaLabel="Halaman analitik"
@@ -1060,24 +1008,14 @@ const PageOwner: React.FC<PageOwnerProps> = ({
         </div>
       )}
 
-      {activeTabOwner === "PEGAWAI" && (
+      {/* Lainnya › Pegawai / Log aktivitas / Request edit */}
+      {(bagian === "PEGAWAI" || bagian === "LOG" || bagian === "REQUEST") && (
         <div className="space-y-4 sm:space-y-6">
-          <SubTabs
-            ariaLabel="Halaman pegawai"
-            value={pegawaiSubTab}
-            onChange={setPegawaiSubTab}
-            options={[
-              { key: "DASHBOARD", label: "Dashboard" },
-              { key: "REQUEST", label: "Request" },
-              { key: "LOGGING", label: "Log" },
-            ]}
-          />
-
-          {pegawaiSubTab === "DASHBOARD" ? (
+          {bagian === "PEGAWAI" ? (
             <div className="animate-in fade-in duration-200">
               <TabPegawai history={history} isOwner={true} />
             </div>
-          ) : pegawaiSubTab === "LOGGING" ? (
+          ) : bagian === "LOG" ? (
             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
               <Card title="Log aktivitas pegawai" icon={<Terminal />} iconColor="gray">
                 {/* Filter Controls */}
@@ -1350,8 +1288,6 @@ const PageOwner: React.FC<PageOwnerProps> = ({
         </div>
       )}
 
-      {activeTabOwner === "STOK" && <HalamanStok isOwner tampilJajanan={tampilJajanan !== false} />}
-
       {/* MODAL: RINCIAN PENGELUARAN (UDS Sheet) */}
       {renderRincianSheet({
         open: showAnalitikModal,
@@ -1548,51 +1484,6 @@ const PageOwner: React.FC<PageOwnerProps> = ({
           </Sheet>
         );
       })()}
-    </div>
-  );
-};
-
-const UnitStatusWidget = ({ rowsSewa, history, activeDate, onVerifyActiveRental, onPengingat, hargaItems, isVerifyingPayment }: { rowsSewa: RowSewa[], history?: HistoryItem[], activeDate?: string, onVerifyActiveRental?: (idx: number) => void, onPengingat?: (item: any) => void, hargaItems?: any[], isVerifyingPayment?: boolean }) => {
-  const [activeSlide, setActiveSlide] = useState<"status" | "device">("status");
-
-  useEffect(() => {
-    const handleGlobalScan = () => {
-      setActiveSlide("device");
-    };
-    window.addEventListener("trigger-device-scan", handleGlobalScan);
-    return () => window.removeEventListener("trigger-device-scan", handleGlobalScan);
-  }, []);
-
-  return (
-    <div className="flex flex-col gap-4">
-      <SubTabs
-        ariaLabel="Halaman monitoring"
-        value={activeSlide}
-        onChange={setActiveSlide}
-        options={[{ key: "status", label: "Status Unit" }, { key: "device", label: "Kondisi Unit" }]}
-      />
-
-      {/* Widget Container with fast fade transition */}
-      <div className="w-full">
-        {activeSlide === "status" ? (
-          <div className="animate-in fade-in duration-200">
-            <WidgetMonitoringStatus 
-              history={history || []} 
-              rowsSewa={rowsSewa} 
-              activeDate={activeDate} 
-              onVerifyActiveRental={onVerifyActiveRental} 
-              onPengingat={onPengingat}
-              isOwner={true} 
-              hargaItems={hargaItems}
-              isVerifyingPayment={isVerifyingPayment}
-            />
-          </div>
-        ) : (
-          <div className="animate-in fade-in duration-200">
-            <WidgetMonitoringDevice isOwner={true} />
-          </div>
-        )}
-      </div>
     </div>
   );
 };

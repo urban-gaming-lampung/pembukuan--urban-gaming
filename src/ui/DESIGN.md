@@ -170,7 +170,11 @@ Seluruh sistem antarmuka kini dikelompokkan mengikuti taksonomi **Apple iOS 27 U
 
 ## 6. Pola Halaman (iOS & macOS)
 
-1. **Pola Navigasi:** Maksimal **1 lapis navigasi utama** (Sidebar macOS / Bottom Tab Bar iOS) + **1 lapis `SubTabs`** di dalam halaman jika memang ada sub-pandangan (hindari tab pill bertumpuk 3 lapis).
+1. **Pola Navigasi:** Maksimal **1 lapis navigasi utama** (Sidebar macOS / Bottom Tab Bar iOS) + **1 lapis `SubTabs`** di dalam halaman jika memang ada sub-pandangan (hindari tab pill bertumpuk 3 lapis). Peta navigasi aplikasi (`src/lib/navigasi.ts`):
+   - Tab bar admin: **Monitoring · Pembukuan · Stok**. Owner / super admin: **Monitoring · Pembukuan · Stok · Analitik · Lainnya** (maks. 5 tab).
+   - Segmen per halaman: Monitoring = Status unit · Kondisi alat (+ Stiker owner); Stok = Rental · Jualan (+ Atur stok owner); Analitik = Keseluruhan · Rental · Usaha.
+   - Halaman yang jarang dibuka dikumpulkan di **Lainnya** (daftar `ListGroup` ala iOS → halaman dengan tombol kembali `‹ Lainnya`): Transaksi, Pegawai, Request edit (angka menunggu), Log aktivitas, Pengaturan. Di laptop isinya tampil langsung sebagai grup kedua di sidebar.
+   - Pandangan sekunder di dalam halaman (mis. riwayat stok) dibuka sebagai `Sheet`, bukan segmen kedua.
 2. **Hierarki Warna dalam Satu Layar:**
    - **Hero Card / Status Utama:** pakai `Card variant="hero"` (atau `StatTile accent="…"` pada ringkasan inti) agar langsung menarik fokus.
    - **Tile Rincian (2–4 kotak):** beri `accent` konsisten per kategori usaha/bayar + ikon berwarna, angka tetap `text-label`.
