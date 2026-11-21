@@ -21,6 +21,7 @@ import { pad, persen, rpShort, rupiah } from "../lib/format";
 import { dariYmd, tanggalHariKerja, toLocalYmd } from "../lib/dateLocal";
 import { Amount, BarRow, Button, Card, ChartTip, EmptyState, IconBadge, ImagePreviewModal, konfirmasi, LineItem, LineList, MARK, Notice, notify, Pill, SearchField, SectionHeader, Sheet, SplitBar, StatTile, SubTabs, tanya, TileValue, sumbu, useTemaGrafik } from "../ui";
 import { HeroArus } from "./analitik/HeroArus";
+import RincianBiayaSheet from "./analitik/RincianBiayaSheet";
 
 type FilterProps = {
   mode: string;
@@ -69,6 +70,7 @@ export default function AnalitikUsaha(props: FilterProps) {
   const [cari, setCari] = useState("");
   const [showN, setShowN] = useState(20);
   const [selected, setSelected] = useState<PosSale | null>(null);
+  const [bukaBiaya, setBukaBiaya] = useState(false);
 
   // Riwayat nota = nota yang DIBUAT di periode ini
   const inPeriod = useMemo(() => raw.filter((s) => s.ts >= period.from && s.ts <= period.to), [raw, period.from, period.to]);
@@ -246,6 +248,9 @@ export default function AnalitikUsaha(props: FilterProps) {
     const keluar = belanjaStok + tukarKeluar + operasional;
     return { belanjaStok, tukarKeluar, operasional, lain, masuk, keluar, selisih: masuk - keluar };
   }, [props.pengeluaran, props.pemasukan, st.posKasMasuk, st.tukarKasKeluar, st.manualOmzet, dp.berjalan, dp.hangus]);
+  // Transaksi penyusun "Biaya operasional" (sumber yang sama dengan uang.operasional)
+  const biayaOperasional = useMemo(() => (props.pengeluaran || []).filter((e) => !isBelanjaStok(e)), [props.pengeluaran]);
+  const lihatBiaya = uang.operasional > 0 ? () => setBukaBiaya(true) : undefined;
 
   // ===== Laba & margin usaha =====
   // Penjualan terhitung = omzet POS + penyesuaian modal tukar tambah (kas + modal diakui) - barang tanpa harga modal + DP hangus.
@@ -376,7 +381,7 @@ export default function AnalitikUsaha(props: FilterProps) {
           <LineItem dot={MARK.masuk} label="Pemasukan lain" note="modal dll." value={rupiah(uang.lain)} muted={uang.lain === 0} />
           <LineItem dot={MARK.keluar} label="Belanja stok" value={`${uang.belanjaStok > 0 ? "−" : ""}${rupiah(uang.belanjaStok)}`} muted={uang.belanjaStok === 0} />
           {uang.tukarKeluar > 0 && <LineItem dot={MARK.keluar} label="Selisih tukar tambah" note="kas dibayar ke pembeli" value={`−${rupiah(uang.tukarKeluar)}`} />}
-          <LineItem dot={MARK.keluar} label="Biaya operasional" value={`${uang.operasional > 0 ? "−" : ""}${rupiah(uang.operasional)}`} muted={uang.operasional === 0} />
+          <LineItem dot={MARK.keluar} label="Biaya operasional" note={biayaOperasional.length ? `${biayaOperasional.length} transaksi` : undefined} value={`${uang.operasional > 0 ? "−" : ""}${rupiah(uang.operasional)}`} muted={uang.operasional === 0} onClick={lihatBiaya} />
         </LineList>
         {growth !== null && !loading && (
           <div className="mt-3 flex items-center gap-2 border-t border-sep pt-3 text-footnote text-label-2">
@@ -451,7 +456,7 @@ export default function AnalitikUsaha(props: FilterProps) {
               />
               <LineItem label="Modal barang terjual" value={`−${rupiah(laba.hpp)}`} />
               <LineItem label="Laba kotor" total value={<Amount value={untung.kotor} tone="auto" className="font-bold" />} />
-              <LineItem label="Biaya operasional usaha" value={`−${rupiah(uang.operasional)}`} />
+              <LineItem label="Biaya operasional usaha" note={biayaOperasional.length ? `${biayaOperasional.length} transaksi · ketuk untuk rincian` : undefined} value={`−${rupiah(uang.operasional)}`} onClick={lihatBiaya} />
               <LineItem label="Laba bersih" total value={<Amount value={untung.bersih} tone="auto" className="font-bold" />} />
             </LineList>
 
@@ -681,6 +686,15 @@ export default function AnalitikUsaha(props: FilterProps) {
       </Card>
 
       <NotaDetailSheet sale={selected} live={semua.find((s) => s.id && s.id === selected?.id) || selected} onClose={() => setSelected(null)} />
+
+      <RincianBiayaSheet
+        open={bukaBiaya}
+        onClose={() => setBukaBiaya(false)}
+        title="Biaya operasional usaha"
+        periode={period.label}
+        items={biayaOperasional}
+        keterangan="Pengeluaran owner bertanda Usaha (Lainnya › Transaksi), di luar belanja stok."
+      />
     </div>
   );
 }

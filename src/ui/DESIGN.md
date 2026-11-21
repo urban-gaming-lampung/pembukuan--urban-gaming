@@ -175,6 +175,7 @@ Seluruh sistem antarmuka kini dikelompokkan mengikuti taksonomi **Apple iOS 27 U
    - Segmen per halaman: Monitoring = Status unit · Kondisi alat (+ Stiker owner); Stok = Rental · Jualan (+ Atur stok owner); Analitik = Keseluruhan · Rental · Usaha.
    - Halaman yang jarang dibuka dikumpulkan di **Lainnya** (daftar `ListGroup` ala iOS → halaman dengan tombol kembali `‹ Lainnya`): Transaksi, Pegawai, Request edit (angka menunggu), Log aktivitas, Pengaturan. Di laptop isinya tampil langsung sebagai grup kedua di sidebar.
    - Pandangan sekunder di dalam halaman (mis. riwayat stok) dibuka sebagai `Sheet`, bukan segmen kedua.
+   - Tabel rincian pembukuan (`TableEditor`): mode **Kartu** = daftar ringkas ala iOS (nomor · judul · info · nominal · Cash/TF), ketuk untuk membuka editor di tempat (satu baris terbuka, field jam/angka/harga berpasangan 2 kolom, pembayaran segmented), geser kiri untuk hapus, baris kosong disembunyikan di balik "Tambah transaksi". Mode **Klasik** tetap tabel.
 2. **Hierarki Warna dalam Satu Layar:**
    - **Hero Card / Status Utama:** pakai `Card variant="hero"` (atau `StatTile accent="…"` pada ringkasan inti) agar langsung menarik fokus.
    - **Tile Rincian (2–4 kotak):** beri `accent` konsisten per kategori usaha/bayar + ikon berwarna, angka tetap `text-label`.

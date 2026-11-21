@@ -14,9 +14,6 @@ import {
   ClipboardList,
   Info,
   LogOut,
-  CreditCard,
-  Sparkles,
-  Zap,
   Gamepad2,
   Coffee,
   Wrench,
@@ -1340,7 +1337,7 @@ const Pengaturan: React.FC<Props> = ({
             <SettingRow>
               <div className="space-y-0.5 min-w-0">
                 <div className="text-callout font-medium text-label">Mode Tabel Rincian</div>
-                <div className="text-caption text-label-2">Ubah gaya tabel di layar HP</div>
+                <div className="text-caption text-label-2">Kartu: daftar ringkas, ketuk untuk ubah</div>
               </div>
               <div className="w-44 shrink-0">
                 <SubTabs<"Lama" | "Baru">
@@ -1349,8 +1346,8 @@ const Pengaturan: React.FC<Props> = ({
                   value={tableMode}
                   onChange={(val) => runOrAlert(() => onTableModeChange?.(val))}
                   options={[
-                    { key: "Lama", label: "Klasik", icon: <FileText /> },
-                    { key: "Baru", label: "Kartu", icon: <CreditCard /> },
+                    { key: "Lama", label: "Klasik" },
+                    { key: "Baru", label: "Kartu" },
                   ]}
                 />
               </div>
@@ -1369,8 +1366,8 @@ const Pengaturan: React.FC<Props> = ({
                     value={kualitasGambar}
                     onChange={(val) => runOrAlert(() => onKualitasGambarChange?.(val))}
                     options={[
-                      { key: "Tinggi", label: "HD", icon: <Sparkles /> },
-                      { key: "Hemat", label: "Low", icon: <Zap /> },
+                      { key: "Tinggi", label: "HD" },
+                      { key: "Hemat", label: "Low" },
                     ]}
                   />
                 </div>
