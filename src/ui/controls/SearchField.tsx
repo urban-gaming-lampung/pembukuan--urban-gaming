@@ -11,7 +11,7 @@ export const SearchField: React.FC<{
 }> = ({ value, onChange, placeholder = "Cari", className }) => (
   <label
     className={cx(
-      "flex h-11 items-center gap-2 rounded-full bg-fill px-3.5 transition-all focus-within:bg-surface focus-within:ring-2 focus-within:ring-tint/35",
+      "flex h-11 items-center gap-2 rounded-full bg-fill px-3.5 transition focus-within:bg-surface focus-within:ring-2 focus-within:ring-tint/35",
       className
     )}
   >
@@ -29,7 +29,7 @@ export const SearchField: React.FC<{
         type="button"
         onClick={() => onChange("")}
         aria-label="Hapus pencarian"
-        className="-mr-1 flex h-7 w-7 items-center justify-center rounded-full text-label-3 hover:text-label"
+        className="-mr-1 flex hit-44 h-7 w-7 items-center justify-center rounded-full text-label-3 hover:text-label"
       >
         <X className="h-4 w-4" />
       </button>

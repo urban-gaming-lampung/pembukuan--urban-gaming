@@ -1,19 +1,9 @@
 import { useEffect, useState } from "react";
 import { PresenceData } from "../hooks/usePresence";
+import { warnaPengguna } from "../ui/foundations/tokens";
 
-const USER_COLORS = [
-  "#FF383C", "#FF8D28", "#FFCC00", "#34C759", "#00C8B3", "#00C0E8", "#0088FF",
-  "#6155F5", "#CB30E0", "#FF2D55"
-];
-
-export function getColorForEmailHex(email: string) {
-  if (!email) return "#0088FF";
-  let hash = 0;
-  for (let i = 0; i < email.length; i++) {
-    hash = email.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return USER_COLORS[Math.abs(hash) % USER_COLORS.length];
-}
+/** Sama dengan warna chip pengguna aktif di header (satu sumber: tokens.ts). */
+export const getColorForEmailHex = (email: string) => warnaPengguna(email);
 
 export default function LiveCursors({ users, currentUserEmail }: { users: PresenceData[], currentUserEmail?: string }) {
   const [rects, setRects] = useState<Record<string, DOMRect>>({});
@@ -84,7 +74,7 @@ export default function LiveCursors({ users, currentUserEmail }: { users: Presen
             }}
           >
             <div
-              className="absolute -top-6 left-[-2px] px-2 py-0.5 text-[11px] font-bold text-white rounded-t-md rounded-br-md whitespace-nowrap shadow-sm"
+              className="absolute -top-6 left-[-2px] px-2 py-0.5 text-caption2 font-bold text-white rounded-t-md rounded-br-md whitespace-nowrap shadow-sm"
               style={{ backgroundColor: color }}
             >
               {u.email.split('@')[0]}

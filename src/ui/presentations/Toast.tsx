@@ -27,6 +27,49 @@ const TOAST_TONES = {
   },
 } as const;
 
+export type NadaToast = keyof typeof TOAST_TONES;
+
+/**
+ * Isi kapsul notifikasi (dipakai Toast & PemberitahuanHost). Pesan panjang / banyak baris
+ * otomatis jadi kartu bersudut 16px supaya tetap terbaca. Ketuk di mana saja untuk menutup.
+ */
+export const ToastKapsul: React.FC<{
+  message: React.ReactNode;
+  tone?: NadaToast;
+  icon?: React.ReactNode;
+  onClose?: () => void;
+  /** Arah animasi masuk: dari atas (notifikasi global) atau dari bawah (default). */
+  dari?: "atas" | "bawah";
+}> = ({ message, tone = "info", icon, onClose, dari = "bawah" }) => {
+  const cfg = TOAST_TONES[tone];
+  // > ~38 karakter biasanya turun 2 baris di HP 390px → kartu, bukan kapsul
+  const panjang = typeof message === "string" && (message.length > 38 || message.includes("\n"));
+  return (
+    <div
+      role={tone === "negative" || tone === "warning" ? "alert" : "status"}
+      aria-live="polite"
+      onClick={onClose}
+      className={cx(
+        "pointer-events-auto flex max-w-md gap-2.5 apple-sheet px-4 py-2.5 shadow-float border ring-1 ring-black/10 dark:ring-white/10",
+        panjang ? "items-start rounded-tile" : "items-center rounded-full",
+        onClose && "cursor-pointer",
+        cfg.ring,
+        dari === "atas" ? MOTION.toastTop : MOTION.toast
+      )}
+    >
+      <span aria-hidden className={cx("shrink-0 [&>svg]:h-4 [&>svg]:w-4", panjang && "mt-0.5", cfg.icCls)}>
+        {icon ?? cfg.icon}
+      </span>
+      <div className={cx("min-w-0 flex-1 text-footnote font-semibold text-label", panjang && "whitespace-pre-line")}>{message}</div>
+      {onClose && (
+        <span aria-hidden className="-mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-label-3">
+          <X className="h-3.5 w-3.5" />
+        </span>
+      )}
+    </div>
+  );
+};
+
 /**
  * Kapsul notifikasi mengambang bergaya iOS 27 Dynamic Pill / Liquid Glass Toast.
  */
@@ -57,8 +100,6 @@ export const Toast: React.FC<{
 
   if (!open || typeof document === "undefined") return null;
 
-  const cfg = TOAST_TONES[tone];
-
   return createPortal(
     <div
       className={cx(
@@ -69,30 +110,7 @@ export const Toast: React.FC<{
         zClassName
       )}
     >
-      <div
-        role={tone === "negative" || tone === "warning" ? "alert" : "status"}
-        aria-live="polite"
-        className={cx(
-          "pointer-events-auto flex max-w-md items-center gap-2.5 rounded-full apple-glass px-4 py-2.5 shadow-float border ring-1 ring-black/10 dark:ring-white/10",
-          cfg.ring,
-          MOTION.toast
-        )}
-      >
-        <span aria-hidden className={cx("shrink-0 [&>svg]:h-4 [&>svg]:w-4", cfg.icCls)}>
-          {icon ?? cfg.icon}
-        </span>
-        <div className="min-w-0 text-footnote font-semibold text-label">{message}</div>
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Tutup notifikasi"
-            className="-mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-label-3 transition-colors hover:bg-fill hover:text-label"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
+      <ToastKapsul message={message} tone={tone} icon={icon} onClose={onClose} dari={position === "top" ? "atas" : "bawah"} />
     </div>,
     document.body
   );

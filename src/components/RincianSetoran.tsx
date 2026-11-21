@@ -129,7 +129,7 @@ export default function RincianSetoran({
               <button
                 type="button"
                 onClick={() => updateRow(rowIndex, { bayar: "Ya" })}
-                className={`flex items-center justify-center gap-1.5 min-h-[34px] px-3 rounded-full text-caption font-semibold transition-all ${
+                className={`flex items-center justify-center gap-1.5 min-h-[34px] px-3 rounded-full text-caption font-semibold transition ${
                   row?.bayar === "Ya"
                     ? "apple-segmented-thumb text-positive"
                     : "text-label-2 hover:text-label"
@@ -140,7 +140,7 @@ export default function RincianSetoran({
               <button
                 type="button"
                 onClick={() => updateRow(rowIndex, { bayar: "Belum" })}
-                className={`flex items-center justify-center gap-1.5 min-h-[34px] px-3 rounded-full text-caption font-semibold transition-all ${
+                className={`flex items-center justify-center gap-1.5 min-h-[34px] px-3 rounded-full text-caption font-semibold transition ${
                   row?.bayar === "Belum"
                     ? "apple-segmented-thumb text-warning"
                     : "text-label-2 hover:text-label"

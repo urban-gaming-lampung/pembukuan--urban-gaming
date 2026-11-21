@@ -464,7 +464,7 @@ const PdfExporter = forwardRef<PdfExporterHandle, Props>(function PdfExporter({ 
 
             <div className="w-full bg-fill rounded-full h-3 mb-2 overflow-hidden ring-1 ring-inset ring-edge p-0.5 relative">
               <div
-                className="bg-tint h-full rounded-full transition-all duration-300 ease-out relative overflow-hidden"
+                className="bg-tint h-full rounded-full transition-[width] duration-300 ease-out relative overflow-hidden"
                 style={{ width: `${progress}%` }}
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]" />

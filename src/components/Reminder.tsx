@@ -10,7 +10,7 @@ const Reminder: React.FC = () => {
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="inline-flex h-10 items-center gap-2 rounded-full apple-card ring-1 ring-edge shadow-card px-4 text-subhead font-semibold text-label transition-all hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint/40"
+        className="inline-flex hit-44 h-10 items-center gap-2 rounded-full apple-card ring-1 ring-edge shadow-card px-4 text-subhead font-semibold text-label transition hover:scale-[1.02] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint/40"
       >
         <Bell className="w-4 h-4 text-warning" />
         <span>Tombol Pengingat</span>

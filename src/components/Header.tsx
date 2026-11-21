@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { PresenceData } from "../hooks/usePresence";
-import { AlertDialog } from "../ui";
+import { AlertDialog, warnaPengguna } from "../ui";
 
 type HeaderProps = {
   rootRef?: React.RefObject<HTMLDivElement>;
@@ -40,26 +40,6 @@ type HeaderProps = {
   onHeightChange?: (h: number) => void;
   hasPOSUpdate?: boolean;
 };
-
-const AVATAR_COLORS = [
-  "bg-[#FF383C]",
-  "bg-[#FF8D28]",
-  "bg-[#34C759]",
-  "bg-[#00C8B3]",
-  "bg-[#00C0E8]",
-  "bg-[#0088FF]",
-  "bg-[#6155F5]",
-  "bg-[#CB30E0]",
-  "bg-[#FF2D55]",
-];
-
-export function getColorForEmail(email: string) {
-  let hash = 0;
-  for (let i = 0; i < email.length; i++) {
-    hash = email.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
 
 export default function Header({
   tanggal,
@@ -300,7 +280,7 @@ export default function Header({
                 <div className="flex flex-col min-w-0 flex-1">
                   <h1
                     className={`font-bold tracking-tight text-label truncate transition-[font-size] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${
-                      scrolled ? "text-lg" : "text-xl"
+                      scrolled ? "text-headline" : "text-title3"
                     }`}
                   >
                     Hi, {namaPendek}
@@ -326,17 +306,15 @@ export default function Header({
                     {activeUsers && activeUsers.length > 0 && (
                       <div className="flex flex-wrap items-center gap-1" title="User Aktif (Live)">
                         {activeUsers.map((u) => {
-                          const customStyle = u.profileColor ? { backgroundColor: u.profileColor } : undefined;
-                          const defaultCls = u.profileColor ? "" : getColorForEmail(u.email);
                           return (
                             <div
                               key={u.uid}
-                              style={customStyle}
-                              className={`flex items-center gap-1 px-2 py-0.5 rounded-full shadow-xs text-white ${defaultCls}`}
+                              style={{ backgroundColor: u.profileColor || warnaPengguna(u.email) }}
+                              className="flex items-center gap-1 px-2 py-0.5 rounded-full shadow-xs text-white"
                               title={`Sedang aktif di tab: ${u.tab}`}
                             >
                               <span
-                                className="text-[11px] font-bold tracking-wide uppercase max-w-[96px] truncate"
+                                className="text-caption2 font-bold tracking-wide uppercase max-w-[96px] truncate"
                                 style={{ textShadow: "0 1px 2px rgba(0,0,0,0.2)" }}
                               >
                                 {u.email === userEmail ? "SAYA" : u.email.split("@")[0]}

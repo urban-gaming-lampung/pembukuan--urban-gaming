@@ -6,5 +6,6 @@ export const MOTION = {
   sheet: "ios-anim-sheet",
   dialog: "ios-anim-dialog",
   toast: "ios-anim-toast",
+  toastTop: "ios-anim-toast-top",
   panel: "ios-anim-panel",
 } as const;

@@ -270,10 +270,10 @@ export default function AdminNotes({
                 )}
               </div>
 
-              <div className="flex items-center justify-between w-full mt-2 pt-1.5 border-t border-sep text-[10px] text-label-3 shrink-0">
+              <div className="flex items-center justify-between w-full mt-2 pt-1.5 border-t border-sep text-caption2 text-label-3 shrink-0">
                 <span className="truncate">{formatDateTime(note.createdAt)}</span>
                 {note.isPinned && (
-                  <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold shrink-0 ml-1 ${AKSEN_TILE.yellow.iconText}`}>
+                  <span className={`inline-flex items-center gap-0.5 text-caption2 font-semibold shrink-0 ml-1 ${AKSEN_TILE.yellow.iconText}`}>
                     <Pin className="w-2.5 h-2.5" />
                     Pin
                   </span>
@@ -334,7 +334,7 @@ export default function AdminNotes({
             <button
               type="button"
               onClick={() => setIsOpenModal(false)}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-fill text-label-2 hover:text-label transition-colors"
+              className="flex hit-44 h-8 w-8 items-center justify-center rounded-full bg-fill text-label-2 hover:text-label transition-colors"
               aria-label="Tutup Catatan"
             >
               <X className="h-4 w-4" />
@@ -518,7 +518,7 @@ export default function AdminNotes({
                           type="button"
                           onClick={() => handleCopyText(note)}
                           title="Salin isi catatan"
-                          className="flex h-8 w-8 items-center justify-center rounded-full bg-fill hover:bg-fill/80 text-label-2 hover:text-label transition-colors"
+                          className="flex hit-44 h-8 w-8 items-center justify-center rounded-full bg-fill hover:bg-fill/80 text-label-2 hover:text-label transition-colors"
                         >
                           {copiedId === note.id ? (
                             <Check className="w-3.5 h-3.5 text-positive" />
@@ -533,7 +533,7 @@ export default function AdminNotes({
                               type="button"
                               onClick={() => togglePin(note.id, note.isPinned)}
                               title={note.isPinned ? "Lepas sematan" : "Sematkan di atas"}
-                              className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                              className={`flex hit-44 h-8 w-8 items-center justify-center rounded-full transition-colors ${
                                 note.isPinned
                                   ? "bg-warning text-white"
                                   : "bg-fill hover:bg-fill/80 text-label-2 hover:text-label"
@@ -546,7 +546,7 @@ export default function AdminNotes({
                               type="button"
                               onClick={() => handleOpenEdit(note)}
                               title="Edit catatan"
-                              className="flex h-8 w-8 items-center justify-center rounded-full bg-fill hover:bg-fill/80 text-label-2 hover:text-label transition-colors"
+                              className="flex hit-44 h-8 w-8 items-center justify-center rounded-full bg-fill hover:bg-fill/80 text-label-2 hover:text-label transition-colors"
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
@@ -555,7 +555,7 @@ export default function AdminNotes({
                               type="button"
                               onClick={() => setDeletingNote(note)}
                               title="Hapus catatan permanen"
-                              className="flex h-8 w-8 items-center justify-center rounded-full bg-negative/10 hover:bg-negative/20 text-negative transition-colors"
+                              className="flex hit-44 h-8 w-8 items-center justify-center rounded-full bg-negative/10 hover:bg-negative/20 text-negative transition-colors"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>

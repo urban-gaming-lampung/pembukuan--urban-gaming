@@ -1,7 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { rupiah, toInt, formatRibuanInput } from "../lib/format";
-import { AKSEN_TILE, AlertDialog, Amount, Button, Card, ImagePreviewModal, Pill, type WarnaIkon } from "../ui";
+import { AKSEN_ONGKIR, AKSEN_TILE, AlertDialog, Amount, Button, Card, ImagePreviewModal, Pill, type WarnaIkon } from "../ui";
 import {
   Clock,
   Plus,
@@ -109,7 +109,7 @@ export type RenderCellArgs<T> = {
 
 /** Kelas visual field tabel tanpa memaksa w-full supaya AutoFit dapat mengecilkan/memanjangkan lebar sesuai teks. */
 export const TABLE_INPUT_VISUAL =
-  "h-[44px] min-h-[44px] px-3 rounded-control bg-transparent border border-transparent hover:border-sep focus:bg-surface focus:border-tint/40 focus:outline-none focus:ring-2 focus:ring-tint/25 transition-all duration-150 text-[16px] sm:text-subhead text-label placeholder:text-label-3";
+  "h-[44px] min-h-[44px] px-3 rounded-control bg-transparent border border-transparent hover:border-sep focus:bg-surface focus:border-tint/40 focus:outline-none focus:ring-2 focus:ring-tint/25 transition duration-150 text-[16px] sm:text-subhead text-label placeholder:text-label-3";
 
 function extractMirrorClasses(cls: string) {
   return cls
@@ -333,7 +333,7 @@ const SwipeableRow = ({ isMobile, className, style, children, onSwipe, disabled 
 
   return (
     <tr
-      className={`${className} ${isSwiping ? "!bg-[#FF383C]/20 dark:!bg-[#FF4245]/30 !ring-[#FF383C]/50" : ""}`}
+      className={`${className} ${isSwiping ? "!bg-negative/20 dark:!bg-negative/30 !ring-negative/50" : ""}`}
       style={{
         ...style,
         ...(swipeX !== 0 ? { transform: `translateX(${swipeX}px)` } : {}),
@@ -874,7 +874,7 @@ export default function TableEditor<T extends AnyRow>(props: {
         subtitle={subtitleText}
         accessory={
           <div className="text-right shrink-0">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.04em] text-label-2">
+            <div className="text-caption2 font-semibold uppercase tracking-[0.04em] text-label-2">
               {totalLabelProp ?? (props.title.toLowerCase().includes("pengeluaran") ? "Total Keluar" : "Total")}
             </div>
             <Amount
@@ -944,7 +944,7 @@ export default function TableEditor<T extends AnyRow>(props: {
                           >
                             <div className="flex flex-col gap-1 min-w-0 flex-1">
                               <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wide shrink-0 ${catAccent.pill}`}>
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-caption2 font-semibold tracking-wide shrink-0 ${catAccent.pill}`}>
                                   <Lock size={10} />{b.label}
                                 </span>
                                 {b.renderNo?.()}
@@ -974,7 +974,7 @@ export default function TableEditor<T extends AnyRow>(props: {
                       <tr key={b.key} className="table-row bg-fill/40 hover:bg-fill/60 transition-colors">
                         <td className="table-cell w-[56px] text-center px-1.5 py-2 align-middle" title="Otomatis — tidak bisa diubah di sini">
                           <div className="flex flex-col items-center justify-center gap-1 text-label-2">
-                            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold tracking-wider uppercase">
+                            <span className="inline-flex items-center gap-0.5 text-caption2 font-semibold tracking-wider uppercase">
                               <Lock size={10} />{b.label}
                             </span>
                             {b.renderNo?.()}
@@ -1021,7 +1021,7 @@ export default function TableEditor<T extends AnyRow>(props: {
                     const expanded = isExpanded(i);
                     const isCollapsedEmpty = !expanded && !hasData;
 
-                    const cardClass = `flex flex-col rounded-tile ring-1 overflow-hidden transition-all duration-200 ${
+                    const cardClass = `flex flex-col rounded-tile ring-1 overflow-hidden transition duration-200 ${
                       payInvalid ? "ring-negative/50 bg-negative/[0.06] backdrop-blur-xl" :
                       locked ? `${AKSEN_TILE.purple.bg} ring-edge` :
                       isCollapsedEmpty ? "apple-tile ring-edge opacity-80" :
@@ -1029,7 +1029,7 @@ export default function TableEditor<T extends AnyRow>(props: {
                     }`;
                     const rowClass = `table-row group transition-colors ${
                       payInvalid ? "bg-negative/[0.06] hover:bg-negative/[0.09]" :
-                      locked ? "bg-[#CB30E0]/[0.05] hover:bg-[#CB30E0]/[0.08]" :
+                      locked ? AKSEN_ONGKIR.baris :
                       "hover:bg-fill/40"
                     }`;
 
@@ -1046,14 +1046,14 @@ export default function TableEditor<T extends AnyRow>(props: {
                         <td
                           onClick={() => { if (isMobile && !isAlwaysExpanded) toggleExpand(i) }}
                           className={isMobile
-                            ? `flex justify-between items-center px-4 py-3 ${!isAlwaysExpanded ? 'cursor-pointer active:opacity-90' : ''} ${locked ? `${AKSEN_TILE.purple.bg} !ring-0 border-b border-[#CB30E0]/20 text-label` : isCollapsedEmpty ? 'bg-transparent text-label-2' : `${catAccent.bg} !ring-0 border-b border-sep text-label`} transition-colors select-none`
+                            ? `flex justify-between items-center px-4 py-3 ${!isAlwaysExpanded ? 'cursor-pointer active:opacity-90' : ''} ${locked ? `${AKSEN_TILE.purple.bg} !ring-0 border-b ${AKSEN_ONGKIR.garis} text-label` : isCollapsedEmpty ? 'bg-transparent text-label-2' : `${catAccent.bg} !ring-0 border-b border-sep text-label`} transition-colors select-none`
                             : `table-cell w-[56px] text-center px-1.5 py-1.5 align-middle relative`
                           }
                         >
                            {isMobile ? (
                               <div className="flex flex-col gap-1 w-full max-w-[85%]">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold tracking-wider uppercase ${locked ? AKSEN_TILE.purple.pill : isCollapsedEmpty ? "bg-fill text-label-2" : catAccent.pill}`}>
+                                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-caption2 font-semibold tracking-wider uppercase ${locked ? AKSEN_TILE.purple.pill : isCollapsedEmpty ? "bg-fill text-label-2" : catAccent.pill}`}>
                                     Baris {i + 1}
                                   </span>
                                   {renderNo && (
@@ -1232,7 +1232,7 @@ export default function TableEditor<T extends AnyRow>(props: {
                                        }}
                                        className={`inline-flex items-center justify-center transition active:scale-95 ${
                                          isMobile
-                                          ? `h-10 min-w-[92px] px-3 rounded-field font-semibold text-subhead ${locked || rowAny.isPaid === "TIDAK" ? (bayarSet.has("Cash") ? "bg-positive/85 text-white opacity-90 cursor-not-allowed" : "bg-fill text-label-3 opacity-50 cursor-not-allowed") : bayarSet.has("Cash") ? "bg-positive text-white shadow-xs" : "bg-fill text-label-2"}`
+                                          ? `hit-44 h-10 min-w-[92px] px-3 rounded-field font-semibold text-subhead ${locked || rowAny.isPaid === "TIDAK" ? (bayarSet.has("Cash") ? "bg-positive/85 text-white opacity-90 cursor-not-allowed" : "bg-fill text-label-3 opacity-50 cursor-not-allowed") : bayarSet.has("Cash") ? "bg-positive text-white shadow-xs" : "bg-fill text-label-2"}`
                                           : `h-9 w-9 rounded-full ${locked || rowAny.isPaid === "TIDAK" ? (bayarSet.has("Cash") ? "bg-positive/85 text-white opacity-90 cursor-not-allowed" : "bg-fill text-label-3 opacity-50 cursor-not-allowed") : bayarSet.has("Cash") ? "bg-positive text-white" : "bg-fill text-label-3 hover:text-label-2"}`
                                        }`}
                                      >
@@ -1356,7 +1356,7 @@ export default function TableEditor<T extends AnyRow>(props: {
                                         type="button"
                                         disabled={!canResetRow}
                                         onClick={() => setResetConfirm({ type: "row", index: i })}
-                                        className="flex items-center justify-center w-8 h-8 rounded-full bg-fill text-label-2 hover:bg-negative/10 hover:text-negative active:scale-90 transition disabled:opacity-35 disabled:pointer-events-none"
+                                        className="flex items-center justify-center w-8 hit-44 h-8 rounded-full bg-fill text-label-2 hover:bg-negative/10 hover:text-negative active:scale-90 transition disabled:opacity-35 disabled:pointer-events-none"
                                         title="Reset baris ini"
                                         aria-label={`Reset baris ${i + 1}`}
                                       >
@@ -1365,7 +1365,7 @@ export default function TableEditor<T extends AnyRow>(props: {
                                       <button
                                         type="button"
                                         onClick={() => onDeleteRow(i)}
-                                        className="flex items-center justify-center w-8 h-8 rounded-full bg-fill text-label-2 hover:bg-negative/15 hover:text-negative active:scale-90 transition"
+                                        className="flex items-center justify-center w-8 hit-44 h-8 rounded-full bg-fill text-label-2 hover:bg-negative/15 hover:text-negative active:scale-90 transition"
                                         title="Hapus baris ini"
                                       >
                                         <Trash2 size={14} />

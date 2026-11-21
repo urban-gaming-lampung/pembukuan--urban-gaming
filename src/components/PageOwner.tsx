@@ -5,7 +5,7 @@ import { doc, setDoc, onSnapshot, query, collection, updateDoc, orderBy } from "
 import { db } from "../lib/firebase";
 import { HistoryItem, RowSewa } from "../lib/types";
 import { rupiah, formatDateShort, toInt } from "../lib/format";
-import { Amount, Button, Card, ChartTip, EmptyState, Eyebrow, MOTION, Pill, Sheet, SubTabs } from "../ui";
+import { Amount, Button, Card, ChartTip, EmptyState, Eyebrow, konfirmasi, MOTION, notify, Pill, Sheet, SubTabs } from "../ui";
 import TabPegawai from "./TabPegawai";
 import WidgetMonitoringStatus from "./WidgetMonitoringStatus";
 import HalamanStok from "./HalamanStok";
@@ -140,7 +140,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
 
 
   const handleApproveRequest = async (req: any) => {
-    if (!confirm(`Setujui request edit pembukuan tanggal ${req.tanggal}?`)) return;
+    if (!(await konfirmasi("Data pembukuan akan diganti dengan usulan pegawai.", { judul: `Setujui edit ${req.tanggal}?`, ya: "Setujui", bahaya: false }))) return;
     try {
       // 1. Update history_pembukuan
       await setDoc(doc(db, "history_pembukuan", req.historyId), req.proposedData, { merge: true });
@@ -153,23 +153,23 @@ const PageOwner: React.FC<PageOwnerProps> = ({
       // 3. Log activity
       await catatLogPembukuan("UPDATE", req.tanggal, req.hari, req.proposedData);
       
-      alert("Request edit berhasil disetujui! ✅");
+      notify("Request edit disetujui", "positive");
       setSelectedRequest(null);
     } catch (error) {
       console.error("Error approving request:", error);
-      alert("Gagal menyetujui request ❌");
+      notify("Gagal menyetujui request", "negative");
     }
   };
 
   const handleRejectRequest = async (req: any) => {
-    if (!confirm(`Tolak request edit pembukuan tanggal ${req.tanggal}?`)) return;
+    if (!(await konfirmasi("Data pembukuan tetap seperti sekarang.", { judul: `Tolak edit ${req.tanggal}?`, ya: "Tolak", bahaya: true }))) return;
     try {
       await updateDoc(doc(db, "edit_requests", req.id), { status: "rejected" });
-      alert("Request edit ditolak! ❌");
+      notify("Request edit ditolak", "info");
       setSelectedRequest(null);
     } catch (error) {
       console.error("Error rejecting request:", error);
-      alert("Gagal menolak request ❌");
+      notify("Gagal menolak request", "negative");
     }
   };
 
@@ -819,7 +819,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                       type="button"
                       key={cat.name}
                       onClick={() => setSelectedCat((prev) => (prev === cat.name ? null : cat.name))}
-                      className={`relative overflow-hidden rounded-tile p-3 text-left transition-all active:scale-[0.97] ${
+                      className={`relative overflow-hidden rounded-tile p-3 text-left transition active:scale-[0.97] ${
                         isActive
                           ? "bg-tint/10 ring-2 ring-tint"
                           : "apple-tile apple-tile-interactive ring-1 ring-edge"
@@ -971,7 +971,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
         value={activeTabOwner}
         onChange={setActiveTabOwner}
         options={[
-          { key: "MONITORING", label: "Monitoring" },
+          { key: "MONITORING", label: "Unit" },
           { key: "INPUT PENGELUARAN", label: "Input" },
           { key: "ANALITIK", label: "Analitik" },
           { key: "PEGAWAI", label: "Pegawai" },
@@ -1067,9 +1067,9 @@ const PageOwner: React.FC<PageOwnerProps> = ({
             value={pegawaiSubTab}
             onChange={setPegawaiSubTab}
             options={[
-              { key: "DASHBOARD", label: "Dashboard Pegawai" },
-              { key: "REQUEST", label: "Request Pegawai" },
-              { key: "LOGGING", label: "Logging Pegawai" },
+              { key: "DASHBOARD", label: "Dashboard" },
+              { key: "REQUEST", label: "Request" },
+              { key: "LOGGING", label: "Log" },
             ]}
           />
 

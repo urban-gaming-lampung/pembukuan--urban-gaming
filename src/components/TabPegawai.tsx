@@ -10,7 +10,7 @@ import { getAbsenCycleInfo, getCycleInfoFromBulanTahun, getTodayYmd, BULAN_NAMES
 import { isUrbanUserDocId } from "../lib/urbanUsers";
 import { tanggalHariKerja, toLocalYmd } from "../lib/dateLocal";
 import { rpShort, rupiah, toInt, formatRibuanInput } from "../lib/format";
-import { Amount, Button, Card, EmptyState, Eyebrow, Footnote, IconBadge, kartu, LineItem, LineList, ListGroup, Notice, Pill, SectionHeader, SubTabs, TileValue, UserAvatar } from "../ui";
+import { Amount, Button, Card, EmptyState, Eyebrow, Footnote, IconBadge, kartu, konfirmasi, LineItem, LineList, ListGroup, Notice, Pill, SectionHeader, SubTabs, TileValue, UserAvatar } from "../ui";
 import { ongkirPengantarTersimpan } from "../lib/sewa";
 
 // === Helper tampilan & gaji (SSOT dashboard pegawai) ===
@@ -198,7 +198,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
 
   const handleDeleteAccount = async (email: string) => {
     if (email.toLowerCase().trim() === "owner@gmail.com") return;
-    if (!confirm(`Apakah Anda yakin ingin menghapus profil akun ${email}? Riwayat gaji tetap disimpan untuk arsip.`)) return;
+    if (!(await konfirmasi(`${email}\nRiwayat gaji tetap disimpan untuk arsip.`, { judul: "Hapus profil akun?", ya: "Hapus", bahaya: true }))) return;
 
     setIsDeletingEmail(email);
     try {
@@ -1330,7 +1330,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
                   role="tab"
                   aria-selected={aktif}
                   onClick={() => setFilterPegawaiAbsen(x.id)}
-                  className={`h-9 shrink-0 rounded-full px-4 text-footnote font-semibold capitalize transition-colors ${aktif ? "bg-action text-action-label shadow-sm" : "apple-card text-label hover:bg-white/40 dark:hover:bg-white/[0.08]"}`}
+                  className={`hit-44 h-9 shrink-0 rounded-full px-4 text-footnote font-semibold capitalize transition-colors ${aktif ? "bg-action text-action-label shadow-sm" : "apple-card text-label hover:bg-white/40 dark:hover:bg-white/[0.08]"}`}
                 >
                   {x.label}
                 </button>
@@ -1611,7 +1611,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
               type="button"
               aria-label="Tutup"
               onClick={() => setPhotoPopup(null)}
-              className="absolute top-2.5 right-2.5 w-11 h-11 flex items-center justify-center bg-black/55 text-white rounded-full hover:bg-black/70 backdrop-blur-md transition-all z-20"
+              className="absolute top-2.5 right-2.5 w-11 h-11 flex items-center justify-center bg-black/55 text-white rounded-full hover:bg-black/70 backdrop-blur-md transition z-20"
             >
               <X size={18} strokeWidth={2.5} />
             </button>
@@ -1702,8 +1702,8 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
         setRecords(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
     };
 
-    const handleDeleteRecord = (id: string) => {
-        if(confirm("Yakin ingin menghapus rekam gaji ini?")) {
+    const handleDeleteRecord = async (id: string) => {
+        if (await konfirmasi("Hapus rekam gaji ini?", { ya: "Hapus", bahaya: true })) {
             isDirtyRef.current = true;
             setRecords(prev => prev.filter(r => r.id !== id));
         }
@@ -1741,7 +1741,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
     const currentCycle = getAbsenCycleInfo(todayStr, empCutoff);
 
     return (
-        <fieldset disabled={isSaving} className={`min-w-0 rounded-card apple-card p-4 sm:p-5 shadow-card flex flex-col gap-3 transition-all ${
+        <fieldset disabled={isSaving} className={`min-w-0 rounded-card apple-card p-4 sm:p-5 shadow-card flex flex-col gap-3 transition ${
             isChanged ? 'ring-2 ring-warning/50' : 'ring-1 ring-edge'
         }`}>
 
@@ -1911,12 +1911,12 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                                       const newTb = [...r.gajiTambahan];
                                                       newTb[i] = { ...newTb[i], status: 'belum' };
                                                       handleUpdateRecord(r.id, { gajiTambahan: newTb });
-                                                  }} className={`flex-1 min-h-[36px] py-1.5 text-caption2 font-bold rounded-full transition-all ${tb.status !== 'sudah' ? 'apple-segmented-thumb text-warning !ring-1 !ring-warning/30' : 'text-label-2 hover:text-label'}`}>Belum Dibayar</button>
+                                                  }} className={`flex-1 min-h-[36px] py-1.5 text-caption2 font-bold rounded-full transition ${tb.status !== 'sudah' ? 'apple-segmented-thumb text-warning !ring-1 !ring-warning/30' : 'text-label-2 hover:text-label'}`}>Belum Dibayar</button>
                                                   <button type="button" onClick={() => {
                                                       const newTb = [...r.gajiTambahan];
                                                       newTb[i] = { ...newTb[i], status: 'sudah' };
                                                       handleUpdateRecord(r.id, { gajiTambahan: newTb });
-                                                  }} className={`flex-1 min-h-[36px] py-1.5 text-caption2 font-bold rounded-full transition-all ${tb.status === 'sudah' ? 'apple-segmented-thumb text-positive !ring-1 !ring-positive/30' : 'text-label-2 hover:text-label'}`}>Sudah Dibayar</button>
+                                                  }} className={`flex-1 min-h-[36px] py-1.5 text-caption2 font-bold rounded-full transition ${tb.status === 'sudah' ? 'apple-segmented-thumb text-positive !ring-1 !ring-positive/30' : 'text-label-2 hover:text-label'}`}>Sudah Dibayar</button>
                                               </div>
                                           </div>
                                        ))}
@@ -1948,7 +1948,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                       return (
                                         <div className="w-full bg-negative/10 ring-1 ring-negative/20 rounded-tile p-3 flex items-center justify-between gap-2">
                                           <div className="flex flex-col">
-                                            <span className="text-caption2 font-semibold uppercase tracking-wide text-negative">Total Denda Absensi (⚡ Auto)</span>
+                                            <span className="text-caption2 font-semibold uppercase tracking-wide text-negative">Total Denda Absensi (Otomatis)</span>
                                             <span className="text-subhead font-bold tabular-nums text-negative">- {rupiah(totalDendaAktif)}</span>
                                           </div>
                                           <Pill tone="negative" className="uppercase">
@@ -1975,7 +1975,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                           return (
                                             <div 
                                               key={pg.id || pg._idempKey || i} 
-                                              className={`flex flex-col gap-2 w-full p-2.5 rounded-field border transition-all ${
+                                              className={`flex flex-col gap-2 w-full p-2.5 rounded-field border transition ${
                                                 isCanceled 
                                                   ? 'bg-fill/40 border-dashed border-sep opacity-75' 
                                                   : 'bg-canvas/70 border-sep'
@@ -2020,7 +2020,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                                 <div className="flex items-center gap-2 justify-end flex-wrap">
                                                     {pg._isAutoSistem && (
                                                       <span className="text-caption2 font-semibold uppercase tracking-wide text-warning bg-warning/10 px-2 py-0.5 rounded-icon mr-auto">
-                                                        ⚡ Auto-Sistem
+                                                        Otomatis
                                                       </span>
                                                     )}
                                                     {isCanceled && (
@@ -2043,7 +2043,7 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                                               newPg[i] = { ...newPg[i], isDibatalkan: false };
                                                               handleUpdateRecord(r.id, { gajiPengurangan: newPg });
                                                             }} 
-                                                            className="h-9 px-3.5 flex items-center justify-center gap-1.5 shrink-0 bg-positive/10 text-positive rounded-full hover:bg-positive/20 transition-colors text-caption2 font-bold" 
+                                                            className="hit-44 h-9 px-3.5 flex items-center justify-center gap-1.5 shrink-0 bg-positive/10 text-positive rounded-full hover:bg-positive/20 transition-colors text-caption2 font-bold" 
                                                             title="Lepas Coretan (Aktifkan Kembali Pemotongan)"
                                                           >
                                                               <RotateCcw size={12} /> Undo Coret
@@ -2051,9 +2051,12 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                                         ) : (
                                                           <button 
                                                             type="button"
-                                                            onClick={() => {
+                                                            onClick={async () => {
                                                               const isAuto = Boolean(pg._isAutoSistem);
-                                                              if (confirm(isAuto ? "Coret pengurangan otomatis ini? (Pengurangan tidak akan memotong gaji, dan bisa di-undo kapan saja)" : "Yakin ingin menghapus / mencoret pengurangan ini?")) {
+                                                              const ok = isAuto
+                                                                ? await konfirmasi("Gaji tidak dipotong. Bisa di-undo kapan saja.", { judul: "Coret pengurangan otomatis?", ya: "Coret", bahaya: true })
+                                                                : await konfirmasi("Hapus pengurangan ini?", { ya: "Hapus", bahaya: true });
+                                                              if (ok) {
                                                                 if (isAuto) {
                                                                   const newPg = [...r.gajiPengurangan];
                                                                   newPg[i] = { ...newPg[i], isDibatalkan: true };
@@ -2073,13 +2076,13 @@ const PegawaiCard = ({ pegawai, onSave, isOwner = false, onUpdateCutoff }: any) 
                                                         {isCanceled && !pg._isAutoSistem && (
                                                           <button 
                                                             type="button"
-                                                            onClick={() => {
-                                                              if (confirm("Hapus permanen pengurangan manual ini?")) {
+                                                            onClick={async () => {
+                                                              if (await konfirmasi("Hapus permanen pengurangan manual ini?", { ya: "Hapus", bahaya: true })) {
                                                                 const newPg = r.gajiPengurangan.filter((_: any, idx: number) => idx !== i);
                                                                 handleUpdateRecord(r.id, { gajiPengurangan: newPg });
                                                               }
                                                             }} 
-                                                            className="h-9 w-9 flex items-center justify-center shrink-0 bg-fill text-label-2 hover:text-negative rounded-full transition-colors" 
+                                                            className="hit-44 h-9 w-9 flex items-center justify-center shrink-0 bg-fill text-label-2 hover:text-negative rounded-full transition-colors" 
                                                             title="Hapus Permanen Baris Manual"
                                                           >
                                                               <Trash2 size={12} />

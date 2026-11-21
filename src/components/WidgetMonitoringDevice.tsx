@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { doc, setDoc, onSnapshot, deleteDoc, updateDoc } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
-import { Button, Card, cx, EmptyState, Eyebrow, IconBadge, ListGroup, MOTION, Pill, Sheet, Stepper, SubTabs, TextAreaField, tile, type WarnaIkon } from "../ui";
+import { Button, Card, cx, EmptyState, Eyebrow, IconBadge, konfirmasi, ListGroup, MOTION, Pill, Sheet, Stepper, SubTabs, TextAreaField, tile, type WarnaIkon } from "../ui";
 
 import useStokData, { RegisteredDevice, DeviceType } from "../hooks/useStokData";
 import { toLocalYmd } from "../lib/dateLocal";
@@ -541,7 +541,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
     // check if it's already registered under another ID
     const duplicate = devices.find(d => d.id === deviceId && d.id !== editingStickerId);
     if (duplicate && !editingStickerId) {
-      if (!confirm(`Unit ${DEVICE_LABELS[genType]} nomor ${numValue} sudah ada. Ingin menimpa desain stiker ini?`)) {
+      if (!(await konfirmasi(`${DEVICE_LABELS[genType]} nomor ${numValue} sudah terdaftar. Desain stikernya akan diganti.`, { judul: "Timpa stiker?", ya: "Timpa", bahaya: true }))) {
         return;
       }
     }
@@ -590,7 +590,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
 
   // Delete device registration
   const handleDeleteDevice = async (id: string) => {
-    if (!confirm("Apakah Anda yakin ingin menghapus device ini dari daftar monitoring? Riwayat kondisi device ini akan hilang.")) {
+    if (!(await konfirmasi("Riwayat kondisi device ini ikut hilang.", { judul: "Hapus dari monitoring?", ya: "Hapus", bahaya: true }))) {
       return;
     }
     try {
@@ -897,7 +897,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                               key={deviceId}
                               onClick={() => handleScannedId(deviceId)}
                               className={cx(
-                                "flex h-10 min-w-0 flex-col items-center justify-center rounded-control font-mono text-footnote font-semibold leading-none tabular-nums transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
+                                "flex hit-44 h-10 min-w-0 flex-col items-center justify-center rounded-control font-mono text-footnote font-semibold leading-none tabular-nums transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
                                 gaya
                               )}
                               title={registered?.status === "rusak" ? `Rusak: ${registered.keterangan}` : registered ? "Kondisi normal" : "Belum didata"}
@@ -1441,7 +1441,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                                     <button
                                       type="button"
                                       onClick={() => startEditSticker(dev)}
-                                      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-fill text-label-2 transition-colors hover:text-label"
+                                      className="inline-flex hit-44 h-9 w-9 items-center justify-center rounded-full bg-fill text-label-2 transition-colors hover:text-label"
                                       title="Edit desain stiker"
                                     >
                                       <Edit className="h-4 w-4" />
@@ -1449,7 +1449,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
                                     <button
                                       type="button"
                                       onClick={() => handleDeleteDevice(dev.id)}
-                                      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-negative/10 text-negative transition-colors hover:bg-negative/20"
+                                      className="inline-flex hit-44 h-9 w-9 items-center justify-center rounded-full bg-negative/10 text-negative transition-colors hover:bg-negative/20"
                                       title="Hapus unit"
                                     >
                                       <Trash2 className="h-4 w-4" />
@@ -1567,7 +1567,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
               Posisikan QR code di dalam kotak untuk memindai secara otomatis.
             </p>
             <div className="flex gap-2.5">
-              <label className="inline-flex h-[50px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full bg-fill px-5 text-headline text-label transition-all hover:brightness-[0.95] dark:hover:brightness-115 active:opacity-70">
+              <label className="inline-flex h-[50px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full bg-fill px-5 text-headline text-label transition hover:brightness-[0.95] dark:hover:brightness-115 active:opacity-70">
                 <Upload className="h-4 w-4 text-tint" />
                 Unggah file QR
                 <input type="file" accept="image/*" onChange={handleUploadScanFile} className="hidden" />
@@ -1599,7 +1599,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
               <AlertCircle className="mb-3 h-12 w-12 text-negative" />
               <p className="mb-4 text-callout font-semibold text-label">{scanningError}</p>
               <div className="flex w-full flex-col gap-2.5">
-                <label className="inline-flex h-[50px] w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-fill px-5 text-headline text-label transition-all hover:brightness-[0.95] dark:hover:brightness-115 active:opacity-70">
+                <label className="inline-flex h-[50px] w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-fill px-5 text-headline text-label transition hover:brightness-[0.95] dark:hover:brightness-115 active:opacity-70">
                   <Upload className="h-4 w-4 text-tint" />
                   Unggah file QR
                   <input type="file" accept="image/*" onChange={handleUploadScanFile} className="hidden" />
@@ -2027,7 +2027,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
             {/* Progress Bar */}
             <div className="mb-2 h-2.5 w-full overflow-hidden rounded-full bg-fill">
               <div
-                className="h-full rounded-full bg-tint transition-all duration-300 ease-out"
+                className="h-full rounded-full bg-tint transition-[width] duration-300 ease-out"
                 style={{ width: `${pdfProgress}%` }}
               />
             </div>

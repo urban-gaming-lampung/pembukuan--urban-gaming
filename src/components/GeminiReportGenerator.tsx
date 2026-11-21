@@ -76,11 +76,7 @@ export default function GeminiReportGenerator({
         {report && (
           <div className="rounded-tile apple-tile ring-1 ring-edge overflow-hidden">
             <div className="h-9 apple-bar border-b border-sep flex items-center justify-between px-4">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#FF5F57] shadow-xs" />
-                <span className="w-2.5 h-2.5 rounded-full bg-[#FEBC2E] shadow-xs" />
-                <span className="w-2.5 h-2.5 rounded-full bg-[#28C840] shadow-xs" />
-              </div>
+              <Sparkles aria-hidden className="h-4 w-4 text-tint" />
               <span className="text-caption2 font-semibold uppercase tracking-[0.06em] text-label-3">
                 Laporan Harian
               </span>

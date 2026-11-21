@@ -396,10 +396,10 @@ const Input: React.FC<InputProps> = ({
   const tileBase =
     "group relative flex flex-col justify-center px-3.5 sm:px-4 py-3 sm:py-3.5 rounded-tile apple-tile apple-tile-interactive";
   const focusRing =
-    "focus-within:ring-2 focus-within:ring-tint/20 focus-within:bg-white dark:focus-within:bg-[#2C2C2E]/90 focus-within:border-tint/30";
+    "focus-within:ring-2 focus-within:ring-tint/20 focus-within:bg-surface dark:focus-within:bg-surface-elevated/90 focus-within:border-tint/30";
 
   const labelStyle =
-    "text-[11px] font-semibold uppercase tracking-wider text-label-3 mb-1.5 flex items-center gap-1.5";
+    "text-caption2 font-semibold uppercase tracking-wider text-label-3 mb-1.5 flex items-center gap-1.5";
   const inputStyle =
     "w-full bg-transparent p-0 text-[16px] sm:text-subhead font-medium text-label placeholder:text-label-3 outline-none border-none ring-0 appearance-none relative z-[1] min-h-[44px]";
 
@@ -424,7 +424,7 @@ const Input: React.FC<InputProps> = ({
                 className={`${inputStyle} max-w-[160px] tracking-tight`}
               />
               {hari && (
-                <div className="shrink-0 px-2.5 py-1 rounded-full bg-fill border border-sep text-[11px] font-bold tracking-wide text-label-2 uppercase">
+                <div className="shrink-0 px-2.5 py-1 rounded-full bg-fill border border-sep text-caption2 font-bold tracking-wide text-label-2 uppercase">
                   {hari}
                 </div>
               )}
@@ -492,7 +492,7 @@ const Input: React.FC<InputProps> = ({
               <button
                 type="button"
                 onClick={() => setResetTarget("absenPagi")}
-                className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center text-label-3 hover:text-negative hover:bg-negative/10 rounded-full transition-colors z-10"
+                className="absolute top-2 right-2 flex hit-44 h-7 w-7 items-center justify-center text-label-3 hover:text-negative hover:bg-negative/10 rounded-full transition-colors z-10"
                 title="Reset Absen Masuk"
                 aria-label="Reset Absen Masuk"
               >
@@ -505,10 +505,10 @@ const Input: React.FC<InputProps> = ({
             </label>
             {absenPagi ? (
               <div className="flex flex-col mt-2 mb-0.5">
-                <span className="text-[16px] sm:text-[18px] font-bold tracking-tight text-positive tabular-nums">
+                <span className="text-callout sm:text-headline font-bold tracking-tight text-positive tabular-nums">
                   {absenPagi}
                 </span>
-                <span className="text-[11px] text-label-3 font-medium leading-tight mt-0.5">
+                <span className="text-caption2 text-label-3 font-medium leading-tight mt-0.5">
                   Sistem mendeteksi potong gaji jika telat
                 </span>
               </div>
@@ -525,7 +525,7 @@ const Input: React.FC<InputProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsManualPagi(false)}
-                  className="px-3 py-2 rounded-full bg-fill hover:brightness-95 text-label text-xs font-semibold shrink-0 transition-colors"
+                  className="px-3 py-2 rounded-full bg-fill hover:brightness-95 text-label text-caption font-semibold shrink-0 transition-colors"
                 >
                   Batal
                 </button>
@@ -542,7 +542,7 @@ const Input: React.FC<InputProps> = ({
                     setPopupAbsen("Masuk");
                   }}
                   disabled={shiftPegawai === "Libur" || shiftPegawai === ""}
-                  className="group relative flex items-center justify-center gap-1.5 w-full rounded-full transition-all duration-200 active:scale-[0.97] disabled:opacity-50 font-semibold select-none overflow-hidden px-3 py-2.5 min-h-[44px] text-[13px] sm:text-subhead bg-action text-action-label hover:opacity-90 shadow-card disabled:bg-fill disabled:text-label-3"
+                  className="group relative flex items-center justify-center gap-1.5 w-full rounded-full transition duration-200 active:scale-[0.97] disabled:opacity-50 font-semibold select-none overflow-hidden px-3 py-2.5 min-h-[44px] text-footnote sm:text-subhead bg-action text-action-label hover:opacity-90 shadow-card disabled:bg-fill disabled:text-label-3"
                 >
                   {shiftPegawai === "" ? (
                     <span className="relative z-0 opacity-75 truncate">Pilih Shift Dahulu</span>
@@ -559,7 +559,7 @@ const Input: React.FC<InputProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsManualPagi(true)}
-                    className="w-full py-2 px-3 rounded-full bg-negative text-white text-[12px] font-semibold flex items-center justify-center gap-1 hover:opacity-90 active:scale-[0.97] transition-all"
+                    className="w-full py-2 px-3 rounded-full bg-negative text-white text-caption font-semibold flex items-center justify-center gap-1 hover:opacity-90 active:scale-[0.97] transition"
                     title="Emergency Absen (Set Jam Masuk Manual)"
                   >
                     <svg
@@ -586,7 +586,7 @@ const Input: React.FC<InputProps> = ({
               <button
                 type="button"
                 onClick={() => setResetTarget("absenSiang")}
-                className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center text-label-3 hover:text-negative hover:bg-negative/10 rounded-full transition-colors z-10"
+                className="absolute top-2 right-2 flex hit-44 h-7 w-7 items-center justify-center text-label-3 hover:text-negative hover:bg-negative/10 rounded-full transition-colors z-10"
                 title="Reset Absen Pulang"
                 aria-label="Reset Absen Pulang"
               >
@@ -599,10 +599,10 @@ const Input: React.FC<InputProps> = ({
             </label>
             {absenSiang ? (
               <div className="flex flex-col mt-2 mb-0.5">
-                <span className="text-[16px] sm:text-[18px] font-bold tracking-tight text-positive tabular-nums">
+                <span className="text-callout sm:text-headline font-bold tracking-tight text-positive tabular-nums">
                   {absenSiang}
                 </span>
-                <span className="text-[11px] text-label-3 font-medium leading-tight mt-0.5">
+                <span className="text-caption2 text-label-3 font-medium leading-tight mt-0.5">
                   Sistem mendeteksi potong gaji jika telat
                 </span>
               </div>
@@ -619,7 +619,7 @@ const Input: React.FC<InputProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsManualSiang(false)}
-                  className="px-3 py-2 rounded-full bg-fill hover:brightness-95 text-label text-xs font-semibold shrink-0 transition-colors"
+                  className="px-3 py-2 rounded-full bg-fill hover:brightness-95 text-label text-caption font-semibold shrink-0 transition-colors"
                 >
                   Batal
                 </button>
@@ -630,7 +630,7 @@ const Input: React.FC<InputProps> = ({
                   type="button"
                   onClick={() => setPopupAbsen("Pulang")}
                   disabled={shiftPegawai === "Libur" || shiftPegawai === "" || !isSudahWaktuPulang}
-                  className="group relative flex items-center justify-center gap-1.5 w-full rounded-full transition-all duration-200 active:scale-[0.97] disabled:opacity-50 font-semibold select-none overflow-hidden px-3 py-2.5 min-h-[44px] text-[13px] sm:text-subhead bg-action text-action-label hover:opacity-90 shadow-card disabled:bg-fill disabled:text-label-3"
+                  className="group relative flex items-center justify-center gap-1.5 w-full rounded-full transition duration-200 active:scale-[0.97] disabled:opacity-50 font-semibold select-none overflow-hidden px-3 py-2.5 min-h-[44px] text-footnote sm:text-subhead bg-action text-action-label hover:opacity-90 shadow-card disabled:bg-fill disabled:text-label-3"
                 >
                   {shiftPegawai === "" ? (
                     <span className="relative z-0 opacity-75 truncate">Pilih Shift Dahulu</span>
@@ -649,7 +649,7 @@ const Input: React.FC<InputProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsManualSiang(true)}
-                    className="w-full py-2 px-3 rounded-full bg-negative text-white text-[12px] font-semibold flex items-center justify-center gap-1 hover:opacity-90 active:scale-[0.97] transition-all"
+                    className="w-full py-2 px-3 rounded-full bg-negative text-white text-caption font-semibold flex items-center justify-center gap-1 hover:opacity-90 active:scale-[0.97] transition"
                     title="Emergency Absen (Set Jam Pulang Manual)"
                   >
                     <svg
@@ -676,7 +676,7 @@ const Input: React.FC<InputProps> = ({
               <button
                 type="button"
                 onClick={() => setResetTarget("rukoBuka")}
-                className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center text-label-3 hover:text-negative hover:bg-negative/10 rounded-full transition-colors z-10"
+                className="absolute top-2 right-2 flex hit-44 h-7 w-7 items-center justify-center text-label-3 hover:text-negative hover:bg-negative/10 rounded-full transition-colors z-10"
                 title="Reset Ruko Buka"
                 aria-label="Reset Ruko Buka"
               >
@@ -697,7 +697,7 @@ const Input: React.FC<InputProps> = ({
                 className={`${inputStyle} min-w-0 ${!isOwner ? "opacity-75 cursor-not-allowed pointer-events-none" : "cursor-pointer"}`}
               />
               {rukoBukaDate && rukoBuka && (
-                <span className="text-[11px] font-medium text-label-2 bg-fill border border-sep px-2.5 py-0.5 rounded-full shrink-0">
+                <span className="text-caption2 font-medium text-label-2 bg-fill border border-sep px-2.5 py-0.5 rounded-full shrink-0">
                   {rukoBukaDate}
                 </span>
               )}
@@ -710,7 +710,7 @@ const Input: React.FC<InputProps> = ({
               <button
                 type="button"
                 onClick={() => setResetTarget("rukoTutup")}
-                className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center text-label-3 hover:text-negative hover:bg-negative/10 rounded-full transition-colors z-10"
+                className="absolute top-2 right-2 flex hit-44 h-7 w-7 items-center justify-center text-label-3 hover:text-negative hover:bg-negative/10 rounded-full transition-colors z-10"
                 title="Reset Ruko Tutup"
                 aria-label="Reset Ruko Tutup"
               >
@@ -731,7 +731,7 @@ const Input: React.FC<InputProps> = ({
                 className={`${inputStyle} min-w-0 ${!isOwner ? "opacity-75 cursor-not-allowed pointer-events-none" : "cursor-pointer"}`}
               />
               {rukoTutupDate && rukoTutup && (
-                <span className="text-[11px] font-medium text-label-2 bg-fill border border-sep px-2.5 py-0.5 rounded-full shrink-0">
+                <span className="text-caption2 font-medium text-label-2 bg-fill border border-sep px-2.5 py-0.5 rounded-full shrink-0">
                   {rukoTutupDate}
                 </span>
               )}

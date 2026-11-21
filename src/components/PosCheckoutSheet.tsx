@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { X, CheckCircle2, Download, Printer, Share2, AlertTriangle, Package, Loader2, MessageCircle, PlusCircle, Link2Off, Handshake, Pencil, RotateCcw, Clock, ArrowLeftRight, Gift } from "lucide-react";
 import logoBlack from "../assets/urban-logo-black.png";
-import { Button, Card, Eyebrow, Notice, Pill, Sheet } from "../ui";
+import { Button, Card, Eyebrow, konfirmasi, Notice, Pill, Sheet } from "../ui";
 import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 import { adaTukarTambah, bayarNota, commitPosSale, dpSudahDiSaldoNota, infoNego, nilaiTukarNota, isBonus, Kondisi, kondisiProduk, negoSatuan, notaUrlValid, PILIH_SAAT_CHECKOUT, PosItem, PosSale, simpanNotaOnline, sisaBayar, StokRef, updateDpSudahDiSaldoPos } from "../lib/posSales";
 import { alokasiBonusPsFifo, type PsBonusBatch } from "../lib/psBonusFifo";
@@ -195,7 +195,7 @@ export function useNotaActions(sale: PosSale | null) {
         a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 4000);
       } else (await buildNotaPdf(sale)).save(notaFileName(sale));
-      setMsg("PDF nota diunduh ✅");
+      setMsg("PDF nota diunduh");
     } catch (e: any) {
       setMsg("Gagal membuat PDF: " + (e?.message || e));
     } finally { setBusy(""); }
@@ -205,7 +205,7 @@ export function useNotaActions(sale: PosSale | null) {
     setBusy("thermal");
     try {
       const r = await printNotaThermal(sale);
-      setMsg(r === "bluetooth" ? "Nota terkirim ke printer ✅" : r === "rawbt" ? "Nota dibuka di aplikasi RawBT 🖨️" : "");
+      setMsg(r === "bluetooth" ? "Nota terkirim ke printer" : r === "rawbt" ? "Nota dibuka di aplikasi RawBT" : "");
     } catch (e: any) {
       setMsg(e?.message || String(e));
     } finally { setBusy(""); }
@@ -274,7 +274,7 @@ export function useNotaActions(sale: PosSale | null) {
 }
 
 export const NotaActionButtons: React.FC<{ sale: PosSale; actions: ReturnType<typeof useNotaActions> }> = ({ sale, actions: a }) => {
-  const btn = "flex flex-col items-center justify-center gap-1 min-h-[60px] rounded-tile text-caption font-semibold active:scale-[0.98] transition-all disabled:opacity-40";
+  const btn = "flex flex-col items-center justify-center gap-1 min-h-[60px] rounded-tile text-caption font-semibold active:scale-[0.98] transition disabled:opacity-40";
   return (
     <div className={`grid gap-2 ${sale.pembeliWa || a.canShare ? "grid-cols-3" : "grid-cols-2"}`}>
       <button type="button" disabled={!!a.busy} onClick={a.cetak} className={`${btn} bg-action text-action-label hover:opacity-90`}>
@@ -398,11 +398,20 @@ const PosCheckoutSheet: React.FC<Props> = ({
     setDraftHarga(ribuan(String(hargaAkhir(l))));
     setError("");
   };
-  const simpanHarga = (l: CheckoutLine) => {
+  // Enter + klik OK bisa memicu 2x; dialog gratis cukup muncul sekali
+  const tanyaGratisRef = useRef(false);
+  const simpanHarga = async (l: CheckoutLine) => {
     const digit = draftHarga.replace(/[^\d]/g, "");
     if (!digit) { setEditHarga(null); return; }
     const n = Math.round(Number(digit));
-    if (n === 0 && !window.confirm(`Jadikan ${l.name} GRATIS (Rp 0)?`)) return;
+    if (n === 0) {
+      if (tanyaGratisRef.current) return;
+      tanyaGratisRef.current = true;
+      const ok = await konfirmasi(`${l.name} dijual Rp 0 di nota ini.`, { judul: "Jadikan gratis?", ya: "Jadikan gratis" }).finally(() => {
+        tanyaGratisRef.current = false;
+      });
+      if (!ok) return;
+    }
     setHargaNego((m) => {
       const x = { ...m };
       if (n === l.price) delete x[l.id];
@@ -606,7 +615,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
       if (mode === "pdf") (await buildNotaPdf(s)).save(notaFileName(s));
       if (mode === "thermal") {
         const r = await printNotaThermal(s);
-        actions.setMsg(r === "bluetooth" ? "Nota terkirim ke printer ✅" : r === "rawbt" ? "Nota dibuka di aplikasi RawBT 🖨️" : "Cetak dibatalkan — ketuk Cetak Thermal untuk mencoba lagi.");
+        actions.setMsg(r === "bluetooth" ? "Nota terkirim ke printer" : r === "rawbt" ? "Nota dibuka di aplikasi RawBT" : "Cetak dibatalkan — ketuk Cetak Thermal untuk mencoba lagi.");
       }
     } catch (e: any) {
       actions.setMsg((e?.message || String(e)) + " — transaksi tetap tersimpan.");
@@ -710,7 +719,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
           <div className="space-y-3">
             {/* Total */}
             <div className="rounded-card bg-action text-action-label px-4 py-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.08)]">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.06em] opacity-70">
+              <div className="text-caption2 font-semibold uppercase tracking-[0.06em] opacity-70">
                 {nominalDpLama > 0 ? "Pelunasan Hari Ini" : adaTukar ? labelBayarTukar(bayar) : "Total Bayar"}
               </div>
               <div className="text-display font-mono tracking-tight leading-none mt-1 tabular-nums">
@@ -773,7 +782,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
                       setCaraBayar(c);
                       setError("");
                     }}
-                    className={`min-h-[38px] rounded-full text-footnote font-semibold transition-all disabled:opacity-40 ${
+                    className={`min-h-[38px] rounded-full text-footnote font-semibold transition disabled:opacity-40 ${
                       caraBayar === c ? "apple-segmented-thumb text-label" : "text-label-2 hover:text-label hover:bg-white/30 dark:hover:bg-white/[0.05]"
                     }`}
                   >
@@ -806,7 +815,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
                   {adaDpLama && (
                     <div className="space-y-1.5">
                       <div
-                        className={`flex items-center h-11 px-3.5 rounded-field bg-fill transition-all focus-within:bg-surface focus-within:ring-2 focus-within:ring-tint/35 ${
+                        className={`flex items-center h-11 px-3.5 rounded-field bg-fill transition focus-within:bg-surface focus-within:ring-2 focus-within:ring-tint/35 ${
                           dpLamaStr && dpLamaSalah ? "ring-2 ring-negative/50" : ""
                         }`}
                       >
@@ -839,7 +848,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
                       Nominal DP
                     </label>
                     <div
-                      className={`mt-1 flex items-center h-11 px-3.5 rounded-field bg-fill transition-all focus-within:bg-surface focus-within:ring-2 focus-within:ring-tint/35 ${
+                      className={`mt-1 flex items-center h-11 px-3.5 rounded-field bg-fill transition focus-within:bg-surface focus-within:ring-2 focus-within:ring-tint/35 ${
                         dpStr && dpSalah ? "ring-2 ring-negative/50" : ""
                       }`}
                     >
@@ -921,7 +930,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
                 onChange={(e) => setPembeli(e.target.value)}
                 placeholder="Nama pembeli (kosong = Pelanggan)"
                 autoComplete="off"
-                className="w-full h-11 px-3.5 rounded-field bg-fill text-[16px] sm:text-subhead font-medium text-label placeholder:text-label-3 focus:outline-none focus:bg-surface dark:focus:bg-[#2C2C2E] focus:ring-2 focus:ring-tint/35"
+                className="w-full h-11 px-3.5 rounded-field bg-fill text-[16px] sm:text-subhead font-medium text-label placeholder:text-label-3 focus:outline-none focus:bg-surface dark:focus:bg-surface-elevated focus:ring-2 focus:ring-tint/35"
               />
               <input
                 value={pembeliWa}
@@ -929,7 +938,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
                 inputMode="tel"
                 placeholder="No. WhatsApp (opsional, untuk garansi)"
                 autoComplete="off"
-                className="w-full h-11 px-3.5 rounded-field bg-fill text-[16px] sm:text-subhead font-medium text-label placeholder:text-label-3 focus:outline-none focus:bg-surface dark:focus:bg-[#2C2C2E] focus:ring-2 focus:ring-tint/35"
+                className="w-full h-11 px-3.5 rounded-field bg-fill text-[16px] sm:text-subhead font-medium text-label placeholder:text-label-3 focus:outline-none focus:bg-surface dark:focus:bg-surface-elevated focus:ring-2 focus:ring-tint/35"
               />
               {tanpaUang ? (
                 <p className="text-caption text-label-2 px-0.5">
@@ -948,7 +957,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
                         key={m}
                         type="button"
                         onClick={() => setMetode(m)}
-                        className={`min-h-[44px] rounded-full text-subhead font-semibold inline-flex items-center justify-center gap-1.5 transition-all ${
+                        className={`min-h-[44px] rounded-full text-subhead font-semibold inline-flex items-center justify-center gap-1.5 transition ${
                           metode === m ? "apple-segmented-thumb text-label" : "text-label-2 hover:text-label hover:bg-white/30 dark:hover:bg-white/[0.05]"
                         }`}
                       >
@@ -1086,7 +1095,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
                             setVariant((v) => ({ ...v, [l.id]: e.target.value }));
                             setError("");
                           }}
-                          className={`mt-2 w-full h-11 px-3 rounded-field text-[15px] sm:text-footnote font-semibold focus:outline-none focus:ring-2 focus:ring-tint/35 ${
+                          className={`mt-2 w-full h-11 px-3 rounded-field text-[16px] sm:text-footnote font-semibold focus:outline-none focus:ring-2 focus:ring-tint/35 ${
                             variant[l.id]
                               ? "bg-fill text-label"
                               : "bg-warning/10 dark:bg-warning/15 text-warning ring-1 ring-warning/40"
@@ -1165,7 +1174,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
                                         });
                                         setError("");
                                       }}
-                                      className={`flex-1 min-w-0 h-10 px-3 rounded-field text-[15px] sm:text-footnote font-semibold focus:outline-none focus:ring-2 focus:ring-tint/35 ${
+                                      className={`flex-1 min-w-0 h-10 px-3 rounded-field text-[16px] sm:text-footnote font-semibold focus:outline-none focus:ring-2 focus:ring-tint/35 ${
                                         val
                                           ? "bg-surface text-label border border-sep"
                                           : "bg-warning/10 dark:bg-warning/15 text-warning ring-1 ring-warning/40"
@@ -1194,7 +1203,7 @@ const PosCheckoutSheet: React.FC<Props> = ({
                                           });
                                           setError("");
                                         }}
-                                        className="h-10 px-2.5 rounded-field bg-surface border border-sep text-caption font-semibold text-tint shrink-0 active:opacity-75"
+                                        className="hit-44 h-10 px-2.5 rounded-field bg-surface border border-sep text-caption font-semibold text-tint shrink-0 active:opacity-75"
                                       >
                                         Sama ({picks[0]})
                                       </button>
@@ -1375,8 +1384,8 @@ export const DpLamaEditor: React.FC<{ sale: PosSale; onSaved?: (msg: string, dpB
       setBuka(false);
       onSaved?.(
         bersih > 0
-          ? `DP sebelumnya diset ${rupiah(bersih)} · kas masuk nota ini ${rupiah(maxBayar - bersih)} ✅`
-          : "Potongan DP sebelumnya dihapus ✅",
+          ? `DP sebelumnya diset ${rupiah(bersih)} · kas masuk nota ini ${rupiah(maxBayar - bersih)}`
+          : "Potongan DP sebelumnya dihapus",
         bersih
       );
     } catch (e: any) {

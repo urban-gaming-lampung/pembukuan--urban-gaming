@@ -198,7 +198,7 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
           block
           disabled={!perluBeli.length}
           icon={<ShoppingCart />}
-          onClick={() => shareOrCopy(restockText(rows), "Daftar belanja disalin 📋")}
+          onClick={() => shareOrCopy(restockText(rows), "Daftar belanja disalin")}
         >
           Daftar Belanja ({perluBeli.length} barang)
         </Button>
@@ -207,7 +207,7 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
           size="md"
           block
           icon={<Copy />}
-          onClick={() => shareOrCopy(buildStokReport(kategoriJualan, dataJualan as any), "Laporan stok disalin 📋")}
+          onClick={() => shareOrCopy(buildStokReport(kategoriJualan, dataJualan as any), "Laporan stok disalin")}
           className="bg-surface ring-1 ring-edge"
         >
           Salin Laporan Stok
@@ -246,7 +246,7 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
             <button
               type="button"
               onClick={() => setFilter("semua")}
-              className="h-8 px-3 rounded-full bg-tint/15 text-tint text-caption font-semibold inline-flex items-center gap-1.5"
+              className="hit-44 h-8 px-3 rounded-full bg-tint/15 text-tint text-caption font-semibold inline-flex items-center gap-1.5"
             >
               Filter: {tiles.find((t) => t.key === filter)?.title} <X className="w-3.5 h-3.5" />
             </button>
@@ -256,7 +256,7 @@ const StokJualan: React.FC<{ isOwner?: boolean }> = ({ isOwner }) => {
             <EmptyState
               title={
                 filter === "habis" || filter === "menipis"
-                  ? `Tidak ada barang ${kondisi === "BARU" ? "baru" : "seken"} dengan status ini 👍`
+                  ? `Tidak ada barang ${kondisi === "BARU" ? "baru" : "seken"} dengan status ini`
                   : "Tidak ada barang yang cocok."
               }
             />
@@ -470,7 +470,7 @@ const ItemSheet: React.FC<{
                 type="button"
                 onClick={() => setMin((m) => Math.max(0, m - 1))}
                 aria-label="Kurangi minimum"
-                className="w-11 h-11 rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label flex items-center justify-center active:scale-95 transition-all"
+                className="w-11 h-11 rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label flex items-center justify-center active:scale-95 transition"
               >
                 <Minus className="w-4 h-4" />
               </button>
@@ -479,7 +479,7 @@ const ItemSheet: React.FC<{
                 type="button"
                 onClick={() => setMin((m) => Math.min(999, m + 1))}
                 aria-label="Tambah minimum"
-                className="w-11 h-11 rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label flex items-center justify-center active:scale-95 transition-all"
+                className="w-11 h-11 rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label flex items-center justify-center active:scale-95 transition"
               >
                 <Plus className="w-4 h-4" />
               </button>

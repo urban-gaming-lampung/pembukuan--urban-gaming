@@ -34,8 +34,8 @@ export const Stepper: React.FC<{
   const canInc = !disabled && value + step <= max;
   const btnCls =
     size === "sm"
-      ? "h-7 w-7 [&>svg]:h-3.5 [&>svg]:w-3.5"
-      : "h-8 w-8 [&>svg]:h-4 [&>svg]:w-4";
+      ? "hit-44 h-7 w-7 [&>svg]:h-3.5 [&>svg]:w-3.5"
+      : "hit-44 h-8 w-8 [&>svg]:h-4 [&>svg]:w-4";
 
   return (
     <div
@@ -53,7 +53,7 @@ export const Stepper: React.FC<{
         disabled={!canDec}
         onClick={() => canDec && onChange(Math.max(min, value - step))}
         className={cx(
-          "inline-flex items-center justify-center rounded-full text-label transition-all hover:bg-surface active:scale-95 disabled:pointer-events-none disabled:opacity-35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
+          "inline-flex items-center justify-center rounded-full text-label transition hover:bg-surface active:scale-95 disabled:pointer-events-none disabled:opacity-35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
           btnCls
         )}
       >
@@ -70,7 +70,7 @@ export const Stepper: React.FC<{
         disabled={!canInc}
         onClick={() => canInc && onChange(Math.min(max, value + step))}
         className={cx(
-          "inline-flex items-center justify-center rounded-full text-label transition-all hover:bg-surface active:scale-95 disabled:pointer-events-none disabled:opacity-35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
+          "inline-flex items-center justify-center rounded-full text-label transition hover:bg-surface active:scale-95 disabled:pointer-events-none disabled:opacity-35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
           btnCls
         )}
       >

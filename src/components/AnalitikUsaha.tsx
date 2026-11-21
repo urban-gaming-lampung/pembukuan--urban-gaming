@@ -19,7 +19,7 @@ import { isBelanjaStok, periodRange, TransaksiOwner } from "../lib/keuangan";
 import { tebakModalBaris, useBarisUsahaManual } from "../lib/pemasukanUsaha";
 import { pad, persen, rpShort, rupiah } from "../lib/format";
 import { dariYmd, tanggalHariKerja, toLocalYmd } from "../lib/dateLocal";
-import { Amount, BarRow, Button, Card, ChartTip, EmptyState, IconBadge, ImagePreviewModal, LineItem, LineList, MARK, Notice, Pill, SearchField, SectionHeader, Sheet, SplitBar, StatTile, SubTabs, TileValue, sumbu, useTemaGrafik } from "../ui";
+import { Amount, BarRow, Button, Card, ChartTip, EmptyState, IconBadge, ImagePreviewModal, konfirmasi, LineItem, LineList, MARK, Notice, notify, Pill, SearchField, SectionHeader, Sheet, SplitBar, StatTile, SubTabs, tanya, TileValue, sumbu, useTemaGrafik } from "../ui";
 import { HeroArus } from "./analitik/HeroArus";
 
 type FilterProps = {
@@ -699,17 +699,17 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
   const batalPakaiDp = live.status === "BATAL_PEMBELI" || live.status === "BATAL_URBAN";
 
   const hapus = async () => {
-    const ok = window.confirm(
-      `Hapus permanen nota ${live.noNota}?\n\n` +
-        (live.batal || notaDp ? "" : "• Stok barang yang terpotong akan dikembalikan.\n") +
-        "• Riwayat stok nota ini ikut dihapus.\n• Tidak bisa dibatalkan."
+    const ok = await konfirmasi(
+      (live.batal || notaDp ? "" : "Stok barang yang terpotong akan dikembalikan. ") +
+        "Riwayat stok nota ini ikut dihapus. Tindakan ini tidak bisa dibatalkan.",
+      { judul: `Hapus permanen nota ${live.noNota}?`, ya: "Hapus", bahaya: true }
     );
     if (!ok) return;
     setBusy("hapus");
     try {
       await deletePosSale(live);
       onClose();
-      window.alert(`Nota ${live.noNota} dihapus ✅`);
+      notify(`Nota ${live.noNota} dihapus`, "positive");
     } catch (e: any) {
       actions.setMsg("Gagal menghapus: " + (e?.message || e));
     } finally {
@@ -718,12 +718,18 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
   };
 
   const batalkan = async () => {
-    const alasan = window.prompt(`Batalkan nota ${live.noNota}?\nStok barang yang terpotong akan dikembalikan.\n\nAlasan pembatalan (opsional):`, "");
+    const alasan = await tanya("Stok barang yang terpotong akan dikembalikan.", {
+      judul: `Batalkan nota ${live.noNota}?`,
+      placeholder: "Alasan pembatalan (opsional)",
+      ya: "Batalkan nota",
+      batal: "Tutup",
+      bahaya: true,
+    });
     if (alasan === null) return;
     setBusy("batal");
     try {
       await cancelPosSale(live, alasan);
-      actions.setMsg("Nota dibatalkan & stok dikembalikan ✅");
+      actions.setMsg("Nota dibatalkan & stok dikembalikan");
     } catch (e: any) {
       actions.setMsg("Gagal membatalkan: " + (e?.message || e));
     } finally {
@@ -765,7 +771,7 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
         <div className="space-y-3">
           {actions.msg && <Notice tone={actions.msg.toLowerCase().includes("gagal") ? "negative" : "info"}>{actions.msg}</Notice>}
           {notaDp && batalDp && (
-            <BatalDp sale={live} onKembali={() => setBatalDp(false)} onSelesai={() => { setBatalDp(false); actions.setMsg("Nota DP dibatalkan ✅"); }} />
+            <BatalDp sale={live} onKembali={() => setBatalDp(false)} onSelesai={() => { setBatalDp(false); actions.setMsg("Nota DP dibatalkan"); }} />
           )}
           {live.batal && (
             <Notice tone="negative">

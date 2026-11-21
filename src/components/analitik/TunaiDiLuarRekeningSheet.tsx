@@ -36,7 +36,7 @@ const BarisCentangTunai: React.FC<{
     disabled={busy || disabled}
     onClick={onToggle}
     aria-pressed={checked}
-    className={`w-full apple-tile ring-1 ring-black/[0.04] dark:ring-white/[0.06] px-3.5 py-3 flex items-start gap-3 text-left transition-all min-h-[44px] enabled:hover:bg-fill/60 enabled:active:scale-[0.99] ${
+    className={`w-full apple-tile ring-1 ring-black/[0.04] dark:ring-white/[0.06] px-3.5 py-3 flex items-start gap-3 text-left transition min-h-[44px] enabled:hover:bg-fill/60 enabled:active:scale-[0.99] ${
       checked || disabled ? "opacity-75" : ""
     }`}
   >

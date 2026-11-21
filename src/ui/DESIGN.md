@@ -62,6 +62,9 @@ Tersedia **12 warna sistem iOS 27** (`blue` `#0088FF`, `green` `#34C759`, `mint`
 ### D. Warna uang & grafik (`MARK` di `tokens.ts`)
 - **Hasil / selisih / laba** memakai `Amount tone="auto" signed`: hijau `+Rp…` bila surplus, merah `−Rp…` bila minus, hitam/putih bila 0. Selalu disertai `StatusPill` (ikon + teks).
 - Uang masuk (`#34C759`) vs keluar (`#FF383C`), Tunai (`#34C759`) vs Transfer (`#0088FF`), multi-seri kategori memakai `PALET_SERI` (`#0088FF`, `#34C759`, `#FF8D28`, `#CB30E0`, `#FF2D55`, `#6155F5`).
+- Warna identitas pengguna (chip "aktif" di header & kursor live): `warnaPengguna(email)` dari `WARNA_PENGGUNA` — satu email = satu warna di semua tempat.
+- Baris ongkir otomatis (terkunci) di tabel & kartu rincian: `AKSEN_ONGKIR` (`baris`, `latar`, `garis`, `pemisah`).
+- Pengecualian hex yang disengaja: render stiker (monitoring kondisi), struk/nota thermal, PDF, pratinjau tema di Pengaturan, dan penampil media Galeri (selalu gelap seperti app Foto).
 
 ---
 
@@ -107,6 +110,8 @@ Stack `font-sans` & `font-display` mengutamakan `-apple-system, BlinkMacSystemFo
 | `shadow-float` + `.apple-glass` | — | Header melayang, dock bawah, tooltip, popover, sheet, alert dialog |
 
 - Target sentuh minimum: **44px** (`ListRow` `52px`, `Button md` `44px`, dock tab bar, segmen `md`, tombol alert `48px`, input tanggal/waktu `44px`).
+- Tombol yang tampil lebih kecil (ikon 28–36px, `Button sm`, `Stepper`, segmen `sm`) wajib diberi kelas **`hit-44`**: area sentuh diperluas ke 44×44 lewat `::after` tanpa mengubah tampilan (lihat `src/index.css`).
+- Transisi: pakai `transition` / `transition-colors` / `transition-transform` / `transition-[width]` sesuai properti yang bergerak — **jangan `transition-all`** (ikut menganimasikan layout & berat di HP).
 - Fokus keyboard macOS: `focus-visible:ring-tint`.
 - Menghormati `prefers-reduced-motion: reduce`.
 
@@ -146,7 +151,12 @@ Seluruh sistem antarmuka kini dikelompokkan mengikuti taksonomi **Apple iOS 27 U
    - `Sheet.tsx` — Bottom Sheet (`rounded-t-[34px]`) dengan grabber 36×5px di HP ↔ Centered Sheet (`32px`) di macOS/desktop (`Esc`, `useBodyScrollLock`, `MOTION.backdrop` & `MOTION.sheet`).
    - `AlertDialog.tsx` — Dialog konfirmasi `.apple-sheet` `rounded-[34px]` dengan tombol kapsul `48px` (`cancel` / `primary` `bg-action` hitam-putih / `destructive`). **SSOT Aksi Reset & Destruktif:** semua fungsi **Reset** wajib memakai `AlertDialog` dengan tombol `Batal` (`cancel`) di kiri dan `Reset` (`destructive`) di kanan.
    - `ImagePreviewModal.tsx` — Lightbox SSOT untuk pratinjau foto & bukti transfer (mendukung `Buka penuh` dan aksi `Hapus` opsional).
-   - `Toast.tsx` — Kapsul notifikasi mengambang `.apple-glass` (`info` | `positive` | `warning` | `negative`, `MOTION.toast`).
+   - `Toast.tsx` — Kapsul notifikasi mengambang `.apple-sheet` (`info` | `positive` | `warning` | `negative`, `MOTION.toast`); isi kapsulnya `ToastKapsul` (pesan panjang / banyak baris otomatis jadi kartu `rounded-tile`).
+   - `Pemberitahuan.tsx` — **pengganti `alert` / `confirm` / `prompt` bawaan browser** (dipasang sekali lewat `<PemberitahuanHost />` di `main.tsx`):
+     - `notify(pesan, nada?)` — toast di atas layar, maks. 3 bertumpuk, nada ditebak dari isi bila kosong, emoji dibuang. `window.alert` sudah diarahkan ke sini (`src/lib/nativeAlert.ts`).
+     - `await konfirmasi(teks, { judul, ya, batal, bahaya })` → `true`/`false` (AlertDialog; tombol merah otomatis untuk hapus/tolak/coret/timpa).
+     - `await tanya(teks, { judul, placeholder, awal, wajib })` → teks / `null` bila batal.
+     - Jangan memakai `window.confirm` / `window.prompt` lagi.
 
 6. **`src/ui/feedback/` (Umpan Balik & Pemuat — `Feedback.tsx`):**
    - `EmptyState`, `Notice`, `Footnote`, dan `Spinner`.
@@ -177,3 +187,6 @@ Seluruh sistem antarmuka kini dikelompokkan mengikuti taksonomi **Apple iOS 27 U
 - ❌ Sheet/modal buatan sendiri dengan `bg-zinc-*` — gunakan `Sheet` atau `AlertDialog`.
 - ❌ Tombol aksi utama berwarna biru atau warna mencolok lainnya — gunakan `Button variant="filled"` (`bg-action`, hitam profesional).
 - ❌ Ukuran / sudut / warna di luar token `src/ui`.
+- ❌ `window.confirm` / `window.prompt` / dialog buatan sendiri untuk konfirmasi — pakai `konfirmasi()` / `tanya()`.
+- ❌ Emoji di teks UI (label, judul, toast, empty state). Emoji hanya boleh di isi pesan WhatsApp / caption promosi.
+- ❌ Label segmen (`SubTabs`) yang terpotong di HP 360px — pendekkan labelnya (konteks sudah jelas dari halaman induk).

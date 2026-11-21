@@ -17,12 +17,12 @@ export const VARIAN_TOMBOL = {
 const UKURAN_TOMBOL = {
   lg: "h-[50px] rounded-full px-5 text-headline",
   md: "h-11 rounded-full px-4 text-subhead font-semibold",
-  sm: "h-8 rounded-full px-3 text-footnote font-semibold",
+  sm: "hit-44 h-8 rounded-full px-3 text-footnote font-semibold",
 } as const;
 
 const UKURAN_IKON_TOMBOL = {
-  sm: "h-8 w-8 [&>svg]:h-4 [&>svg]:w-4",
-  md: "h-9 w-9 [&>svg]:h-[18px] [&>svg]:w-[18px]",
+  sm: "hit-44 h-8 w-8 [&>svg]:h-4 [&>svg]:w-4",
+  md: "hit-44 h-9 w-9 [&>svg]:h-[18px] [&>svg]:w-[18px]",
   lg: "h-11 w-11 [&>svg]:h-5 [&>svg]:w-5",
 } as const;
 

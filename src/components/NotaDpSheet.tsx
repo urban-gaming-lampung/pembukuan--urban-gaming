@@ -237,7 +237,7 @@ const NotaDpSheet: React.FC<{
             onClick={() => setMode({ k: "list" })}
             disabled={busy}
             aria-label="Kembali ke daftar"
-            className="w-9 h-9 rounded-full bg-fill text-label-2 hover:text-label flex items-center justify-center transition-colors disabled:opacity-40"
+            className="w-9 hit-44 h-9 rounded-full bg-fill text-label-2 hover:text-label flex items-center justify-center transition-colors disabled:opacity-40"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -342,7 +342,7 @@ const NotaDpSheet: React.FC<{
           <>
             <div className="rounded-card bg-action text-action-label px-4 py-3.5 shadow-card">
               <div className="text-caption2 font-semibold uppercase tracking-wider opacity-70">Sisa yang dibayar</div>
-              <div className="text-[28px] font-bold font-mono tabular-nums tracking-tight leading-none mt-1">
+              <div className="text-title1 font-bold font-mono tabular-nums tracking-tight leading-none mt-1">
                 {rupiah(sisaBayar(aktif))}
               </div>
               <div className="text-caption mt-1.5 opacity-80">
@@ -361,7 +361,7 @@ const NotaDpSheet: React.FC<{
                       setMetode(m);
                       setGalat("");
                     }}
-                    className={`min-h-[42px] rounded-full text-caption font-semibold inline-flex items-center justify-center gap-1.5 transition-all ${
+                    className={`min-h-[42px] rounded-full text-caption font-semibold inline-flex items-center justify-center gap-1.5 transition ${
                       metode === m
                         ? "apple-segmented-thumb text-label"
                         : "text-label-2 hover:text-label hover:bg-white/30 dark:hover:bg-white/[0.05]"

@@ -1,5 +1,6 @@
 import { runSalaryTransaction } from "../lib/salaryPersistence";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { konfirmasi } from "../ui/presentations/Pemberitahuan";
 import { runTransaction, collection, doc, setDoc, deleteDoc, onSnapshot, addDoc, updateDoc, query, getDocs, getDoc, where, orderBy, serverTimestamp, arrayUnion } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth, listGameDb, storage } from "../lib/firebase";
@@ -911,7 +912,7 @@ export default function useAppController() {
               const el = document.getElementById(targetId);
               if (el) {
                   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  el.classList.add("ring-2", "ring-negative", "ring-offset-2", "transition-all", "duration-500", "rounded-card");
+                  el.classList.add("ring-2", "ring-negative", "ring-offset-2", "transition", "duration-500", "rounded-card");
                   setTimeout(() => {
                       el.classList.remove("ring-2", "ring-negative", "ring-offset-2");
                   }, 2500);
@@ -1667,7 +1668,7 @@ export default function useAppController() {
     setShowSuccessAlert(true);
   };
 
-  const updatePencatatan = () => {
+  const updatePencatatan = async () => {
     if (!editingId) return;
 
     const valStatus = validateTransactions();
@@ -1676,7 +1677,7 @@ export default function useAppController() {
         return;
     }
 
-    if (!confirm("Simpan perubahan?")) return;
+    if (!(await konfirmasi("Simpan perubahan?", { ya: "Simpan" }))) return;
     const updatedData = {
         tanggal, hari, absenPagi, absenSiang, shiftPegawai, rukoBuka, rukoTutup, catatan,
         totalHarian, totalJajanan, totalJasaAks, totalSewa, totalCash, totalTransfer,

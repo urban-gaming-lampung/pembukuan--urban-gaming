@@ -2,7 +2,7 @@ import React from "react";
 import { Zap } from "lucide-react";
 import TableEditor from "./TableEditor";
 import { rupiah, toInt } from "../lib/format";
-import { AKSEN_TILE, Pill } from "../ui";
+import { AKSEN_ONGKIR, AKSEN_TILE, Pill } from "../ui";
 
 interface Props {
   rows: any[];
@@ -58,7 +58,7 @@ export default function RincianPengeluaran({
     .join(" · ");
 
   const ongkirTableFooter = hasOngkir ? (
-    <tfoot className="border-t border-[#CB30E0]/20 bg-[#CB30E0]/[0.05]">
+    <tfoot className={`border-t ${AKSEN_ONGKIR.garis} ${AKSEN_ONGKIR.latar}`}>
       {Object.entries(ongkirGroup).map(([name, totalOngkir]) => (
         <tr key={name} className={`font-semibold text-caption ${AKSEN_TILE.purple.iconText}`}>
           <td className="py-2.5 px-2 text-center">
@@ -83,7 +83,7 @@ export default function RincianPengeluaran({
       <div className={`text-caption font-bold tracking-wider uppercase ${AKSEN_TILE.purple.iconText}`}>
         Rangkuman Ongkir Pegawai
       </div>
-      <div className="divide-y divide-[#CB30E0]/15">
+      <div className={`divide-y ${AKSEN_ONGKIR.pemisah}`}>
         {Object.entries(ongkirGroup).map(([name, totalOngkir]) => (
           <div key={name} className="flex justify-between items-center py-2 first:pt-0 last:pb-0">
             <span className={`text-caption font-semibold uppercase ${AKSEN_TILE.purple.iconText}`}>

@@ -103,7 +103,7 @@ export const ImagePreviewModal: React.FC<{
                   href={src}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex h-8 items-center gap-1.5 rounded-full bg-action/[0.08] px-3 text-footnote font-semibold text-action transition-opacity hover:bg-action/[0.14] active:opacity-75 dark:bg-action/[0.15]"
+                  className="hit-44 inline-flex h-8 items-center gap-1.5 rounded-full bg-action/[0.08] px-3 text-footnote font-semibold text-action transition-opacity hover:bg-action/[0.14] active:opacity-75 dark:bg-action/[0.15]"
                 >
                   <ExternalLink className="h-3.5 w-3.5" aria-hidden />
                   {openExternalLabel}

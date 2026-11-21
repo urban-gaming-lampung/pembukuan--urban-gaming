@@ -35,9 +35,9 @@ export const StokRefSelect: React.FC<{
   <select
     value={value === undefined && allowAuto ? AUTO : encode(value)}
     onChange={(e) => onChange(e.target.value === AUTO ? undefined : decode(e.target.value))}
-    className={className || "w-full h-11 px-3 rounded-field bg-fill text-[15px] sm:text-footnote font-semibold text-label focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"}
+    className={className || "w-full h-11 px-3 rounded-field bg-fill text-[16px] sm:text-footnote font-semibold text-label focus:outline-none focus:bg-surface focus:ring-2 focus:ring-tint/35"}
   >
-    {allowAuto && <option value={AUTO}>✨ Otomatis — sistem hubungkan / buat barang stok</option>}
+    {allowAuto && <option value={AUTO}>Otomatis — sistem hubungkan / buat barang stok</option>}
     <option value="">— Tidak dihubungkan (stok tidak berkurang) —</option>
     {categories.map((c) => (
       <optgroup key={c.kategori} label={c.kategori}>

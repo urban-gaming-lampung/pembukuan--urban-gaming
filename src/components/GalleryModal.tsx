@@ -694,7 +694,7 @@ export default function GalleryModal({
 
     if (isVideo) {
       setUploadMediaType("video");
-      showToast("Menganalisis video & membuat cover thumbnail... ⏳");
+      showToast("Menganalisis video & membuat cover thumbnail...");
 
       try {
         const thumbResult = await captureVideoThumbnail(file);
@@ -711,7 +711,7 @@ export default function GalleryModal({
         } else if (ratio <= 0.7) {
           setUploadAspectRatio("16:9");
         }
-        showToast("Cover thumbnail video berhasil dibuat! 📸");
+        showToast("Cover thumbnail video berhasil dibuat!");
       } catch (err) {
         console.warn("Auto thumbnail fallback:", err);
       }
@@ -747,7 +747,7 @@ export default function GalleryModal({
     setUploadThumbnailBlob(file);
     const url = URL.createObjectURL(file);
     setUploadThumbnailPreviewUrl(url);
-    showToast("Foto cover kustom berhasil dipilih! 🖼️");
+    showToast("Foto cover kustom berhasil dipilih!");
   };
 
   const handleSeedDefaults = () => {
@@ -766,7 +766,7 @@ export default function GalleryModal({
         });
       }
       setConfirmSeedOpen(false);
-      showToast("Template bawaan berhasil ditambahkan! ✨");
+      showToast("Template bawaan berhasil ditambahkan!");
     } catch (e: any) {
       showToast("Gagal inisialisasi: " + e.message);
     } finally {
@@ -882,7 +882,7 @@ export default function GalleryModal({
         pinned: uploadPinned,
       });
 
-      showToast(`Media ${isVideo ? "video" : "gambar"} berhasil diunggah! 🚀`);
+      showToast(`Media ${isVideo ? "video" : "gambar"} berhasil diunggah!`);
       
       setOpenUpload(false);
       setUploadTitle("");
@@ -907,7 +907,7 @@ export default function GalleryModal({
       await updateDoc(doc(db, "media_gallery", item.id), {
         pinned: !item.pinned,
       });
-      showToast(item.pinned ? "Pin dilepas" : "Disematkan ke paling atas ⭐");
+      showToast(item.pinned ? "Pin dilepas" : "Disematkan ke paling atas");
     } catch (e: any) {
       showToast("Gagal mengubah pin: " + e.message);
     }
@@ -953,7 +953,7 @@ export default function GalleryModal({
       let newThumbStoragePath = openEdit.thumbStoragePath || "";
 
       if (editCoverFile) {
-        showToast("Mengunggah cover thumbnail baru... ⏳");
+        showToast("Mengunggah cover thumbnail baru...");
         const timestamp = Date.now();
         newThumbStoragePath = `gallery_media/${timestamp}_custom_thumb.jpg`;
         const thumbRef = ref(storage, newThumbStoragePath);
@@ -972,7 +972,7 @@ export default function GalleryModal({
         thumbStoragePath: newThumbStoragePath || null,
       });
 
-      showToast("Perubahan media berhasil disimpan! ✨");
+      showToast("Perubahan media berhasil disimpan!");
       setOpenEdit(null);
       setEditCoverFile(null);
       setEditCoverPreviewUrl(null);
@@ -986,7 +986,7 @@ export default function GalleryModal({
   const handleCopyCaption = async (caption: string) => {
     try {
       await navigator.clipboard.writeText(caption);
-      showToast("Caption promosi berhasil disalin! 📋");
+      showToast("Caption promosi berhasil disalin!");
     } catch {
       const ta = document.createElement("textarea");
       ta.value = caption;
@@ -994,7 +994,7 @@ export default function GalleryModal({
       ta.select();
       document.execCommand("copy");
       document.body.removeChild(ta);
-      showToast("Caption promosi berhasil disalin! 📋");
+      showToast("Caption promosi berhasil disalin!");
     }
   };
 
@@ -1013,7 +1013,7 @@ export default function GalleryModal({
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-      showToast(`Media ${ext.toUpperCase()} berhasil diunduh! ⬇️`);
+      showToast(`Media ${ext.toUpperCase()} berhasil diunduh!`);
     } catch {
       const a = document.createElement("a");
       a.href = item.mediaUrl;
@@ -1105,8 +1105,8 @@ export default function GalleryModal({
       setShareTargetItem(null);
       showToast(
         copied
-          ? "Pilih Status saya di WA Business. Caption juga sudah disalin 📋"
-          : "Pilih Status saya di WA Business 🚀"
+          ? "Pilih Status saya di WA Business. Caption juga sudah disalin"
+          : "Pilih Status saya di WA Business"
       );
     } catch (err: any) {
       if (err?.name === "AbortError") return; // user menutup menu share
@@ -1178,7 +1178,7 @@ export default function GalleryModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-fill hover:brightness-95 text-label-2 hover:text-label active:scale-95 transition-all"
+            className="w-8 hit-44 h-8 flex items-center justify-center rounded-full bg-fill hover:brightness-95 text-label-2 hover:text-label active:scale-95 transition"
             aria-label="Tutup Galeri"
           >
             <Icons.X className="w-4 h-4" />
@@ -1199,7 +1199,7 @@ export default function GalleryModal({
                     type="button"
                     key={r.key}
                     onClick={() => setActiveRatio(r.key)}
-                    className={`flex-1 min-w-[78px] py-2 px-3 text-caption font-semibold rounded-full transition-all ${
+                    className={`flex-1 min-w-[78px] py-2 px-3 text-caption font-semibold rounded-full transition ${
                       active
                         ? "apple-segmented-thumb text-label"
                         : "text-label-2 hover:text-label hover:bg-white/30 dark:hover:bg-white/[0.05]"
@@ -1258,7 +1258,7 @@ export default function GalleryModal({
                     type="button"
                     key={cat}
                     onClick={() => setActiveCategory(cat)}
-                    className={`px-3 py-1.5 rounded-full text-caption font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                    className={`px-3 py-1.5 rounded-full text-caption font-semibold transition flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                       active
                         ? "bg-action text-action-label shadow-card"
                         : "bg-surface border border-edge text-label-2 hover:text-label"
@@ -1322,7 +1322,7 @@ export default function GalleryModal({
                     key={item.id}
                     onMouseEnter={() => prefetchMediaBlob(item)}
                     onTouchStart={() => prefetchMediaBlob(item)}
-                    className="group apple-card rounded-card ring-1 ring-edge shadow-card hover:shadow-float transition-all duration-200 overflow-hidden flex flex-col p-2 sm:p-2.5 justify-between"
+                    className="group apple-card rounded-card ring-1 ring-edge shadow-card hover:shadow-float transition duration-200 overflow-hidden flex flex-col p-2 sm:p-2.5 justify-between"
                   >
                     {/* Media Poster Box */}
                     <div
@@ -1354,13 +1354,13 @@ export default function GalleryModal({
                               />
                               <div className="thumb-fallback hidden w-full h-full bg-gradient-to-br from-[#CB30E0]/35 via-[#1C1C1E] to-black flex flex-col items-center justify-center p-3 text-center">
                                 <Icons.Video className="w-8 h-8 text-[#DB34F2] mb-1 opacity-85" />
-                                <span className="text-[10px] text-white/65 font-semibold uppercase tracking-wider">Video Promo</span>
+                                <span className="text-caption2 text-white/65 font-semibold uppercase tracking-wider">Video Promo</span>
                               </div>
                             </>
                           ) : (
                             <div className="w-full h-full bg-gradient-to-br from-[#CB30E0]/35 via-[#1C1C1E] to-black flex flex-col items-center justify-center p-3 text-center">
                               <Icons.Video className="w-8 h-8 text-[#DB34F2] mb-1 opacity-85" />
-                              <span className="text-[10px] text-white/65 font-semibold uppercase tracking-wider">Video Promo</span>
+                              <span className="text-caption2 text-white/65 font-semibold uppercase tracking-wider">Video Promo</span>
                             </div>
                           )}
                           
@@ -1386,14 +1386,14 @@ export default function GalleryModal({
                           />
                           <div className="media-fallback hidden flex flex-col items-center justify-center p-3 text-center gap-1.5">
                             <Icons.Gallery className="w-8 h-8 text-white/40" />
-                            <span className="text-[10px] text-white/60 font-medium">Gagal memuat</span>
+                            <span className="text-caption2 text-white/60 font-medium">Gagal memuat</span>
                           </div>
                         </div>
                       )}
 
                       {/* Top Overlay Badges */}
                       <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none gap-1">
-                        <span className="px-2 py-0.5 rounded-full text-[9px] font-semibold bg-black/60 text-white backdrop-blur-md border border-white/15 truncate max-w-[70%]">
+                        <span className="px-2 py-0.5 rounded-full text-caption2 font-semibold bg-black/60 text-white backdrop-blur-md border border-white/15 truncate max-w-[70%]">
                           {item.category}
                         </span>
 
@@ -1447,7 +1447,7 @@ export default function GalleryModal({
                         <button
                           type="button"
                           onClick={() => handleShareClick(item)}
-                          className="h-9 flex items-center justify-center gap-1.5 px-3 rounded-full bg-[#34C759] hover:opacity-90 active:scale-[0.98] text-white font-semibold text-footnote shadow-card transition-all"
+                          className="hit-44 h-9 flex items-center justify-center gap-1.5 px-3 rounded-full bg-[#34C759] hover:opacity-90 active:scale-[0.98] text-white font-semibold text-footnote shadow-card transition"
                           title="Share Media & Caption"
                         >
                           <Icons.Share className="w-3.5 h-3.5 stroke-[2.2]" />
@@ -1597,7 +1597,7 @@ export default function GalleryModal({
                       {openPreview.category}
                     </span>
                     {openPreview.mediaType === "video" && (
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-[#CB30E0] text-white">
+                      <span className="px-2 py-0.5 rounded-full text-caption2 font-bold bg-[#CB30E0] text-white">
                         VIDEO
                       </span>
                     )}
@@ -1609,7 +1609,7 @@ export default function GalleryModal({
                   <button
                     type="button"
                     onClick={() => setOpenPreview(null)}
-                    className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/15 flex items-center justify-center text-white/65 hover:text-white transition-colors shrink-0"
+                    className="w-8 hit-44 h-8 rounded-full bg-white/10 hover:bg-white/15 flex items-center justify-center text-white/65 hover:text-white transition-colors shrink-0"
                     aria-label="Tutup Pratinjau"
                   >
                     <Icons.X className="w-4 h-4" />
@@ -1636,7 +1636,7 @@ export default function GalleryModal({
                 <button
                   type="button"
                   onClick={() => handleShareClick(openPreview)}
-                  className="w-full h-11 flex items-center justify-center gap-2 rounded-full bg-[#34C759] hover:opacity-90 text-white font-semibold text-subhead shadow-card active:scale-[0.98] transition-all"
+                  className="w-full h-11 flex items-center justify-center gap-2 rounded-full bg-[#34C759] hover:opacity-90 text-white font-semibold text-subhead shadow-card active:scale-[0.98] transition"
                 >
                   <Icons.Share className="w-4 h-4 stroke-[2.2]" />
                   <span>Bagikan Video/Foto ke Story &amp; Chat</span>
@@ -1646,7 +1646,7 @@ export default function GalleryModal({
                   <button
                     type="button"
                     onClick={() => handleCopyCaption(openPreview.caption)}
-                    className="h-10 flex items-center justify-center gap-1.5 rounded-full bg-white/10 hover:bg-white/15 text-white font-semibold text-footnote transition-all active:scale-95"
+                    className="hit-44 h-10 flex items-center justify-center gap-1.5 rounded-full bg-white/10 hover:bg-white/15 text-white font-semibold text-footnote transition active:scale-95"
                   >
                     <Icons.Copy className="w-3.5 h-3.5" />
                     <span>Salin Caption</span>
@@ -1655,7 +1655,7 @@ export default function GalleryModal({
                   <button
                     type="button"
                     onClick={() => handleDownloadMedia(openPreview)}
-                    className="h-10 flex items-center justify-center gap-1.5 rounded-full bg-white/10 hover:bg-white/15 text-white font-semibold text-footnote transition-all active:scale-95"
+                    className="hit-44 h-10 flex items-center justify-center gap-1.5 rounded-full bg-white/10 hover:bg-white/15 text-white font-semibold text-footnote transition active:scale-95"
                   >
                     <Icons.Download className="w-3.5 h-3.5" />
                     <span>Download Media</span>
@@ -1721,7 +1721,7 @@ export default function GalleryModal({
                   type="button"
                   onClick={() => shareToWAStory(shareTargetItem)}
                   disabled={sharePrepState !== "ready"}
-                  className="w-full h-[50px] flex items-center justify-center gap-2.5 rounded-tile bg-[#25D366] hover:bg-[#1FB656] disabled:bg-fill disabled:text-label-3 text-white font-semibold text-headline shadow-card disabled:shadow-none active:scale-[0.98] transition-all"
+                  className="w-full h-[50px] flex items-center justify-center gap-2.5 rounded-tile bg-[#25D366] hover:bg-[#1FB656] disabled:bg-fill disabled:text-label-3 text-white font-semibold text-headline shadow-card disabled:shadow-none active:scale-[0.98] transition"
                 >
                   {sharePrepState === "preparing" ? (
                     <>
@@ -1865,7 +1865,7 @@ export default function GalleryModal({
                       <p className="text-footnote font-semibold text-label truncate">
                         {uploadFile?.name}
                       </p>
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-action text-action-label">
+                      <span className="px-2 py-0.5 rounded-full text-caption2 font-bold uppercase bg-action text-action-label">
                         {uploadMediaType}
                       </span>
                     </div>
@@ -1916,7 +1916,7 @@ export default function GalleryModal({
                   )}
                 </div>
                 <div className="flex-1">
-                  <label className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface hover:brightness-95 text-label text-footnote font-semibold shadow-card cursor-pointer active:scale-95 transition-all border border-edge">
+                  <label className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-surface hover:brightness-95 text-label text-footnote font-semibold shadow-card cursor-pointer active:scale-95 transition border border-edge">
                     <Icons.Upload className="w-3.5 h-3.5 text-label" />
                     <span>Pilih Foto Cover Sendiri</span>
                     <input
@@ -1943,7 +1943,7 @@ export default function GalleryModal({
               value={directUrlInput}
               onChange={(e) => setDirectUrlInput(e.target.value)}
               placeholder="https://..."
-              className="w-full px-3.5 py-2.5 text-[16px] sm:text-subhead bg-fill rounded-field text-label placeholder:text-label-3 border border-transparent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-tint/35 transition-all"
+              className="w-full px-3.5 py-2.5 text-[16px] sm:text-subhead bg-fill rounded-field text-label placeholder:text-label-3 border border-transparent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-tint/35 transition"
             />
           </div>
 
@@ -1958,7 +1958,7 @@ export default function GalleryModal({
                 value={uploadTitle}
                 onChange={(e) => setUploadTitle(e.target.value)}
                 placeholder="Contoh: Video Gameplay FC 25 PS5"
-                className="w-full px-3.5 py-2.5 text-[16px] sm:text-subhead bg-fill rounded-field text-label placeholder:text-label-3 border border-transparent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-tint/35 transition-all"
+                className="w-full px-3.5 py-2.5 text-[16px] sm:text-subhead bg-fill rounded-field text-label placeholder:text-label-3 border border-transparent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-tint/35 transition"
               />
             </div>
 
@@ -1969,7 +1969,7 @@ export default function GalleryModal({
               <select
                 value={uploadCategory}
                 onChange={(e) => setUploadCategory(e.target.value as any)}
-                className="w-full px-3.5 py-2.5 text-[16px] sm:text-subhead bg-fill rounded-field text-label border border-transparent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-tint/35 transition-all"
+                className="w-full px-3.5 py-2.5 text-[16px] sm:text-subhead bg-fill rounded-field text-label border border-transparent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-tint/35 transition"
               >
                 {CATEGORIES.filter((c) => c !== "Semua").map((c) => (
                   <option key={c} value={c}>
@@ -1995,7 +1995,7 @@ export default function GalleryModal({
                   type="button"
                   key={r.id}
                   onClick={() => setUploadAspectRatio(r.id as any)}
-                  className={`py-2 px-2 rounded-full text-center transition-all text-footnote font-semibold ${
+                  className={`py-2 px-2 rounded-full text-center transition text-footnote font-semibold ${
                     uploadAspectRatio === r.id
                       ? "apple-segmented-thumb text-label"
                       : "text-label-2 hover:text-label hover:bg-white/30 dark:hover:bg-white/[0.05]"
@@ -2042,7 +2042,7 @@ export default function GalleryModal({
               value={uploadCaption}
               onChange={(e) => setUploadCaption(e.target.value)}
               placeholder="Tulis caption promosi menarik..."
-              className="w-full p-3 text-[16px] sm:text-footnote bg-fill rounded-field text-label font-mono leading-relaxed placeholder:text-label-3 border border-transparent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-tint/35 transition-all"
+              className="w-full p-3 text-[16px] sm:text-footnote bg-fill rounded-field text-label font-mono leading-relaxed placeholder:text-label-3 border border-transparent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-tint/35 transition"
             />
           </div>
 
@@ -2071,7 +2071,7 @@ export default function GalleryModal({
               </div>
               <div className="w-full h-2 bg-fill rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-action transition-all duration-300 rounded-full"
+                  className="h-full bg-action transition-[width] duration-300 rounded-full"
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
@@ -2134,7 +2134,7 @@ export default function GalleryModal({
                 required
                 value={openEdit.title}
                 onChange={(e) => setOpenEdit({ ...openEdit, title: e.target.value })}
-                className="w-full px-3.5 py-2.5 text-[16px] sm:text-subhead bg-fill rounded-field text-label border border-transparent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-tint/35 transition-all"
+                className="w-full px-3.5 py-2.5 text-[16px] sm:text-subhead bg-fill rounded-field text-label border border-transparent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-tint/35 transition"
               />
             </div>
 
@@ -2157,7 +2157,7 @@ export default function GalleryModal({
                     )}
                   </div>
                   <div className="flex-1">
-                    <label className="inline-flex h-11 sm:h-9 cursor-pointer items-center gap-1.5 rounded-full bg-fill px-4 text-footnote font-semibold text-label transition-all hover:brightness-[0.95] dark:hover:brightness-115 active:scale-95">
+                    <label className="inline-flex h-11 sm:h-9 cursor-pointer items-center gap-1.5 rounded-full bg-fill px-4 text-footnote font-semibold text-label transition hover:brightness-[0.95] dark:hover:brightness-115 active:scale-95">
                       <Icons.Upload className="w-3.5 h-3.5 text-label" />
                       <span>Pilih Foto Cover Baru</span>
                       <input
@@ -2187,7 +2187,7 @@ export default function GalleryModal({
                 <select
                   value={openEdit.category}
                   onChange={(e) => setOpenEdit({ ...openEdit, category: e.target.value as any })}
-                  className="w-full px-3.5 py-2.5 text-[16px] sm:text-subhead bg-fill rounded-field text-label border border-transparent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-tint/35 transition-all"
+                  className="w-full px-3.5 py-2.5 text-[16px] sm:text-subhead bg-fill rounded-field text-label border border-transparent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-tint/35 transition"
                 >
                   {CATEGORIES.filter((c) => c !== "Semua").map((c) => (
                     <option key={c} value={c}>
@@ -2202,7 +2202,7 @@ export default function GalleryModal({
                 <select
                   value={openEdit.aspectRatio}
                   onChange={(e) => setOpenEdit({ ...openEdit, aspectRatio: e.target.value as any })}
-                  className="w-full px-3.5 py-2.5 text-[16px] sm:text-subhead bg-fill rounded-field text-label border border-transparent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-tint/35 transition-all"
+                  className="w-full px-3.5 py-2.5 text-[16px] sm:text-subhead bg-fill rounded-field text-label border border-transparent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-tint/35 transition"
                 >
                   <option value="9:16">9:16</option>
                   <option value="3:4">3:4</option>
@@ -2218,7 +2218,7 @@ export default function GalleryModal({
                 rows={5}
                 value={openEdit.caption}
                 onChange={(e) => setOpenEdit({ ...openEdit, caption: e.target.value })}
-                className="w-full p-3 text-[16px] sm:text-footnote bg-fill rounded-field text-label font-mono leading-relaxed border border-transparent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-tint/35 transition-all"
+                className="w-full p-3 text-[16px] sm:text-footnote bg-fill rounded-field text-label font-mono leading-relaxed border border-transparent focus:bg-surface focus:outline-none focus:ring-2 focus:ring-tint/35 transition"
               />
             </div>
           </form>

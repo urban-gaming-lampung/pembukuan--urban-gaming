@@ -289,7 +289,7 @@ export default function InputStokJualan() {
             type="button"
             onClick={x.on}
             disabled={!x.on}
-            className={`rounded-tile apple-card ring-1 ring-edge shadow-card px-3.5 py-3 text-left transition-all disabled:cursor-default ${
+            className={`rounded-tile apple-card ring-1 ring-edge shadow-card px-3.5 py-3 text-left transition disabled:cursor-default ${
               x.on ? "apple-tile-interactive active:scale-[0.98]" : ""
             }`}
           >
@@ -361,7 +361,7 @@ export default function InputStokJualan() {
               key={c.key}
               type="button"
               onClick={() => setFilter(c.key)}
-              className={`shrink-0 h-9 px-3.5 rounded-full text-footnote font-semibold border transition-colors ${
+              className={`shrink-0 hit-44 h-9 px-3.5 rounded-full text-footnote font-semibold border transition-colors ${
                 aktif
                   ? "bg-action text-action-label border-action"
                   : "bg-surface text-label-2 hover:text-label border-sep"
@@ -383,7 +383,7 @@ export default function InputStokJualan() {
           {!loadingTukar && menungguShown.length === 0 && stokBelumShown.length === 0 ? (
             <EmptyState
               icon={<Package />}
-              title={q ? "Tidak ditemukan." : "Semua stok & tukar tambah sudah dikonfirmasi 👍"}
+              title={q ? "Tidak ditemukan." : "Semua stok & tukar tambah sudah dikonfirmasi"}
             />
           ) : (
             <>
@@ -421,7 +421,7 @@ export default function InputStokJualan() {
           <Footnote className="px-1 pb-2">Barang ini ada di stok tapi belum dijual di POS. Jadikan produk supaya punya harga &amp; muncul di kasir, atau hapus bila sudah tidak dipakai.</Footnote>
           <Card flush>
             {yatimShown.length === 0 ? (
-              <EmptyState title="Semua barang stok sudah punya produk 👍" />
+              <EmptyState title="Semua barang stok sudah punya produk" />
             ) : (
               <div className="divide-y divide-sep">
                 {yatimShown.map((r) => (
@@ -454,7 +454,7 @@ export default function InputStokJualan() {
       ) : list.length === 0 ? (
         <EmptyState
           icon={<Package />}
-          title={q ? "Tidak ditemukan." : filter === "tanpaModal" ? "Semua barang sudah punya harga modal 👍" : "Belum ada barang."}
+          title={q ? "Tidak ditemukan." : filter === "tanpaModal" ? "Semua barang sudah punya harga modal" : "Belum ada barang."}
         />
       ) : (
         grouped.map((g) => (
@@ -797,7 +797,7 @@ const BarangJualanSheet: React.FC<{
                   key={s.key}
                   type="button"
                   onClick={() => { setSub(s.key); setSubManual(true); }}
-                  className={`shrink-0 h-9 px-3.5 rounded-full text-footnote font-semibold border transition-colors ${
+                  className={`shrink-0 hit-44 h-9 px-3.5 rounded-full text-footnote font-semibold border transition-colors ${
                     sub === s.key
                       ? "bg-action text-action-label border-action"
                       : "bg-surface text-label-2 hover:text-label border-sep"
@@ -865,7 +865,7 @@ const BarangJualanSheet: React.FC<{
               {stokTercampur ? (
                 <p className="flex items-start gap-1.5 text-caption text-warning px-0.5">
                   <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                  Stok ini juga dihitung untuk {dipakaiLain.map((x) => x.name).join(", ")}. Pilih ✨ Otomatis supaya produk ini punya stok sendiri.
+                  Stok ini juga dihitung untuk {dipakaiLain.map((x) => x.name).join(", ")}. Pilih Otomatis supaya produk ini punya stok sendiri.
                 </p>
               ) : dipakaiLain.length > 0 ? (
                 <Footnote className="px-0.5 leading-snug">Varian di kategori ini juga dijual sebagai: {dipakaiLain.map((x) => x.name).join(", ")}</Footnote>
@@ -874,7 +874,7 @@ const BarangJualanSheet: React.FC<{
               {efektif && /\b(BARU|SEKEN)\b/.test(efektif.kategori) && !efektif.kategori.includes(kondisiB) && (
                 <p className="flex items-start gap-1.5 text-caption text-warning px-0.5">
                   <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                  Kondisi {kondisiB === "SEKEN" ? "Seken" : "Baru"}, tapi stoknya dihitung di {efektif.kategori}. Pilih barang stok yang sesuai{ref !== undefined ? " atau pilih ✨ Otomatis" : ""}.
+                  Kondisi {kondisiB === "SEKEN" ? "Seken" : "Baru"}, tapi stoknya dihitung di {efektif.kategori}. Pilih barang stok yang sesuai{ref !== undefined ? " atau pilih Otomatis" : ""}.
                 </p>
               )}
 
@@ -965,7 +965,7 @@ const BarangJualanSheet: React.FC<{
                       type="button"
                       aria-label="Kurangi"
                       onClick={() => setQty((n) => Math.max(0, n - 1))}
-                      className="w-9 h-9 rounded-full flex items-center justify-center text-label hover:bg-surface/60 active:bg-surface transition-colors"
+                      className="w-9 hit-44 h-9 rounded-full flex items-center justify-center text-label hover:bg-surface/60 active:bg-surface transition-colors"
                     >
                       <Minus className="w-4 h-4" />
                     </button>
@@ -980,7 +980,7 @@ const BarangJualanSheet: React.FC<{
                       type="button"
                       aria-label="Tambah"
                       onClick={() => setQty((n) => Math.min(9999, n + 1))}
-                      className="w-9 h-9 rounded-full flex items-center justify-center text-label hover:bg-surface/60 active:bg-surface transition-colors"
+                      className="w-9 hit-44 h-9 rounded-full flex items-center justify-center text-label hover:bg-surface/60 active:bg-surface transition-colors"
                     >
                       <Plus className="w-4 h-4" />
                     </button>

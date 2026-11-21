@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, Suspense, lazy } from "react";
-import Header, { getColorForEmail } from "./components/Header";
+import Header from "./components/Header";
 import Input from "./components/Input";
 import RincianHarian from "./components/RincianHarian";
 import RincianJajanan from "./components/RincianJajanan";
@@ -43,7 +43,7 @@ import {
 } from "lucide-react";
 import { GAME_NAMES_ID } from "./games/constants";
 import useAppController from "./hooks/useAppController";
-import { AlertDialog, AppShell, Button, IconBadge, type NavItem, type NavSection, SubTabs } from "./ui";
+import { AlertDialog, AppShell, Button, IconBadge, type NavItem, type NavSection, SubTabs, warnaPengguna } from "./ui";
 import { petaWaPenyewa } from "./lib/pengingatSewa";
 import PeringatanSewaHabis from "./components/PeringatanSewaHabis";
 import { totalPemasukanHarian } from "./lib/keuangan";
@@ -319,13 +319,11 @@ export default function App() {
                     </div>
                     <div className="flex flex-wrap gap-1">
                       {activeUsers.map((u) => {
-                        const customStyle = u.profileColor ? { backgroundColor: u.profileColor } : undefined;
-                        const defaultCls = u.profileColor ? "" : getColorForEmail(u.email);
                         return (
                           <span
                             key={u.uid}
-                            style={customStyle}
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold text-white uppercase tracking-wide ${defaultCls}`}
+                            style={{ backgroundColor: u.profileColor || warnaPengguna(u.email) }}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-caption2 font-semibold text-white uppercase tracking-wide"
                             title={`Sedang aktif di tab: ${u.tab}`}
                           >
                             <span className="max-w-[110px] truncate">

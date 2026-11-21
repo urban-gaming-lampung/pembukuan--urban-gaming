@@ -94,7 +94,7 @@ export const Sheet: React.FC<{
                 type="button"
                 onClick={onClose}
                 aria-label="Tutup"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-fill text-label-2 transition-colors hover:text-label active:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint"
+                className="flex hit-44 h-8 w-8 shrink-0 items-center justify-center rounded-full bg-fill text-label-2 transition-colors hover:text-label active:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint"
               >
                 <X className="h-4 w-4" />
               </button>

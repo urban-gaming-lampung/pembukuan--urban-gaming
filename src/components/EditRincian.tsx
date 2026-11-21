@@ -166,7 +166,7 @@ const EditRincian: React.FC<EditRincianProps> = ({
                         <button
                           type="button"
                           onClick={() => handleDelete(realIndex)}
-                          className="w-9 h-9 rounded-full flex items-center justify-center text-negative hover:bg-negative/10 active:scale-90 transition-all shrink-0"
+                          className="w-9 hit-44 h-9 rounded-full flex items-center justify-center text-negative hover:bg-negative/10 active:scale-90 transition shrink-0"
                           title="Hapus"
                           aria-label={`Hapus ${item.label || "item"}`}
                         >

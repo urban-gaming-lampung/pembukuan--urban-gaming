@@ -39,7 +39,7 @@ export const TileStok: React.FC<{
       <div className="text-caption2 text-label-2 mt-1 truncate">{sub}</div>
     </>
   );
-  const base = "text-left rounded-card apple-card p-3.5 sm:p-4 ring-1 shadow-card min-w-0 transition-all duration-200";
+  const base = "text-left rounded-card apple-card p-3.5 sm:p-4 ring-1 shadow-card min-w-0 transition duration-200";
   if (!onClick) return <div className={`${base} ring-edge`}>{body}</div>;
   return (
     <button
@@ -85,7 +85,7 @@ export const StepperStok: React.FC<{
     if (!isNaN(n) && n >= 0 && n !== value) onSet(n);
   };
   const btn =
-    "w-11 h-11 rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 flex items-center justify-center text-label active:scale-95 transition-all disabled:opacity-30";
+    "w-11 h-11 rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 flex items-center justify-center text-label active:scale-95 transition disabled:opacity-30";
   return (
     <div className="flex items-center gap-1.5 shrink-0">
       <button type="button" onClick={() => onStep(-1)} disabled={disabled || value <= 0} aria-label={`Kurangi ${nama}`} className={btn}>

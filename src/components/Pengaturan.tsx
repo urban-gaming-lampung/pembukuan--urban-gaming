@@ -975,7 +975,7 @@ const Pengaturan: React.FC<Props> = ({
             <div className="p-6 flex flex-col items-center justify-center text-center">
               <label className="relative mb-3.5 group cursor-pointer block" aria-label="Ubah foto profil">
                 <div
-                  className="w-24 h-24 rounded-full overflow-hidden shadow-card flex items-center justify-center relative ring-[3px] ring-offset-2 ring-offset-surface transition-all"
+                  className="w-24 h-24 rounded-full overflow-hidden shadow-card flex items-center justify-center relative ring-[3px] ring-offset-2 ring-offset-surface transition"
                   style={{
                     ["--tw-ring-color" as any]: userProfileColor || "#0088FF",
                     backgroundColor: userProfilePic ? undefined : (userProfileColor || "#0088FF"),
@@ -984,7 +984,7 @@ const Pengaturan: React.FC<Props> = ({
                   {userProfilePic ? (
                     <img src={userProfilePic} alt="Foto profil" className="w-full h-full object-cover" />
                   ) : (
-                    <span className="font-bold text-white text-2xl uppercase tracking-wider select-none">
+                    <span className="font-bold text-white text-title2 uppercase tracking-wider select-none">
                       {(userEmail?.split("@")[0] || "U").substring(0, 2).toUpperCase()}
                     </span>
                   )}
@@ -1025,7 +1025,7 @@ const Pengaturan: React.FC<Props> = ({
                       aria-label={`Pilih warna ${name}`}
                       aria-pressed={active}
                       onClick={() => runOrAlert(() => onProfileColorChange?.(hex))}
-                      className={`shrink-0 w-10 h-10 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint transition-transform hover:scale-105 active:scale-95 flex items-center justify-center shadow-card border border-white/25 ${
+                      className={`shrink-0 w-10 hit-44 h-10 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint transition-transform hover:scale-105 active:scale-95 flex items-center justify-center shadow-card border border-white/25 ${
                         active ? "scale-110 ring-2 ring-offset-2 ring-offset-surface ring-tint z-10" : ""
                       }`}
                       style={{ backgroundColor: hex }}
@@ -1171,7 +1171,7 @@ const Pengaturan: React.FC<Props> = ({
                         const tDiterimaSemua = Math.max(0, tPokok + tBonus + tOngkir - tPotongan);
                         const tDitransfer = Math.max(0, tPokok + tBonusBelumDibayar - tPotongan);
                         return (
-                          <div key={r.id} className="apple-tile rounded-tile border border-sep overflow-hidden w-full transition-all">
+                          <div key={r.id} className="apple-tile rounded-tile border border-sep overflow-hidden w-full transition">
                             <button
                               type="button"
                               aria-expanded={isExpanded}
@@ -2109,7 +2109,7 @@ const Pengaturan: React.FC<Props> = ({
               type="button"
               onClick={() => setTab("profile")}
               aria-current={tab === "profile" ? "page" : undefined}
-              className={`w-full text-left apple-card rounded-tile p-3 flex items-center gap-3 cursor-pointer shadow-card ring-1 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint ${
+              className={`w-full text-left apple-card rounded-tile p-3 flex items-center gap-3 cursor-pointer shadow-card ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint ${
                 tab === "profile" ? "ring-2 ring-tint" : "ring-edge hover:bg-fill/40"
               }`}
             >

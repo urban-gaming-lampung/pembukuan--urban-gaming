@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { X, ShoppingCart, Plus, Minus, Trash2, PlusCircle, Sparkles, Pencil, Receipt, Clock, AlertTriangle } from "lucide-react";
+import { X, ShoppingCart, Plus, Minus, Trash2, PlusCircle, Sparkles, Pencil, Receipt, Clock, AlertTriangle, Package } from "lucide-react";
 import { collection, onSnapshot, query, addDoc, serverTimestamp, doc, setDoc, deleteDoc, deleteField } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage, listGameDb } from "../lib/firebase";
-import { Button, Card, EmptyState, Eyebrow, IconBadge, Notice, Pill, SearchField, Sheet, Toast } from "../ui";
+import { Button, Card, EmptyState, Eyebrow, IconBadge, konfirmasi, Notice, Pill, SearchField, Sheet, Toast } from "../ui";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import useStokData from "../hooks/useStokData";
 import type { StokItemValue } from "../hooks/useStokData";
@@ -541,7 +541,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   };
 
   const handleDeleteProduct = async (productId: string) => {
-    if (!window.confirm("Apakah Anda yakin ingin menghapus produk ini secara permanen dari database?")) return;
+    if (!(await konfirmasi("Produk dihapus permanen dari database.", { judul: "Hapus produk ini?", ya: "Hapus", bahaya: true }))) return;
     try {
       const docRef = doc(db, "products", productId);
       const prod = products.find((x) => x.id === productId);
@@ -563,7 +563,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
   // Initialize Default Products
   const handleInitializeDefaults = async () => {
-    if (!window.confirm("Apakah Anda ingin memuat produk bawaan awal ke database?")) return;
+    if (!(await konfirmasi("Produk bawaan yang belum ada akan ditambahkan ke database.", { judul: "Muat produk bawaan?", ya: "Muat" }))) return;
     try {
       const existing = new Set(products.map((x) => String(x.name || "").trim().toLowerCase()));
       const toAdd = DEFAULT_PRODUCTS.filter((p) => !existing.has(String(p.name || "").trim().toLowerCase()));
@@ -704,7 +704,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             type="button"
             onClick={() => removeFromCart(item.id)}
             aria-label={`Kurangi ${item.name}`}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label-2 hover:text-label active:scale-90 transition-all"
+            className="w-8 hit-44 h-8 flex items-center justify-center rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label-2 hover:text-label active:scale-90 transition"
           >
             <Minus size={14} />
           </button>
@@ -715,7 +715,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             type="button"
             onClick={() => addToCart(item)}
             aria-label={`Tambah ${item.name}`}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label-2 hover:text-label active:scale-90 transition-all"
+            className="w-8 hit-44 h-8 flex items-center justify-center rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label-2 hover:text-label active:scale-90 transition"
           >
             <Plus size={14} />
           </button>
@@ -723,7 +723,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             type="button"
             onClick={() => removeAllFromCart(item.id)}
             aria-label={`Hapus ${item.name}`}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-negative/10 text-negative hover:bg-negative/15 active:scale-90 transition-all ml-1"
+            className="w-8 hit-44 h-8 flex items-center justify-center rounded-full bg-negative/10 text-negative hover:bg-negative/15 active:scale-90 transition ml-1"
             title="Hapus item"
           >
             <Trash2 size={13} />
@@ -757,7 +757,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               key={m}
               type="button"
               onClick={() => setPaymentMethod(m)}
-              className={`min-h-[38px] rounded-full text-footnote font-semibold inline-flex items-center justify-center gap-1.5 transition-all ${
+              className={`min-h-[38px] rounded-full text-footnote font-semibold inline-flex items-center justify-center gap-1.5 transition ${
                 paymentMethod === m
                   ? "apple-segmented-thumb text-label"
                   : "text-label-2 hover:text-label hover:bg-white/30 dark:hover:bg-white/[0.05]"
@@ -836,7 +836,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
   );
 
   const inputCls =
-    "w-full h-11 px-3.5 rounded-field bg-fill text-[16px] sm:text-footnote font-medium text-label placeholder:text-label-3 focus:outline-none focus:bg-surface dark:focus:bg-[#2C2C2E] focus:ring-2 focus:ring-tint/35 transition-all";
+    "w-full h-11 px-3.5 rounded-field bg-fill text-[16px] sm:text-footnote font-medium text-label placeholder:text-label-3 focus:outline-none focus:bg-surface dark:focus:bg-surface-elevated focus:ring-2 focus:ring-tint/35 transition";
   const labelCls = "text-caption font-semibold uppercase tracking-[0.04em] text-label-2 block mb-1";
 
   return (
@@ -863,7 +863,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
               type="button"
               onClick={() => setOpenDp(true)}
               aria-label={`Belum lunas, ${notaDp.length} nota DP`}
-              className="min-h-[36px] pl-3 pr-3 flex items-center gap-1.5 rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label text-footnote font-semibold active:scale-95 transition-all"
+              className="min-h-[36px] pl-3 pr-3 flex items-center gap-1.5 rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label text-footnote font-semibold active:scale-95 transition"
             >
               <Clock size={14} className="text-label-2" />
               Belum Lunas
@@ -880,7 +880,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             <button
               type="button"
               onClick={onClose}
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label-2 hover:text-label active:scale-90 transition-all"
+              className="w-9 hit-44 h-9 flex items-center justify-center rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label-2 hover:text-label active:scale-90 transition"
               aria-label="Tutup POS"
             >
               <X size={18} />
@@ -904,7 +904,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     key={sub}
                     type="button"
                     onClick={() => setActiveSub(sub)}
-                    className={`flex-1 min-w-[75px] min-h-[38px] text-caption font-semibold rounded-full tracking-wide transition-all relative ${
+                    className={`flex-1 min-w-[75px] min-h-[38px] text-caption font-semibold rounded-full tracking-wide transition relative ${
                       activeSub === sub
                         ? "apple-segmented-thumb text-label"
                         : "text-label-2 hover:text-label hover:bg-white/30 dark:hover:bg-white/[0.05]"
@@ -978,7 +978,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                     key={sub}
                     type="button"
                     onClick={() => setActiveSub(sub)}
-                    className={`w-full min-h-[44px] flex items-center justify-between px-3.5 py-2.5 rounded-tile font-semibold text-footnote tracking-wide transition-all ${
+                    className={`w-full min-h-[44px] flex items-center justify-between px-3.5 py-2.5 rounded-tile font-semibold text-footnote tracking-wide transition ${
                       active
                         ? "bg-action text-action-label shadow-sm"
                         : "text-label-2 hover:bg-fill/70 hover:text-label"
@@ -1090,7 +1090,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                         key={subJualan}
                         type="button"
                         onClick={() => setActiveJualanSub(subJualan)}
-                        className={`flex items-center gap-1.5 px-3 min-h-[34px] rounded-full text-caption font-semibold whitespace-nowrap active:scale-95 transition-all relative ${
+                        className={`flex items-center gap-1.5 px-3 min-h-[34px] rounded-full text-caption font-semibold whitespace-nowrap active:scale-95 transition relative ${
                           active
                             ? "bg-action text-action-label shadow-sm"
                             : "bg-surface text-label-2 ring-1 ring-edge hover:text-label"
@@ -1103,7 +1103,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                           )}
                         </span>
                         <span
-                          className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold tabular-nums ${
+                          className={`text-caption2 px-1.5 py-0.5 rounded-full font-bold tabular-nums ${
                             active ? "bg-action-label/20 text-action-label" : "bg-fill text-label-3"
                           }`}
                         >
@@ -1131,7 +1131,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                       key={subIsiGame}
                       type="button"
                       onClick={() => setActiveIsiGameSub(subIsiGame)}
-                      className={`flex items-center gap-1.5 px-3 min-h-[34px] rounded-full text-caption font-semibold whitespace-nowrap active:scale-95 transition-all relative ${
+                      className={`flex items-center gap-1.5 px-3 min-h-[34px] rounded-full text-caption font-semibold whitespace-nowrap active:scale-95 transition relative ${
                         active
                           ? "bg-action text-action-label shadow-sm"
                           : "bg-surface text-label-2 ring-1 ring-edge hover:text-label"
@@ -1144,7 +1144,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                         )}
                       </span>
                       <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold tabular-nums ${
+                        className={`text-caption2 px-1.5 py-0.5 rounded-full font-bold tabular-nums ${
                           active ? "bg-action-label/20 text-action-label" : "bg-fill text-label-3"
                         }`}
                       >
@@ -1197,13 +1197,13 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                       <div
                         key={p.id}
                         onClick={() => addToCart(p)}
-                        className={`group relative overflow-hidden rounded-tile apple-card shadow-card transition-all cursor-pointer flex flex-col active:scale-[0.98] ${
+                        className={`group relative overflow-hidden rounded-tile apple-card shadow-card transition cursor-pointer flex flex-col active:scale-[0.98] ${
                           qty > 0 ? "ring-2 ring-action" : "ring-1 ring-edge hover:ring-label-3"
                         }`}
                       >
                         {/* Selected Indicator Badge (Bottom Right) */}
                         {qty > 0 && (
-                          <div className="absolute bottom-2 right-2 z-10 min-w-[22px] h-[22px] px-1 rounded-full bg-action text-action-label font-bold text-[11px] tabular-nums flex items-center justify-center shadow-md animate-in zoom-in-50 duration-200">
+                          <div className="absolute bottom-2 right-2 z-10 min-w-[22px] h-[22px] px-1 rounded-full bg-action text-action-label font-bold text-caption2 tabular-nums flex items-center justify-center shadow-md animate-in zoom-in-50 duration-200">
                             {qty}
                           </div>
                         )}
@@ -1216,7 +1216,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                               e.stopPropagation();
                               handleEditClick(p);
                             }}
-                            className="absolute top-1.5 right-1.5 z-10 w-7 h-7 rounded-full bg-surface/85 backdrop-blur-md text-label-2 hover:text-label flex items-center justify-center shadow-sm ring-1 ring-edge active:scale-90 transition-all"
+                            className="absolute top-1.5 right-1.5 z-10 w-7 hit-44 h-7 rounded-full bg-surface/85 backdrop-blur-md text-label-2 hover:text-label flex items-center justify-center shadow-sm ring-1 ring-edge active:scale-90 transition"
                             title="Edit Produk"
                             aria-label={`Edit ${p.name}`}
                           >
@@ -1242,10 +1242,10 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                                   if (fallback) fallback.classList.remove("hidden");
                                 }}
                               />
-                              <div className="img-fallback hidden text-2xl text-label-3">📦</div>
+                              <div className="img-fallback hidden text-label-3"><Package className="h-7 w-7" strokeWidth={1.75} /></div>
                             </>
                           ) : (
-                            <div className="text-2xl text-label-3">📦</div>
+                            <Package aria-hidden className="h-7 w-7 text-label-3" strokeWidth={1.75} />
                           )}
 
                           {/* Badge stok jualan (Bottom Left) */}
@@ -1253,7 +1253,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                             const b = stokBadge(p);
                             return b ? (
                               <div
-                                className={`absolute bottom-1.5 left-1.5 z-10 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm select-none ${
+                                className={`absolute bottom-1.5 left-1.5 z-10 px-2 py-0.5 rounded-full text-caption2 font-bold shadow-sm select-none ${
                                   b.tone === "habis"
                                     ? "bg-negative text-white"
                                     : b.tone === "menipis"
@@ -1270,7 +1270,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
 
                           {/* Catalog Update Badge */}
                           {changeType && (
-                            <div className="absolute top-1.5 left-1.5 z-10 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider shadow-md bg-negative text-white select-none animate-pulse">
+                            <div className="absolute top-1.5 left-1.5 z-10 px-2 py-0.5 rounded-full text-caption2 font-bold uppercase tracking-wider shadow-md bg-negative text-white select-none animate-pulse">
                               {changeType}
                             </div>
                           )}
@@ -1318,7 +1318,7 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
                                   removeFromCart(p.id);
                                 }}
                                 aria-label={`Kurangi ${p.name}`}
-                                className="w-7 h-7 rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label-2 hover:text-label flex items-center justify-center active:scale-90 transition-all"
+                                className="w-7 hit-44 h-7 rounded-full bg-fill hover:brightness-95 dark:hover:brightness-110 text-label-2 hover:text-label flex items-center justify-center active:scale-90 transition"
                               >
                                 <Minus size={12} />
                               </button>
@@ -1369,12 +1369,12 @@ export default function POSModal({ open, onClose, isSuperAdminOrOwner, adminName
             <button
               type="button"
               onClick={() => setOpenMobileCart(true)}
-              className="w-full flex items-center justify-between px-5 min-h-[54px] rounded-card bg-action text-action-label font-semibold shadow-card active:scale-[0.98] transition-all"
+              className="w-full flex items-center justify-between px-5 min-h-[54px] rounded-card bg-action text-action-label font-semibold shadow-card active:scale-[0.98] transition"
             >
               <div className="flex items-center gap-2.5">
                 <div className="relative">
                   <ShoppingCart size={18} />
-                  <span className="absolute -top-1.5 -right-2 bg-action-label text-action font-bold text-[10px] min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center shadow-sm tabular-nums">
+                  <span className="absolute -top-1.5 -right-2 bg-action-label text-action font-bold text-caption2 min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center shadow-sm tabular-nums">
                     {totalCartQty}
                   </span>
                 </div>

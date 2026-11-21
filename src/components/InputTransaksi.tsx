@@ -247,8 +247,8 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
                 value={form.metode}
                 onChange={(m) => setForm((f) => ({ ...f, metode: m }))}
                 options={[
-                  { key: "TRANSFER", label: "Rekening (Transfer)" },
-                  { key: "CASH", label: "Tunai (Cash)" },
+                  { key: "TRANSFER", label: "Transfer" },
+                  { key: "CASH", label: "Tunai" },
                 ]}
               />
             </div>
@@ -353,8 +353,8 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
           value={tab}
           onChange={setTab}
           options={[
-            { key: "RENTAL", label: `${label} Rental`, count: perUsaha.RENTAL.length },
-            { key: "USAHA", label: `${label} Usaha`, count: perUsaha.USAHA.length },
+            { key: "RENTAL", label: "Rental", count: perUsaha.RENTAL.length },
+            { key: "USAHA", label: "Usaha", count: perUsaha.USAHA.length },
           ]}
         />
 

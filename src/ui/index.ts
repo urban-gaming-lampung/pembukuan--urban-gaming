@@ -19,6 +19,7 @@ export * from "./presentations/Sheet";
 export * from "./presentations/AlertDialog";
 export * from "./presentations/ImagePreviewModal";
 export * from "./presentations/Toast";
+export * from "./presentations/Pemberitahuan";
 
 export * from "./feedback/Feedback";
 

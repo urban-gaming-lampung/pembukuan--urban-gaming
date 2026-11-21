@@ -191,7 +191,7 @@ export const TukarTambahSheet: React.FC<{
             value={mode}
             onChange={(m) => { setMode(m); setUangStr(""); }}
             ariaLabel="Siapa yang menambah uang"
-            options={[{ key: "PEMBELI", label: "Pembeli" }, { key: "URBAN", label: "URBAN" }, { key: "NILAI", label: "Nilai barang" }]}
+            options={[{ key: "PEMBELI", label: "Pembeli" }, { key: "URBAN", label: "URBAN" }, { key: "NILAI", label: "Nilai" }]}
           />
           <Field label={labelUang}>
             <div className={`flex items-center h-12 px-3.5 rounded-field bg-fill ${nilaiSalah ? "ring-2 ring-negative/40" : ""}`}>

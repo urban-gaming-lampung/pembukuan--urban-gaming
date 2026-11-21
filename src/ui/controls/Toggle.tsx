@@ -17,8 +17,8 @@ export const Toggle: React.FC<{ on: boolean; onChange: (v: boolean) => void; lab
   >
     <span
       className={cx(
-        "absolute top-[2px] h-[24px] w-[38px] rounded-full bg-white shadow-[0_3px_8px_rgba(0,0,0,0.16),0_1px_1px_rgba(0,0,0,0.12)] transition-all duration-200 group-active:scale-[1.06] motion-reduce:transition-none",
-        on ? "left-[24px]" : "left-[2px]"
+        "absolute left-[2px] top-[2px] h-[24px] w-[38px] rounded-full bg-white shadow-[0_3px_8px_rgba(0,0,0,0.16),0_1px_1px_rgba(0,0,0,0.12)] transition-transform duration-200 group-active:scale-[1.06] motion-reduce:transition-none",
+        on ? "translate-x-[22px]" : "translate-x-0"
       )}
     />
   </button>

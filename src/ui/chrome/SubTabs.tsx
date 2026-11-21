@@ -31,7 +31,7 @@ export function SubTabs<T extends string>({
   size?: "md" | "sm";
 }) {
   const kecil = size === "sm";
-  const padat = !kecil && options.length >= 5;
+  const padat = !kecil && options.length >= 4;
   return (
     <div
       role="tablist"
@@ -55,10 +55,10 @@ export function SubTabs<T extends string>({
             className={cx(
               "leading-tight whitespace-nowrap transition-[color,background-color,box-shadow] duration-150 flex items-center justify-center gap-1.5 text-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
               kecil
-                ? "min-h-[34px] px-3 py-1.5 text-caption font-bold uppercase tracking-wide"
+                ? "hit-44 min-h-[34px] px-3 py-1.5 text-caption font-bold uppercase tracking-wide"
                 : cx(
-                    "min-h-[44px] py-1.5 text-[11px] sm:text-footnote font-bold uppercase tracking-normal sm:tracking-wide",
-                    padat ? "px-1.5 sm:px-3.5" : "px-2.5 sm:px-3.5"
+                    "min-h-[44px] py-1.5 text-caption2 sm:text-footnote font-bold uppercase sm:tracking-wide",
+                    padat ? "px-1 tracking-normal sm:px-3.5" : "px-2.5 tracking-normal sm:px-3.5"
                   ),
               aktif
                 ? cx("apple-segmented-thumb", o.tone || "text-label")

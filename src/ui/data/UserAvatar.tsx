@@ -23,11 +23,11 @@ export interface UserAvatarProps {
 }
 
 const SIZE_MAP = {
-  xs: "w-6 h-6 text-[10px]",
-  sm: "w-8 h-8 text-xs",
-  md: "w-9 h-9 text-xs",
-  lg: "w-10 h-10 text-sm",
-  xl: "w-12 h-12 text-base",
+  xs: "w-6 h-6 text-caption2",
+  sm: "w-8 h-8 text-caption",
+  md: "w-9 h-9 text-caption",
+  lg: "w-10 h-10 text-footnote",
+  xl: "w-12 h-12 text-callout",
 };
 
 export const UserAvatar: React.FC<UserAvatarProps> = ({

@@ -46,8 +46,8 @@ function barisTerkunciDariNota(
           title={`Nota ${nota}`}
           className={
             isMobileTable === false
-              ? "inline-flex items-center justify-center w-8 h-8 rounded-full bg-tint/10 text-tint hover:bg-tint/15 dark:bg-tint/15 active:scale-90 transition"
-              : "inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-fill/90 hover:bg-fill text-tint ring-1 ring-edge text-[11px] font-semibold active:scale-95 transition"
+              ? "inline-flex items-center justify-center w-8 hit-44 h-8 rounded-full bg-tint/10 text-tint hover:bg-tint/15 dark:bg-tint/15 active:scale-90 transition"
+              : "inline-flex items-center gap-1 hit-44 h-7 px-2.5 rounded-full bg-fill/90 hover:bg-fill text-tint ring-1 ring-edge text-caption2 font-semibold active:scale-95 transition"
           }
         >
           <Receipt size={13} strokeWidth={2.2} />
@@ -127,7 +127,7 @@ const DaftarNotaOwner: React.FC<{
                   type="button"
                   onClick={() => onOpenNota(n)}
                   aria-label={`Lihat nota ${n.noNota}`}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-tint/10 px-3.5 text-caption font-semibold text-tint transition hover:bg-tint/15 dark:bg-tint/15 active:scale-95"
+                  className="inline-flex hit-44 h-9 items-center gap-1.5 rounded-full bg-tint/10 px-3.5 text-caption font-semibold text-tint transition hover:bg-tint/15 dark:bg-tint/15 active:scale-95"
                 >
                   <Receipt size={14} />
                   <span>Nota</span>

@@ -1,1 +1,0 @@
-import{j as b,i as l}from"./index-D8rJCJJb.js";import"./react-vendor-DJ1oPbzn.js";const K=({value:i,onChange:e,counts:a,className:r=""})=>b.jsx(l,{ariaLabel:"Kondisi barang",value:i,onChange:e,className:r,options:[{key:"BARU",label:"Baru",count:a==null?void 0:a.BARU},{key:"SEKEN",label:"Seken",count:a==null?void 0:a.SEKEN}]});export{K};

@@ -64,7 +64,7 @@ export const TextField: React.FC<
       )}
       <div
         className={cx(
-          "flex items-center gap-2 rounded-field bg-fill px-3.5 ring-1 ring-inset transition-all",
+          "flex items-center gap-2 rounded-field bg-fill px-3.5 ring-1 ring-inset transition",
           FIELD_HEIGHT[size],
           error
             ? "ring-negative/60 focus-within:bg-surface focus-within:ring-2 focus-within:ring-negative/50"
@@ -128,7 +128,7 @@ export const SelectField: React.FC<
       )}
       <div
         className={cx(
-          "relative flex items-center rounded-field bg-fill ring-1 ring-inset transition-all",
+          "relative flex items-center rounded-field bg-fill ring-1 ring-inset transition",
           FIELD_HEIGHT[size],
           error
             ? "ring-negative/60 focus-within:bg-surface focus-within:ring-2 focus-within:ring-negative/50"
@@ -198,7 +198,7 @@ export const TextAreaField: React.FC<
         aria-invalid={error ? true : undefined}
         {...rest}
         className={cx(
-          "w-full rounded-field bg-fill px-3.5 py-2.5 text-[16px] sm:text-callout text-label placeholder:text-label-3 ring-1 ring-inset transition-all focus:bg-surface focus:outline-none focus:ring-2 disabled:opacity-50",
+          "w-full rounded-field bg-fill px-3.5 py-2.5 text-[16px] sm:text-callout text-label placeholder:text-label-3 ring-1 ring-inset transition focus:bg-surface focus:outline-none focus:ring-2 disabled:opacity-50",
           error ? "ring-negative/60 focus:ring-negative/50" : "ring-edge/70 focus:ring-tint/40",
           className,
           textareaClassName

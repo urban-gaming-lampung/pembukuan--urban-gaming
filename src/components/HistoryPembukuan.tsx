@@ -247,10 +247,10 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
               const isWeekExpanded = expandedWeeks.includes(g.week);
 
               return (
-                <div key={`week-${g.week}`} className="rounded-tile p-3.5 sm:p-4 apple-tile transition-all">
+                <div key={`week-${g.week}`} className="rounded-tile p-3.5 sm:p-4 apple-tile transition">
                   <button
                     type="button"
-                    className={`w-full min-h-[44px] flex justify-between items-center text-left active:opacity-70 transition-all ${isWeekExpanded ? 'mb-3 pb-3 border-b border-sep' : ''}`}
+                    className={`w-full min-h-[44px] flex justify-between items-center text-left active:opacity-70 transition ${isWeekExpanded ? 'mb-3 pb-3 border-b border-sep' : ''}`}
                     onClick={() => toggleWeekExpand(g.week)}
                   >
                     <div className="flex items-center gap-3 min-w-0">
@@ -368,7 +368,7 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
                       <button
                         type="button"
                         onClick={() => setHapusCatatanTarget(h)}
-                        className="w-8 h-8 flex items-center justify-center rounded-full bg-fill hover:bg-negative/15 text-label-3 hover:text-negative transition-all md:opacity-0 md:group-hover/note:opacity-100 focus:opacity-100 active:scale-90 shrink-0"
+                        className="w-8 hit-44 h-8 flex items-center justify-center rounded-full bg-fill hover:bg-negative/15 text-label-3 hover:text-negative transition md:opacity-0 md:group-hover/note:opacity-100 focus:opacity-100 active:scale-90 shrink-0"
                         title="Hapus catatan"
                         aria-label={`Hapus catatan ${h.tanggal}`}
                       >
@@ -391,11 +391,11 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
       {activeAction && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[1000] flex items-end sm:items-center justify-center p-4 sm:p-6 font-sans">
           <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-[4px] transition-all duration-300"
+            className="absolute inset-0 bg-black/50 backdrop-blur-[4px] transition duration-300"
             onClick={() => setActiveAction(null)}
           />
 
-          <div className="relative w-full max-w-sm transform overflow-hidden rounded-sheet apple-sheet p-3.5 border border-white/65 dark:border-white/[0.14] shadow-float ring-1 ring-black/10 dark:ring-white/10 transition-all animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
+          <div className="relative w-full max-w-sm transform overflow-hidden rounded-sheet apple-sheet p-3.5 border border-white/65 dark:border-white/[0.14] shadow-float ring-1 ring-black/10 dark:ring-white/10 transition animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
             <div className="flex flex-col items-center px-2.5 pt-3.5 pb-4 text-center">
               <div className={`mb-4 flex h-14 w-14 items-center justify-center rounded-full ${activeAction.type === 'delete'
                   ? 'bg-negative/10 text-negative'
@@ -430,14 +430,14 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
               <button
                 type="button"
                 onClick={() => setActiveAction(null)}
-                className="min-h-[48px] w-full rounded-full bg-fill px-4 py-3 text-subhead font-medium text-label hover:brightness-95 dark:hover:brightness-115 active:opacity-75 transition-all"
+                className="min-h-[48px] w-full rounded-full bg-fill px-4 py-3 text-subhead font-medium text-label hover:brightness-95 dark:hover:brightness-115 active:opacity-75 transition"
               >
                 Batal
               </button>
               <button
                 type="button"
                 onClick={confirmAction}
-                className={`min-h-[48px] w-full rounded-full px-4 py-3 text-subhead font-semibold active:opacity-75 transition-all ${activeAction.type === 'delete'
+                className={`min-h-[48px] w-full rounded-full px-4 py-3 text-subhead font-semibold active:opacity-75 transition ${activeAction.type === 'delete'
                     ? 'bg-negative/[0.13] text-negative dark:bg-negative/[0.22] hover:bg-negative/[0.20]'
                     : 'bg-action text-action-label shadow-sm hover:opacity-85'
                   }`}

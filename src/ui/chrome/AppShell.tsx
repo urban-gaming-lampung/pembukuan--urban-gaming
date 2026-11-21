@@ -158,7 +158,7 @@ export const AppShell: React.FC<{
                     onClick={() => onSelectKey(item.key)}
                     aria-current={active ? "page" : undefined}
                     className={cx(
-                      "relative flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-full px-2 py-1 transition-all duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
+                      "relative flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-full px-2 py-1 transition duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
                       active
                         ? "bg-[var(--ui-fill-2)] text-tint shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]"
                         : "text-label-2 hover:text-label"
@@ -168,7 +168,7 @@ export const AppShell: React.FC<{
                       {item.icon}
                       {item.dot && <span aria-hidden className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-negative ring-2 ring-surface" />}
                     </span>
-                    <span className={cx("max-w-full truncate text-[11px] leading-tight", active ? "font-semibold" : "font-medium")}>
+                    <span className={cx("max-w-full truncate text-caption2 leading-tight", active ? "font-semibold" : "font-medium")}>
                       {item.shortLabel ?? item.label}
                     </span>
                   </button>

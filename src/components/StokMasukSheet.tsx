@@ -7,7 +7,7 @@ import {
 import { Kondisi, kondisiProduk, PILIH_SAAT_CHECKOUT, produkSubKategori, StokRef } from "../lib/posSales";
 import { isUnitPsBaruRef, sameBonusStik } from "../lib/psBonusFifo";
 import { rupiah } from "../lib/format";
-import { Button, Card, Footnote, Notice, Sheet, Toggle } from "../ui";
+import { Button, Card, Footnote, konfirmasi, Notice, Sheet, Toggle } from "../ui";
 
 /** Angka saja dari input bebas ("01.500" -> "1500"). */
 export const digits = (s: string) => s.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
@@ -111,7 +111,7 @@ export const BonusStikPicker: React.FC<{
             type="button"
             aria-label="Kurangi bonus stik"
             onClick={() => onQtyChange(Math.max(0, qty - 1))}
-            className="w-9 h-9 rounded-full flex items-center justify-center text-label hover:bg-surface/60 active:bg-surface transition-colors"
+            className="w-9 hit-44 h-9 rounded-full flex items-center justify-center text-label hover:bg-surface/60 active:bg-surface transition-colors"
           >
             <Minus className="w-4 h-4" />
           </button>
@@ -126,7 +126,7 @@ export const BonusStikPicker: React.FC<{
             type="button"
             aria-label="Tambah bonus stik"
             onClick={() => onQtyChange(Math.min(10, qty + 1))}
-            className="w-9 h-9 rounded-full flex items-center justify-center text-label hover:bg-surface/60 active:bg-surface transition-colors"
+            className="w-9 hit-44 h-9 rounded-full flex items-center justify-center text-label hover:bg-surface/60 active:bg-surface transition-colors"
           >
             <Plus className="w-4 h-4" />
           </button>
@@ -255,7 +255,7 @@ const StokMasukSheet: React.FC<{
   const hapus = async () => {
     const efekStok = ikutStok ? `Stok ${rec.item} berkurang ${rec.qty} (${stokSekarang} → ${Math.max(0, stokSekarang - rec.qty)})` : `Stok ${rec.item} tetap ${stokSekarang}`;
     const efekUang = rec.catatPengeluaran ? `\nPengeluaran ${rupiah(rec.qty * (rec.modalSatuan || 0))} ikut dihapus.` : "";
-    if (!confirm(`Hapus stok masuk +${rec.qty} (${rec.item})?\n${efekStok}.${efekUang}`)) return;
+    if (!(await konfirmasi(`${efekStok}.${efekUang}`, { judul: `Hapus stok masuk +${rec.qty}?`, ya: "Hapus", bahaya: true }))) return;
     setBusy("hapus"); setErr("");
     try { await hapusStokMasuk(rec, ikutStok); onDone(`Stok masuk dihapus${ikutStok ? ` · stok −${rec.qty}` : ""} ✓`); }
     catch (e: any) { setErr(e?.message || String(e)); setBusy(""); }
@@ -327,9 +327,9 @@ const StokMasukSheet: React.FC<{
                 <div className="text-caption text-label-2 truncate">{rec.kategori}</div>
               </div>
               <div className="flex items-center gap-1 bg-fill rounded-full p-1 shrink-0">
-                <button type="button" aria-label="Kurangi" onClick={() => setQty((n) => Math.max(1, n - 1))} className="w-9 h-9 rounded-full flex items-center justify-center text-label hover:bg-surface/70 transition-colors"><Minus className="w-4 h-4" /></button>
+                <button type="button" aria-label="Kurangi" onClick={() => setQty((n) => Math.max(1, n - 1))} className="w-9 hit-44 h-9 rounded-full flex items-center justify-center text-label hover:bg-surface/70 transition-colors"><Minus className="w-4 h-4" /></button>
                 <input inputMode="numeric" aria-label="Jumlah stok masuk" value={qty || ""} onChange={(e) => setQty(Math.min(9999, Number(digits(e.target.value) || 0)))} className="w-10 bg-transparent text-center text-headline font-semibold tabular-nums text-label focus:outline-none" />
-                <button type="button" aria-label="Tambah" onClick={() => setQty((n) => Math.min(9999, n + 1))} className="w-9 h-9 rounded-full flex items-center justify-center text-label hover:bg-surface/70 transition-colors"><Plus className="w-4 h-4" /></button>
+                <button type="button" aria-label="Tambah" onClick={() => setQty((n) => Math.min(9999, n + 1))} className="w-9 hit-44 h-9 rounded-full flex items-center justify-center text-label hover:bg-surface/70 transition-colors"><Plus className="w-4 h-4" /></button>
               </div>
             </div>
             <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">

@@ -41,11 +41,14 @@ export const AlertDialog: React.FC<{
 
   useEffect(() => {
     if (!open || !dismissible) return;
+    // capture + stop: Escape hanya menutup dialog teratas, bukan Sheet di belakangnya
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      onClose();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [open, dismissible, onClose]);
 
   if (!open || typeof document === "undefined") return null;
@@ -93,7 +96,7 @@ export const AlertDialog: React.FC<{
                 disabled={a.disabled}
                 onClick={a.onClick}
                 className={cx(
-                  "flex min-h-[48px] w-full items-center justify-center rounded-full px-4 text-subhead transition-all active:opacity-75 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
+                  "flex min-h-[48px] w-full items-center justify-center rounded-full px-4 text-subhead transition active:opacity-75 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
                   roleCls
                 )}
               >

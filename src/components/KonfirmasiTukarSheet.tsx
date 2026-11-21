@@ -43,7 +43,7 @@ export const DaftarKonfirmasiTukar: React.FC<{ list: TukarTambah[]; loading: boo
     </p>
     <div className="rounded-card apple-card ring-1 ring-edge shadow-card overflow-hidden divide-y divide-sep">
       {loading && <div className="py-10 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-label-3" /></div>}
-      {!loading && list.length === 0 && <div className="py-10 text-center text-subhead text-label-2">Tidak ada barang yang menunggu konfirmasi 👍</div>}
+      {!loading && list.length === 0 && <div className="py-10 text-center text-subhead text-label-2">Tidak ada barang yang menunggu konfirmasi</div>}
       {list.map((t) => (
         <button key={t.id} type="button" onClick={() => onPilih(t)} className="w-full min-h-[44px] flex items-center gap-3 px-3.5 py-3 text-left active:bg-fill">
           <Foto url={t.fotoBarang} size={44} />
@@ -343,8 +343,8 @@ export const KonfirmasiTukarSheet: React.FC<{
                 }}
                 ariaLabel="Cara hitung modal barang masuk"
                 options={[
-                  { key: "TERTAHAN", label: "Modal tertahan" },
-                  { key: "NILAI_TUKAR", label: "Nilai tukar nota" },
+                  { key: "TERTAHAN", label: "Tertahan" },
+                  { key: "NILAI_TUKAR", label: "Nilai tukar" },
                 ]}
               />
               <label className="block">

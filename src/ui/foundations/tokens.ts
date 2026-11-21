@@ -42,6 +42,28 @@ export const MARK = {
   transfer: "#0088FF",
 } as const;
 
+/**
+ * Warna identitas pengguna (chip "aktif" di header & kursor live) — iOS 27 System Colors.
+ * Satu email selalu dapat warna yang sama di semua tempat. Kuning sengaja tidak dipakai
+ * karena teks putih di atasnya tidak terbaca.
+ */
+export const WARNA_PENGGUNA = ["#FF383C", "#FF8D28", "#34C759", "#00C8B3", "#00C0E8", "#0088FF", "#6155F5", "#CB30E0", "#FF2D55"] as const;
+
+export const warnaPengguna = (email?: string | null): string => {
+  if (!email) return "#0088FF";
+  let hash = 0;
+  for (let i = 0; i < email.length; i++) hash = email.charCodeAt(i) + ((hash << 5) - hash);
+  return WARNA_PENGGUNA[Math.abs(hash) % WARNA_PENGGUNA.length];
+};
+
+/** Baris ongkir otomatis (terkunci) — ungu lembut, sama di tabel desktop & kartu rincian. */
+export const AKSEN_ONGKIR = {
+  baris: "bg-[#CB30E0]/[0.05] hover:bg-[#CB30E0]/[0.08] dark:bg-[#DB34F2]/[0.08] dark:hover:bg-[#DB34F2]/[0.12]",
+  latar: "bg-[#CB30E0]/[0.05] dark:bg-[#DB34F2]/[0.08]",
+  garis: "border-[#CB30E0]/20 dark:border-[#DB34F2]/30",
+  pemisah: "divide-[#CB30E0]/15 dark:divide-[#DB34F2]/25",
+} as const;
+
 /** Warna ikon kotak (squircle) & aksen kategori ala Apple iOS 27 System Colors. */
 export type WarnaIkon =
   | "blue"

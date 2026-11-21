@@ -86,8 +86,8 @@ const RincianSewa: React.FC<{
         title={ada ? `Nota ${(row as any)._noNota}` : "Buat nota sewa"}
         className={
           isMobileTable === false
-            ? "inline-flex items-center justify-center w-8 h-8 rounded-full bg-tint/10 text-tint hover:bg-tint/15 dark:bg-tint/15 active:scale-90 transition"
-            : "inline-flex items-center gap-1 h-7 px-2.5 rounded-full bg-fill/90 hover:bg-fill text-tint ring-1 ring-edge text-caption2 font-semibold active:scale-95 transition"
+            ? "inline-flex items-center justify-center w-8 hit-44 h-8 rounded-full bg-tint/10 text-tint hover:bg-tint/15 dark:bg-tint/15 active:scale-90 transition"
+            : "inline-flex items-center gap-1 hit-44 h-7 px-2.5 rounded-full bg-fill/90 hover:bg-fill text-tint ring-1 ring-edge text-caption2 font-semibold active:scale-95 transition"
         }
       >
         <Receipt size={13} strokeWidth={2.4} />
@@ -422,7 +422,7 @@ const RincianSewa: React.FC<{
                     patch._addedBy = (row as any)._addedBy || userEmail;
                     updateRow(rowIndex, patch);
                   }}
-                  className={`flex items-center justify-center min-h-[32px] px-3 py-1 rounded-full transition-all duration-200 ${(row as any).isOngkir === "YA"
+                  className={`flex items-center justify-center min-h-[32px] px-3 py-1 rounded-full transition duration-200 ${(row as any).isOngkir === "YA"
                     ? isHanyaOngkir
                       ? "bg-positive/75 text-white cursor-not-allowed shadow-none"
                       : "bg-positive text-white shadow-sm"
@@ -441,7 +441,7 @@ const RincianSewa: React.FC<{
                     patch._addedBy = (row as any)._addedBy || userEmail;
                     updateRow(rowIndex, patch);
                   }}
-                  className={`flex items-center justify-center min-h-[32px] px-3 py-1 rounded-full transition-all duration-200 ${
+                  className={`flex items-center justify-center min-h-[32px] px-3 py-1 rounded-full transition duration-200 ${
                     isHanyaOngkir
                       ? "opacity-30 cursor-not-allowed text-label-3"
                       : (row as any).isOngkir === "TIDAK"
@@ -489,7 +489,7 @@ const RincianSewa: React.FC<{
                         patch._addedBy = (row as any)._addedBy || userEmail;
                         updateRow(rowIndex, patch);
                       }}
-                      className={`flex items-center justify-center min-h-[32px] px-2.5 py-1 rounded-full transition-all duration-200 ${(row as any)._bayarOngkir === "Cash"
+                      className={`flex items-center justify-center min-h-[32px] px-2.5 py-1 rounded-full transition duration-200 ${(row as any)._bayarOngkir === "Cash"
                         ? "bg-positive text-white shadow-sm"
                         : "hover:bg-surface/60 text-label-2"
                         }`}
@@ -509,7 +509,7 @@ const RincianSewa: React.FC<{
                         patch._addedBy = (row as any)._addedBy || userEmail;
                         updateRow(rowIndex, patch);
                       }}
-                      className={`flex items-center justify-center min-h-[32px] px-2.5 py-1 rounded-full transition-all duration-200 ${(row as any)._bayarOngkir === "Transfer"
+                      className={`flex items-center justify-center min-h-[32px] px-2.5 py-1 rounded-full transition duration-200 ${(row as any)._bayarOngkir === "Transfer"
                         ? "bg-tint text-white shadow-sm"
                         : "hover:bg-surface/60 text-label-2"
                         }`}
