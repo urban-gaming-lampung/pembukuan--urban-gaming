@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Package, Trash2 } from "lucide-react";
 import { addDoc, collection, deleteDoc, doc, updateDoc } from "firebase/firestore";
+import { isKategoriGajiPegawai, SUMBER_GAJI } from "../lib/gajiBuku";
 import { db } from "../lib/firebase";
 import { rupiah, formatRibuanInput } from "../lib/format";
 import { toLocalYmd } from "../lib/dateLocal";
@@ -93,7 +94,7 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
   }, [jenis]);
 
   // Saran nama & kategori dari riwayat manual (bukan yang dibuat otomatis oleh stok masuk)
-  const manual = useMemo(() => items.filter((o) => o.sumber !== "input_stok"), [items]);
+  const manual = useMemo(() => items.filter((o) => o.sumber !== "input_stok" && o.sumber !== SUMBER_GAJI && !isKategoriGajiPegawai(o.kategori)), [items]);
   // Saran mengikuti usaha yang dipilih (Rental / Usaha); usaha baru tanpa riwayat -> pakai semua
   const manualBisnis = useMemo(() => {
     const x = manual.filter((o) => bisnisOf(o) === form.bisnis);
@@ -147,6 +148,10 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
   const nominal = parseInt(form.harga.replace(/\D/g, "") || "0", 10);
   const simpan = async () => {
     if (!form.nama.trim() || !nominal || !form.tanggal) return;
+    if (jenis === "PENGELUARAN" && isKategoriGajiPegawai(form.kategori)) {
+      setFormErr("Gaji pegawai dicatat otomatis dari menu Gaji (tandai Sudah Dibayar / tutup buku). Pakai kategori lain untuk pengeluaran ini.");
+      return;
+    }
     setSaving(true);
     setFormErr("");
     try {
@@ -431,7 +436,9 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
                                     </div>
                                     <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
                                       <div className={`text-subhead font-bold whitespace-nowrap tabular-nums ${t.angka}`}>{rupiah(o.harga)}</div>
-                                      {o.sumber === "input_stok" ? (
+                                      {o.sumber === SUMBER_GAJI || isKategoriGajiPegawai(o.kategori) ? (
+                                        <Pill tone="neutral">{o.sumber === SUMBER_GAJI ? "Dari menu Gaji" : "Arsip gaji"}</Pill>
+                                      ) : o.sumber === "input_stok" ? (
                                         <Button
                                           variant="gray"
                                           size="sm"

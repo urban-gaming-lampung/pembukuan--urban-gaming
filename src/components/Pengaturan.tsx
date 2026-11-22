@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
+import { gajiBersih } from "../lib/gajiBuku";
 import { createPortal } from "react-dom";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { collection, addDoc, deleteDoc, onSnapshot, query, doc, updateDoc, where } from "firebase/firestore";
@@ -1166,7 +1167,7 @@ const Pengaturan: React.FC<Props> = ({
                         const tPotongan = pgArr.filter((p: any) => !p.isDibatalkan).reduce((sum: number, p: any) => sum + (Number(p.nominal) || 0), 0);
                         const tBonusBelumDibayar = tbArr.filter((t: any) => t.status !== "sudah").reduce((sum: number, t: any) => sum + (Number(t.nominal) || 0), 0);
                         const tDiterimaSemua = Math.max(0, tPokok + tBonus + tOngkir - tPotongan);
-                        const tDitransfer = Math.max(0, tPokok + tBonusBelumDibayar - tPotongan);
+                        const tDitransfer = gajiBersih(r); // sama dengan menu Gaji owner (ongkir masuk gaji & angka tutup buku)
                         return (
                           <div key={r.id} className="apple-tile rounded-tile border border-sep overflow-hidden w-full transition">
                             <button

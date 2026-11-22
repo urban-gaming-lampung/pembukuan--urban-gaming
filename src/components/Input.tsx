@@ -353,7 +353,7 @@ const Input: React.FC<InputProps> = ({
             if (monthIndex >= 0) {
                const currentMonth = records[monthIndex];
                const gajiPengurangan = Array.isArray(currentMonth.gajiPengurangan) ? currentMonth.gajiPengurangan : [];
-               records[monthIndex] = { ...currentMonth, gajiPengurangan: [...gajiPengurangan, newDenda] };
+               records[monthIndex] = currentMonth.tutupBuku ? currentMonth : { ...currentMonth, gajiPengurangan: [...gajiPengurangan, newDenda] };
             } else {
                records = [{
                    id: `rec-${Date.now()}`,

@@ -1,5 +1,6 @@
 import { Firestore, Transaction, runTransaction, getDocFromServer, DocumentReference } from 'firebase/firestore';
 import { normalizeBulanTahun } from './absenPeriod';
+import { isArsipGaji } from './gajiBuku';
 
 // Object key order is not a data change (Firestore may reorder map keys).
 export function sameSalaryValue(a: any, b: any): boolean {
@@ -56,7 +57,7 @@ function mergeFields(base: any, edit: any, remote: any, source: any, fields: str
 }
 
 function mergeItems(base: any[], edit: any[], remote: any[], source: any[]) {
-  const fields = ['nominal', 'ket', 'status', 'isDibatalkan', 'photoUrl'];
+  const fields = ['nominal', 'ket', 'status', 'isDibatalkan', 'photoUrl', 'tglDibayar'];
   const result = remote.map(x => ({ ...x }));
   for (const item of edit) {
     const before = base.find(x => key(x) === key(item));
@@ -84,6 +85,11 @@ export function mergeSalaryEdits(source: any[], baseline: any[], edited: any[], 
     const original = find(source, base || edit);
     const remote = find(result, base || edit);
     if (!remote && original) { if (!sameSalaryValue(base, edit)) conflict(); continue; }
+    // Bulan arsip / sudah tutup buku hanya baca: perubahan dari layar diabaikan.
+    if (remote && (remote.tutupBuku || isArsipGaji(remote.bulanTahun))) continue;
+    if (isArsipGaji(edit.bulanTahun) && !sameSalaryValue(base, edit)) {
+      throw new Error('Bulan gaji sebelum 11/26 adalah arsip dan tidak bisa diubah.');
+    }
     const merged = mergeFields(base, edit, remote, original, ['gajiPokok', 'bulanTahun', 'buktiTransfer']);
     // Display-only totals must never be persisted from a filtered history view.
     const record = { ...(remote || {}), id: remote?.id || edit.id,
