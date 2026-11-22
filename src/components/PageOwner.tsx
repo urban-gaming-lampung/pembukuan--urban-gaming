@@ -13,7 +13,7 @@ import AnalitikKeseluruhan from "./AnalitikKeseluruhan";
 import AnalitikRental, { type RekomendasiRental } from "./AnalitikRental";
 import { bisnisOf, catatLogPembukuan, JenisTransaksi, pemasukanRental, pengeluaranAdminRental, periodRange, ringkasPembukuan, saringPeriode, useTransaksiOwner } from "../lib/keuangan";
 import { kasUsahaHarian } from "../lib/pemasukanUsaha";
-import { isPelunasanSewa, jenisUnit, ongkirBaris, tanpaUnitKeluar } from "../lib/sewa";
+import { dpBookingBaris, isDpBooking, isPelunasanSewa, jenisUnit, ongkirBaris, tanpaUnitKeluar } from "../lib/sewa";
 import { sinkronNotaKePembukuan } from "../lib/posPembukuan";
 import { ResponsiveContainer, Tooltip, Cell, PieChart, Pie } from "recharts";
 import { toLocalYmd } from "../lib/dateLocal";
@@ -486,8 +486,8 @@ const PageOwner: React.FC<PageOwnerProps> = ({
     filteredHistory.forEach(h => {
         uniqueDays.add(h.tanggal);
         const processRow = (r: any) => {
-             if (isPelunasanSewa(r)) return;
-             let price = toInt(r.harga);
+             if (isPelunasanSewa(r) || isDpBooking(r)) return;
+             let price = toInt(r.harga) + dpBookingBaris(r);
              if (price === 0 && r.isPaid === "TIDAK") price = toInt(r._customBase);
              price = Math.max(0, price - toInt(r._ongkir));
              const konsol = jenisUnit(r.jenisPS).konsol;
@@ -527,11 +527,11 @@ const PageOwner: React.FC<PageOwnerProps> = ({
         if (Array.isArray(h.rowsSewa)) {
             h.rowsSewa.forEach((r: any) => {
                const jm = String(r.jamMasukSewa || "");
-               if (jm.includes(":") && r.lamaSewa !== "PELUNASAN") {
+               if (jm.includes(":") && !tanpaUnitKeluar(r)) {
                    const hh = parseInt(jm.split(":")[0]);
                    if (!isNaN(hh) && hh >= 0 && hh <= 23) {
                        hours[hh].count += 1;
-                       hours[hh].revenue += toInt(r.harga);
+                       hours[hh].revenue += toInt(r.harga) + dpBookingBaris(r);
                    }
                }
             });

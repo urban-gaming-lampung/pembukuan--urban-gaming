@@ -10,7 +10,7 @@
 import type { HistoryItem } from "./types";
 import { pad } from "./format";
 import { waValid } from "./wa";
-import { isHanyaOngkir, isItemTambahan, isPelunasanSewa, jenisUnit, waBaris } from "./sewa";
+import { jenisUnit, tanpaUnitKeluar, waBaris } from "./sewa";
 
 export const TOLERANSI_KEMBALI_MENIT = 60;
 export const TOLERANSI_TELAT_MENIT = 10;
@@ -20,10 +20,10 @@ export const WA_WAJIB_SEJAK = "2026-11-13";
 export const INGATKAN_SEBELUM_MENIT = 30;
 
 // ---------- No. WA penyewa ----------
-/** Baris yang WAJIB punya No. WA: sewa unit berdurasi (bukan ongkir saja, pelunasan, atau item tambahan). */
+/** Baris yang WAJIB punya No. WA: sewa unit berdurasi (bukan ongkir saja, pelunasan, DP booking, atau item tambahan). */
 export function wajibWaPenyewa(r: any, tanggal: string): boolean {
   if (!tanggal || tanggal < WA_WAJIB_SEJAK) return false;
-  return !isHanyaOngkir(r) && !isPelunasanSewa(r) && !isItemTambahan(r);
+  return !tanpaUnitKeluar(r);
 }
 
 /** Kunci nama penyewa untuk mencocokkan riwayat ("  Budi  Santoso" = "budi santoso"). */

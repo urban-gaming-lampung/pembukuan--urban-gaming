@@ -1,6 +1,7 @@
 import { runSalaryTransaction } from "../lib/salaryPersistence";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { konfirmasi } from "../ui/presentations/Pemberitahuan";
+import { konfirmasi, notify } from "../ui/presentations/Pemberitahuan";
+import { barisSewaDariBooking, ubahBooking, type BookingSewa } from "../lib/bookingSewa";
 import type { SegmenMonitoring, TabUtama } from "../lib/navigasi";
 import { runTransaction, collection, doc, setDoc, deleteDoc, onSnapshot, addDoc, updateDoc, query, getDocs, getDoc, where, orderBy, serverTimestamp, arrayUnion } from "firebase/firestore";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -21,12 +22,12 @@ import { bukaHalamanStok } from "../lib/stokRental";
 import { isBarisNota, sinkronNotaKePembukuan, useNotaHariKerja } from "../lib/posPembukuan";
 import { CatatanPengingat, wajibWaPenyewa } from "../lib/pengingatSewa";
 import { waValid } from "../lib/wa";
-import { cariBarisSewa, daftarSewaBerjalan, hargaDasarSewa, ONGKIR_BAGI_HASIL_SEJAK, ongkirBaris, ongkirPengantar, perluKonfirmasiKembali, siapkanOngkirSimpan, tagihanBelumBayar, waBaris } from "../lib/sewa";
+import { cariBarisSewa, daftarSewaBerjalan, dpBookingBaris, hargaDasarSewa, ONGKIR_BAGI_HASIL_SEJAK, ongkirBaris, ongkirPengantar, perluKonfirmasiKembali, siapkanOngkirSimpan, tagihanBelumBayar, waBaris } from "../lib/sewa";
 import { bayarCash, bayarTransfer, catatLogPembukuan, periodRange, saringPeriode, totalBaris } from "../lib/keuangan";
-import { rupiah, toInt } from "../lib/format";
+import { pad, rupiah, toInt } from "../lib/format";
 import { PdfExporterHandle } from "../components/PdfExporter";
 import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr, isLogForDate } from "../lib/absenPeriod";
-import { jamDiniHari, menitHariKerja, namaHari, toLocalYmd } from "../lib/dateLocal";
+import { jamDiniHari, menitHariKerja, namaHari, tanggalHariKerja, toLocalYmd } from "../lib/dateLocal";
 import { buildSewaTable, effectiveSewaPrices, effectiveJasaPrices, cleanPriceList } from "../lib/priceLists";
 
 type ImageQuality = "Tinggi" | "Hemat";
@@ -1425,7 +1426,7 @@ export default function useAppController() {
       if (!r.isPaid) return "isPaid_empty";
 
       // Belum dibayar: kolom harga 0, jadi cek harga dasarnya (tabel Edit Rincian / isi sendiri)
-      const basePrice = r.isPaid === "TIDAK" ? hargaDasarSewa(r, sewaPriceTable) : toInt(r.harga);
+      const basePrice = r.isPaid === "TIDAK" ? hargaDasarSewa(r, sewaPriceTable) : toInt(r.harga) + dpBookingBaris(r);
 
       if (basePrice <= 0) return "harga_sewa_empty";
 
@@ -2116,6 +2117,92 @@ export default function useAppController() {
     }, 100);
   }, [paymentVerifyPrompt, pindahkanBarisBelumBayar, setRowsSewa, newBlankSewa, setActiveTab, sewaPriceTable]);
 
+  // ===== BOOKING SEWA → RINCIAN SEWA (Monitoring › Booking) =====
+  /** Masukkan baris ke form Rincian Sewa (isi baris kosong dulu), lalu buka Pembukuan. */
+  const tambahBarisSewa = useCallback((baris: Record<string, any>[]) => {
+    const oleh = user?.email || auth.currentUser?.email || "";
+    setRowsSewa((prev) => {
+      const next = [...prev];
+      baris.forEach((b) => {
+        let t = next.findIndex((r) => !r.ket && !r.jenisPS && !r.harga && !r.bayar);
+        if (t === -1) {
+          t = next.length;
+          next.push(newBlankSewa());
+        }
+        next[t] = { ...next[t], ...b, _addedBy: oleh } as any;
+      });
+      return next;
+    });
+    setActiveTab("USAHA RENTAL");
+    setTimeout(() => document.getElementById("section-rincian")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setRowsSewa, user]);
+
+  /** Form pembukuan bukan hari ini / sedang edit data lama → tanya dulu. */
+  const formHariIniUntukBooking = async (aksi: string) => {
+    if (!editingId && (tanggal === tanggalHariKerja() || tanggal === toLocalYmd(new Date()))) return true;
+    return konfirmasi(
+      `Form Pembukuan sedang ${editingId ? "mengedit pembukuan" : "berisi"} tanggal ${tanggal}. ${aksi} akan dicatat di tanggal itu.`,
+      { judul: "Tanggal pembukuan berbeda", ya: "Tetap catat" }
+    );
+  };
+
+  /** "Mulai sewa": baris sewa (sisa bayar) + baris DP BOOKING masuk Rincian Sewa, booking jadi DIAMBIL. */
+  const mulaiSewaBooking = async (b: BookingSewa): Promise<boolean> => {
+    if (rowsSewa.some((r: any) => r._bookingId === b.id)) {
+      notify("Booking ini sudah ada di Rincian Sewa.", "info");
+      setActiveTab("USAHA RENTAL");
+      return false;
+    }
+    if (!(await formHariIniUntukBooking("Sewa"))) return false;
+    const d = new Date();
+    const { sewa, dp } = barisSewaDariBooking(b, { jamSekarang: `${pad(d.getHours())}:${pad(d.getMinutes())}`, lamaOptions: sewaPriceTable.lamaOptions });
+    tambahBarisSewa(dp ? [sewa, dp] : [sewa]);
+    try {
+      await ubahBooking(b.id, { status: "DIAMBIL", diambil: { ts: Date.now(), oleh: user?.email || "admin", tanggal }, batal: null });
+      notify(dp ? "Sewa masuk Rincian Sewa beserta baris DP. Pilih status bayar lalu simpan." : "Sewa masuk Rincian Sewa. Pilih status bayar lalu simpan.", "positive");
+    } catch (e: any) {
+      notify(`Baris sewa sudah masuk, tapi status booking gagal diubah: ${e?.message || e}`, "negative");
+    }
+    return true;
+  };
+
+  /** Booking batal, DP hangus → DP dicatat sebagai pemasukan hari ini (baris DP BOOKING). */
+  const dpHangusBooking = async (b: BookingSewa, alasan: string): Promise<boolean> => {
+    const { dp } = barisSewaDariBooking(b, { jamSekarang: "-", lamaOptions: sewaPriceTable.lamaOptions });
+    if (!dp) return false;
+    if (!(await formHariIniUntukBooking("DP hangus"))) return false;
+    tambahBarisSewa([{ ...dp, ket: `${b.nama} (DP hangus)` }]);
+    try {
+      await ubahBooking(b.id, { status: "BATAL", batal: { alasan, oleh: user?.email || "admin", ts: Date.now(), dp: "HANGUS" } });
+      notify("DP hangus masuk Rincian Sewa. Simpan pembukuan supaya tercatat.", "positive");
+    } catch (e: any) {
+      notify(`Baris DP sudah masuk, tapi status booking gagal diubah: ${e?.message || e}`, "negative");
+    }
+    return true;
+  };
+
+  /** Urungkan Mulai sewa / DP hangus: baris dari booking ini di form dihapus, status booking kembali aktif. */
+  const urungkanBooking = async (b: BookingSewa): Promise<boolean> => {
+    const kembali = { status: (b.dp && b.dp.nominal > 0 ? "KONFIRMASI" : "BARU") as BookingSewa["status"], diambil: null, batal: null };
+    // Batal tanpa DP hangus: tidak ada baris di pembukuan
+    if (b.status === "BATAL" && b.batal?.dp !== "HANGUS") {
+      await ubahBooking(b.id, kembali);
+      return true;
+    }
+    const adaDiForm = rowsSewa.some((r: any) => r._bookingId === b.id);
+    const ok = await konfirmasi(
+      adaDiForm
+        ? "Baris sewa / DP dari booking ini dihapus dari form Rincian Sewa dan booking kembali aktif."
+        : "Baris dari booking ini sudah tidak ada di form (mungkin sudah tersimpan). Hapus manual di pembukuan bila perlu. Booking tetap dikembalikan aktif.",
+      { judul: "Urungkan booking?", ya: "Urungkan" }
+    );
+    if (!ok) return false;
+    if (adaDiForm) setRowsSewa((prev) => prev.map((r: any) => (r._bookingId === b.id ? (newBlankSewa() as any) : r)));
+    await ubahBooking(b.id, kembali);
+    return true;
+  };
+
   const resetSetting = async () => {
     try { await persistPrices(priceDefaults); }
     catch (error: any) { alert(error?.message || "Gagal reset pengaturan."); return; }
@@ -2217,6 +2304,9 @@ export default function useAppController() {
   }, [tanggal, allLogAbsensi, setShiftPegawai]);
 
   return {
+    mulaiSewaBooking,
+    dpHangusBooking,
+    urungkanBooking,
     rootRef,
     appStokData,
     pdfRef,

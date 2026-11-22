@@ -13,8 +13,8 @@
  */
 export type TabUtama = "USAHA RENTAL" | "UPDATE STOK" | "MONITORING" | "ANALITIK" | "LAINNYA";
 
-/** Segmen halaman Monitoring. "stiker" khusus owner (buat & daftar stiker unit). */
-export type SegmenMonitoring = "status" | "device" | "stiker";
+/** Segmen halaman Monitoring: Status · Booking · Kondisi (+ Stiker khusus owner: buat & daftar stiker unit). */
+export type SegmenMonitoring = "status" | "booking" | "device" | "stiker";
 
 /** Halaman di dalam menu Lainnya (owner). */
 export type HalamanLainnya = "TRANSAKSI" | "PEGAWAI" | "REQUEST" | "LOG";

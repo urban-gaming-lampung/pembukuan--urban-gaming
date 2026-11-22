@@ -8,7 +8,10 @@ import { doc, runTransaction } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { pad, toInt } from "./format";
 import { bayarTransfer } from "./keuangan";
-import { isHanyaOngkir, isItemTambahan, isPelunasanSewa, labelDurasi, ongkirBaris, waktuSewa } from "./sewa";
+import { dpBookingBaris, isDpBooking, isHanyaOngkir, isItemTambahan, isPelunasanSewa, labelDurasi, ongkirBaris, waktuSewa } from "./sewa";
+
+/** Baris uang saja (pelunasan / DP booking): harga = uang yang diterima, tanpa unit & ongkir. */
+const barisUang = (r: BarisSewaNota) => isPelunasanSewa(r) || isDpBooking(r);
 import type { PosItem, PosSale } from "./posSales";
 import type { RowSewa } from "./types";
 
@@ -41,9 +44,10 @@ export async function ambilNomorNotaSewa(): Promise<{ noNota: string; ts: number
  * karena kolom harga baris "belum dibayar" selalu 0).
  */
 export function hargaSewaBaris(r: BarisSewaNota, hargaDasar: number): number {
-  if (isPelunasanSewa(r)) return toInt(r.harga);
+  if (barisUang(r)) return toInt(r.harga);
   if (r.isPaid === "TIDAK") return r.lamaSewa === "Isi Sendiri" ? toInt(r._customBase) : Math.max(0, hargaDasar);
-  return Math.max(0, toInt(r.harga) - ongkirBaris(r));
+  // Harga penuh: kolom harga = sisa sesudah DP booking
+  return Math.max(0, toInt(r.harga) - ongkirBaris(r) + dpBookingBaris(r));
 }
 
 /** Baris sudah lengkap untuk dibuatkan nota? */
@@ -52,7 +56,7 @@ export function barisSiapNota(r: BarisSewaNota, hargaDasar: number): boolean {
   const nama = String(r.ket || "").trim();
   if (!nama) return false;
   const bayarOk = r.isPaid === "TIDAK" || !!String(r.bayar || "").trim();
-  if (isPelunasanSewa(r)) return toInt(r.harga) > 0 && !!String(r.bayar || "").trim();
+  if (barisUang(r)) return toInt(r.harga) > 0 && !!String(r.bayar || "").trim();
   if (isItemTambahan(r)) return !!r.jenisPS && hargaSewaBaris(r, hargaDasar) > 0 && bayarOk;
   return (
     !!r.jenisPS &&
@@ -92,11 +96,14 @@ export function notaSewaDariBaris(
   const items: PosItem[] = [];
   const item = (id: string, nama: string, harga: number): PosItem => ({ id, nama, kategori: "RENTAL", harga, qty: 1, subtotal: harga });
   const harga = hargaSewaBaris(r, o.hargaDasar);
-  const ongkir = isPelunasanSewa(r) ? 0 : ongkirBaris(r);
+  const ongkir = barisUang(r) ? 0 : ongkirBaris(r);
   const info: { l: string; r: string }[] = [];
+  const dpBooking = Math.min(dpBookingBaris(r), harga + ongkir);
 
   if (isPelunasanSewa(r)) {
     items.push(item("pelunasan", `Pelunasan sewa${r.jenisPS ? ` ${r.jenisPS}` : ""}`, harga));
+  } else if (isDpBooking(r)) {
+    items.push(item("dp-booking", `DP booking sewa${r.jenisPS ? ` ${r.jenisPS}` : ""}`, harga));
   } else if (isItemTambahan(r)) {
     items.push(item("tambahan", String(r.jenisPS), harga));
   } else {
@@ -131,7 +138,13 @@ export function notaSewaDariBaris(
     total,
     jenisNota: "SEWA",
     infoNota: info,
-    syaratNota: isPelunasanSewa(r) ? { judul: "BUKTI PELUNASAN SEWA", isi: ["Simpan nota ini sebagai bukti pelunasan."] } : KETENTUAN_SEWA(r),
-    statusBayar: r.isPaid === "TIDAK" && !isPelunasanSewa(r) ? "BELUM DIBAYAR" : "LUNAS",
+    // DP booking yang dibayar sebelum hari sewa: nota mencetak "DP dibayar sebelumnya / Pelunasan hari ini"
+    ...(dpBooking > 0 ? { dpSudahDiSaldo: dpBooking } : {}),
+    syaratNota: isPelunasanSewa(r)
+      ? { judul: "BUKTI PELUNASAN SEWA", isi: ["Simpan nota ini sebagai bukti pelunasan."] }
+      : isDpBooking(r)
+        ? { judul: "BUKTI DP BOOKING", isi: ["DP dipotong dari harga sewa saat unit diambil."] }
+        : KETENTUAN_SEWA(r),
+    statusBayar: r.isPaid === "TIDAK" && !barisUang(r) ? "BELUM DIBAYAR" : "LUNAS",
   };
 }

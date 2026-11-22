@@ -6,7 +6,7 @@ import { RowSewa } from "../lib/types";
 import { rupiah, toInt, formatRibuanInput } from "../lib/format";
 import { Receipt } from "lucide-react";
 import { buildSewaTable } from "../lib/priceLists";
-import { dasarDariHarga, hargaDasarSewa, hargaKolomSewa } from "../lib/sewa";
+import { dasarDariHarga, dpBookingBaris, hargaDasarSewa, hargaKolomSewa, LAMA_DP_BOOKING } from "../lib/sewa";
 import { formatWa, rapikanWa, waValid } from "../lib/wa";
 import { isUrbanUserDocId } from "../lib/urbanUsers";
 import NotaSewaSheet from "./NotaSewaSheet";
@@ -251,6 +251,11 @@ const RincianSewa: React.FC<{
                   PELUNASAN
                 </option>
               )}
+              {row.lamaSewa === LAMA_DP_BOOKING && (
+                <option value={LAMA_DP_BOOKING} className="bg-surface text-positive font-bold">
+                  {LAMA_DP_BOOKING}
+                </option>
+              )}
             </AutoFitSelect>
           );
         }
@@ -267,7 +272,8 @@ const RincianSewa: React.FC<{
               />
             );
           }
-          const isPelunasan = row.lamaSewa === "PELUNASAN";
+          // Pelunasan & DP booking: uang saja, tanpa jam ambil
+          const isPelunasan = row.lamaSewa === "PELUNASAN" || row.lamaSewa === LAMA_DP_BOOKING;
           return (
             <AutoFitInput
               isMobile={isMobile}
@@ -594,11 +600,15 @@ const RincianSewa: React.FC<{
           }
 
           // Kunci Readonly Permanen
+          const dpBooking = dpBookingBaris(row);
           return (
             <div className="relative px-2 py-1.5 whitespace-nowrap">
               <span className="font-bold tabular-nums text-label">
-                {currentTotal > 0 ? rupiah(currentTotal) : "-"}
+                {currentTotal > 0 ? rupiah(currentTotal) : dpBooking > 0 && row.isPaid === "YA" ? rupiah(0) : "-"}
               </span>
+              {dpBooking > 0 && (
+                <div className="text-caption2 text-label-2 font-medium tabular-nums">sesudah DP {rupiah(dpBooking)}</div>
+              )}
             </div>
           );
         }

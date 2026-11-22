@@ -261,6 +261,13 @@ service cloud.firestore {
       allow update, delete: if isSalaryAdmin();
     }
 
+    // Booking sewa PS (Monitoring › Booking): semua staf boleh baca / tambah / ubah /
+    // batalkan; hapus permanen (salah input) hanya owner / super admin
+    match /booking_sewa/{bookingId} {
+      allow read, create, update: if isUrbanStaff();
+      allow delete: if isSalaryAdmin();
+    }
+
     // ==========================================
     // Aturan Share Screenshots (ProsperoEden) — tidak diubah
     // ==========================================

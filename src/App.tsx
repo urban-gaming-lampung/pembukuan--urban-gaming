@@ -24,6 +24,7 @@ const GalleryModal = lazy(() => import("./components/GalleryModal"));
 const HalamanMonitoring = lazy(() => import("./components/HalamanMonitoring"));
 import HalamanLainnyaDaftar, { JUDUL_LAINNYA, KembaliLainnya, MENU_LAINNYA } from "./components/HalamanLainnya";
 import useRequestEditPending from "./hooks/useRequestEditPending";
+import { jumlahPerhatianBooking, useBookingSewa } from "./lib/bookingSewa";
 import type { HalamanLainnya, TabUtama } from "./lib/navigasi";
 import LiveCursors from "./components/LiveCursors";
 import Login from "./components/Login";
@@ -214,7 +215,10 @@ export default function App() {
     handleLogout,
     handleUpdateProfileColor,
     handlePaymentVerifyNo,
-    handlePaymentVerifyYes
+    handlePaymentVerifyYes,
+    mulaiSewaBooking,
+    dpHangusBooking,
+    urungkanBooking
   } = useAppController();
   const [posMounted, setPosMounted] = useState(false);
   useEffect(() => {
@@ -231,10 +235,13 @@ export default function App() {
   // ===== NAVIGASI SATU LAPIS (lihat src/lib/navigasi.ts) =====
   const [halLainnya, setHalLainnya] = useState<HalamanLainnya | null>(null);
   const requestPending = useRequestEditPending(isSuperAdminOrOwner);
+  // Booking sewa (Monitoring › Booking): satu listener untuk daftar & titik di tab Monitoring
+  const bookingSewa = useBookingSewa(!!user);
+  const perhatianBooking = jumlahPerhatianBooking(bookingSewa.list, Date.now());
 
   const navItems = useMemo<NavItem[]>(() => {
     const items: NavItem[] = [
-      { key: "MONITORING", label: "Monitoring", icon: <Activity />, color: "teal" },
+      { key: "MONITORING", label: "Monitoring", icon: <Activity />, color: "teal", dot: perhatianBooking > 0 },
       { key: "USAHA RENTAL", label: "Pembukuan", icon: <BookOpen />, color: "blue" },
       { key: "UPDATE STOK", label: "Stok", icon: <Package />, color: "orange" },
     ];
@@ -243,7 +250,7 @@ export default function App() {
       items.push({ key: "LAINNYA", label: "Lainnya", icon: <Ellipsis />, color: "gray", dot: requestPending > 0 });
     }
     return items;
-  }, [isSuperAdminOrOwner, requestPending]);
+  }, [isSuperAdminOrOwner, requestPending, perhatianBooking]);
 
   // Laptop: isi menu Lainnya tampil langsung di sidebar (tanpa halaman daftar)
   const sidebarSections = useMemo<NavSection[]>(() => {
@@ -417,6 +424,14 @@ export default function App() {
                   onPengingat={handleCatatPengingat}
                   hargaItems={hargaSewa}
                   isVerifyingPayment={!!paymentVerifyPrompt}
+                  booking={{
+                    list: bookingSewa.list,
+                    loading: bookingSewa.loading,
+                    error: bookingSewa.error,
+                    onMulaiSewa: mulaiSewaBooking,
+                    onDpHangus: dpHangusBooking,
+                    onUrungkan: urungkanBooking,
+                  }}
                 />
               </Suspense>
             ) : activeTab === "UPDATE STOK" ? (

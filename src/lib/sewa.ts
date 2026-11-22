@@ -14,11 +14,17 @@ type Baris = Record<string, any>;
 
 // ---------- Jenis baris ----------
 export const isPelunasanSewa = (r: Baris | null | undefined) => String(r?.lamaSewa ?? "").trim() === "PELUNASAN";
+/** Lama sewa penanda baris uang DP booking (Monitoring › Booking › Mulai sewa / DP hangus). */
+export const LAMA_DP_BOOKING = "DP BOOKING";
+/** Baris uang DP booking: tanpa unit keluar, harga = nominal DP. */
+export const isDpBooking = (r: Baris | null | undefined) => String(r?.lamaSewa ?? "").trim() === LAMA_DP_BOOKING;
+/** DP booking yang sudah dicatat di baris DP terpisah — dipotong dari harga / tagihan baris sewanya. */
+export const dpBookingBaris = (r: Baris | null | undefined) => (isDpBooking(r) ? 0 : Math.max(0, toInt(r?._dpBooking)));
 export const isHanyaOngkir = (r: Baris | null | undefined) => String(r?.jenisPS ?? "").trim().toLowerCase() === "hanya ongkir";
 /** Item tambahan berharga tetap tanpa durasi (mis. "Tambah Sewa Stik PS4"): lama sewa "-". */
 export const isItemTambahan = (r: Baris | null | undefined) => String(r?.lamaSewa ?? "").trim() === "-" && !isHanyaOngkir(r);
-/** Baris tanpa unit yang keluar: hanya ongkir, item tambahan, atau pelunasan. */
-export const tanpaUnitKeluar = (r: Baris | null | undefined) => isHanyaOngkir(r) || isItemTambahan(r) || isPelunasanSewa(r);
+/** Baris tanpa unit yang keluar: hanya ongkir, item tambahan, pelunasan, atau DP booking. */
+export const tanpaUnitKeluar = (r: Baris | null | undefined) => isHanyaOngkir(r) || isItemTambahan(r) || isPelunasanSewa(r) || isDpBooking(r);
 
 /** No. WA penyewa sebuah baris (kolom No. WA Penyewa; data lama dari nota sewa), bentuk 08xx. */
 export const waBaris = (r: Baris | null | undefined): string => rapikanWa(r?.waPenyewa || r?._waPenyewa || "");
@@ -88,7 +94,7 @@ export function hargaDasarSewa(r: Baris | null | undefined, sewaTable: SewaTable
 
 /** Tagihan penyewa yang belum bayar (sewa + ongkir). 0 bila baris sudah dibayar. */
 export const tagihanBelumBayar = (r: Baris | null | undefined, sewaTable: SewaTable) =>
-  r?.isPaid === "TIDAK" ? hargaDasarSewa(r, sewaTable) + ongkirBaris(r) : 0;
+  r?.isPaid === "TIDAK" ? Math.max(0, hargaDasarSewa(r, sewaTable) + ongkirBaris(r) - dpBookingBaris(r)) : 0;
 
 /**
  * Kolom "Harga" baris sewa sesudah jenis / lama / harga isi sendiri / ongkir / status bayar diubah:
@@ -97,14 +103,21 @@ export const tagihanBelumBayar = (r: Baris | null | undefined, sewaTable: SewaTa
  * (mis. baris pelunasan) saat hanya ongkirnya yang diubah.
  */
 export function hargaKolomSewa(r: Baris, sewaTable: SewaTable, dasarLama?: number): number {
+  // Baris DP booking: harga = nominal DP (tidak ikut tabel harga)
+  if (isDpBooking(r)) return toInt(r.harga);
   if (r.isPaid === "TIDAK") return 0;
   if (isHanyaOngkir(r)) return toInt(r._ongkir);
   const dasar = hargaDasarSewa(r, sewaTable);
-  return (dasar > 0 || r.lamaSewa === "Isi Sendiri" ? dasar : dasarLama ?? 0) + ongkirBaris(r);
+  const kotor = (dasar > 0 || r.lamaSewa === "Isi Sendiri" ? dasar : dasarLama ?? 0) + ongkirBaris(r);
+  // DP booking sudah masuk di baris DP terpisah → baris sewa = sisa bayar
+  return Math.max(0, kotor - dpBookingBaris(r));
 }
 
-/** Harga dasar baris saat ini (harga kolom tanpa ongkir) — untuk `dasarLama`. */
-export const dasarDariHarga = (r: Baris) => Math.max(0, toInt(r.harga) - ongkirBaris(r));
+/** Harga dasar baris saat ini (harga kolom tanpa ongkir, DP booking ditambahkan lagi) — untuk `dasarLama`. */
+export const dasarDariHarga = (r: Baris) => {
+  const h = toInt(r.harga);
+  return h > 0 ? Math.max(0, h - ongkirBaris(r) + dpBookingBaris(r)) : 0;
+};
 
 // ---------- Ongkir pengantar (bagi hasil) ----------
 /** Ongkir bagi hasil berlaku untuk pembukuan mulai tanggal ini (sebelumnya: sistem lama). */
@@ -178,7 +191,7 @@ export type SewaBerjalan = {
 
 /** Baris sewa yang menghitung satu unit keluar. */
 const barisUnit = (r: Baris) =>
-  !tanpaUnitKeluar(r) && !!r.jenisPS && !!r.jamMasukSewa && !!r.lamaSewa && (toInt(r.harga) > 0 || r.isPaid === "TIDAK");
+  !tanpaUnitKeluar(r) && !!r.jenisPS && !!r.jamMasukSewa && !!r.lamaSewa && (toInt(r.harga) + dpBookingBaris(r) > 0 || r.isPaid === "TIDAK");
 
 /**
  * Unit sewa yang masih jalan atau belum dikonfirmasi kembali — dari history 31 hari terakhir
