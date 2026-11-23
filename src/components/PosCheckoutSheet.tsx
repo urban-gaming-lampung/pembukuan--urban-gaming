@@ -10,7 +10,7 @@ import { barangTukarTambah, barisPembayaran, belumDibayar, belumLunas, statusTeg
 import { rupiah } from "../lib/format";
 import { toLocalYmd } from "../lib/dateLocal";
 import { kunciStok } from "../lib/stokJualan";
-import { linkWa, rapikanWa } from "../lib/wa";
+import { bukaWa, getAplikasiWa, isAndroid, linkWa, rapikanWa } from "../lib/wa";
 import { DraftTukar, KartuTukarTambah, TukarTambahSheet } from "./TukarTambahSheet";
 import { labelBayarTukar } from "../lib/posReceipt";
 
@@ -249,9 +249,11 @@ export function useNotaActions(sale: PosSale | null) {
     ].join("\n");
     const waLink = (link: string) => linkWa(sale.pembeliWa, pesan(link));
     const siap = notaUrl || notaUrlValid(sale);
-    if (siap) { window.open(waLink(siap), "_blank"); return; }
-    // Buka tab dulu (masih dalam ketukan pengguna), isi alamatnya setelah PDF terunggah
-    const w = window.open("", "_blank");
+    if (siap) { bukaWa(sale.pembeliWa, pesan(siap)); return; }
+    // Buka tab dulu (masih dalam ketukan pengguna), isi alamatnya setelah PDF terunggah.
+    // Link aplikasi Android (WA Business / biasa) dibuka di tab ini, jadi tidak perlu tab baru.
+    const pakaiIntent = getAplikasiWa() !== "otomatis" && isAndroid();
+    const w = pakaiIntent ? null : window.open("", "_blank");
     setBusy("wa");
     let link = "";
     try {
@@ -269,6 +271,8 @@ export function useNotaActions(sale: PosSale | null) {
     }
     if (w) w.location.href = waLink(link);
     else window.location.href = waLink(link);
+    // Android bisa menahan pembukaan aplikasi WA yang tidak langsung dari ketukan (menunggu unggah PDF)
+    if (pakaiIntent && link) setMsg("Kalau WhatsApp belum terbuka, ketuk Kirim WA sekali lagi.");
   };
   return { pdfFile, canShare, busy, msg, setMsg, unduh, cetak, bagikan, kirimWa };
 }

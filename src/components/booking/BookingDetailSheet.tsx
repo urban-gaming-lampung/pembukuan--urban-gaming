@@ -4,7 +4,7 @@ import { Button, Footnote, LineItem, LineList, ListGroup, Notice, Pill, Sheet, S
 import { UploadTransferProof } from "../TableEditor";
 import { rupiah } from "../../lib/format";
 import { auth } from "../../lib/firebase";
-import { formatWa, linkWa, waValid } from "../../lib/wa";
+import { bukaWa, formatWa, waValid } from "../../lib/wa";
 import type { SewaTable } from "../../lib/priceLists";
 import type { SewaBerjalan } from "../../lib/sewa";
 import {
@@ -93,7 +93,7 @@ const BookingDetailSheet: React.FC<{
       notify("No. WA penyewa tidak valid. Ubah booking dulu.", "warning");
       return;
     }
-    window.open(linkWa(b.wa, pesanBooking(b, jenis)), "_blank", "noopener");
+    bukaWa(b.wa, pesanBooking(b, jenis));
     catatPesanBooking(b.id, jenis).catch((e) => console.error("Gagal mencatat pesan booking:", e));
   };
 
@@ -103,7 +103,7 @@ const BookingDetailSheet: React.FC<{
         const ok = await konfirmasi(`Jam ambil masih ${sisaWaktu(m, Date.now())} (${fmtWaktu(m)}). Mulai sewa sekarang?`, { judul: "Belum jam ambil", ya: "Mulai sekarang" });
         if (!ok) return;
       }
-      if (dp && dp.metode === "TRANSFER" && !dp.bukti) notify("Bukti TF DP belum ada — unggah di baris DP BOOKING sebelum simpan pembukuan.", "warning");
+      if (dp && dp.metode === "TRANSFER" && !dp.bukti) notify("Bukti TF DP belum ada — unggah lewat Ubah booking.", "warning");
       if (await onMulaiSewa(b)) onClose();
     });
 
@@ -182,7 +182,7 @@ const BookingDetailSheet: React.FC<{
           <Notice tone="negative">
             Dibatalkan {jamTitik(b.batal.ts)}
             {b.batal.alasan ? ` · ${b.batal.alasan}` : ""}
-            {b.batal.dp === "HANGUS" ? " · DP hangus (dicatat di pembukuan)" : b.batal.dp === "KEMBALI" ? " · DP dikembalikan" : ""}
+            {b.batal.dp === "HANGUS" ? " · DP hangus (tetap tercatat sebagai pemasukan)" : b.batal.dp === "KEMBALI" ? " · DP dikembalikan (catatan DP dihapus)" : ""}
           </Notice>
         )}
 
@@ -193,7 +193,7 @@ const BookingDetailSheet: React.FC<{
               label="No. WA"
               note={waValid(b.wa) ? "Ketuk untuk chat" : "Tidak valid, ubah booking"}
               value={b.wa ? formatWa(b.wa) : "—"}
-              onClick={waValid(b.wa) ? () => window.open(linkWa(b.wa, ""), "_blank", "noopener") : undefined}
+              onClick={waValid(b.wa) ? () => bukaWa(b.wa, "") : undefined}
             />
             <LineItem
               label="Cara ambil"
@@ -290,9 +290,9 @@ const BookingDetailSheet: React.FC<{
                 />
                 <Footnote>
                   {nasibDp === "HANGUS"
-                    ? `DP ${rupiah(dp.nominal)} dicatat sebagai pemasukan hari ini di Rincian Sewa.`
+                    ? `DP ${rupiah(dp.nominal)} tetap tercatat sebagai pemasukan (sudah masuk sejak diterima).`
                     : nasibDp === "KEMBALI"
-                      ? "DP dikembalikan ke penyewa, tidak dicatat di pembukuan."
+                      ? "DP dikembalikan ke penyewa; catatan DP di Transaksi & Analitik dihapus."
                       : `Penyewa sudah DP ${rupiah(dp.nominal)}. Pilih hangus atau dikembalikan.`}
                 </Footnote>
               </div>

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Package, Trash2 } from "lucide-react";
 import { addDoc, collection, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { isKategoriGajiPegawai, SUMBER_GAJI } from "../lib/gajiBuku";
+import { SUMBER_DP_BOOKING } from "../lib/bookingSewa";
 import { db } from "../lib/firebase";
 import { rupiah, formatRibuanInput } from "../lib/format";
 import { toLocalYmd } from "../lib/dateLocal";
@@ -94,7 +95,7 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
   }, [jenis]);
 
   // Saran nama & kategori dari riwayat manual (bukan yang dibuat otomatis oleh stok masuk)
-  const manual = useMemo(() => items.filter((o) => o.sumber !== "input_stok" && o.sumber !== SUMBER_GAJI && !isKategoriGajiPegawai(o.kategori)), [items]);
+  const manual = useMemo(() => items.filter((o) => o.sumber !== "input_stok" && o.sumber !== SUMBER_GAJI && o.sumber !== SUMBER_DP_BOOKING && !isKategoriGajiPegawai(o.kategori)), [items]);
   // Saran mengikuti usaha yang dipilih (Rental / Usaha); usaha baru tanpa riwayat -> pakai semua
   const manualBisnis = useMemo(() => {
     const x = manual.filter((o) => bisnisOf(o) === form.bisnis);
@@ -436,7 +437,9 @@ const InputTransaksi: React.FC<{ jenis: JenisTransaksi; items: TransaksiOwner[];
                                     </div>
                                     <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
                                       <div className={`text-subhead font-bold whitespace-nowrap tabular-nums ${t.angka}`}>{rupiah(o.harga)}</div>
-                                      {o.sumber === SUMBER_GAJI || isKategoriGajiPegawai(o.kategori) ? (
+                                      {o.sumber === SUMBER_DP_BOOKING ? (
+                                        <Pill tone="neutral">Dari Booking</Pill>
+                                      ) : o.sumber === SUMBER_GAJI || isKategoriGajiPegawai(o.kategori) ? (
                                         <Pill tone="neutral">{o.sumber === SUMBER_GAJI ? "Dari menu Gaji" : "Arsip gaji"}</Pill>
                                       ) : o.sumber === "input_stok" ? (
                                         <Button

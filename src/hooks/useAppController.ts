@@ -1,4 +1,5 @@
 import { runSalaryTransaction } from "../lib/salaryPersistence";
+import { setTampilRincian } from "../lib/tampilRincian";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { konfirmasi, notify } from "../ui/presentations/Pemberitahuan";
 import { barisSewaDariBooking, ubahBooking, type BookingSewa } from "../lib/bookingSewa";
@@ -943,6 +944,7 @@ export default function useAppController() {
   const DEFAULT_RINCIAN_VISIBILITY = { harian: true, jajanan: true, jasaAks: true, sewa: true, pengeluaran: true, setoran: true };
   type RincianKey = keyof typeof DEFAULT_RINCIAN_VISIBILITY;
   const [rincianVisibility, setRincianVisibility] = useState<Record<RincianKey, boolean>>(DEFAULT_RINCIAN_VISIBILITY);
+  useEffect(() => { setTampilRincian(rincianVisibility); }, [rincianVisibility]);
   const handleUpdateRincianVisibility = async (key: RincianKey, visible: boolean) => {
     if (!isSuperAdminOrOwner) { alert("Hanya super admin yang dapat mengatur tabel rincian."); return; }
     const next = { ...rincianVisibility, [key]: visible };
@@ -2147,7 +2149,7 @@ export default function useAppController() {
     );
   };
 
-  /** "Mulai sewa": baris sewa (sisa bayar) + baris DP BOOKING masuk Rincian Sewa, booking jadi DIAMBIL. */
+  /** "Mulai sewa": baris sewa (sisa bayar) masuk Rincian Sewa, booking jadi DIAMBIL. DP sudah tercatat sejak diterima. */
   const mulaiSewaBooking = async (b: BookingSewa): Promise<boolean> => {
     if (rowsSewa.some((r: any) => r._bookingId === b.id)) {
       notify("Booking ini sudah ada di Rincian Sewa.", "info");
@@ -2156,45 +2158,43 @@ export default function useAppController() {
     }
     if (!(await formHariIniUntukBooking("Sewa"))) return false;
     const d = new Date();
-    const { sewa, dp } = barisSewaDariBooking(b, { jamSekarang: `${pad(d.getHours())}:${pad(d.getMinutes())}`, lamaOptions: sewaPriceTable.lamaOptions });
-    tambahBarisSewa(dp ? [sewa, dp] : [sewa]);
+    const { sewa } = barisSewaDariBooking(b, { jamSekarang: `${pad(d.getHours())}:${pad(d.getMinutes())}`, lamaOptions: sewaPriceTable.lamaOptions });
+    tambahBarisSewa([sewa]);
     try {
       await ubahBooking(b.id, { status: "DIAMBIL", diambil: { ts: Date.now(), oleh: user?.email || "admin", tanggal }, batal: null });
-      notify(dp ? "Sewa masuk Rincian Sewa beserta baris DP. Pilih status bayar lalu simpan." : "Sewa masuk Rincian Sewa. Pilih status bayar lalu simpan.", "positive");
+      notify(b.dp && b.dp.nominal > 0 ? "Sewa masuk Rincian Sewa (sisa bayar sesudah DP). Pilih status bayar lalu simpan." : "Sewa masuk Rincian Sewa. Pilih status bayar lalu simpan.", "positive");
     } catch (e: any) {
       notify(`Baris sewa sudah masuk, tapi status booking gagal diubah: ${e?.message || e}`, "negative");
     }
     return true;
   };
 
-  /** Booking batal, DP hangus → DP dicatat sebagai pemasukan hari ini (baris DP BOOKING). */
+  /** Booking batal, DP hangus → catatan DP (sudah tercatat sejak diterima) tetap sebagai pemasukan. */
   const dpHangusBooking = async (b: BookingSewa, alasan: string): Promise<boolean> => {
-    const { dp } = barisSewaDariBooking(b, { jamSekarang: "-", lamaOptions: sewaPriceTable.lamaOptions });
-    if (!dp) return false;
-    if (!(await formHariIniUntukBooking("DP hangus"))) return false;
-    tambahBarisSewa([{ ...dp, ket: `${b.nama} (DP hangus)` }]);
+    if (!(b.dp && b.dp.nominal > 0)) return false;
     try {
       await ubahBooking(b.id, { status: "BATAL", batal: { alasan, oleh: user?.email || "admin", ts: Date.now(), dp: "HANGUS" } });
-      notify("DP hangus masuk Rincian Sewa. Simpan pembukuan supaya tercatat.", "positive");
+      notify("Booking dibatalkan. DP hangus tetap tercatat sebagai pemasukan.", "positive");
+      return true;
     } catch (e: any) {
-      notify(`Baris DP sudah masuk, tapi status booking gagal diubah: ${e?.message || e}`, "negative");
+      notify(`Gagal membatalkan booking: ${e?.message || e}`, "negative");
+      return false;
     }
-    return true;
   };
 
-  /** Urungkan Mulai sewa / DP hangus: baris dari booking ini di form dihapus, status booking kembali aktif. */
+  /** Urungkan Mulai sewa / batal: baris sewa dari booking ini di form dihapus, status booking kembali aktif. */
   const urungkanBooking = async (b: BookingSewa): Promise<boolean> => {
     const kembali = { status: (b.dp && b.dp.nominal > 0 ? "KONFIRMASI" : "BARU") as BookingSewa["status"], diambil: null, batal: null };
-    // Batal tanpa DP hangus: tidak ada baris di pembukuan
-    if (b.status === "BATAL" && b.batal?.dp !== "HANGUS") {
+    // Batal: tidak ada baris di form pembukuan (catatan DP disinkronkan otomatis)
+    if (b.status === "BATAL") {
       await ubahBooking(b.id, kembali);
       return true;
     }
     const adaDiForm = rowsSewa.some((r: any) => r._bookingId === b.id);
     const ok = await konfirmasi(
       adaDiForm
-        ? "Baris sewa / DP dari booking ini dihapus dari form Rincian Sewa dan booking kembali aktif."
-        : "Baris dari booking ini sudah tidak ada di form (mungkin sudah tersimpan). Hapus manual di pembukuan bila perlu. Booking tetap dikembalikan aktif.",
+        ? "Baris sewa dari booking ini dihapus dari form Rincian Sewa dan booking kembali aktif."
+        : "Baris sewa dari booking ini sudah tidak ada di form (mungkin sudah tersimpan). Hapus manual di pembukuan bila perlu. Booking tetap dikembalikan aktif.",
       { judul: "Urungkan booking?", ya: "Urungkan" }
     );
     if (!ok) return false;

@@ -24,7 +24,7 @@ const GalleryModal = lazy(() => import("./components/GalleryModal"));
 const HalamanMonitoring = lazy(() => import("./components/HalamanMonitoring"));
 import HalamanLainnyaDaftar, { JUDUL_LAINNYA, KembaliLainnya, MENU_LAINNYA } from "./components/HalamanLainnya";
 import useRequestEditPending from "./hooks/useRequestEditPending";
-import { jumlahPerhatianBooking, useBookingSewa } from "./lib/bookingSewa";
+import { jumlahPerhatianBooking, sinkronDpBooking, useBookingSewa } from "./lib/bookingSewa";
 import type { HalamanLainnya, TabUtama } from "./lib/navigasi";
 import LiveCursors from "./components/LiveCursors";
 import Login from "./components/Login";
@@ -238,6 +238,20 @@ export default function App() {
   // Booking sewa (Monitoring › Booking): satu listener untuk daftar & titik di tab Monitoring
   const bookingSewa = useBookingSewa(!!user);
   const perhatianBooking = jumlahPerhatianBooking(bookingSewa.list, Date.now());
+  // DP booking langsung tercatat sebagai pemasukan Rental (owner_incomes). Staf tidak boleh menulis
+  // transaksi owner, jadi sinkron berjalan dari sesi owner / super admin setiap data DP berubah.
+  const tandaDpBooking = useMemo(
+    () => JSON.stringify(bookingSewa.list.map((b) => [b.id, b.status, b.batal?.dp ?? null, b.dp?.nominal ?? 0, b.dp?.metode ?? "", b.dp?.ts ?? 0, b.dp?.bukti ?? "", b.nama, b.jenisPS, b.tanggal])),
+    [bookingSewa.list]
+  );
+  useEffect(() => {
+    if (!isSuperAdminOrOwner || bookingSewa.loading || bookingSewa.error) return;
+    const t = setTimeout(() => {
+      sinkronDpBooking(bookingSewa.list).catch((e) => console.warn("Sinkron DP booking:", e));
+    }, 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSuperAdminOrOwner, bookingSewa.loading, bookingSewa.error, tandaDpBooking]);
 
   const navItems = useMemo<NavItem[]>(() => {
     const items: NavItem[] = [

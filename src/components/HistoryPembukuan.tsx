@@ -6,6 +6,7 @@ import { db } from "../lib/firebase";
 import { HistoryItem } from "../lib/types";
 import { rupiah } from "../lib/format";
 import { totalPemasukanHarian } from "../lib/keuangan";
+import { useTampilRincian } from "../lib/tampilRincian";
 import { mingguKe } from "../lib/laporan";
 import KonfirmasiAkun from "./KonfirmasiAkun";
 import { AKSEN_TILE, AlertDialog, Amount, Button, Card, Pill, SectionHeader } from "../ui";
@@ -64,6 +65,12 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
       { harian: 0, jajanan: 0, jasa: 0, sewa: 0, cash: 0, transfer: 0 }
     );
   }, [items]);
+
+  const tampil = useTampilRincian();
+  const kolH = tampil("harian", subtotal.harian);
+  const kolJ = tampil("jajanan", subtotal.jajanan);
+  const kolU = tampil("jasaAks", subtotal.jasa);
+  const kolS = tampil("sewa", subtotal.sewa);
 
   const subtotalGrand = totalPemasukanHarian({ totalHarian: subtotal.harian, totalJajanan: subtotal.jajanan, totalJasaAks: subtotal.jasa, totalSewa: subtotal.sewa });
 
@@ -161,10 +168,10 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
                 <tr>
                   <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Tanggal</th>
                   <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Hari</th>
-                  <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Harian</th>
-                  <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Jajanan</th>
-                  <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Usaha</th>
-                  <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Sewa PS</th>
+                  {kolH && <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Harian</th>}
+                  {kolJ && <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Jajanan</th>}
+                  {kolU && <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Usaha</th>}
+                  {kolS && <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Sewa PS</th>}
                   {isOwner && (
                     <>
                       <th className={thStyle} style={{ boxShadow: `inset 0 -2px 0 ${AKSEN_TILE.blue.bar}55` }}>Total</th>
@@ -189,10 +196,10 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
                       <tr key={h.id} className={trHover}>
                         <td className={tdStyle}>{h.tanggal}</td>
                         <td className={`${tdStyle} capitalize`}>{h.hari}</td>
-                        <td className={tdStyle}>{rupiah(h.totalHarian)}</td>
-                        <td className={tdStyle}>{rupiah(h.totalJajanan)}</td>
-                        <td className={tdStyle}>{rupiah(h.totalJasaAks)}</td>
-                        <td className={tdStyle}>{rupiah(h.totalSewa)}</td>
+                        {kolH && <td className={tdStyle}>{rupiah(h.totalHarian)}</td>}
+                        {kolJ && <td className={tdStyle}>{rupiah(h.totalJajanan)}</td>}
+                        {kolU && <td className={tdStyle}>{rupiah(h.totalJasaAks)}</td>}
+                        {kolS && <td className={tdStyle}>{rupiah(h.totalSewa)}</td>}
                         {isOwner && (
                           <>
                             <td className={`${tdStyle} font-semibold text-label`}>{rupiah(grand)}</td>
@@ -217,10 +224,10 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
                 {sortedItems.length > 0 && (
                   <tr className="apple-bar font-semibold sticky bottom-0 border-t border-sep z-[30]">
                     <td colSpan={2} className="px-2.5 py-3 text-caption2 uppercase tracking-[0.04em] text-label-2 text-right whitespace-nowrap">Grand Total</td>
-                    <td className={tdStyle}>{rupiah(subtotal.harian)}</td>
-                    <td className={tdStyle}>{rupiah(subtotal.jajanan)}</td>
-                    <td className={tdStyle}>{rupiah(subtotal.jasa)}</td>
-                    <td className={tdStyle}>{rupiah(subtotal.sewa)}</td>
+                    {kolH && <td className={tdStyle}>{rupiah(subtotal.harian)}</td>}
+                    {kolJ && <td className={tdStyle}>{rupiah(subtotal.jajanan)}</td>}
+                    {kolU && <td className={tdStyle}>{rupiah(subtotal.jasa)}</td>}
+                    {kolS && <td className={tdStyle}>{rupiah(subtotal.sewa)}</td>}
                     {isOwner && (
                       <>
                         <td className={`${tdStyle} font-bold text-label`}>{rupiah(subtotalGrand)}</td>
@@ -305,10 +312,10 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
                               {isItemExpanded && (
                                 <div className="animate-in fade-in slide-in-from-top-2 duration-200">
                                   <div className="grid grid-cols-2 gap-y-3 gap-x-4 mb-3.5">
-                                    <DetailRow label="Harian" value={rupiah(h.totalHarian)} />
-                                    <DetailRow label="Jajanan" value={rupiah(h.totalJajanan)} />
-                                    <DetailRow label="Usaha" value={rupiah(h.totalJasaAks)} />
-                                    <DetailRow label="Sewa PS" value={rupiah(h.totalSewa)} />
+                                    {tampil("harian", h.totalHarian) && <DetailRow label="Harian" value={rupiah(h.totalHarian)} />}
+                                    {tampil("jajanan", h.totalJajanan) && <DetailRow label="Jajanan" value={rupiah(h.totalJajanan)} />}
+                                    {tampil("jasaAks", h.totalJasaAks) && <DetailRow label="Usaha" value={rupiah(h.totalJasaAks)} />}
+                                    {tampil("sewa", h.totalSewa) && <DetailRow label="Sewa PS" value={rupiah(h.totalSewa)} />}
                                   </div>
 
                                   {isOwner && ((h as any).totalCash > 0 || (h as any).totalTransfer > 0) && (

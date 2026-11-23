@@ -2,6 +2,7 @@ import React from "react";
 import { Calendar, CircleDollarSign, Coffee, Gamepad2, Wrench } from "lucide-react";
 import { totalPemasukanHarian } from "../lib/keuangan";
 import { persen } from "../lib/format";
+import { useTampilRincian } from "../lib/tampilRincian";
 import { Amount, Card, Eyebrow, MARK, SplitBar, StatTile, StatusPill } from "../ui";
 
 interface RekapPemasukanProps {
@@ -26,6 +27,7 @@ const RekapPemasukan: React.FC<RekapPemasukanProps> = ({
   pendapatanBersih,
 }) => {
   const grand = totalPemasukanHarian({ totalHarian, totalJajanan, totalJasaAks, totalSewa });
+  const tampil = useTampilRincian();
   const totalBayar = totalCash + totalTransfer;
 
   return (
@@ -40,10 +42,10 @@ const RekapPemasukan: React.FC<RekapPemasukanProps> = ({
     >
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-          <StatTile label="Harian" accent="teal" icon={<Calendar />} value={<Amount value={totalHarian} size="headline" fitAt={13} />} />
-          <StatTile label="Jajanan" accent="orange" icon={<Coffee />} value={<Amount value={totalJajanan} size="headline" fitAt={13} />} />
-          <StatTile label="Usaha" accent="red" icon={<Wrench />} value={<Amount value={totalJasaAks} size="headline" fitAt={13} />} />
-          <StatTile label="Sewa konsol" accent="blue" icon={<Gamepad2 />} value={<Amount value={totalSewa} size="headline" fitAt={13} />} />
+          {tampil("harian", totalHarian) && <StatTile label="Harian" accent="teal" icon={<Calendar />} value={<Amount value={totalHarian} size="headline" fitAt={13} />} />}
+          {tampil("jajanan", totalJajanan) && <StatTile label="Jajanan" accent="orange" icon={<Coffee />} value={<Amount value={totalJajanan} size="headline" fitAt={13} />} />}
+          {tampil("jasaAks", totalJasaAks) && <StatTile label="Usaha" accent="red" icon={<Wrench />} value={<Amount value={totalJasaAks} size="headline" fitAt={13} />} />}
+          {tampil("sewa", totalSewa) && <StatTile label="Sewa konsol" accent="blue" icon={<Gamepad2 />} value={<Amount value={totalSewa} size="headline" fitAt={13} />} />}
         </div>
 
         <div className="space-y-2.5 border-t border-sep pt-3.5">

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { AlertCircle, MessageCircle } from "lucide-react";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
 import { pesanPengingat } from "../lib/pengingatSewa";
-import { linkWa } from "../lib/wa";
+import { bukaWa } from "../lib/wa";
 import type { SewaBerjalan } from "../lib/sewa";
 import { Button, MOTION } from "../ui";
 
@@ -27,7 +27,7 @@ export const bisaIngatkan = (u: SewaBerjalan | null | undefined) => !!(u && u.wa
 export function kirimPengingatSewa(u: SewaBerjalan, onPengingat?: (item: ReturnType<typeof sumberSewa>) => void) {
   if (!bisaIngatkan(u)) return;
   const pesan = pesanPengingat({ nama: u.namaPenyewa, jenis: u.jenis, endMs: u.endMs!, now: Date.now(), noNota: u._rawRow?._noNota });
-  window.open(linkWa(u.waPenyewa, pesan), "_blank");
+  bukaWa(u.waPenyewa, pesan);
   onPengingat?.(sumberSewa(u));
 }
 

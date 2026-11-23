@@ -1,4 +1,5 @@
 import React, { forwardRef, useImperativeHandle, useRef, useMemo, useState } from "react";
+import { useTampilRincian } from "../lib/tampilRincian";
 import { createPortal } from "react-dom";
 import type JsPDF from "jspdf";
 import { 
@@ -110,6 +111,7 @@ const AppleChart = ({ history }: { history: HistoryItem[] }) => {
 
 const AppleReportTemplate = forwardRef<HTMLDivElement, { data: Props['data'] }>(({ data }, ref) => {
   const GrandTotal = totalPemasukanHarian(data);
+  const tampil = useTampilRincian();
   return (
     <div ref={ref} className="w-[1200px] min-h-[1600px] bg-white text-zinc-900 p-12 font-sans antialiased">
       <div className="flex justify-between items-end border-b-2 border-zinc-900 pb-6 mb-8">
@@ -140,27 +142,31 @@ const AppleReportTemplate = forwardRef<HTMLDivElement, { data: Props['data'] }>(
         <div><span className="font-bold text-zinc-900 mr-2">Tanggal Shift:</span>{data.absenPagi || "-"} / {data.absenSiang || "-"}</div>
         <div className="text-right italic">"{data.catatan || "Tidak ada catatan operasional."}"</div>
       </div>
-      <div className="space-y-8 mb-10">
-        <div className="grid grid-cols-2 gap-8">
+      <div className="mb-10 grid grid-cols-2 gap-8">
+          {tampil("harian", data.totalHarian) && (
           <div>
             <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Pemasukan Harian</span> <span className="text-zinc-500">{rupiah(data.totalHarian)}</span></h3>
             <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsHarian.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.jenisPS} ({r.jumlahJam} jam)</td><td className="py-2 text-right font-bold">{rupiah(r.harga)}</td></tr>) : null)}</tbody></table>
           </div>
+          )}
+          {tampil("sewa", data.totalSewa) && (
           <div>
             <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Sewa PS</span> <span className="text-zinc-500">{rupiah(data.totalSewa)}</span></h3>
             <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsSewa.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.jenisPS} ({r.lamaSewa})</td><td className="py-2 text-right font-bold">{rupiah(r.harga)}</td></tr>) : null)}</tbody></table>
           </div>
-        </div>
-        <div className="grid grid-cols-2 gap-8">
+          )}
+          {tampil("jajanan", data.totalJajanan) && (
           <div>
             <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Jajanan</span> <span className="text-zinc-500">{rupiah(data.totalJajanan)}</span></h3>
             <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsJajanan.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.jenisJajanan} (x{r.qtyJam})</td><td className="py-2 text-right font-bold">{rupiah(r.harga)}</td></tr>) : null)}</tbody></table>
           </div>
+          )}
+          {tampil("jasaAks", data.totalJasaAks) && (
           <div>
             <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Pemasukan Usaha</span> <span className="text-zinc-500">{rupiah(data.totalJasaAks)}</span></h3>
             <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsJasaAks.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.tipe}</td><td className="py-2 text-right font-bold">{rupiah(r.harga)}</td></tr>) : null)}</tbody></table>
           </div>
-        </div>
+          )}
       </div>
       <div className="pt-6 border-t-4 border-zinc-900">
            <h3 className="text-lg font-bold mb-4 uppercase tracking-wider">Performa 7 Hari Terakhir</h3>

@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
+import { getAplikasiWa, isAndroid, setAplikasiWa, type AplikasiWa } from "../lib/wa";
 import { gajiBersih } from "../lib/gajiBuku";
 import { createPortal } from "react-dom";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
@@ -1376,6 +1377,8 @@ const Pengaturan: React.FC<Props> = ({
             )}
           </IOSGroup>
 
+          <PilihanAplikasiWa />
+
           {isOwner && (
             <IOSGroup title="Atur Ongkir (Sistem Baru)">
               <SettingSliderRow
@@ -1532,10 +1535,10 @@ const Pengaturan: React.FC<Props> = ({
             title="Kategori Item"
             footer="Pilih kategori untuk mengubah harga atau nama item. Perubahan tersimpan otomatis."
           >
-            <IOSRow label="Pemasukan Harian" value={`${sHarian.count} Item`} icon={<Gamepad2 size={16} />} iconColor="blue" onClick={() => openEditModal(onOpenEditHarian)} />
-            <IOSRow label="Jajanan" value={`${sJajanan.count} Item`} icon={<Coffee size={16} />} iconColor="orange" onClick={() => openEditModal(onOpenEditJajanan)} />
-            <IOSRow label="Pemasukan Usaha" value={`${sJasa.count} Item`} icon={<Wrench size={16} />} iconColor="gray" onClick={() => openEditModal(onOpenEditJasaAks)} />
-            <IOSRow label="Sewa PS" value={`${sSewa.count} Item`} icon={<Truck size={16} />} iconColor="green" onClick={() => openEditModal(onOpenEditSewa)} />
+            {rincianVisibility?.harian !== false && <IOSRow label="Pemasukan Harian" value={`${sHarian.count} Item`} icon={<Gamepad2 size={16} />} iconColor="blue" onClick={() => openEditModal(onOpenEditHarian)} />}
+            {rincianVisibility?.jajanan !== false && <IOSRow label="Jajanan" value={`${sJajanan.count} Item`} icon={<Coffee size={16} />} iconColor="orange" onClick={() => openEditModal(onOpenEditJajanan)} />}
+            {rincianVisibility?.jasaAks !== false && <IOSRow label="Pemasukan Usaha" value={`${sJasa.count} Item`} icon={<Wrench size={16} />} iconColor="gray" onClick={() => openEditModal(onOpenEditJasaAks)} />}
+            {rincianVisibility?.sewa !== false && <IOSRow label="Sewa PS" value={`${sSewa.count} Item`} icon={<Truck size={16} />} iconColor="green" onClick={() => openEditModal(onOpenEditSewa)} />}
           </IOSGroup>
 
           <IOSGroup
@@ -2297,6 +2300,44 @@ const Pengaturan: React.FC<Props> = ({
       />
     </div>,
     document.body
+  );
+};
+
+/** Aplikasi WhatsApp yang dibuka tombol WA (pengingat sewa, booking, nota) — disimpan per HP. */
+const PilihanAplikasiWa = () => {
+  const [app, setApp] = useState<AplikasiWa>(() => getAplikasiWa());
+  const android = isAndroid();
+  return (
+    <IOSGroup
+      title="WhatsApp"
+      footer={
+        android
+          ? "Berlaku untuk HP ini saja. Bila aplikasi yang dipilih tidak terpasang, WhatsApp dibuka lewat browser."
+          : "Pilihan aplikasi hanya berlaku di Android. Di iPhone, WhatsApp dibuka lewat link wa.me."
+      }
+    >
+      <SettingRow>
+        <div className="space-y-0.5 min-w-0">
+          <div className="text-callout font-medium text-label">Buka chat pakai</div>
+          <div className="text-caption text-label-2">
+            {app === "bisnis" ? "WhatsApp Business" : app === "biasa" ? "WhatsApp biasa" : "Ikuti pilihan HP"}
+          </div>
+        </div>
+        <div className="w-48 shrink-0">
+          <SubTabs<AplikasiWa>
+            size="sm"
+            ariaLabel="Aplikasi WhatsApp"
+            value={app}
+            onChange={(v) => { setApp(v); setAplikasiWa(v); }}
+            options={[
+              { key: "bisnis", label: "Bisnis" },
+              { key: "biasa", label: "Biasa" },
+              { key: "otomatis", label: "Default" },
+            ]}
+          />
+        </div>
+      </SettingRow>
+    </IOSGroup>
   );
 };
 

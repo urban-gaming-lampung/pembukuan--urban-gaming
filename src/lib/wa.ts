@@ -30,5 +30,43 @@ export const formatWa = (s: unknown) => {
   return `${d.slice(0, 4)}-${d.slice(4, 8)}-${d.slice(8)}`.replace(/-$/, "");
 };
 
-/** Link chat WhatsApp berisi pesan. */
-export const linkWa = (wa: unknown, pesan: string) => `https://wa.me/${waInternasional(wa)}?text=${encodeURIComponent(pesan)}`;
+// ---------------------------------------------------------------- aplikasi WhatsApp
+
+/**
+ * Aplikasi yang dibuka tombol WA, disimpan per HP (localStorage):
+ * - "otomatis": link wa.me (HP memakai aplikasi default / menampilkan pilihan)
+ * - "bisnis" / "biasa": di Android langsung membuka WhatsApp Business / WhatsApp biasa.
+ *   Bila aplikasinya tidak terpasang, browser kembali ke wa.me. iPhone selalu memakai wa.me.
+ */
+export type AplikasiWa = "otomatis" | "bisnis" | "biasa";
+const KUNCI_APLIKASI_WA = "urban_aplikasi_wa";
+const PAKET_WA: Record<Exclude<AplikasiWa, "otomatis">, string> = { bisnis: "com.whatsapp.w4b", biasa: "com.whatsapp" };
+
+export function getAplikasiWa(): AplikasiWa {
+  try {
+    const v = localStorage.getItem(KUNCI_APLIKASI_WA);
+    return v === "bisnis" || v === "biasa" ? v : "otomatis";
+  } catch {
+    return "otomatis";
+  }
+}
+export function setAplikasiWa(v: AplikasiWa) {
+  try { localStorage.setItem(KUNCI_APLIKASI_WA, v); } catch { /* mode privat: abaikan */ }
+}
+export const isAndroid = () => typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent || "");
+
+/** Link chat WhatsApp berisi pesan, sesuai aplikasi WA pilihan di HP ini. */
+export function linkWa(wa: unknown, pesan: string): string {
+  const nomor = waInternasional(wa);
+  const web = `https://wa.me/${nomor}?text=${encodeURIComponent(pesan)}`;
+  const app = getAplikasiWa();
+  if (app === "otomatis" || !isAndroid()) return web;
+  return `intent://send?phone=${nomor}&text=${encodeURIComponent(pesan)}#Intent;scheme=whatsapp;package=${PAKET_WA[app]};S.browser_fallback_url=${encodeURIComponent(web)};end`;
+}
+
+/** Buka chat WA. Link aplikasi Android (intent) dibuka di tab ini agar tidak meninggalkan tab kosong. */
+export function bukaWa(wa: unknown, pesan: string) {
+  const url = linkWa(wa, pesan);
+  if (url.startsWith("intent:")) window.location.href = url;
+  else window.open(url, "_blank", "noopener");
+}

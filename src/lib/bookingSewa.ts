@@ -4,18 +4,21 @@
  * Alur: BARU (dicatat) → KONFIRMASI (sudah DP / sudah dikonfirmasi lewat WA)
  *       → DIAMBIL (tombol "Mulai sewa": baris masuk Pembukuan › Rincian Sewa) | BATAL.
  *
- * Aturan DP (disetujui owner 22 Nov 2026):
- * - DP TIDAK masuk pembukuan saat diterima; disimpan di booking (nominal, metode, bukti).
- * - Saat "Mulai sewa": baris sewa = sisa bayar (`_dpBooking` memotong kolom harga) +
- *   baris "DP BOOKING" terpisah (uang DP + bukti, tidak dihitung unit keluar).
- * - Booking batal: DP hangus → baris "DP BOOKING" dicatat sebagai pemasukan hari itu;
- *   DP dikembalikan → tidak dicatat.
+ * Aturan DP (diubah owner 23 Nov 2026):
+ * - DP LANGSUNG tercatat saat diterima: dokumen `owner_incomes/dpbooking_<id>` (Rental, tanggal hari
+ *   kerja DP diterima, metode sesuai DP) → ikut Analitik, posisi dana & Transaksi (terkunci).
+ *   Ditulis oleh `sinkronDpBooking` dari sesi owner / super admin (staf tidak boleh menulis owner_incomes).
+ * - Saat "Mulai sewa": hanya baris sewa = sisa bayar (`_dpBooking` memotong kolom harga);
+ *   DP tidak dicatat ulang di Rincian Sewa.
+ * - Booking batal + DP dikembalikan (atau booking dihapus) → catatan DP dihapus.
+ *   Batal + DP hangus → catatan DP tetap (uangnya memang diterima).
  *
  * Hak akses (firestore.rules): semua staf boleh baca / tambah / ubah / batalkan;
  * HAPUS hanya owner & super admin.
  */
 import { useEffect, useState } from "react";
-import { addDoc, arrayUnion, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, updateDoc, where } from "firebase/firestore";
+import { addDoc, arrayUnion, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, setDoc, updateDoc, where } from "firebase/firestore";
+import { tanggalHariKerja } from "./dateLocal";
 import { auth, db } from "./firebase";
 import { pad, toInt } from "./format";
 import { rapikanWa, waValid } from "./wa";
@@ -545,18 +548,72 @@ export const catatPesanBooking = (id: string, jenis: JenisPesanBooking) =>
   updateDoc(doc(db, KOLEKSI_BOOKING, id), { diingatkan: arrayUnion({ ts: Date.now(), oleh: email(), jenis }) });
 
 /** Hapus permanen — hanya owner / super admin (dikunci juga di firestore.rules). */
-export const hapusBooking = (id: string) => deleteDoc(doc(db, KOLEKSI_BOOKING, id));
+export const hapusBooking = async (id: string) => {
+  await deleteDoc(doc(db, KOLEKSI_BOOKING, id));
+  // Catatan DP ikut terhapus (hanya owner / super admin yang boleh menghapus booking)
+  await deleteDoc(doc(db, KOLEKSI_DP, idDpBooking(id))).catch((e) => console.warn("Hapus catatan DP booking:", e));
+};
+
+// ---------------------------------------------------------------- DP → transaksi owner (Analitik)
+
+const KOLEKSI_DP = "owner_incomes";
+export const SUMBER_DP_BOOKING = "booking";
+export const KATEGORI_DP_BOOKING = "DP Booking Sewa";
+export const idDpBooking = (bookingId: string) => `dpbooking_${bookingId}`;
+
+/** DP booking ini harus tercatat sebagai pemasukan? (ada DP, dan tidak batal dengan DP dikembalikan) */
+export const dpTercatat = (b: BookingSewa) =>
+  !!b.dp && toInt(b.dp.nominal) > 0 && !(b.status === "BATAL" && b.batal?.dp !== "HANGUS");
+
+const dataDp = (b: BookingSewa) => {
+  const dp = b.dp!;
+  const hangus = b.status === "BATAL" && b.batal?.dp === "HANGUS";
+  return {
+    nama: `DP booking ${String(b.nama || "").trim() || "tanpa nama"} · ${b.jenisPS || "-"} · ambil ${b.tanggal || "-"}${hangus ? " (hangus)" : ""}`,
+    harga: toInt(dp.nominal),
+    kategori: KATEGORI_DP_BOOKING,
+    tanggal: tanggalHariKerja(Number(dp.ts) || Date.now()),
+    bisnis: "RENTAL",
+    metode: dp.metode === "CASH" ? "CASH" : "TRANSFER",
+    sumber: SUMBER_DP_BOOKING,
+    bookingId: b.id,
+    buktiTransfer: dp.bukti || "",
+  };
+};
+
+/**
+ * Samakan catatan DP di `owner_incomes` dengan daftar booking (idempoten, ID dokumen tetap).
+ * Hanya menyentuh booking yang ada di `list`, jadi booking lama di luar jendela daftar tidak terhapus.
+ */
+export async function sinkronDpBooking(list: BookingSewa[]): Promise<void> {
+  const lama = await getDocs(query(collection(db, KOLEKSI_DP), where("sumber", "==", SUMBER_DP_BOOKING)));
+  const lamaMap = new Map(lama.docs.map((d) => [d.id, d.data() as any]));
+  const tugas: Promise<unknown>[] = [];
+  list.forEach((b) => {
+    if (!b?.id) return;
+    const id = idDpBooking(b.id);
+    const cur = lamaMap.get(id);
+    if (!dpTercatat(b)) {
+      if (cur) tugas.push(deleteDoc(doc(db, KOLEKSI_DP, id)));
+      return;
+    }
+    const v = dataDp(b);
+    const sama = cur && (Object.keys(v) as (keyof typeof v)[]).every((k) => cur[k] === v[k]);
+    if (!sama) tugas.push(setDoc(doc(db, KOLEKSI_DP, id), { ...v, timestamp: cur?.timestamp || Number(b.dp!.ts) || Date.now() }));
+  });
+  await Promise.all(tugas);
+}
 
 // ---------------------------------------------------------------- ke Rincian Sewa
 
 /**
- * Baris Rincian Sewa dari booking: baris sewa (sisa bayar; `_dpBooking` memotong harga) dan
- * baris "DP BOOKING" (uang DP + bukti) bila ada DP.
+ * Baris Rincian Sewa dari booking: baris sewa (sisa bayar; `_dpBooking` memotong harga).
+ * DP sudah tercatat sebagai pemasukan sejak diterima (lihat `sinkronDpBooking`).
  */
 export function barisSewaDariBooking(
   b: BookingSewa,
   o: { jamSekarang: string; lamaOptions: string[] }
-): { sewa: Record<string, any>; dp: Record<string, any> | null } {
+): { sewa: Record<string, any> } {
   const dpNominal = b.dp ? toInt(b.dp.nominal) : 0;
   const lamaAda = o.lamaOptions.some((x) => x.toUpperCase() === String(b.lamaSewa || "").toUpperCase());
   const jamDurasiCustom = !lamaAda ? jamDurasi({ lamaSewa: b.lamaSewa }) : null;
@@ -575,26 +632,7 @@ export function barisSewaDariBooking(
     _bookingId: b.id,
     ...(dpNominal > 0 ? { _dpBooking: dpNominal } : {}),
   };
-  const dp =
-    dpNominal > 0
-      ? {
-          jenisPS: b.jenisPS,
-          lamaSewa: LAMA_DP_BOOKING,
-          jamMasukSewa: "-",
-          ket: b.nama,
-          waPenyewa: b.wa,
-          isPaid: "YA",
-          isOngkir: "TIDAK",
-          _ongkir: "",
-          _bayarOngkir: "",
-          harga: dpNominal,
-          bayar: b.dp!.metode === "CASH" ? "Cash" : "Transfer",
-          buktiTransfer: b.dp!.bukti || "",
-          _bookingId: b.id,
-          _dpTs: b.dp!.ts,
-        }
-      : null;
-  return { sewa, dp };
+  return { sewa };
 }
 
 
