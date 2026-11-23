@@ -152,11 +152,17 @@ export function unitDipakai(jenisPS: unknown): SumberUnit[] {
   return out;
 }
 
-export type Bentrok = { unit: SumberUnit; kapasitas: number; terpakai: number; penyebab: string[] };
+/**
+ * "penuh" = unit benar-benar kurang menurut jam kembali terjadwal.
+ * "mepet" = unit cukup bila sewa sebelumnya kembali tepat waktu; kurang hanya bila penyewa
+ * memakai toleransi telat (TOLERANSI_KEMBALI_MENIT) — cukup diingatkan, bukan bentrok.
+ */
+export type Bentrok = { unit: SumberUnit; kapasitas: number; terpakai: number; penyebab: string[]; jenis: "penuh" | "mepet" };
 
 /**
  * Cek apakah unit untuk booking `b` masih tersedia di rentang waktunya, dengan menghitung
- * booking aktif lain + unit yang sedang disewa (belum kembali). Toleransi kembali 1 jam ikut dihitung.
+ * booking aktif lain + unit yang sedang disewa (belum kembali).
+ * Dihitung dua kali: tanpa toleransi kembali (bentrok "penuh") dan dengan toleransi (bentrok "mepet").
  * Unit dengan kapasitas 0 (belum diatur owner) tidak dicek.
  */
 export function cekBentrok(
@@ -165,41 +171,61 @@ export function cekBentrok(
 ): Bentrok[] {
   const r = rentangBooking(b);
   if (!r) return [];
-  const tol = TOLERANSI_KEMBALI_MENIT * 60000;
-  const awal = r.mulai;
-  const akhir = r.selesai + tol;
   type Pakai = { mulai: number; selesai: number; unit: SumberUnit[]; label: string };
-  const lain: Pakai[] = [];
-  o.bookings.forEach((x) => {
-    if (!aktif(x) || x.id === b.id) return;
-    const rx = rentangBooking(x);
-    if (!rx) return;
-    lain.push({ mulai: rx.mulai, selesai: rx.selesai + tol, unit: unitDipakai(x.jenisPS), label: `Booking ${x.nama || "tanpa nama"} · ${fmtWaktu(rx.mulai)}` });
-  });
-  o.berjalan.forEach((s) => {
-    const mulai = s.mulaiMs ?? o.now;
-    // Belum kembali: dianggap terpakai minimal sampai sekarang
-    const selesai = Math.max((s.endMs ?? o.now) + tol, s.isDone && !s.isVerified ? o.now + tol : 0);
-    lain.push({ mulai, selesai, unit: unitDipakai(s.jenis), label: `Sewa jalan ${s.namaPenyewa}${s.endMs ? ` · kembali ${fmtWaktu(s.endMs)}` : ""}` });
-  });
+  const hitung = (tol: number) => {
+    const awal = r.mulai;
+    const akhir = r.selesai + tol;
+    const lain: Pakai[] = [];
+    o.bookings.forEach((x) => {
+      if (!aktif(x) || x.id === b.id) return;
+      const rx = rentangBooking(x);
+      if (!rx) return;
+      lain.push({ mulai: rx.mulai, selesai: rx.selesai + tol, unit: unitDipakai(x.jenisPS), label: `Booking ${x.nama || "tanpa nama"} · ${fmtWaktu(rx.mulai)}` });
+    });
+    o.berjalan.forEach((s) => {
+      const mulai = s.mulaiMs ?? o.now;
+      // Belum kembali: dianggap terpakai minimal sampai sekarang
+      const selesai = Math.max((s.endMs ?? o.now) + tol, s.isDone && !s.isVerified ? o.now + tol : 0);
+      lain.push({ mulai, selesai, unit: unitDipakai(s.jenis), label: `Sewa jalan ${s.namaPenyewa}${s.endMs ? ` · kembali ${fmtWaktu(s.endMs)}` : ""}` });
+    });
+    const out = new Map<SumberUnit, { kapasitas: number; terpakai: number; penyebab: string[] }>();
+    unitDipakai(b.jenisPS).forEach((unit) => {
+      const kapasitas = Number(o.kapasitas[KUNCI_KAPASITAS[unit]]) || 0;
+      if (kapasitas <= 0) return;
+      const tumpang = lain.filter((p) => p.unit.includes(unit) && p.mulai < akhir && p.selesai > awal);
+      if (!tumpang.length) return;
+      // Pemakaian maksimum bersamaan di dalam rentang booking (dicek di setiap titik mulai)
+      const titik = [awal, ...tumpang.map((p) => Math.max(awal, p.mulai))];
+      let maks = 0;
+      titik.forEach((t) => {
+        const n = tumpang.filter((p) => p.mulai <= t && p.selesai > t).length;
+        if (n > maks) maks = n;
+      });
+      if (maks + 1 > kapasitas) out.set(unit, { kapasitas, terpakai: maks, penyebab: tumpang.map((p) => p.label) });
+    });
+    return out;
+  };
 
+  const penuh = hitung(0);
+  const denganToleransi = hitung(TOLERANSI_KEMBALI_MENIT * 60000);
   const hasil: Bentrok[] = [];
   unitDipakai(b.jenisPS).forEach((unit) => {
-    const kapasitas = Number(o.kapasitas[KUNCI_KAPASITAS[unit]]) || 0;
-    if (kapasitas <= 0) return;
-    const tumpang = lain.filter((p) => p.unit.includes(unit) && p.mulai < akhir && p.selesai > awal);
-    if (!tumpang.length) return;
-    // Pemakaian maksimum bersamaan di dalam rentang booking (dicek di setiap titik mulai)
-    const titik = [awal, ...tumpang.map((p) => Math.max(awal, p.mulai))];
-    let maks = 0;
-    titik.forEach((t) => {
-      const n = tumpang.filter((p) => p.mulai <= t && p.selesai > t).length;
-      if (n > maks) maks = n;
-    });
-    if (maks + 1 > kapasitas) hasil.push({ unit, kapasitas, terpakai: maks, penyebab: tumpang.map((p) => p.label) });
+    const x = penuh.get(unit);
+    if (x) { hasil.push({ unit, ...x, jenis: "penuh" }); return; }
+    const y = denganToleransi.get(unit);
+    if (y) hasil.push({ unit, ...y, jenis: "mepet" });
   });
   return hasil;
 }
+
+/** Bentrok yang benar-benar membuat unit kurang (bukan sekadar mepet toleransi). */
+export const adaBentrokPenuh = (list: Bentrok[]) => list.some((x) => x.jenis === "penuh");
+
+/** Kalimat peringatan untuk satu bentrok. */
+export const teksBentrok = (x: Bentrok) =>
+  x.jenis === "penuh"
+    ? `${LABEL_UNIT[x.unit]} kurang: ${x.terpakai} dari ${x.kapasitas} unit masih terpakai di jam itu.`
+    : `${LABEL_UNIT[x.unit]} mepet: unit sebelumnya kembali dekat jam ambil. Aman bila kembali tepat waktu, tapi penyewa masih boleh telat sampai ${TOLERANSI_KEMBALI_MENIT / 60} jam.`;
 
 // ---------------------------------------------------------------- pesan WhatsApp
 

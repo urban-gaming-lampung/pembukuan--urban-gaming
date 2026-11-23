@@ -10,7 +10,9 @@ import type { SewaBerjalan } from "../../lib/sewa";
 import {
   aktif,
   catatPesanBooking,
+  adaBentrokPenuh,
   cekBentrok,
+  teksBentrok,
   estimasiHarga,
   fmtWaktu,
   hapusBooking,
@@ -162,10 +164,10 @@ const BookingDetailSheet: React.FC<{
         </div>
 
         {bisaAksi && bentrok.length > 0 && (
-          <Notice tone="warning">
+          <Notice tone={adaBentrokPenuh(bentrok) ? "negative" : "warning"}>
             {bentrok.map((x) => (
               <div key={x.unit}>
-                {LABEL_UNIT[x.unit]} bisa kurang: {x.terpakai} dari {x.kapasitas} unit terpakai di jam itu ({x.penyebab.slice(0, 2).join(" · ")}).
+                {teksBentrok(x)} ({x.penyebab.slice(0, 2).join(" · ")})
               </div>
             ))}
           </Notice>

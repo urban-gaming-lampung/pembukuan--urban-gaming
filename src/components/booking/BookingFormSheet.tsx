@@ -9,7 +9,9 @@ import type { SewaBerjalan } from "../../lib/sewa";
 import {
   aktif,
   bacaTeksBooking,
+  adaBentrokPenuh,
   cekBentrok,
+  teksBentrok,
   estimasiHarga,
   LABEL_UNIT,
   mulaiBooking,
@@ -338,13 +340,11 @@ const BookingFormSheet: React.FC<{
         </section>
 
         {bentrok.length > 0 && (
-          <Notice tone="warning">
+          <Notice tone={adaBentrokPenuh(bentrok) ? "negative" : "warning"}>
             <div className="space-y-1">
               {bentrok.map((x) => (
                 <div key={x.unit}>
-                  <div className="font-semibold">
-                    {LABEL_UNIT[x.unit]} bisa kurang: {x.terpakai} dari {x.kapasitas} unit sudah terpakai di jam itu.
-                  </div>
+                  <div className="font-semibold">{teksBentrok(x)}</div>
                   <div className="text-caption text-label-2">{x.penyebab.slice(0, 3).join(" · ")}{x.penyebab.length > 3 ? ` · +${x.penyebab.length - 3} lagi` : ""}</div>
                 </div>
               ))}

@@ -7,6 +7,7 @@ import { daftarSewaBerjalan } from "../../lib/sewa";
 import type { HistoryItem, RowSewa } from "../../lib/types";
 import {
   aktif,
+  adaBentrokPenuh,
   cekBentrok,
   kelompokBooking,
   LABEL_STATUS,
@@ -30,7 +31,7 @@ const JUDUL_KELOMPOK: Record<KelompokBooking, string> = {
 const URUTAN: KelompokBooking[] = ["LEWAT", "HARI_INI", "BESOK", "MINGGU_INI", "NANTI", "TANPA_JADWAL"];
 const HARI = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 
-const BarisBooking: React.FC<{ b: BookingSewa; now: number; bentrok?: boolean; onClick: () => void; riwayat?: boolean }> = ({ b, now, bentrok, onClick, riwayat }) => {
+const BarisBooking: React.FC<{ b: BookingSewa; now: number; bentrok?: "penuh" | "mepet"; onClick: () => void; riwayat?: boolean }> = ({ b, now, bentrok, onClick, riwayat }) => {
   const m = mulaiBooking(b);
   const d = m !== null ? new Date(m) : null;
   const dp = b.dp && b.dp.nominal > 0 ? b.dp.nominal : 0;
@@ -56,7 +57,7 @@ const BarisBooking: React.FC<{ b: BookingSewa; now: number; bentrok?: boolean; o
         ) : (
           <Pill tone={dp ? "positive" : b.status === "KONFIRMASI" ? "tint" : "neutral"}>{dp ? `DP ${rpShort(dp)}` : b.status === "KONFIRMASI" ? "Pasti" : "Belum DP"}</Pill>
         )}
-        {bentrok ? <Pill tone="negative">Unit kurang</Pill> : ingat ? <Pill tone="warning">Ingatkan</Pill> : null}
+        {bentrok === "penuh" ? <Pill tone="negative">Unit kurang</Pill> : ingat ? <Pill tone="warning">Ingatkan</Pill> : bentrok === "mepet" ? <Pill tone="warning">Mepet</Pill> : null}
       </span>
       <ChevronRight aria-hidden className="h-4 w-4 shrink-0 text-label-3" />
     </button>
@@ -103,9 +104,10 @@ const HalamanBooking: React.FC<{
     [bookings]
   );
   const bentrokIds = useMemo(() => {
-    const s = new Set<string>();
+    const s = new Map<string, "penuh" | "mepet">();
     aktifList.forEach((b) => {
-      if (cekBentrok(b, { bookings, berjalan, kapasitas, now }).length) s.add(b.id);
+      const list = cekBentrok(b, { bookings, berjalan, kapasitas, now });
+      if (list.length) s.set(b.id, adaBentrokPenuh(list) ? "penuh" : "mepet");
     });
     return s;
   }, [aktifList, bookings, berjalan, kapasitas, now]);
@@ -157,7 +159,7 @@ const HalamanBooking: React.FC<{
           />
           <div className="overflow-hidden rounded-tile bg-surface ring-1 ring-edge shadow-card divide-y divide-sep">
             {list.map((b) => (
-              <BarisBooking key={b.id} b={b} now={now} bentrok={bentrokIds.has(b.id)} onClick={() => setLihatId(b.id)} />
+              <BarisBooking key={b.id} b={b} now={now} bentrok={bentrokIds.get(b.id)} onClick={() => setLihatId(b.id)} />
             ))}
           </div>
         </section>
