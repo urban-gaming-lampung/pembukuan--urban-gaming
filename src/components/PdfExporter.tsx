@@ -1,489 +1,399 @@
-import React, { forwardRef, useImperativeHandle, useRef, useMemo, useState } from "react";
-import { useTampilRincian } from "../lib/tampilRincian";
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from "react";
 import { createPortal } from "react-dom";
 import type JsPDF from "jspdf";
-import { 
-  RowHarian, RowJajanan, RowJasaAks, RowSewa, HistoryItem 
-} from "../lib/types";
-import type { StokData, MasterStokCategories, StokKategori } from "../hooks/useStokData";
-import { rpShort, rupiah } from "../lib/format";
+import { Check, Copy, Download, ExternalLink, FileText, Share2 } from "lucide-react";
+import { useTampilRincian } from "../lib/tampilRincian";
+import type { MasterStokCategories, StokData } from "../hooks/useStokData";
+import { rupiah } from "../lib/format";
 import { totalPemasukanHarian } from "../lib/keuangan";
-import { buatLaporanHarian, laporanUntukPdf } from "../lib/laporan";
-import { toAscii } from "../lib/posReceipt";
-import { MOTION } from "../ui";
+import { buatLaporanHarian } from "../lib/laporan";
+import { buildLaporanPdf, type PdfExportData } from "../lib/pdfReportBuilder";
+import { AKSEN_TILE, Button, IconBadge, MOTION, Notice, Pill, Sheet, Spinner, notify, tile, cx } from "../ui";
 
 type ImageQuality = "Tinggi" | "Hemat";
 
 type Props = {
-  rootRef: React.RefObject<HTMLDivElement>;
-  dark: boolean;
+  rootRef?: React.RefObject<HTMLDivElement>;
+  dark?: boolean;
   kualitasGambar: ImageQuality;
-  data: {
-    tanggal: string; hari: string; absenPagi: string; absenSiang: string; catatan: string;
-    rowsHarian: RowHarian[]; rowsJajanan: RowJajanan[]; rowsJasaAks: RowJasaAks[]; rowsSewa: RowSewa[];
-    totalHarian: number; totalJajanan: number; totalJasaAks: number; totalSewa: number;
-    totalCash: number; totalTransfer: number; history: HistoryItem[];
-    rowsSetoran?: any[]; rowsPengeluaran?: any[];
-  };
+  data: PdfExportData;
   stokData?: StokData;
   masterCategories?: MasterStokCategories;
   onStartExport?: () => void;
   onEndExport?: () => void;
 };
 
-const generateLaporanStokText = (stokData?: StokData, masterCats?: MasterStokCategories) => {
-    const d = stokData || { rental: {}, jualan: {} };
-    const rentalCats: StokKategori[] = masterCats?.rental || [];
-    const jualanCats: StokKategori[] = masterCats?.jualan || [];
-
-    const getHintStr = (itemData: any) => {
-        if (!itemData || !itemData.lastEditDate) return "";
-        const delta = itemData.lastEditDelta || 0;
-        const deltaStr = delta > 0 ? `+${delta}` : `${delta}`;
-        return ` (telah di edit, ${itemData.lastEditDate}, ${deltaStr})`;
-    };
-
-    let text = `==============================\nREKAP STOK RENTAL\n==============================\n\n`;
-    rentalCats.forEach(cat => {
-        text += `${cat.kategori}\n`;
-        let sum = 0;
-        cat.items.forEach(item => {
-            const itemData = d.rental?.[cat.kategori]?.[item] || { jumlah: 0 };
-            const val = itemData.jumlah || 0;
-            sum += val;
-            text += `${item} : ${val}${getHintStr(itemData)}\n`;
-        });
-        text += `TOTAL : ${sum}\n\n`;
-    });
-
-    text += `==============================\nREKAP STOK JUALAN\n==============================\n\n`;
-    jualanCats.forEach(cat => {
-        text += `${cat.kategori}\n`;
-        let sum = 0;
-        cat.items.forEach(item => {
-            const itemData = d.jualan?.[cat.kategori]?.[item] || { jumlah: 0 };
-            const val = itemData.jumlah || 0;
-            sum += val;
-            text += `- ${item} : ${val}${getHintStr(itemData)}\n`;
-        });
-        text += `TOTAL : ${sum}\n\n`;
-    });
-    return text;
+export type PdfExporterHandle = {
+  share: () => Promise<void>;
+  /** Muat modul jsPDF lebih awal (mis. saat pop-up cek stok muncul) agar tap "Ya" langsung sinkron ke Web Share API. */
+  preload: () => void;
 };
 
-export type PdfExporterHandle = { share: () => Promise<void>; };
-
-const AppleChart = ({ history }: { history: HistoryItem[] }) => {
-  const chartData = useMemo(() => {
-    if (!history) return [];
-    const raw = [...history].slice(0, 7).reverse(); 
-    return raw.map(h => {
-        return { label: String(h.hari || "").substring(0, 3), value: totalPemasukanHarian(h) };
-    });
-  }, [history]);
-
-  if (chartData.length === 0) return null;
-  const width = 600; const height = 180; const padding = 10;
-  const maxVal = Math.max(...chartData.map(d => d.value)) * 1.15 || 100;
-  const barWidth = 45;
-  const gap = (width - (padding * 2) - (chartData.length * barWidth)) / Math.max(1, chartData.length - 1);
-  return (
-    <div className="w-full mt-4">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
-            <line x1="0" y1={height - 20} x2={width} y2={height - 20} stroke="#f4f4f5" strokeWidth="2" />
-            {chartData.map((d, i) => {
-                const x = padding + i * (barWidth + gap);
-                const barHeight = (d.value / maxVal) * (height - 40);
-                const y = height - 20 - barHeight;
-                const isToday = i === chartData.length - 1;
-                return (
-                    <g key={i}>
-                        <rect x={x} y={y} width={barWidth} height={barHeight} rx="6" fill={isToday ? "#0088FF" : "#E5E5EA"} />
-                        <text x={x + barWidth / 2} y={y - 8} textAnchor="middle" fontSize="14" fontWeight="bold" fill={isToday ? "#0088FF" : "#8E8E93"}>{rpShort(d.value)}</text>
-                        <text x={x + barWidth / 2} y={height} textAnchor="middle" fontSize="12" fontWeight="500" fill="#a1a1aa">{d.label}</text>
-                    </g>
-                );
-            })}
-        </svg>
-    </div>
-  );
+type ReadyPdf = {
+  file: File;
+  blobUrl: string;
+  filename: string;
+  pageCount: number;
+  sizeBytes: number;
+  durationMs: number;
+  canWebShare: boolean;
+  gestureExpired: boolean;
+  tanggal: string;
+  hari: string;
+  grandTotal: number;
 };
 
-const AppleReportTemplate = forwardRef<HTMLDivElement, { data: Props['data'] }>(({ data }, ref) => {
-  const GrandTotal = totalPemasukanHarian(data);
-  const tampil = useTampilRincian();
-  return (
-    <div ref={ref} className="w-[1200px] min-h-[1600px] bg-white text-zinc-900 p-12 font-sans antialiased">
-      <div className="flex justify-between items-end border-b-2 border-zinc-900 pb-6 mb-8">
-        <div>
-          <h1 className="text-5xl font-extrabold tracking-tight text-zinc-900">Laporan Harian</h1>
-          <p className="text-zinc-500 text-lg mt-1 font-medium tracking-wide">URBAN GAMING LAMPUNG</p>
-        </div>
-        <div className="text-right">
-          <p className="text-3xl font-bold text-zinc-800">{data.hari}</p>
-          <p className="text-zinc-500 font-medium">{data.tanggal}</p>
-        </div>
-      </div>
-      <div className="grid grid-cols-3 gap-6 mb-8">
-        <div className="p-6 bg-zinc-50 rounded-2xl border border-zinc-100">
-          <p className="text-zinc-500 text-sm font-semibold uppercase tracking-wider mb-1">Total Pemasukan</p>
-          <p className="text-4xl font-extrabold text-black">{rupiah(GrandTotal)}</p>
-        </div>
-        <div className="p-6 bg-zinc-50 rounded-2xl border border-zinc-100">
-          <p className="text-zinc-500 text-sm font-semibold uppercase tracking-wider mb-1">Cash</p>
-          <p className="text-3xl font-bold text-[#008932]">{rupiah(data.totalCash)}</p>
-        </div>
-        <div className="p-6 bg-zinc-50 rounded-2xl border border-zinc-100">
-          <p className="text-zinc-500 text-sm font-semibold uppercase tracking-wider mb-1">Transfer / QRIS</p>
-          <p className="text-3xl font-bold text-[#0088FF]">{rupiah(data.totalTransfer)}</p>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-8 mb-8 text-sm text-zinc-600 border-b border-zinc-100 pb-6">
-        <div><span className="font-bold text-zinc-900 mr-2">Tanggal Shift:</span>{data.absenPagi || "-"} / {data.absenSiang || "-"}</div>
-        <div className="text-right italic">"{data.catatan || "Tidak ada catatan operasional."}"</div>
-      </div>
-      <div className="mb-10 grid grid-cols-2 gap-8">
-          {tampil("harian", data.totalHarian) && (
-          <div>
-            <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Pemasukan Harian</span> <span className="text-zinc-500">{rupiah(data.totalHarian)}</span></h3>
-            <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsHarian.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.jenisPS} ({r.jumlahJam} jam)</td><td className="py-2 text-right font-bold">{rupiah(r.harga)}</td></tr>) : null)}</tbody></table>
-          </div>
-          )}
-          {tampil("sewa", data.totalSewa) && (
-          <div>
-            <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Sewa PS</span> <span className="text-zinc-500">{rupiah(data.totalSewa)}</span></h3>
-            <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsSewa.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.jenisPS} ({r.lamaSewa})</td><td className="py-2 text-right font-bold">{rupiah(r.harga)}</td></tr>) : null)}</tbody></table>
-          </div>
-          )}
-          {tampil("jajanan", data.totalJajanan) && (
-          <div>
-            <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Jajanan</span> <span className="text-zinc-500">{rupiah(data.totalJajanan)}</span></h3>
-            <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsJajanan.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.jenisJajanan} (x{r.qtyJam})</td><td className="py-2 text-right font-bold">{rupiah(r.harga)}</td></tr>) : null)}</tbody></table>
-          </div>
-          )}
-          {tampil("jasaAks", data.totalJasaAks) && (
-          <div>
-            <h3 className="text-lg font-bold mb-3 border-b border-zinc-200 pb-2 flex justify-between"><span>Pemasukan Usaha</span> <span className="text-zinc-500">{rupiah(data.totalJasaAks)}</span></h3>
-            <table className="w-full text-sm"><tbody className="divide-y divide-zinc-100">{data.rowsJasaAks.map((r, i) => r.harga ? (<tr key={i}><td className="py-2">{r.tipe}</td><td className="py-2 text-right font-bold">{rupiah(r.harga)}</td></tr>) : null)}</tbody></table>
-          </div>
-          )}
-      </div>
-      <div className="pt-6 border-t-4 border-zinc-900">
-           <h3 className="text-lg font-bold mb-4 uppercase tracking-wider">Performa 7 Hari Terakhir</h3>
-           <div className="w-full mb-8">
-             <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-zinc-400 border-b border-zinc-100">
-                    <th className="pb-2 font-normal">Tanggal</th><th className="pb-2 font-normal">Hari</th><th className="pb-2 text-right font-normal">Total</th><th className="pb-2 text-right font-normal text-[#008932]">Cash</th><th className="pb-2 text-right font-normal text-[#CB30E0]">TF</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-50">
-                  {data.history.slice(0, 7).map((h, i) => {
-                     const total = totalPemasukanHarian(h);
-                     return (
-                      <tr key={i} className="text-zinc-700">
-                        <td className="py-3 font-medium">{h.tanggal}</td><td className="py-3">{h.hari}</td><td className="py-3 text-right font-bold">{rupiah(total)}</td><td className="py-3 text-right">{rupiah((h as any).totalCash)}</td><td className="py-3 text-right">{rupiah((h as any).totalTransfer)}</td>
-                      </tr>
-                     )
-                  })}
-                </tbody>
-             </table>
-           </div>
-           <div className="p-6 bg-zinc-50 rounded-2xl border border-zinc-100">
-              <AppleChart history={data.history} />
-           </div>
-      </div>
-    </div>
-  );
-});
+// Cache modul jsPDF di memori sehingga pemanggilan Web Share API kedua dst (atau setelah preload) berjalan 0ms tanpa await jaringan.
+let cachedJsPdfCtor: typeof JsPDF | null = null;
+let jsPdfLoading: Promise<typeof JsPDF> | null = null;
 
-const PdfExporter = forwardRef<PdfExporterHandle, Props>(function PdfExporter({ rootRef, dark, kualitasGambar, data, stokData, masterCategories, onStartExport, onEndExport }, ref) {
-  const appleReportRef = useRef<HTMLDivElement>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [loadingText, setLoadingText] = useState("Menyiapkan layout Dokumen PDF...");
-  const [progress, setProgress] = useState(0);
+function preloadJsPdf(): Promise<typeof JsPDF> {
+  if (cachedJsPdfCtor) return Promise.resolve(cachedJsPdfCtor);
+  if (!jsPdfLoading) {
+    jsPdfLoading = import("jspdf")
+      .then((m) => {
+        cachedJsPdfCtor = m.default;
+        return m.default;
+      })
+      .catch((e) => {
+        jsPdfLoading = null;
+        throw e;
+      });
+  }
+  return jsPdfLoading;
+}
 
-  const captureSection = async (id: string, name: string, contentWidth: number, scale: number) => {
-     const el = document.getElementById(id);
-     if (!el) return null;
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${Math.round(kb)} KB`;
+  return `${(kb / 1024).toFixed(2)} MB`;
+}
 
-     try {
-         const { default: html2canvas } = await import("html2canvas");
-    const canvas = await html2canvas(el, {
-            scale,
-            useCORS: true,
-            logging: false, // Matikan log untuk performa
-            backgroundColor: dark ? "#18181b" : "#ffffff",
-            windowWidth: 1280,
-            onclone: (clonedDoc) => {
-                // 1. FIX INPUT TEXT: Ubah input jadi DIV
-                const inputs = clonedDoc.querySelectorAll("input, textarea");
-                inputs.forEach((input: any) => {
-                    const val = input.value || input.placeholder || "";
-                    const textDiv = clonedDoc.createElement("div");
-                    textDiv.textContent = val;
-                    // Salin class layout
-                    textDiv.className = input.className;
-                    // Salin property css spesifik
-                    const style = window.getComputedStyle(input);
-                    textDiv.style.color = style.color; 
-                    textDiv.style.fontSize = style.fontSize;
-                    textDiv.style.fontFamily = style.fontFamily;
-                    textDiv.style.fontWeight = style.fontWeight;
-                    textDiv.style.textAlign = style.textAlign; 
-                    textDiv.style.padding = style.padding;
-                    textDiv.style.display = "flex";
-                    textDiv.style.alignItems = "center";
-                    textDiv.style.justifyContent = style.textAlign === "right" ? "flex-end" : style.textAlign === "center" ? "center" : "flex-start";
-                    
-                    if (input.parentNode) input.parentNode.replaceChild(textDiv, input);
-                });
-
-                // 2. NUCLEAR FIX: FORCE GRADIENT CONTAINER DIMENSIONS
-                // Ini memperbaiki InvalidStateError pada Rekap Keuangan
-                const gradients = clonedDoc.querySelectorAll("[class*='bg-gradient-']");
-                gradients.forEach((el: any) => {
-                     // Paksa elemen gradient memiliki dimensi pixel, bukan 0
-                     el.style.width = "100%";
-                     el.style.minWidth = "100px";
-                     el.style.minHeight = "50px";
-                     el.style.display = "block";
-                });
-
-                // 3. NUCLEAR FIX: FORCE SVG DIMENSIONS
-                const svgs = clonedDoc.querySelectorAll("svg");
-                svgs.forEach((svg: any) => {
-                    const style = window.getComputedStyle(svg);
-                    // Gunakan parseFloat untuk mendapatkan angka pixel dari "24px"
-                    let w = parseFloat(style.width) || 24;
-                    let h = parseFloat(style.height) || 24;
-                    
-                    // Paksa tulis ke atribut. Tanpa ini, html2canvas sering merender 0x0
-                    svg.setAttribute("width", String(w));
-                    svg.setAttribute("height", String(h));
-                    svg.style.width = `${w}px`;
-                    svg.style.height = `${h}px`;
-                    svg.style.display = "inline-block";
-                });
-            }
-         });
-         
-         if (canvas.width > 0 && canvas.height > 0) {
-             const imgData = canvas.toDataURL("image/jpeg", 0.9);
-             const imgH = (canvas.height * contentWidth) / canvas.width;
-             return { name, imgData, width: contentWidth, height: imgH };
-         }
-     } catch (e) {
-         console.warn(`Gagal capture ${name}`, e);
-     }
-     return null;
+/**
+ * Negosiasi payload Web Share API yang paling kompatibel (Android Chrome, iOS Safari, WebView).
+ * Beberapa browser menolak `{ files, title, text }` namun menerima `{ files }`.
+ */
+function resolveSharePayload(file: File, tanggal: string): ShareData | null {
+  if (typeof navigator === "undefined" || typeof navigator.share !== "function") return null;
+  if (typeof navigator.canShare !== "function") return null;
+  const withText: ShareData = {
+    files: [file],
+    title: `Laporan Harian URBAN (${tanggal})`,
+    text: `Laporan harian URBAN Gaming Lampung tanggal ${tanggal}`,
   };
+  const filesOnly: ShareData = { files: [file] };
+  try {
+    if (navigator.canShare(withText)) return withText;
+  } catch {
+    /* lanjut cek filesOnly */
+  }
+  try {
+    if (navigator.canShare(filesOnly)) return filesOnly;
+  } catch {
+    return null;
+  }
+  return null;
+}
 
-  const shareOrDownloadPDF = async () => {
-    if (!rootRef.current || !appleReportRef.current) return;
-    const currentScroll = window.scrollY;
-    
-    setIsGenerating(true);
-    setProgress(0);
-    setLoadingText("Memindai data & merender halaman layout...");
-    
-    // Scroll ke atas agar html2canvas menangkap layout dengan benar
-    window.scrollTo(0, 0);
+const PdfExporter = forwardRef<PdfExporterHandle, Props>(function PdfExporter(
+  { kualitasGambar, data, stokData, masterCategories },
+  ref
+) {
+  const tampil = useTampilRincian();
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [readyPdf, setReadyPdf] = useState<ReadyPdf | null>(null);
+  const [sharingNow, setSharingNow] = useState(false);
+  const [copiedText, setCopiedText] = useState(false);
 
-    const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
-      import("jspdf"),
-      import("html2canvas"),
-    ]);
-    let pdf: JsPDF | null = null;
-    let filename = `Laporan_URBAN_${data.tanggal}.pdf`;
+  const closeReadySheet = useCallback(() => {
+    setReadyPdf((prev) => {
+      if (prev?.blobUrl) URL.revokeObjectURL(prev.blobUrl);
+      return null;
+    });
+    setCopiedText(false);
+  }, []);
+
+  // Bersihkan Blob URL saat unmount agar ramah RAM di perangkat low-end
+  useEffect(() => {
+    return () => {
+      setReadyPdf((prev) => {
+        if (prev?.blobUrl) URL.revokeObjectURL(prev.blobUrl);
+        return null;
+      });
+    };
+  }, []);
+
+  const triggerDownload = useCallback((target: ReadyPdf) => {
+    const a = document.createElement("a");
+    a.href = target.blobUrl;
+    a.download = target.filename;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    notify("PDF berhasil diunduh.", "positive");
+  }, []);
+
+  const triggerFreshWebShare = useCallback(async (target: ReadyPdf) => {
+    const payload = resolveSharePayload(target.file, target.tanggal);
+    if (!payload) {
+      triggerDownload(target);
+      return;
+    }
+    setSharingNow(true);
+    try {
+      await navigator.share(payload);
+      notify("Laporan PDF berhasil dibagikan.", "positive");
+      closeReadySheet();
+    } catch (err: any) {
+      if (err?.name === "AbortError" || /cancel/i.test(String(err?.message || ""))) {
+        return; // Pengguna menutup menu share sendiri
+      }
+      console.warn("[PdfExporter] Web Share gagal dari sheet:", err);
+      notify("Menu bagikan tidak tersedia di browser ini. Gunakan Unduh PDF.", "warning");
+    } finally {
+      setSharingNow(false);
+    }
+  }, [closeReadySheet, triggerDownload]);
+
+  const copyTextReport = useCallback(async () => {
+    try {
+      const text = buatLaporanHarian(data.history, data.tanggal, data);
+      await navigator.clipboard.writeText(text);
+      setCopiedText(true);
+      notify("Laporan teks WhatsApp disalin.", "positive");
+      setTimeout(() => setCopiedText(false), 2000);
+    } catch {
+      notify("Gagal menyalin teks laporan.", "warning");
+    }
+  }, [data]);
+
+  const shareOrOpenSheet = useCallback(async () => {
+    const perluLoad = !cachedJsPdfCtor;
+    if (perluLoad) setIsGenerating(true);
 
     try {
-      if (onStartExport) {
-        onStartExport();
-        await new Promise(r => setTimeout(r, 300)); // Tunggu React mem-flush layout Desktop
-      }
-      
-      const tempPdf = new jsPDF({ orientation: "portrait", unit: "px", format: "a4" });
-      const pdfWidth = tempPdf.internal.pageSize.getWidth();
-      const pdfHeight = tempPdf.internal.pageSize.getHeight();
-      const margin = 20;
-      const contentWidth = pdfWidth - (margin * 2);
-      const scale = kualitasGambar === "Tinggi" ? 2 : 1.5;
+      // Bila sudah di-preload saat pop-up cek stok terbuka, ini langsung sinkron tanpa menunggu jaringan!
+      const JsPDFCtor = cachedJsPdfCtor || (await preloadJsPdf());
+      const built = buildLaporanPdf(JsPDFCtor, {
+        data,
+        stokData,
+        masterCategories,
+        kualitasGambar,
+        tampil,
+      });
 
-      // --- PARALLEL PROCESSING (APPLE OPTIMIZATION) ---
-      // Kita jalankan semua capture secara BERSAMAAN (Parallel) menggunakan Promise.all
-      // Ini drastis mengurangi waktu tunggu dan mencegah Share API timeout.
-      
-      const capturePromises = [
-        // 1. Cover (Apple Report)
-        html2canvas(appleReportRef.current, { scale: 2, useCORS: true, windowWidth: 1280 }).then(canvas => {
-             if (canvas.width > 0 && canvas.height > 0) {
-                 const imgData = canvas.toDataURL("image/jpeg", 1.0);
-                 const height = (canvas.height * pdfWidth) / canvas.width;
-                 return { type: 'cover', imgData, width: pdfWidth, height };
-             }
-             return null;
-        }).catch(() => null),
+      if (perluLoad) setIsGenerating(false);
 
-        // 2. Sections (Evidence)
-        ...[
-            { name: "Input & Absensi", id: "section-input" },
-            { name: "Tabel Pemasukan", id: "section-rincian" },
-            { name: "Rekap Keuangan", id: "section-rekap" }, 
-            { name: "Rincian Pengeluaran", id: "section-pengeluaran" },
-            { name: "Rincian Setoran", id: "section-setoran" },
-            { name: "History Pembukuan", id: "section-history" },
-            { name: "Grafik Performa", id: "section-grafik" }
-        ].map(item => captureSection(item.id, item.name, contentWidth, scale))
-      ];
+      const file = new File([built.blob], built.filename, {
+        type: "application/pdf",
+        lastModified: Date.now(),
+      });
+      const payload = resolveSharePayload(file, data.tanggal);
+      const canWebShare = payload !== null;
 
-      // TUNGGU SEMUA SELESAI DENGAN PROGRESS
-      let completed = 0;
-      const totalTasks = capturePromises.length;
-      const trackedPromises = capturePromises.map(p => p.then(res => {
-          completed++;
-          setProgress(Math.round((completed / totalTasks) * 85)); // 85% untuk tahap rendering grafik html2canvas
-          return res;
-      }));
-
-      const results = await Promise.all(trackedPromises);
-
-      // --- SUSUN PDF DARI HASIL PARALLEL ---
-      setLoadingText("Menyusun halaman PDF...");
-      setProgress(90);
-      
-      // Page 1: Cover
-      const coverResult = results[0] as any;
-      if (coverResult) {
-          // Buat halaman pertama secara dinamis, mencegah crop jika data sangat panjang
-          const firstPageHeight = Math.max(pdfHeight, coverResult.height);
-          pdf = new jsPDF({ orientation: "portrait", unit: "px", format: [pdfWidth, firstPageHeight] });
-          pdf.addImage(coverResult.imgData, "JPEG", 0, 0, coverResult.width, coverResult.height);
-      } else {
-          pdf = new jsPDF({ orientation: "portrait", unit: "px", format: "a4" });
-      }
-
-      // Page 2: Evidence
-      let totalHeightNeeded = 60;
-      const evidenceResults = results.slice(1).filter(r => r !== null) as {name: string, imgData: string, width: number, height: number}[];
-      
-      evidenceResults.forEach(r => totalHeightNeeded += r.height + 30);
-      
-      const customPageHeight = Math.max(pdfHeight, totalHeightNeeded + 50);
-      pdf.addPage([pdfWidth, customPageHeight], "portrait"); 
-      pdf.setFontSize(14); pdf.setTextColor(0); pdf.text("Screenshot Bukti Input", margin, 30);
-      pdf.setDrawColor(200); pdf.line(margin, 35, pdfWidth - margin, 35);
-
-      let currentY = 55;
-      for (const item of evidenceResults) {
-         pdf.setFontSize(8); pdf.text(item.name.toUpperCase(), margin, currentY - 5);
-         pdf.addImage(item.imgData, "JPEG", margin, currentY, item.width, item.height);
-         currentY += item.height + 30;
-      }
-
-      // --- PAGE 3: TEXT REPORT ---
-      const aiText = toAscii(laporanUntukPdf(buatLaporanHarian(data.history, data.tanggal, data)));
-      pdf.setFont("courier", "normal"); pdf.setFontSize(9);
-      const splitText = pdf.splitTextToSize(aiText, contentWidth);
-      const textHeight = splitText.length * pdf.getLineHeight();
-      const finalPage3Height = Math.max(pdfHeight, 50 + textHeight + 30);
-
-      pdf.addPage([pdfWidth, finalPage3Height], "portrait");
-      pdf.setFont("courier", "bold"); pdf.setFontSize(14); pdf.setTextColor(40, 40, 40);
-      pdf.text("LAPORAN TEXT", margin, 30);
-      pdf.setDrawColor(0); pdf.line(margin, 35, pdfWidth - margin, 35);
-      pdf.setFont("courier", "normal"); pdf.setFontSize(9);
-      pdf.text(splitText, margin, 50);
-
-      // --- PAGE 4: STOK TEXT REPORT ---
-      const stokText = generateLaporanStokText(stokData, masterCategories);
-      const splitStok = pdf.splitTextToSize(stokText, contentWidth);
-      const stokHeight = splitStok.length * pdf.getLineHeight();
-      const finalPage4Height = Math.max(pdfHeight, 50 + stokHeight + 30);
-
-      pdf.addPage([pdfWidth, finalPage4Height], "portrait");
-      pdf.setFont("courier", "bold"); pdf.setFontSize(14); pdf.setTextColor(40, 40, 40);
-      pdf.text("LAPORAN STOK", margin, 30);
-      pdf.setDrawColor(0); pdf.line(margin, 35, pdfWidth - margin, 35);
-      pdf.setFont("courier", "normal"); pdf.setFontSize(9);
-      pdf.text(splitStok, margin, 50);
-
-      setLoadingText("Menyimpan & Menyiapkan Jendela Bagikan...");
-      setProgress(100);
-      // ===== FINAL: WEB SHARE API =====
-      const pdfBlob = pdf.output("blob");
-      const file = new File([pdfBlob], filename, { type: "application/pdf" });
-
-      try {
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({ 
-                files: [file], 
-                title: "Laporan Harian URBAN Gaming", 
-                text: `Berikut laporan harian untuk tanggal ${data.tanggal}` 
-            });
-        } else {
-            throw new Error("Share API not supported");
-        }
-      } catch (shareError: any) {
-        // Silent Fallback: Jika share gagal, langsung download
-        if (shareError.name !== "AbortError" && !shareError.message?.includes("User canceled")) {
-            console.log("Share API failed, falling back to download.", shareError);
-            pdf.save(filename);
+      // Coba panggil Web Share API langsung selama user-gesture masih aktif!
+      if (payload) {
+        try {
+          await navigator.share(payload);
+          notify(`PDF (${formatBytes(built.sizeBytes)}) siap dibagikan.`, "positive");
+          return;
+        } catch (shareErr: any) {
+          // Pengguna membatalkan menu share OS: selesai dengan tenang
+          if (shareErr?.name === "AbortError" || /cancel/i.test(String(shareErr?.message || ""))) {
+            return;
+          }
+          // NotAllowedError (gesture kedaluwarsa di HP lambat / cold load): tampilkan Sheet dengan tombol Bagikan 1 ketuk!
+          console.warn("[PdfExporter] Direct Web Share tertunda, membuka Sheet siap-bagikan:", shareErr);
+          const blobUrl = URL.createObjectURL(built.blob);
+          setReadyPdf((prev) => {
+            if (prev?.blobUrl) URL.revokeObjectURL(prev.blobUrl);
+            return {
+              file,
+              blobUrl,
+              filename: built.filename,
+              pageCount: built.pageCount,
+              sizeBytes: built.sizeBytes,
+              durationMs: built.durationMs,
+              canWebShare: true,
+              gestureExpired: shareErr?.name === "NotAllowedError",
+              tanggal: data.tanggal,
+              hari: data.hari,
+              grandTotal: totalPemasukanHarian(data),
+            };
+          });
+          return;
         }
       }
 
+      // Perangkat/browser tanpa Web Share file (mis. desktop browser): buka Sheet Apple iOS 27 (Unduh / Lihat / Salin Teks)
+      const blobUrl = URL.createObjectURL(built.blob);
+      setReadyPdf((prev) => {
+        if (prev?.blobUrl) URL.revokeObjectURL(prev.blobUrl);
+        return {
+          file,
+          blobUrl,
+          filename: built.filename,
+          pageCount: built.pageCount,
+          sizeBytes: built.sizeBytes,
+          durationMs: built.durationMs,
+          canWebShare,
+          gestureExpired: false,
+          tanggal: data.tanggal,
+          hari: data.hari,
+          grandTotal: totalPemasukanHarian(data),
+        };
+      });
     } catch (err: any) {
-      console.error("Critical PDF Generation Error:", err);
-      alert("Gagal membuat PDF: " + (err.message || "Unknown error"));
+      console.error("[PdfExporter] Critical PDF Generation Error:", err);
+      notify(`Gagal membuat PDF: ${err?.message || "Terjadi kesalahan"}`, "negative");
     } finally {
-      if (onEndExport) {
-         onEndExport();
-         await new Promise(r => setTimeout(r, 100));
-      }
       setIsGenerating(false);
-      window.scrollTo(0, currentScroll);
     }
-  };
+  }, [data, stokData, masterCategories, kualitasGambar, tampil]);
 
-  useImperativeHandle(ref, () => ({ share: shareOrDownloadPDF }));
+  useImperativeHandle(
+    ref,
+    () => ({
+      share: shareOrOpenSheet,
+      preload: () => {
+        preloadJsPdf().catch(() => {});
+      },
+    }),
+    [shareOrOpenSheet]
+  );
 
   return (
     <>
-      <div style={{ position: "absolute", left: "-9999px", top: 0, overflow: "hidden" }}>
-        <AppleReportTemplate ref={appleReportRef} data={data} />
-      </div>
-      
-      {isGenerating && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" role="dialog" aria-modal="true">
-          <div className={`absolute inset-0 bg-black/60 backdrop-blur-sm ${MOTION.backdrop}`} />
-          <div className={`relative w-full max-w-sm apple-glass rounded-card p-7 shadow-float flex flex-col items-center text-center ring-1 ring-black/10 dark:ring-white/15 ${MOTION.dialog}`}>
-            <div className="w-14 h-14 mb-5 flex items-center justify-center rounded-tile bg-tint/15 text-tint">
-              <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/>
-              </svg>
+      {/* Overlay ringan hanya tampil saat modul jsPDF pertama kali dimuat dari jaringan */}
+      {isGenerating &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6" role="dialog" aria-modal="true">
+            <div className={`absolute inset-0 bg-black/45 dark:bg-black/75 backdrop-blur-[8px] ${MOTION.backdrop}`} />
+            <div
+              className={`relative z-10 w-full max-w-[300px] apple-sheet rounded-sheet p-6 shadow-float border border-white/65 dark:border-white/[0.14] ring-1 ring-black/10 dark:ring-white/10 flex flex-col items-center text-center gap-3 ${MOTION.dialog}`}
+            >
+              <IconBadge color="blue" variant="tinted" className="h-12 w-12 rounded-full [&>svg]:h-6 [&>svg]:w-6">
+                <FileText />
+              </IconBadge>
+              <div className="space-y-1">
+                <h3 className="text-headline text-label">Menyiapkan PDF</h3>
+                <p className="text-footnote text-label-2">Membuat dokumen vektor ringan...</p>
+              </div>
+              <Spinner />
             </div>
+          </div>,
+          document.body
+        )}
 
-            <h3 className="text-title3 font-bold text-label mb-1.5">Memproses PDF</h3>
-            <p className="text-footnote font-medium text-label-2 leading-relaxed max-w-[260px] mx-auto mb-5 min-h-[40px] flex items-center justify-center">
-              {loadingText}
-            </p>
+      {/* Apple iOS 27 Sheet: PDF Siap Dibagikan (fresh-gesture Web Share + Unduh + Pratinjau) */}
+      <Sheet
+        open={Boolean(readyPdf)}
+        onClose={() => !sharingNow && closeReadySheet()}
+        title="Laporan PDF Siap"
+        subtitle={readyPdf ? `${readyPdf.hari}, ${readyPdf.tanggal}` : undefined}
+        icon={<FileText />}
+        iconColor="blue"
+        size="sm"
+        zClassName="z-[9998]"
+      >
+        {readyPdf && (
+          <div className="space-y-4">
+            {/* Kartu pratinjau dokumen */}
+            <div className={cx(tile, "p-4 space-y-3")}>
+              <div className="flex items-start gap-3">
+                <div
+                  className={cx(
+                    "flex h-11 w-11 shrink-0 items-center justify-center rounded-field",
+                    AKSEN_TILE.blue.iconBg,
+                    AKSEN_TILE.blue.iconText
+                  )}
+                >
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-subhead font-semibold text-label">{readyPdf.filename}</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <Pill tone="positive">{formatBytes(readyPdf.sizeBytes)}</Pill>
+                    <Pill tone="neutral">{readyPdf.pageCount} halaman A4</Pill>
+                    {kualitasGambar === "Hemat" && <Pill tone="tint">Mode Hemat</Pill>}
+                  </div>
+                </div>
+              </div>
 
-            <div className="w-full bg-fill rounded-full h-3 mb-2 overflow-hidden ring-1 ring-inset ring-edge p-0.5 relative">
-              <div
-                className="bg-tint h-full rounded-full transition-[width] duration-300 ease-out relative overflow-hidden"
-                style={{ width: `${progress}%` }}
-              >
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]" />
+              <div className="flex items-center justify-between border-t border-sep pt-2.5 text-footnote">
+                <span className="text-label-2">Total pemasukan</span>
+                <span className="font-bold text-label tabular-nums">{rupiah(readyPdf.grandTotal)}</span>
               </div>
             </div>
 
-            <div className="text-caption font-bold text-tint font-mono tabular-nums tracking-wider">
-              {progress}%
+            {readyPdf.canWebShare && readyPdf.gestureExpired && (
+              <Notice tone="info">
+                File PDF sudah tersimpan di memori ({formatBytes(readyPdf.sizeBytes)}). Ketuk tombol{" "}
+                <strong className="font-semibold text-label">Bagikan PDF</strong> di bawah untuk langsung membuka menu kirim WhatsApp / aplikasi lain.
+              </Notice>
+            )}
+
+            {/* Tombol aksi utama */}
+            <div className="space-y-2.5">
+              {readyPdf.canWebShare ? (
+                <>
+                  <Button
+                    variant="filled"
+                    size="lg"
+                    block
+                    icon={<Share2 />}
+                    loading={sharingNow}
+                    onClick={() => triggerFreshWebShare(readyPdf)}
+                  >
+                    Bagikan PDF
+                  </Button>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <Button variant="gray" size="md" icon={<Download />} onClick={() => triggerDownload(readyPdf)}>
+                      Unduh
+                    </Button>
+                    <Button
+                      variant="gray"
+                      size="md"
+                      icon={<ExternalLink />}
+                      onClick={() => window.open(readyPdf.blobUrl, "_blank", "noopener")}
+                    >
+                      Lihat PDF
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Button variant="filled" size="lg" block icon={<Download />} onClick={() => triggerDownload(readyPdf)}>
+                    Unduh PDF
+                  </Button>
+                  <Button
+                    variant="gray"
+                    size="md"
+                    block
+                    icon={<ExternalLink />}
+                    onClick={() => window.open(readyPdf.blobUrl, "_blank", "noopener")}
+                  >
+                    Lihat Pratinjau PDF
+                  </Button>
+                </>
+              )}
+
+              <Button
+                variant="tinted"
+                size="md"
+                block
+                icon={copiedText ? <Check /> : <Copy />}
+                onClick={copyTextReport}
+              >
+                {copiedText ? "Laporan Teks Disalin" : "Salin Laporan Teks WA"}
+              </Button>
             </div>
           </div>
-        </div>,
-        document.body
-      )}
+        )}
+      </Sheet>
     </>
   );
 });

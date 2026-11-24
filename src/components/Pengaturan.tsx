@@ -1358,8 +1358,8 @@ const Pengaturan: React.FC<Props> = ({
             {isOwner && (
               <SettingRow>
                 <div className="space-y-0.5 min-w-0">
-                  <div className="text-callout font-medium text-label">Kualitas Gambar</div>
-                  <div className="text-caption text-label-2">Pengaruh ke ukuran file PDF</div>
+                  <div className="text-callout font-medium text-label">Mode Export PDF</div>
+                  <div className="text-caption text-label-2">HD (lengkap) atau Low (hemat &amp; ringkas)</div>
                 </div>
                 <div className="w-44 shrink-0">
                   <SubTabs<ImageQuality>

@@ -1205,17 +1205,19 @@ export default function useAppController() {
   const filteredHistory = useMemo(() => saringPeriode(history, filter, filterMonth, rangeStart, rangeEnd), [filter, history, filterMonth, rangeStart, rangeEnd]);
 
   const exportData = useMemo(() => ({
-    tanggal, hari, absenPagi, absenSiang, catatan,
+    tanggal, hari, shiftPegawai, absenPagi, absenSiang, rukoBuka, rukoTutup, catatan,
     rowsHarian, rowsJajanan, rowsJasaAks: rowsJasaAksLengkap, rowsSewa,
     totalHarian, totalJajanan, totalJasaAks, totalSewa,
-    totalCash, totalTransfer, history,
-    rowsSetoran, rowsPengeluaran
+    totalCash, totalTransfer, totalPengeluaran, history,
+    rowsSetoran, rowsPengeluaran,
+    ongkirMasukGaji: Boolean(ongkirConfig?.masukGaji),
+    exportedBy: user?.email ? user.email.split("@")[0] : undefined,
   }), [
-    tanggal, hari, absenPagi, absenSiang, catatan,
+    tanggal, hari, shiftPegawai, absenPagi, absenSiang, rukoBuka, rukoTutup, catatan,
     rowsHarian, rowsJajanan, rowsJasaAksLengkap, rowsSewa,
     totalHarian, totalJajanan, totalJasaAks, totalSewa,
-    totalCash, totalTransfer, history,
-    rowsSetoran, rowsPengeluaran
+    totalCash, totalTransfer, totalPengeluaran, history,
+    rowsSetoran, rowsPengeluaran, ongkirConfig?.masukGaji, user?.email,
   ]);
 
   // --- DIRTY CHECK LOGIC ---

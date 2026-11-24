@@ -227,6 +227,10 @@ export default function App() {
   useEffect(() => {
     if (openPOS) setPosMounted(true);
   }, [openPOS]);
+  // Pre-warm modul jsPDF saat pop-up konfirmasi stok muncul supaya klik "Ya" langsung membuka Web Share API tanpa jeda
+  useEffect(() => {
+    if (showStokConfirmation) pdfRef.current?.preload();
+  }, [showStokConfirmation, pdfRef]);
   const tabFallback = (
     <div className="py-16 flex items-center justify-center">
       <div className="w-8 h-8 border-[3px] border-tint border-t-transparent rounded-full animate-spin" />
@@ -819,9 +823,7 @@ export default function App() {
                     onClick={() => {
                       setShowStokConfirmation(false);
                       setActiveTab("USAHA RENTAL");
-                      setTimeout(() => {
-                        pdfRef.current?.share();
-                      }, 300);
+                      pdfRef.current?.share();
                     }}
                   >
                     Ya
