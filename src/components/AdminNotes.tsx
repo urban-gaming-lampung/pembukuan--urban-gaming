@@ -6,7 +6,6 @@ import {
   ExternalLink,
   Copy,
   Check,
-  X,
   Link2,
   Calendar,
   User,
@@ -319,27 +318,17 @@ export default function AdminNotes({
         }
         subtitle="Permanen • Tidak tereset saat tutup buku"
         headerRight={
-          <div className="flex items-center gap-2">
-            {isOwner && !isEditing && (
-              <Button
-                variant="filled"
-                size="sm"
-                onClick={handleOpenAdd}
-                icon={<Plus className="w-3.5 h-3.5" />}
-              >
-                <span className="hidden sm:inline">Tambah Catatan</span>
-                <span className="sm:hidden">Tambah</span>
-              </Button>
-            )}
-            <button
-              type="button"
-              onClick={() => setIsOpenModal(false)}
-              className="flex hit-44 h-8 w-8 items-center justify-center rounded-full bg-fill text-label-2 hover:text-label transition-colors"
-              aria-label="Tutup Catatan"
+          isOwner && !isEditing ? (
+            <Button
+              variant="filled"
+              size="sm"
+              onClick={handleOpenAdd}
+              icon={<Plus className="w-3.5 h-3.5" />}
             >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+              <span className="hidden sm:inline">Tambah Catatan</span>
+              <span className="sm:hidden">Tambah</span>
+            </Button>
+          ) : undefined
         }
         footer={
           <div className="flex items-center justify-between text-caption text-label-2">

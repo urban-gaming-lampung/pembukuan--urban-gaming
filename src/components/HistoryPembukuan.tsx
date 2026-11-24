@@ -403,6 +403,14 @@ export default function HistoryPembukuan({ items, onEdit, onDelete, isOwner = fa
           />
 
           <div className="relative w-full max-w-sm transform overflow-hidden rounded-sheet apple-sheet p-3.5 border border-white/65 dark:border-white/[0.14] shadow-float ring-1 ring-black/10 dark:ring-white/10 transition animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
+            <button
+              type="button"
+              onClick={() => setActiveAction(null)}
+              aria-label="Tutup"
+              className="absolute top-3 right-3 z-10 flex hit-44 h-8 w-8 items-center justify-center rounded-full bg-fill text-label-2 transition-[color,transform,opacity] hover:text-label active:scale-95 active:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint"
+            >
+              <X className="h-4 w-4" />
+            </button>
             <div className="flex flex-col items-center px-2.5 pt-3.5 pb-4 text-center">
               <div className={`mb-4 flex h-14 w-14 items-center justify-center rounded-full ${activeAction.type === 'delete'
                   ? 'bg-negative/10 text-negative'

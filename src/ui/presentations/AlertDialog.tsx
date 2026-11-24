@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 import { useBodyScrollLock } from "../../hooks/useBodyScrollLock";
 import { cx } from "../foundations/cn";
 import { MOTION } from "../foundations/motion";
@@ -68,6 +69,16 @@ export const AlertDialog: React.FC<{
           MOTION.dialog
         )}
       >
+        {dismissible && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Tutup"
+            className="absolute top-3 right-3 z-10 flex hit-44 h-8 w-8 items-center justify-center rounded-full bg-fill text-label-2 transition-[color,transform,opacity] hover:text-label active:scale-95 active:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
         <div className="px-2 pt-2 pb-4 text-center">
           {icon && (
             <div className="mb-3 flex justify-center">
@@ -76,7 +87,7 @@ export const AlertDialog: React.FC<{
               </IconBadge>
             </div>
           )}
-          <h3 className="text-headline text-label">{title}</h3>
+          <h3 className={cx("text-headline text-label", !icon && dismissible && "px-8")}>{title}</h3>
           {description && <div className="mt-1.5 text-footnote leading-relaxed text-label-2">{description}</div>}
           {children && <div className="mt-3 text-left">{children}</div>}
         </div>

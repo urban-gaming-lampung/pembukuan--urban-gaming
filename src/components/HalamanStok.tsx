@@ -11,23 +11,23 @@ type SegmenStok = JenisStok | "ATUR";
 
 /**
  * HALAMAN STOK — satu UI untuk semua akun (tab bar › Stok).
- * Segmen: Rental · Jualan (+ Atur stok khusus owner / super admin).
+ * Segmen: Jualan · Rental (+ Atur stok khusus owner / super admin).
  */
 const HalamanStok: React.FC<{ isOwner?: boolean; tampilJajanan: boolean }> = ({ isOwner, tampilJajanan }) => {
-  const [tab, setTab] = useState<SegmenStok>(() => ambilPermintaanStok() || "RENTAL");
+  const [tab, setTab] = useState<SegmenStok>(() => ambilPermintaanStok() || "JUALAN");
 
   // Dibuka dari tempat lain (mis. cek stok sebelum kirim laporan PDF)
   useEffect(() => {
     const buka = (e: Event) => {
       const t = (e as CustomEvent).detail as JenisStok | undefined;
       ambilPermintaanStok();
-      setTab(t === "JUALAN" ? "JUALAN" : "RENTAL");
+      setTab(t === "RENTAL" ? "RENTAL" : "JUALAN");
     };
     window.addEventListener(EVENT_BUKA_STOK, buka);
     return () => window.removeEventListener(EVENT_BUKA_STOK, buka);
   }, []);
 
-  const aktif: SegmenStok = !isOwner && tab === "ATUR" ? "RENTAL" : tab;
+  const aktif: SegmenStok = !isOwner && tab === "ATUR" ? "JUALAN" : tab;
 
   return (
     <div className="space-y-4 animate-in fade-in duration-300">
@@ -36,15 +36,15 @@ const HalamanStok: React.FC<{ isOwner?: boolean; tampilJajanan: boolean }> = ({ 
         value={aktif}
         onChange={setTab}
         options={[
-          { key: "RENTAL", label: "Rental" },
           { key: "JUALAN", label: "Jualan" },
+          { key: "RENTAL", label: "Rental" },
           ...(isOwner ? [{ key: "ATUR" as const, label: "Atur stok" }] : []),
         ]}
       />
-      {aktif === "RENTAL" ? (
-        <StokRental isOwner={isOwner} tampilJajanan={tampilJajanan} />
-      ) : aktif === "JUALAN" ? (
+      {aktif === "JUALAN" ? (
         <StokJualan isOwner={isOwner} onAturStok={isOwner ? () => setTab("ATUR") : undefined} />
+      ) : aktif === "RENTAL" ? (
+        <StokRental isOwner={isOwner} tampilJajanan={tampilJajanan} />
       ) : (
         <Suspense
           fallback={

@@ -13,8 +13,12 @@ import {
   cekBentrok,
   teksBentrok,
   estimasiHarga,
+  fmtHariTanggalLengkap,
+  fmtJam,
+  fmtRentangSingkat,
   LABEL_UNIT,
   mulaiBooking,
+  rentangBooking,
   simpanBooking,
   type BookingSewa,
   type HasilBaca,
@@ -81,12 +85,14 @@ const BookingFormSheet: React.FC<{
   onClose: () => void;
   /** Booking yang diubah (kosong = booking baru) */
   booking?: BookingSewa | null;
+  /** Nilai awal saat membuka dari panel Slot Kosong */
+  prefill?: Partial<Pick<BookingSewa, "tanggal" | "jam" | "jenisPS" | "lamaSewa">> | null;
   bookings: BookingSewa[];
   berjalan: SewaBerjalan[];
   kapasitas: Kapasitas;
   sewaTable: SewaTable;
   onSaved: (id: string) => void;
-}> = ({ open, onClose, booking, bookings, berjalan, kapasitas, sewaTable, onSaved }) => {
+}> = ({ open, onClose, booking, prefill, bookings, berjalan, kapasitas, sewaTable, onSaved }) => {
   const [d, setD] = useState<Draf>(DRAF_KOSONG);
   const [hasil, setHasil] = useState<HasilBaca | null>(null);
   const [cobaSimpan, setCobaSimpan] = useState(false);
@@ -94,10 +100,22 @@ const BookingFormSheet: React.FC<{
 
   useEffect(() => {
     if (!open) return;
-    setD(booking ? dariBooking(booking) : DRAF_KOSONG);
+    if (booking) {
+      setD(dariBooking(booking));
+    } else if (prefill) {
+      setD({
+        ...DRAF_KOSONG,
+        tanggal: prefill.tanggal || "",
+        jam: prefill.jam || "",
+        jenisPS: prefill.jenisPS || "",
+        lamaSewa: prefill.lamaSewa || "",
+      });
+    } else {
+      setD(DRAF_KOSONG);
+    }
     setHasil(null);
     setCobaSimpan(false);
-  }, [open, booking]);
+  }, [open, booking, prefill]);
 
   const set = <K extends keyof Draf>(k: K, v: Draf[K]) => setD((x) => ({ ...x, [k]: v }));
 
@@ -338,6 +356,18 @@ const BookingFormSheet: React.FC<{
           <TextField label="Tanggal ambil" required type="date" value={d.tanggal} onChange={(e) => set("tanggal", e.target.value)} error={err("tanggal")} />
           <TextField label="Jam ambil" required type="time" value={d.jam} onChange={(e) => set("jam", e.target.value)} error={err("jam")} />
         </section>
+
+        {(() => {
+          const r = d.tanggal && d.jam && d.lamaSewa ? rentangBooking(d) : null;
+          const m = d.tanggal && d.jam ? mulaiBooking(d) : null;
+          if (m === null) return null;
+          return (
+            <div className="rounded-field bg-fill/75 px-3 py-2 text-caption text-label-2 tabular-nums">
+              <span className="font-semibold text-label">{fmtHariTanggalLengkap(m)}</span>
+              <span> · {r ? fmtRentangSingkat(r.mulai, r.selesai) : `pukul ${fmtJam(m)}`}</span>
+            </div>
+          );
+        })()}
 
         {bentrok.length > 0 && (
           <Notice tone={adaBentrokPenuh(bentrok) ? "negative" : "warning"}>

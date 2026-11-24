@@ -98,11 +98,6 @@ const EditRincian: React.FC<EditRincianProps> = ({
         title={title}
         size="lg"
         zClassName="z-[300]"
-        headerLeft={
-          <Button variant="plain" size="sm" onClick={handleClose} disabled={isSaving}>
-            Kembali
-          </Button>
-        }
         headerRight={
           <Button variant="tinted" size="sm" icon={<Plus className="w-4 h-4" />} onClick={handleAddItem} disabled={isSaving}>
             Tambah

@@ -28,6 +28,8 @@ export const Sheet: React.FC<{
   iconColor?: WarnaIkon;
   headerLeft?: React.ReactNode;
   headerRight?: React.ReactNode;
+  /** Sembunyikan tombol X bawaan hanya jika lembar tidak boleh ditutup langsung */
+  hideClose?: boolean;
   footer?: React.ReactNode;
   size?: keyof typeof LEBAR_SHEET;
   variant?: "grouped" | "surface";
@@ -42,6 +44,7 @@ export const Sheet: React.FC<{
   iconColor = "blue",
   headerLeft,
   headerRight,
+  hideClose = false,
   footer,
   size = "md",
   variant = "grouped",
@@ -76,7 +79,7 @@ export const Sheet: React.FC<{
           <div className="h-[5px] w-9 rounded-full bg-label-3/50" />
         </div>
 
-        {(title || headerLeft || headerRight) && (
+        {(title || subtitle || icon || headerLeft || headerRight || !hideClose) && (
           <header className="apple-bar flex shrink-0 items-center justify-between gap-3 border-b border-sep px-4 sm:px-5 py-3.5">
             {headerLeft ? (
               <div className="shrink-0">{headerLeft}</div>
@@ -89,16 +92,19 @@ export const Sheet: React.FC<{
               {subtitle && <p className="truncate text-caption text-label-2">{subtitle}</p>}
             </div>
 
-            {headerRight ?? (
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Tutup"
-                className="flex hit-44 h-8 w-8 shrink-0 items-center justify-center rounded-full bg-fill text-label-2 transition-colors hover:text-label active:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
+            <div className="flex shrink-0 items-center gap-2">
+              {headerRight}
+              {!hideClose && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Tutup"
+                  className="flex hit-44 h-8 w-8 shrink-0 items-center justify-center rounded-full bg-fill text-label-2 transition-[color,transform,opacity] hover:text-label active:scale-95 active:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           </header>
         )}
 

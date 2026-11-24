@@ -1537,6 +1537,14 @@ export default function GalleryModal({
       {openPreview && (
         <div className="fixed inset-0 z-[140] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-200">
           <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col md:flex-row bg-[#1C1C1E] border border-white/10 rounded-sheet overflow-hidden shadow-float">
+            <button
+              type="button"
+              onClick={() => setOpenPreview(null)}
+              className="md:hidden absolute top-3 right-3 z-30 w-9 hit-44 h-9 rounded-full bg-black/60 backdrop-blur-md border border-white/15 flex items-center justify-center text-white/85 active:scale-95 transition"
+              aria-label="Tutup Pratinjau"
+            >
+              <Icons.X className="w-4 h-4" />
+            </button>
             
             <div className="flex-1 bg-black flex items-center justify-center p-3 sm:p-6">
               <div className="relative w-full max-w-[280px] sm:max-w-[310px] aspect-[9/16] rounded-[34px] overflow-hidden ring-4 ring-white/15 shadow-float bg-[#121214] flex flex-col justify-between">
@@ -1609,7 +1617,7 @@ export default function GalleryModal({
                   <button
                     type="button"
                     onClick={() => setOpenPreview(null)}
-                    className="w-8 hit-44 h-8 rounded-full bg-white/10 hover:bg-white/15 flex items-center justify-center text-white/65 hover:text-white transition-colors shrink-0"
+                    className="hidden md:flex w-8 hit-44 h-8 rounded-full bg-white/10 hover:bg-white/15 items-center justify-center text-white/65 hover:text-white transition-colors shrink-0"
                     aria-label="Tutup Pratinjau"
                   >
                     <Icons.X className="w-4 h-4" />

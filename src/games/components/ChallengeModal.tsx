@@ -201,10 +201,10 @@ export default function ChallengeModal({ isOpen, onClose }: ChallengeModalProps)
           </h2>
           <button
             onClick={handleCloseClick}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+            className="flex hit-44 h-8 w-8 items-center justify-center rounded-full bg-fill text-label-2 hover:text-label active:scale-95 transition-[color,transform]"
             aria-label="Tutup modal tantangan"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Lock } from "lucide-react";
+import { Check, Lock, X } from "lucide-react";
 import { auth } from "../lib/firebase";
 import { verifikasiPasswordAkun } from "../lib/akun";
 import { useBodyScrollLock } from "../hooks/useBodyScrollLock";
@@ -67,6 +67,15 @@ export default function KonfirmasiAkun({
         onSubmit={kirim}
         className={`relative w-full max-w-[320px] overflow-hidden rounded-sheet apple-sheet p-3.5 shadow-float border border-white/65 dark:border-white/[0.14] ring-1 ring-black/10 dark:ring-white/10 ${MOTION.dialog}`}
       >
+        <button
+          type="button"
+          onClick={() => !busy && onBatal()}
+          disabled={busy}
+          aria-label="Tutup"
+          className="absolute top-3 right-3 z-10 flex hit-44 h-8 w-8 items-center justify-center rounded-full bg-fill text-label-2 transition-[color,transform,opacity] hover:text-label active:scale-95 active:opacity-70 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint"
+        >
+          <X className="h-4 w-4" />
+        </button>
         {terverifikasi && langkahLanjut ? (
           <div className="px-2 pt-2.5 pb-4 text-center">
             <div className="mb-3 flex justify-center">

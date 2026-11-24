@@ -14,6 +14,9 @@ import {
   cekBentrok,
   teksBentrok,
   estimasiHarga,
+  fmtHariTanggalLengkap,
+  fmtJam,
+  fmtRentangSingkat,
   fmtWaktu,
   hapusBooking,
   LABEL_STATUS,
@@ -22,6 +25,7 @@ import {
   namaStaf,
   pesanBooking,
   pesanTerakhir,
+  rentangBooking,
   sisaWaktu,
   ubahBooking,
   type BookingSewa,
@@ -155,13 +159,27 @@ const BookingDetailSheet: React.FC<{
     >
       <div className="space-y-4">
         {/* ---- Waktu ambil */}
-        <div className="rounded-tile apple-tile ring-1 ring-edge px-4 py-3.5">
-          <div className="text-caption font-semibold uppercase tracking-[0.06em] text-label-2">Jadwal ambil</div>
-          <div className="mt-0.5 text-title3 font-bold tabular-nums text-label">{m !== null ? fmtWaktu(m) : "Belum ada jadwal"}</div>
-          {m !== null && bisaAksi && (
-            <div className={m < now ? "text-footnote font-semibold text-warning" : "text-footnote text-label-2"}>{sisaWaktu(m, now)}</div>
-          )}
-        </div>
+        {(() => {
+          const r = rentangBooking(b);
+          return (
+            <div className="rounded-tile apple-tile ring-1 ring-edge px-4 py-3.5">
+              <div className="text-caption font-semibold uppercase tracking-[0.06em] text-label-2">Jadwal ambil</div>
+              <div className="mt-0.5 text-headline font-bold text-label">
+                {m !== null ? fmtHariTanggalLengkap(m) : "Belum ada jadwal"}
+              </div>
+              {m !== null && (
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-subhead font-semibold tabular-nums text-label-2">
+                  <span>{r ? fmtRentangSingkat(r.mulai, r.selesai) : `Pukul ${fmtJam(m)}`}</span>
+                  {bisaAksi && (
+                    <span className={m < now ? "text-footnote font-semibold text-warning" : "text-footnote font-normal text-label-3"}>
+                      · {sisaWaktu(m, now)}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {bisaAksi && bentrok.length > 0 && (
           <Notice tone={adaBentrokPenuh(bentrok) ? "negative" : "warning"}>

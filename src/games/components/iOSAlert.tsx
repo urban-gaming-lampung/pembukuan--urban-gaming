@@ -1,4 +1,5 @@
 import React from 'react';
+import { X } from 'lucide-react';
 
 interface iOSAlertProps {
   isOpen: boolean;
@@ -37,9 +38,17 @@ export default function IOSAlert({
 
       {/* Alert Dialog Box */}
       <div className="relative w-full max-w-[270px] bg-white/90 dark:bg-[#1E1E1E]/90 backdrop-blur-2xl rounded-2xl flex flex-col overflow-hidden text-center shadow-2xl border border-zinc-200/20 dark:border-zinc-800/30 animate-in zoom-in-95 duration-200">
+        <button
+          type="button"
+          onClick={onCancel}
+          aria-label="Tutup"
+          className="absolute top-2.5 right-2.5 z-10 flex hit-44 h-7 w-7 items-center justify-center rounded-full bg-zinc-500/15 text-zinc-500 dark:text-zinc-300 active:scale-95 transition"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
         {/* Header & Body */}
         <div className="p-4 flex flex-col gap-1.5">
-          <h3 className="text-[17px] font-bold text-zinc-950 dark:text-white leading-tight">
+          <h3 className="px-7 text-[17px] font-bold text-zinc-950 dark:text-white leading-tight">
             {title}
           </h3>
           <div className="text-[13px] text-zinc-600 dark:text-zinc-400 leading-normal font-normal">

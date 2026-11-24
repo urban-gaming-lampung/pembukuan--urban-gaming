@@ -727,11 +727,6 @@ const BarangJualanSheet: React.FC<{
         onClose={() => { if (!saving && !editMasuk && !confirmHapusOpen) onClose(); }}
         title={p ? "Edit Barang" : "Barang Baru"}
         size="md"
-        headerLeft={
-          <Button variant="plain" size="sm" onClick={onClose} disabled={saving}>
-            Batal
-          </Button>
-        }
         headerRight={
           <Button variant="plain" size="sm" onClick={simpan} disabled={saving} loading={saving} className="font-semibold">
             Simpan

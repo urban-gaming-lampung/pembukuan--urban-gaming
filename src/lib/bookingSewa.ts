@@ -107,6 +107,35 @@ const awalHari = (ms: number) => { const d = new Date(ms); d.setHours(0, 0, 0, 0
 /** "Sab, 25 Nov · 22.00" */
 export const fmtWaktu = (ms: number) => { const d = new Date(ms); return `${HARI[d.getDay()]}, ${d.getDate()} ${BULAN[d.getMonth()]} · ${jamTitik(d)}`; };
 
+/** "Rab, 25 Nov" */
+export const fmtHariTanggal = (ms: number) => { const d = new Date(ms); return `${HARI[d.getDay()]}, ${d.getDate()} ${BULAN[d.getMonth()]}`; };
+
+/** "Rabu, 25 Nov 2026" */
+export const fmtHariTanggalLengkap = (ms: number) => { const d = new Date(ms); return `${HARI_PANJANG[d.getDay()]}, ${d.getDate()} ${BULAN[d.getMonth()]} ${d.getFullYear()}`; };
+
+/** "25 Nov" */
+export const fmtTanggalPendek = (ms: number) => { const d = new Date(ms); return `${d.getDate()} ${BULAN[d.getMonth()]}`; };
+
+/** "19.00" */
+export const fmtJam = (ms: number) => jamTitik(new Date(ms));
+
+/** "19.00–22.00" (hari sama) atau "19.00 – Kam, 26 Nov 07.00" (beda hari) */
+export function fmtRentangSingkat(mulaiMs: number, selesaiMs: number): string {
+  const sama = awalHari(mulaiMs) === awalHari(selesaiMs);
+  return sama ? `${jamTitik(new Date(mulaiMs))}–${jamTitik(new Date(selesaiMs))}` : `${jamTitik(new Date(mulaiMs))} – ${fmtHariTanggal(selesaiMs)} ${jamTitik(new Date(selesaiMs))}`;
+}
+
+/** Label tanggal untuk judul kelompok daftar booking (Hari ini, Besok, 7 hari ke depan, Nanti). */
+export function tanggalKelompok(k: KelompokBooking, now: number): string {
+  const base = awalHari(now);
+  const geser = (n: number) => base + n * 86400000;
+  if (k === "HARI_INI") return fmtHariTanggal(base);
+  if (k === "BESOK") return fmtHariTanggal(geser(1));
+  if (k === "MINGGU_INI") return `${fmtTanggalPendek(geser(2))} – ${fmtTanggalPendek(geser(7))}`;
+  if (k === "NANTI") return `mulai ${fmtTanggalPendek(geser(8))}`;
+  return "";
+}
+
 /** Kelompok daftar: lewat jam ambil, hari ini, besok, 7 hari, nanti. */
 export type KelompokBooking = "LEWAT" | "HARI_INI" | "BESOK" | "MINGGU_INI" | "NANTI" | "TANPA_JADWAL";
 export function kelompokBooking(b: BookingSewa, now: number): KelompokBooking {
@@ -142,8 +171,11 @@ export function estimasiHarga(b: Pick<BookingSewa, "jenisPS" | "lamaSewa" | "ant
 
 export type SumberUnit = "PS3" | "PS4" | "PS5" | "TV" | "PORTABEL";
 export type Kapasitas = { ps3: number; ps4: number; ps5: number; tv: number; portabel: number };
+export const URUTAN_SUMBER_UNIT: SumberUnit[] = ["PS5", "PS4", "PS3", "PORTABEL", "TV"];
 const KUNCI_KAPASITAS: Record<SumberUnit, keyof Kapasitas> = { PS3: "ps3", PS4: "ps4", PS5: "ps5", TV: "tv", PORTABEL: "portabel" };
 export const LABEL_UNIT: Record<SumberUnit, string> = { PS3: "PS3", PS4: "PS4", PS5: "PS5", TV: "TV", PORTABEL: "PS portabel" };
+export const LABEL_UNIT_PENDEK: Record<SumberUnit, string> = { PS3: "PS3", PS4: "PS4", PS5: "PS5", TV: "TV", PORTABEL: "Portabel" };
+export const kapasitasSumber = (k: Kapasitas, u: SumberUnit): number => Math.max(0, Number(k[KUNCI_KAPASITAS[u]]) || 0);
 
 /** Unit fisik yang dipakai satu jenis sewa ("PS4 + TV" = PS4 + TV). */
 export function unitDipakai(jenisPS: unknown): SumberUnit[] {
@@ -161,6 +193,42 @@ export function unitDipakai(jenisPS: unknown): SumberUnit[] {
  * memakai toleransi telat (TOLERANSI_KEMBALI_MENIT) — cukup diingatkan, bukan bentrok.
  */
 export type Bentrok = { unit: SumberUnit; kapasitas: number; terpakai: number; penyebab: string[]; jenis: "penuh" | "mepet" };
+export type PemakaianUnit = { mulai: number; selesai: number; unit: SumberUnit[]; label: string };
+
+/** Daftar seluruh interval pemakaian unit aktif (booking aktif + sewa berjalan, dengan toleransi kembali opsional). */
+export function bangunPemakaianUnit(o: {
+  bookings: BookingSewa[];
+  berjalan: SewaBerjalan[];
+  now: number;
+  excludeBookingId?: string;
+  toleransiMs?: number;
+}): PemakaianUnit[] {
+  const tol = o.toleransiMs ?? TOLERANSI_KEMBALI_MENIT * 60000;
+  const lain: PemakaianUnit[] = [];
+  o.bookings.forEach((x) => {
+    if (!aktif(x) || (o.excludeBookingId && x.id === o.excludeBookingId)) return;
+    const rx = rentangBooking(x);
+    if (!rx) return;
+    lain.push({
+      mulai: rx.mulai,
+      selesai: rx.selesai + tol,
+      unit: unitDipakai(x.jenisPS),
+      label: `Booking ${x.nama || "tanpa nama"} · ${fmtWaktu(rx.mulai)}`,
+    });
+  });
+  o.berjalan.forEach((s) => {
+    const mulai = s.mulaiMs ?? o.now;
+    // Belum kembali: dianggap terpakai minimal sampai sekarang
+    const selesai = Math.max((s.endMs ?? o.now) + tol, s.isDone && !s.isVerified ? o.now + tol : 0);
+    lain.push({
+      mulai,
+      selesai,
+      unit: unitDipakai(s.jenis),
+      label: `Sewa jalan ${s.namaPenyewa}${s.endMs ? ` · kembali ${fmtWaktu(s.endMs)}` : ""}`,
+    });
+  });
+  return lain;
+}
 
 /**
  * Cek apakah unit untuk booking `b` masih tersedia di rentang waktunya, dengan menghitung
@@ -174,26 +242,13 @@ export function cekBentrok(
 ): Bentrok[] {
   const r = rentangBooking(b);
   if (!r) return [];
-  type Pakai = { mulai: number; selesai: number; unit: SumberUnit[]; label: string };
   const hitung = (tol: number) => {
     const awal = r.mulai;
     const akhir = r.selesai + tol;
-    const lain: Pakai[] = [];
-    o.bookings.forEach((x) => {
-      if (!aktif(x) || x.id === b.id) return;
-      const rx = rentangBooking(x);
-      if (!rx) return;
-      lain.push({ mulai: rx.mulai, selesai: rx.selesai + tol, unit: unitDipakai(x.jenisPS), label: `Booking ${x.nama || "tanpa nama"} · ${fmtWaktu(rx.mulai)}` });
-    });
-    o.berjalan.forEach((s) => {
-      const mulai = s.mulaiMs ?? o.now;
-      // Belum kembali: dianggap terpakai minimal sampai sekarang
-      const selesai = Math.max((s.endMs ?? o.now) + tol, s.isDone && !s.isVerified ? o.now + tol : 0);
-      lain.push({ mulai, selesai, unit: unitDipakai(s.jenis), label: `Sewa jalan ${s.namaPenyewa}${s.endMs ? ` · kembali ${fmtWaktu(s.endMs)}` : ""}` });
-    });
+    const lain = bangunPemakaianUnit({ bookings: o.bookings, berjalan: o.berjalan, now: o.now, excludeBookingId: b.id, toleransiMs: tol });
     const out = new Map<SumberUnit, { kapasitas: number; terpakai: number; penyebab: string[] }>();
     unitDipakai(b.jenisPS).forEach((unit) => {
-      const kapasitas = Number(o.kapasitas[KUNCI_KAPASITAS[unit]]) || 0;
+      const kapasitas = kapasitasSumber(o.kapasitas, unit);
       if (kapasitas <= 0) return;
       const tumpang = lain.filter((p) => p.unit.includes(unit) && p.mulai < akhir && p.selesai > awal);
       if (!tumpang.length) return;
@@ -229,6 +284,227 @@ export const teksBentrok = (x: Bentrok) =>
   x.jenis === "penuh"
     ? `${LABEL_UNIT[x.unit]} kurang: ${x.terpakai} dari ${x.kapasitas} unit masih terpakai di jam itu.`
     : `${LABEL_UNIT[x.unit]} mepet: unit sebelumnya kembali dekat jam ambil. Aman bila kembali tepat waktu, tapi penyewa masih boleh telat sampai ${TOLERANSI_KEMBALI_MENIT / 60} jam.`;
+
+// ---------------------------------------------------------------- slot kosong
+
+/** Jam operasional ambil unit: 10.00 – 23.00 WIB (14 slot per hari). */
+export const JAM_SLOT_OPERASIONAL = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23] as const;
+
+export type InfoSlotJam = {
+  jam: number;
+  jamTeks: string;
+  mulaiMs: number;
+  selesaiMs: number;
+  kapasitas: number;
+  terpakai: number;
+  sisa: number;
+  lewat: boolean;
+  penghalang: string[];
+};
+
+export type RingkasanHariSlot = {
+  tanggal: string;
+  hariPendek: string;
+  tanggalAngka: number;
+  bulanPendek: string;
+  isHariIni: boolean;
+  tersediaJam: number;
+  totalJamAktif: number;
+  maksSisa: number;
+  status: "kosong" | "terbatas" | "penuh" | "lewat";
+  jumlahBooking: number;
+};
+
+/** Tanggal YYYY-MM-DD digeser `deltaHari` dari `tanggal` lokal. */
+export function geserTanggalYmd(tanggal: string, deltaHari: number): string {
+  const m = String(tanggal || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const base = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date();
+  return ymd(new Date(base.getFullYear(), base.getMonth(), base.getDate() + deltaHari));
+}
+
+/** Timestamp lokal pukul 00.00 dari YYYY-MM-DD. */
+export function tanggalKeMs(tanggal: string): number {
+  const m = String(tanggal || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : awalHari(Date.now());
+}
+
+/** Tanggal hari ini (kalender lokal YYYY-MM-DD). */
+export const hariIniYmd = (now = Date.now()) => ymd(new Date(now));
+
+/** Hitung ketersediaan slot per jam (10.00–23.00) untuk kombinasi unit + durasi pada tanggal tertentu. */
+export function hitungSlotHari(o: {
+  tanggal: string;
+  unitList: SumberUnit[];
+  durasiJam: number;
+  pemakaian: PemakaianUnit[];
+  kapasitas: Kapasitas;
+  now: number;
+}): InfoSlotJam[] {
+  const m = String(o.tanggal || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m || !o.unitList.length || o.durasiJam <= 0) return [];
+  const y = +m[1], mo = +m[2] - 1, d = +m[3];
+  const tol = TOLERANSI_KEMBALI_MENIT * 60000;
+  const durMs = o.durasiJam * 3600000;
+
+  return JAM_SLOT_OPERASIONAL.map((jam) => {
+    const mulaiMs = new Date(y, mo, d, jam, 0).getTime();
+    const selesaiMs = mulaiMs + durMs;
+    const akhir = selesaiMs + tol;
+    const lewat = mulaiMs < o.now - 15 * 60000;
+
+    let kapMin = Infinity;
+    let sisaMin = Infinity;
+    let terpakaiMax = 0;
+    const penghalangSet = new Set<string>();
+
+    o.unitList.forEach((u) => {
+      const kap = kapasitasSumber(o.kapasitas, u);
+      const tumpang = o.pemakaian.filter((p) => p.unit.includes(u) && p.mulai < akhir && p.selesai > mulaiMs);
+      const titik = [mulaiMs, ...tumpang.map((p) => Math.max(mulaiMs, p.mulai))];
+      let maks = 0;
+      titik.forEach((t) => {
+        const n = tumpang.filter((p) => p.mulai <= t && p.selesai > t).length;
+        if (n > maks) maks = n;
+      });
+      const sisaU = Math.max(0, kap - maks);
+      if (kap < kapMin) kapMin = kap;
+      if (sisaU < sisaMin) sisaMin = sisaU;
+      if (maks > terpakaiMax) terpakaiMax = maks;
+      if (sisaU <= 0 || tumpang.length) {
+        tumpang.forEach((p) => penghalangSet.add(p.label));
+      }
+    });
+
+    const kapasitasEfektif = Number.isFinite(kapMin) ? kapMin : 0;
+    const sisa = kapasitasEfektif > 0 && Number.isFinite(sisaMin) ? sisaMin : 0;
+
+    return {
+      jam,
+      jamTeks: `${pad(jam)}:00`,
+      mulaiMs,
+      selesaiMs,
+      kapasitas: kapasitasEfektif,
+      terpakai: Math.min(kapasitasEfektif, Math.max(0, kapasitasEfektif - sisa, terpakaiMax)),
+      sisa,
+      lewat,
+      penghalang: Array.from(penghalangSet),
+    };
+  });
+}
+
+/** Ringkasan rentang jam kosong yang mudah dibaca ("10.00–15.00 · 19.00–23.00"). */
+export function ringkasanRentangKosong(slots: InfoSlotJam[]): string {
+  const aktifSlots = slots.filter((s) => !s.lewat);
+  if (!aktifSlots.length) return "Jam operasional hari ini sudah lewat";
+  const bebas = aktifSlots.filter((s) => s.sisa > 0);
+  if (!bebas.length) return "Tidak ada slot kosong di tanggal ini";
+  if (bebas.length === aktifSlots.length) {
+    const a = aktifSlots[0].jam;
+    const b = aktifSlots[aktifSlots.length - 1].jam;
+    return a === b ? `Tersedia pukul ${pad(a)}.00` : `Tersedia sepanjang hari (${pad(a)}.00–${pad(b)}.00)`;
+  }
+  const rentang: [number, number][] = [];
+  bebas.forEach((s) => {
+    const last = rentang[rentang.length - 1];
+    if (last && s.jam === last[1] + 1) last[1] = s.jam;
+    else rentang.push([s.jam, s.jam]);
+  });
+  return rentang.map(([a, b]) => (a === b ? `${pad(a)}.00` : `${pad(a)}.00–${pad(b)}.00`)).join(" · ");
+}
+
+/** Ringkasan ketersediaan beberapa hari berturut-turut untuk strip kalender iOS 27. */
+export function ringkasanStripHari(o: {
+  mulaiTanggal: string;
+  jumlahHari: number;
+  unitList: SumberUnit[];
+  durasiJam: number;
+  pemakaian: PemakaianUnit[];
+  bookings: BookingSewa[];
+  kapasitas: Kapasitas;
+  now: number;
+}): RingkasanHariSlot[] {
+  const today = hariIniYmd(o.now);
+  const countByDate = new Map<string, number>();
+  o.bookings.forEach((b) => {
+    if (!aktif(b) || !b.tanggal) return;
+    countByDate.set(b.tanggal, (countByDate.get(b.tanggal) || 0) + 1);
+  });
+
+  const out: RingkasanHariSlot[] = [];
+  for (let i = 0; i < o.jumlahHari; i++) {
+    const tgl = geserTanggalYmd(o.mulaiTanggal, i);
+    const d = new Date(tanggalKeMs(tgl));
+    const slots = hitungSlotHari({
+      tanggal: tgl,
+      unitList: o.unitList,
+      durasiJam: o.durasiJam,
+      pemakaian: o.pemakaian,
+      kapasitas: o.kapasitas,
+      now: o.now,
+    });
+    const aktifSlots = slots.filter((s) => !s.lewat);
+    const bebas = aktifSlots.filter((s) => s.sisa > 0);
+    const maksSisa = bebas.reduce((mx, s) => Math.max(mx, s.sisa), 0);
+    const status: RingkasanHariSlot["status"] =
+      aktifSlots.length === 0
+        ? "lewat"
+        : bebas.length === 0
+          ? "penuh"
+          : bebas.length >= Math.ceil(aktifSlots.length * 0.5)
+            ? "kosong"
+            : "terbatas";
+    out.push({
+      tanggal: tgl,
+      hariPendek: HARI[d.getDay()],
+      tanggalAngka: d.getDate(),
+      bulanPendek: BULAN[d.getMonth()],
+      isHariIni: tgl === today,
+      tersediaJam: bebas.length,
+      totalJamAktif: aktifSlots.length,
+      maksSisa,
+      status,
+      jumlahBooking: countByDate.get(tgl) || 0,
+    });
+  }
+  return out;
+}
+
+/** Cari slot kosong pertama mulai dari tanggal & jam tertentu (hingga `maksHari` hari ke depan). */
+export function cariSlotKosongBerikutnya(o: {
+  dariTanggal: string;
+  dariJam?: number;
+  unitList: SumberUnit[];
+  durasiJam: number;
+  pemakaian: PemakaianUnit[];
+  kapasitas: Kapasitas;
+  now: number;
+  maksHari?: number;
+}): { tanggal: string; slot: InfoSlotJam } | null {
+  const maks = o.maksHari ?? 14;
+  for (let i = 0; i <= maks; i++) {
+    const tgl = geserTanggalYmd(o.dariTanggal, i);
+    const slots = hitungSlotHari({
+      tanggal: tgl,
+      unitList: o.unitList,
+      durasiJam: o.durasiJam,
+      pemakaian: o.pemakaian,
+      kapasitas: o.kapasitas,
+      now: o.now,
+    });
+    const cocok = slots.find((s) => !s.lewat && s.sisa > 0 && (i > 0 || o.dariJam === undefined || s.jam > o.dariJam));
+    if (cocok) return { tanggal: tgl, slot: cocok };
+  }
+  return null;
+}
+
+/** Petakan pilihan unit di panel Slot Kosong ke label `jenisPS` yang valid di tabel harga. */
+export function pilihJenisSewaDariUnit(unit: SumberUnit, paket: "UNIT" | "TV" | "PORTABEL", jenisOptions: string[]): string {
+  if (unit === "TV") return jenisOptions.find((j) => jenisUnit(j).hanyaTv) || "Hanya TV";
+  if (unit === "PORTABEL") return jenisOptions.find((j) => jenisUnit(j).portabel && jenisUnit(j).konsol === "PS4") || jenisOptions.find((j) => jenisUnit(j).portabel) || "PS4 Portable";
+  if (paket === "TV") return jenisOptions.find((j) => jenisUnit(j).konsol === unit && jenisUnit(j).tv && !jenisUnit(j).portabel) || `${unit} + TV`;
+  if (paket === "PORTABEL") return jenisOptions.find((j) => jenisUnit(j).konsol === unit && jenisUnit(j).portabel) || `${unit} Portable`;
+  return jenisOptions.find((j) => jenisUnit(j).konsol === unit && !jenisUnit(j).tv && !jenisUnit(j).portabel) || unit;
+}
 
 // ---------------------------------------------------------------- pesan WhatsApp
 

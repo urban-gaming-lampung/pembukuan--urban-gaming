@@ -38,12 +38,15 @@ import {
   BarChart3,
   BookOpen,
   Bot,
+  Calendar,
   CheckCircle2,
   Ellipsis,
   Info,
   Package,
   Save,
+  Settings,
   User,
+  X,
 } from "lucide-react";
 import { GAME_NAMES_ID } from "./games/constants";
 import useAppController from "./hooks/useAppController";
@@ -266,9 +269,21 @@ export default function App() {
     return items;
   }, [isSuperAdminOrOwner, requestPending, perhatianBooking]);
 
-  // Laptop: isi menu Lainnya tampil langsung di sidebar (tanpa halaman daftar)
+  const mobileTabs = useMemo<NavItem[]>(() => {
+    if (isSuperAdminOrOwner) return navItems;
+    return [
+      ...navItems,
+      { key: "ACTION:SETTINGS", label: "Pengaturan", icon: <Settings />, color: "gray" },
+    ];
+  }, [isSuperAdminOrOwner, navItems]);
+
+  // Laptop: isi menu Lainnya + Pengaturan tampil langsung di sidebar (tanpa ikon pengaturan di header)
   const sidebarSections = useMemo<NavSection[]>(() => {
-    if (!isSuperAdminOrOwner) return [{ title: "Menu utama", items: navItems }];
+    const appSection: NavSection = {
+      title: "Aplikasi",
+      items: [{ key: "ACTION:SETTINGS", label: "Pengaturan", icon: <Settings />, color: "gray" }],
+    };
+    if (!isSuperAdminOrOwner) return [{ title: "Menu utama", items: navItems }, appSection];
     return [
       { title: "Menu utama", items: navItems.filter((n) => n.key !== "LAINNYA") },
       {
@@ -281,10 +296,15 @@ export default function App() {
           badge: m.key === "REQUEST" && requestPending > 0 ? requestPending : undefined,
         })),
       },
+      appSection,
     ];
   }, [isSuperAdminOrOwner, navItems, requestPending]);
 
   const pilihTab = (k: string) => {
+    if (k === "ACTION:SETTINGS") {
+      setOpenSettings(true);
+      return;
+    }
     if (k.startsWith("LAINNYA:")) {
       setHalLainnya(k.slice(8) as HalamanLainnya);
       setActiveTab("LAINNYA");
@@ -344,11 +364,11 @@ export default function App() {
 
         <div className="relative z-10">
           <AppShell
-            activeKey={sidebarKey}
-            mobileActiveKey={activeTab}
+            activeKey={openSettings ? "ACTION:SETTINGS" : sidebarKey}
+            mobileActiveKey={openSettings && !isSuperAdminOrOwner ? "ACTION:SETTINGS" : activeTab}
             onSelectKey={pilihTab}
             sidebarSections={sidebarSections}
-            mobileTabs={navItems}
+            mobileTabs={mobileTabs}
             sidebarHeader={
               <div className="flex items-center gap-3 p-2.5 rounded-tile bg-fill/60 border border-sep">
                 <div className="w-10 h-10 rounded-full bg-surface-elevated ring-1 ring-edge overflow-hidden flex items-center justify-center shrink-0">
@@ -358,9 +378,12 @@ export default function App() {
                     <User className="w-4 h-4 text-label-2" />
                   )}
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="text-subhead font-semibold text-label truncate">Hi, {namaPendek}</div>
-                  <div className="text-caption2 text-label-2 truncate">URBAN Gaming · Pembukuan</div>
+                  <div className="mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface/85 dark:bg-surface-elevated/85 border border-sep max-w-full">
+                    <Calendar className="w-3 h-3 text-label-3 shrink-0" />
+                    <span className="text-caption font-semibold text-label-2 tabular-nums truncate">{tanggal}</span>
+                  </div>
                 </div>
               </div>
             }
@@ -404,7 +427,6 @@ export default function App() {
                 tanggal={tanggal}
                 sectionTitle={activeNavLabel}
                 onSharePDF={handleShareCheck}
-                onOpenSettings={() => setOpenSettings(true)}
                 onOpenScan={handleOpenScan}
                 onOpenPOS={() => setOpenPOS(true)}
                 onOpenGallery={() => setOpenGallery(true)}
@@ -763,7 +785,15 @@ export default function App() {
 
           {showStokConfirmation && (
             <div className="fixed bottom-[calc(86px+env(safe-area-inset-bottom))] md:bottom-6 left-1/2 -translate-x-1/2 z-[400] w-[92%] max-w-[380px] animate-in slide-in-from-bottom-6 fade-in duration-200">
-              <div className="apple-glass rounded-sheet p-5 shadow-float ring-1 ring-black/10 dark:ring-white/15 flex flex-col items-center text-center gap-3.5">
+              <div className="relative apple-glass rounded-sheet p-5 shadow-float ring-1 ring-black/10 dark:ring-white/15 flex flex-col items-center text-center gap-3.5">
+                <button
+                  type="button"
+                  onClick={() => setShowStokConfirmation(false)}
+                  aria-label="Tutup"
+                  className="absolute top-3 right-3 z-10 flex hit-44 h-8 w-8 items-center justify-center rounded-full bg-fill text-label-2 transition-[color,transform,opacity] hover:text-label active:scale-95 active:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint"
+                >
+                  <X className="h-4 w-4" />
+                </button>
                 <IconBadge color="orange" variant="tinted" className="h-12 w-12 rounded-full [&>svg]:h-6 [&>svg]:w-6">
                   <Package />
                 </IconBadge>

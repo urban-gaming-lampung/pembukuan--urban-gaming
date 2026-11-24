@@ -6,7 +6,6 @@ import {
   Plus,
   QrCode,
   Save,
-  Settings,
   Share,
   ShoppingCart,
   User,
@@ -21,7 +20,6 @@ type HeaderProps = {
   sectionTitle?: string;
 
   onSharePDF: () => void;
-  onOpenSettings: () => void;
   onOpenScan: () => void;
   onOpenPOS: () => void;
   onOpenGallery?: () => void;
@@ -45,7 +43,6 @@ export default function Header({
   tanggal,
   sectionTitle,
   onSharePDF,
-  onOpenSettings,
   onOpenScan,
   onOpenPOS,
   onOpenGallery,
@@ -164,12 +161,6 @@ export default function Header({
         onClick={onOpenScan}
         icon={<QrCode className="w-[18px] h-[18px] sm:w-[19px] sm:h-[19px]" />}
         title="Scan QR Code"
-        compact={compact}
-      />
-      <IconButton
-        onClick={onOpenSettings}
-        icon={<Settings className="w-[18px] h-[18px] sm:w-[19px] sm:h-[19px]" />}
-        title="Pengaturan"
         compact={compact}
       />
     </div>
@@ -340,7 +331,7 @@ export default function Header({
             {renderActionButtons()}
           </div>
 
-          {/* DESKTOP TOPBAR (md+): Dioptimalkan tanpa profil & presence ganda (karena sudah tampil di Sidebar) */}
+          {/* DESKTOP TOPBAR (md+): Dioptimalkan tanpa profil, tanggal & presence ganda (sudah tampil di Sidebar) */}
           <div className="hidden md:flex items-center justify-between gap-4 w-full relative z-10 min-w-0">
             <div className="flex items-center gap-3 min-w-0">
               <div className="min-w-0">
@@ -358,11 +349,6 @@ export default function Header({
                 >
                   URBAN Gaming · Pembukuan Digital
                 </div>
-              </div>
-
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-fill/85 border border-sep shrink-0">
-                <Calendar className="w-3.5 h-3.5 text-label-3" />
-                <span className="text-footnote font-semibold text-label-2 tabular-nums">{tanggal}</span>
               </div>
             </div>
 
