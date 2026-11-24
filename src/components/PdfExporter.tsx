@@ -1,7 +1,7 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from "react";
 import { createPortal } from "react-dom";
 import type JsPDF from "jspdf";
-import { Check, Copy, Download, ExternalLink, FileText, Share2 } from "lucide-react";
+import { Check, Copy, Download, ExternalLink, FileText, Lock, Share2 } from "lucide-react";
 import { useTampilRincian } from "../lib/tampilRincian";
 import type { MasterStokCategories, StokData } from "../hooks/useStokData";
 import { rupiah } from "../lib/format";
@@ -36,6 +36,7 @@ type ReadyPdf = {
   pageCount: number;
   sizeBytes: number;
   durationMs: number;
+  isProtected: boolean;
   canWebShare: boolean;
   gestureExpired: boolean;
   tanggal: string;
@@ -216,6 +217,7 @@ const PdfExporter = forwardRef<PdfExporterHandle, Props>(function PdfExporter(
               pageCount: built.pageCount,
               sizeBytes: built.sizeBytes,
               durationMs: built.durationMs,
+              isProtected: built.isProtected,
               canWebShare: true,
               gestureExpired: shareErr?.name === "NotAllowedError",
               tanggal: data.tanggal,
@@ -238,6 +240,7 @@ const PdfExporter = forwardRef<PdfExporterHandle, Props>(function PdfExporter(
           pageCount: built.pageCount,
           sizeBytes: built.sizeBytes,
           durationMs: built.durationMs,
+          isProtected: built.isProtected,
           canWebShare,
           gestureExpired: false,
           tanggal: data.tanggal,
@@ -318,6 +321,11 @@ const PdfExporter = forwardRef<PdfExporterHandle, Props>(function PdfExporter(
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     <Pill tone="positive">{formatBytes(readyPdf.sizeBytes)}</Pill>
                     <Pill tone="neutral">{readyPdf.pageCount} halaman A4</Pill>
+                    {readyPdf.isProtected && (
+                      <Pill tone="warning" icon={<Lock className="h-3 w-3" />}>
+                        Terkunci PW
+                      </Pill>
+                    )}
                     {kualitasGambar === "Hemat" && <Pill tone="tint">Mode Hemat</Pill>}
                   </div>
                 </div>

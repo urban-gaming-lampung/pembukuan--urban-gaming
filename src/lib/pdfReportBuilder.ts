@@ -45,12 +45,16 @@ export type PdfExportData = {
   exportedBy?: string;
 };
 
+export const DEFAULT_PDF_PASSWORD = "707436";
+
 export type PdfBuildOptions = {
   data: PdfExportData;
   stokData?: StokData;
   masterCategories?: MasterStokCategories;
   kualitasGambar?: "Tinggi" | "Hemat";
   tampil: (kunci: KunciRincian, nilai?: number) => boolean;
+  /** Password buka PDF (kosong "" = tanpa password; bawaan DEFAULT_PDF_PASSWORD). */
+  password?: string;
 };
 
 export type PdfBuildResult = {
@@ -60,6 +64,7 @@ export type PdfBuildResult = {
   pageCount: number;
   sizeBytes: number;
   durationMs: number;
+  isProtected: boolean;
 };
 
 type RGB = readonly [number, number, number];
@@ -213,6 +218,8 @@ function drawPill(
 export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions): PdfBuildResult {
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
   const { data, stokData, masterCategories, kualitasGambar = "Tinggi", tampil } = opts;
+  const pdfPassword = opts.password === undefined ? DEFAULT_PDF_PASSWORD : String(opts.password);
+  const isProtected = pdfPassword.length > 0;
   const isHemat = kualitasGambar === "Hemat";
 
   const doc = new JsPDFCtor({
@@ -221,6 +228,15 @@ export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions):
     format: "a4",
     compress: true,
     putOnlyUsedFonts: true,
+    ...(isProtected
+      ? {
+          encryption: {
+            userPassword: pdfPassword,
+            ownerPassword: pdfPassword,
+            userPermissions: ["print", "copy"],
+          },
+        }
+      : {}),
   });
 
   let y = M;
@@ -297,31 +313,32 @@ export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions):
   const cashPct = totalPay > 0 ? Math.round((totalCash / totalPay) * 100) : 0;
   const tfPct = totalPay > 0 ? 100 - cashPct : 0;
 
-  // Gabungkan hari ini bila belum masuk history untuk grafik 7 hari
+  // Gabungkan hari ini bila belum masuk history untuk grafik 7 hari & rekap bulanan (ikutkan rowsPengeluaran & rowsSetoran)
   const historyList = Array.isArray(data.history) ? data.history : [];
   const hasTodayInHistory = historyList.some((h) => h.tanggal === data.tanggal);
-  const mergedHistory: HistoryItem[] = hasTodayInHistory
-    ? historyList
-    : [
-        {
-          id: "current",
-          tanggal: data.tanggal,
-          hari: data.hari,
-          totalHarian: toInt(data.totalHarian),
-          totalJajanan: toInt(data.totalJajanan),
-          totalJasaAks: toInt(data.totalJasaAks),
-          totalSewa: toInt(data.totalSewa),
-          totalCash,
-          totalTransfer,
-          catatan: data.catatan,
-          rowsHarian: data.rowsHarian,
-          rowsJajanan: data.rowsJajanan,
-          rowsJasaAks: data.rowsJasaAks,
-          rowsSewa: data.rowsSewa,
-          rowsSetoran,
-        },
-        ...historyList,
-      ].sort((a, b) => String(b.tanggal).localeCompare(String(a.tanggal)));
+  const todaySnapshot: any = {
+    id: "current",
+    tanggal: data.tanggal,
+    hari: data.hari,
+    totalHarian: toInt(data.totalHarian),
+    totalJajanan: toInt(data.totalJajanan),
+    totalJasaAks: toInt(data.totalJasaAks),
+    totalSewa: toInt(data.totalSewa),
+    totalCash,
+    totalTransfer,
+    catatan: data.catatan,
+    rowsHarian: data.rowsHarian,
+    rowsJajanan: data.rowsJajanan,
+    rowsJasaAks: data.rowsJasaAks,
+    rowsSewa: data.rowsSewa,
+    rowsSetoran,
+    rowsPengeluaran,
+  };
+  const mergedHistory: HistoryItem[] = (
+    hasTodayInHistory
+      ? historyList.map((h) => (h.tanggal === data.tanggal ? { ...h, ...todaySnapshot, id: h.id } : h))
+      : [todaySnapshot, ...historyList]
+  ).sort((a, b) => String(b.tanggal).localeCompare(String(a.tanggal)));
 
   const last7Desc = mergedHistory.slice(0, 7);
   const last7Asc = [...last7Desc].reverse();
@@ -898,7 +915,7 @@ export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions):
   // C. Rincian Pengeluaran
   const keluarRows = rowsPengeluaran.filter((r) => toInt(r?.harga) > 0 || clean(r?.ket));
   if (tampil("pengeluaran", totalPengeluaran) && keluarRows.length > 0) {
-    drawSubheading("Rincian Pengeluaran", `${keluarRows.length} baris · -${rp(totalPengeluaran)}`, C.negative);
+    drawSubheading("Rincian Pengeluaran", `${keluarRows.length} baris | -${rp(totalPengeluaran)}`, C.negative);
     drawTable(
       [
         { label: "NO", width: 24 },
@@ -1097,14 +1114,55 @@ export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions):
   });
 
   const rataRata = hariTerisi ? Math.round(rekap.total / hariTerisi / 1000) * 1000 : 0;
+  const labaBersihBulan = rekap.total - pengeluaranBulan;
   const saldoBulan = kasBulan - pengeluaranBulan;
 
-  // 4 Kartu KPI Bulanan
+  // Baris 1: 2 Kartu Hero Bulanan — Laba Kotor vs Laba Bersih (Kotor − Pengeluaran)
+  const heroW = (CW - 10) / 2;
+  const heroCards = [
+    {
+      label: `LABA KOTOR BULAN INI (1-${anchorDay} ${BULAN_PENDEK[anchor.getMonth()].toUpperCase()})`,
+      val: rp(rekap.total),
+      sub: `Rental ${fmtK0(rekap.rental)} + Jasa ${fmtK0(rekap.jasa)}`,
+      fg: C.label,
+      bg: C.canvas,
+      bd: C.border,
+    },
+    {
+      label: `LABA BERSIH BULAN INI (1-${anchorDay} ${BULAN_PENDEK[anchor.getMonth()].toUpperCase()})`,
+      val: rp(labaBersihBulan),
+      sub: `Kotor ${rp(rekap.total)} - Pengeluaran ${rp(pengeluaranBulan)}`,
+      fg: labaBersihBulan >= 0 ? C.positive : C.negative,
+      bg: labaBersihBulan >= 0 ? C.positiveBg : C.negativeBg,
+      bd: labaBersihBulan >= 0 ? C.positiveBd : C.negativeBd,
+    },
+  ];
+  ensure(66);
+  heroCards.forEach((k, idx) => {
+    const x = M + idx * (heroW + 10);
+    fillStrokeRect(doc, x, y, heroW, 56, 10, k.bg, k.bd, 0.7);
+    setText(doc, 6.6, "bold", C.label2);
+    doc.text(k.label, x + 11, y + 14);
+    setText(doc, 15.5, "bold", k.fg);
+    doc.text(fitText(doc, k.val, heroW - 22), x + 11, y + 34);
+    setText(doc, 7.2, "normal", C.label2);
+    doc.text(fitText(doc, k.sub, heroW - 22), x + 11, y + 47);
+  });
+  y += 64;
+
+  // Baris 2: 4 Kartu Rincian Bulanan (Rental, Jasa, Pengeluaran Bulan Ini, Rata-rata/Hari)
   const mKpiW = (CW - 24) / 4;
   const mKpis = [
-    { label: `TOTAL (1-${anchorDay} ${BULAN_PENDEK[anchor.getMonth()].toUpperCase()})`, val: fmtK0(rekap.total), sub: rp(rekap.total), fg: C.label, bg: C.canvas, bd: C.border },
-    { label: "RENTAL", val: fmtK0(rekap.rental), sub: `Sewa ${fmtK0(rekap.sewa)}${rekap.harian ? ` · Har ${fmtK0(rekap.harian)}` : ""}`, fg: C.indigo, bg: C.indigoBg, bd: C.border },
-    { label: "JASA USAHA", val: fmtK0(rekap.jasa), sub: `Game ${fmtK0(rekap.isiGame)} · HEN ${fmtK0(rekap.hen)}`, fg: C.purple, bg: C.purpleBg, bd: C.border },
+    { label: "RENTAL", val: fmtK0(rekap.rental), sub: `Sewa ${fmtK0(rekap.sewa)}${rekap.harian ? ` + Har ${fmtK0(rekap.harian)}` : ""}${rekap.jajanan ? ` + Jaj ${fmtK0(rekap.jajanan)}` : ""}`, fg: C.indigo, bg: C.indigoBg, bd: C.border },
+    { label: "JASA USAHA", val: fmtK0(rekap.jasa), sub: `Game ${fmtK0(rekap.isiGame)} + HEN ${fmtK0(rekap.hen)}${rekap.servis ? ` + Srv ${fmtK0(rekap.servis)}` : ""}`, fg: C.purple, bg: C.purpleBg, bd: C.border },
+    {
+      label: "PENGELUARAN BULAN",
+      val: pengeluaranBulan > 0 ? `-${rp(pengeluaranBulan)}` : rp(0),
+      sub: listKeluarBulan.length > 0 ? `${listKeluarBulan.length} transaksi keluar` : "Belum ada pengeluaran",
+      fg: pengeluaranBulan > 0 ? C.negative : C.label2,
+      bg: pengeluaranBulan > 0 ? C.negativeBg : C.canvas,
+      bd: pengeluaranBulan > 0 ? C.negativeBd : C.border,
+    },
     {
       label: "RATA-RATA / HARI",
       val: fmtK0(rataRata),
@@ -1114,28 +1172,29 @@ export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions):
       bd: rataRata >= TARGET_HARIAN ? C.positiveBd : C.warningBd,
     },
   ];
-  ensure(62);
+  ensure(58);
   mKpis.forEach((k, idx) => {
     const x = M + idx * (mKpiW + 8);
-    fillStrokeRect(doc, x, y, mKpiW, 52, 9, k.bg, k.bd, 0.6);
-    setText(doc, 6.3, "bold", C.label2);
-    doc.text(k.label, x + 9, y + 13);
-    setText(doc, 12.5, "bold", k.fg);
-    doc.text(fitText(doc, k.val, mKpiW - 18), x + 9, y + 31);
-    setText(doc, 6.8, "normal", C.label2);
-    doc.text(fitText(doc, k.sub, mKpiW - 18), x + 9, y + 44);
+    fillStrokeRect(doc, x, y, mKpiW, 48, 9, k.bg, k.bd, 0.6);
+    setText(doc, 6.2, "bold", C.label2);
+    doc.text(k.label, x + 9, y + 12.5);
+    setText(doc, 11.5, "bold", k.fg);
+    doc.text(fitText(doc, k.val, mKpiW - 18), x + 9, y + 29);
+    setText(doc, 6.6, "normal", C.label2);
+    doc.text(fitText(doc, k.sub, mKpiW - 18), x + 9, y + 41);
   });
-  y += 62;
+  y += 56;
 
   // Kartu Ringkasan Saldo Hari Ini & Bulan Ini
   ensure(48);
   fillStrokeRect(doc, M, y, CW, 40, 9, C.tile, C.border, 0.6);
+  const bersihHariIniLap = hariIniLap.total - totalPengeluaran;
   const salCols = [
     { l: "KOTOR HARI INI", v: rp(hariIniLap.total), c: C.label },
-    { l: "PENGELUARAN HARI INI", v: `-${rp(totalPengeluaran)}`, c: C.negative },
-    { l: "BERSIH HARI INI", v: rp(hariIniLap.total - totalPengeluaran), c: C.positive },
+    { l: "PENGELUARAN HARI INI", v: totalPengeluaran > 0 ? `-${rp(totalPengeluaran)}` : rp(0), c: totalPengeluaran > 0 ? C.negative : C.label2 },
+    { l: "BERSIH HARI INI", v: rp(bersihHariIniLap), c: bersihHariIniLap >= 0 ? C.positive : C.negative },
     { l: "HARUS DISETOR", v: rp(Math.max(0, totalCash)), c: C.tint },
-    { l: "TOTAL SALDO BULAN", v: rp(saldoBulan), c: C.label },
+    { l: "TOTAL SALDO BULAN", v: rp(saldoBulan), c: saldoBulan >= 0 ? C.label : C.negative },
   ];
   const scW = (CW - 20) / 5;
   salCols.forEach((sc, idx) => {
@@ -1201,7 +1260,7 @@ export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions):
   // Daftar Setoran Bulan Ini
   if (listSetorBulan.length > 0) {
     const totalSetorBulan = listSetorBulan.reduce((s, x) => s + x.nom, 0);
-    drawSubheading("Riwayat Setoran Bulan Ini", `${listSetorBulan.length}x · ${rp(totalSetorBulan)}`, C.positive);
+    drawSubheading("Riwayat Setoran Bulan Ini", `${listSetorBulan.length}x | ${rp(totalSetorBulan)}`, C.positive);
     drawTable(
       [
         { label: "TANGGAL", width: 72 },
@@ -1217,7 +1276,7 @@ export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions):
 
   // Daftar Pengeluaran Bulan Ini
   if (listKeluarBulan.length > 0) {
-    drawSubheading("Riwayat Pengeluaran Bulan Ini", `${listKeluarBulan.length}x · -${rp(pengeluaranBulan)}`, C.negative);
+    drawSubheading("Riwayat Pengeluaran Bulan Ini", `${listKeluarBulan.length}x | -${rp(pengeluaranBulan)}`, C.negative);
     drawTable(
       [
         { label: "TANGGAL", width: 72 },
@@ -1366,5 +1425,6 @@ export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions):
     pageCount,
     sizeBytes: blob.size,
     durationMs: Math.max(1, Math.round(t1 - t0)),
+    isProtected,
   };
 }

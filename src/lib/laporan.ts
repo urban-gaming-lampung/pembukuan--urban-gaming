@@ -131,6 +131,7 @@ export function buatLaporanHarian(history: HistoryItem[], tanggal: string, dataF
 
   // Dibulatkan ke ribuan supaya mudah dibaca (mis. 397k)
   const rataRata = hariTerisi ? Math.round(rekap.total / hariTerisi / 1000) * 1000 : 0;
+  const labaBersihBulan = rekap.total - pengeluaranBulan;
   text += GARIS;
   text += `REKAP BULAN INI (1–${anchorDay})\n`;
   text += `Rental : ${formatK0(rekap.rental)}\n`;
@@ -141,7 +142,9 @@ export function buatLaporanHarian(history: HistoryItem[], tanggal: string, dataF
   text += `• Isi game : ${formatK0(rekap.isiGame)}\n`;
   text += `• Upgrade HEN : ${formatK0(rekap.hen)}\n`;
   if (rekap.servis > 0) text += `• Servis : ${formatK(rekap.servis)}\n`;
-  text += `Total : ${formatK0(rekap.total)}\n`;
+  text += `Total kotor : ${formatK0(rekap.total)}\n`;
+  text += `Pengeluaran : -${rupiah(pengeluaranBulan)}\n`;
+  text += `Laba bersih : ${rupiah(labaBersihBulan)}\n`;
   text += `Rata-rata/hari : ${formatK0(rataRata)}${hariTerisi ? (rataRata >= TARGET_HARIAN ? " ✅" : " ❌") : ""}\n`;
 
   text += GARIS;
