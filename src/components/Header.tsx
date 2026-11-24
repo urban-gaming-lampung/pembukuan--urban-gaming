@@ -6,6 +6,7 @@ import {
   Plus,
   QrCode,
   Save,
+  Settings,
   Share,
   ShoppingCart,
   User,
@@ -23,6 +24,7 @@ type HeaderProps = {
   onOpenScan: () => void;
   onOpenPOS: () => void;
   onOpenGallery?: () => void;
+  onOpenSettings?: () => void;
   isSuperAdminOrOwner?: boolean;
 
   hasData: boolean;
@@ -46,6 +48,7 @@ export default function Header({
   onOpenScan,
   onOpenPOS,
   onOpenGallery,
+  onOpenSettings,
   isSuperAdminOrOwner,
   hasData,
   mandatoryFilled,
@@ -140,7 +143,7 @@ export default function Header({
 
   const namaPendek = userEmail?.split("@")[0] || "User";
 
-  const utilityIcons = (compact?: boolean) => (
+  const utilityIcons = (compact?: boolean, showSettings?: boolean) => (
     <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
       {isSuperAdminOrOwner && onOpenGallery && (
         <IconButton
@@ -163,6 +166,14 @@ export default function Header({
         title="Scan QR Code"
         compact={compact}
       />
+      {showSettings && onOpenSettings && (
+        <IconButton
+          onClick={onOpenSettings}
+          icon={<Settings className="w-[18px] h-[18px] sm:w-[19px] sm:h-[19px]" />}
+          title="Pengaturan"
+          compact={compact}
+        />
+      )}
     </div>
   );
 
@@ -325,7 +336,7 @@ export default function Header({
                 </div>
               </div>
 
-              <div className="flex items-center shrink-0">{utilityIcons(scrolled)}</div>
+              <div className="flex items-center shrink-0">{utilityIcons(scrolled, !isSuperAdminOrOwner)}</div>
             </div>
 
             {renderActionButtons()}
@@ -355,7 +366,7 @@ export default function Header({
             <div className="flex items-center gap-2 shrink-0">
               {renderActionButtons()}
               <div className="w-px h-7 bg-sep mx-1" aria-hidden />
-              {utilityIcons(scrolled)}
+              {utilityIcons(scrolled, false)}
             </div>
           </div>
         </div>

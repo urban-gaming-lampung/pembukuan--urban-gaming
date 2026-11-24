@@ -273,15 +273,7 @@ export default function App() {
     return items;
   }, [isSuperAdminOrOwner, requestPending, perhatianBooking]);
 
-  const mobileTabs = useMemo<NavItem[]>(() => {
-    if (isSuperAdminOrOwner) return navItems;
-    return [
-      ...navItems,
-      { key: "ACTION:SETTINGS", label: "Pengaturan", icon: <Settings />, color: "gray" },
-    ];
-  }, [isSuperAdminOrOwner, navItems]);
-
-  // Laptop: isi menu Lainnya + Pengaturan tampil langsung di sidebar (tanpa ikon pengaturan di header)
+  // Laptop: isi menu Lainnya + Pengaturan tampil langsung di sidebar (tanpa ikon pengaturan di header desktop)
   const sidebarSections = useMemo<NavSection[]>(() => {
     const appSection: NavSection = {
       title: "Aplikasi",
@@ -369,10 +361,10 @@ export default function App() {
         <div className="relative z-10">
           <AppShell
             activeKey={openSettings ? "ACTION:SETTINGS" : sidebarKey}
-            mobileActiveKey={openSettings && !isSuperAdminOrOwner ? "ACTION:SETTINGS" : activeTab}
+            mobileActiveKey={activeTab}
             onSelectKey={pilihTab}
             sidebarSections={sidebarSections}
-            mobileTabs={mobileTabs}
+            mobileTabs={navItems}
             sidebarHeader={
               <div className="flex items-center gap-3 p-2.5 rounded-tile bg-fill/60 border border-sep">
                 <div className="w-10 h-10 rounded-full bg-surface-elevated ring-1 ring-edge overflow-hidden flex items-center justify-center shrink-0">
@@ -434,6 +426,7 @@ export default function App() {
                 onOpenScan={handleOpenScan}
                 onOpenPOS={() => setOpenPOS(true)}
                 onOpenGallery={() => setOpenGallery(true)}
+                onOpenSettings={() => setOpenSettings(true)}
                 isSuperAdminOrOwner={isSuperAdminOrOwner}
                 hasData={hasData}
                 mandatoryFilled={mandatoryFilled}
