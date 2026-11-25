@@ -45,7 +45,7 @@ export type PdfExportData = {
   exportedBy?: string;
 };
 
-export const DEFAULT_PDF_PASSWORD = "707436";
+export const DEFAULT_PDF_PASSWORD = "707426";
 
 export type PdfBuildOptions = {
   data: PdfExportData;
