@@ -339,6 +339,7 @@ export default function App() {
         data={exportData}
         stokData={appStokData.stokState}
         masterCategories={appStokData.masterCategories}
+        isSuperAdminOrOwner={isSuperAdminOrOwner}
         onStartExport={() => setIsExportingPDF(true)}
         onEndExport={() => setIsExportingPDF(false)}
       />

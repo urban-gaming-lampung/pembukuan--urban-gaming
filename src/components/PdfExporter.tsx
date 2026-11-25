@@ -7,6 +7,7 @@ import type { MasterStokCategories, StokData } from "../hooks/useStokData";
 import { rupiah } from "../lib/format";
 import { totalPemasukanHarian } from "../lib/keuangan";
 import { buatLaporanHarian } from "../lib/laporan";
+import { ambilDataAnalitikBulanan, type DataAnalitikBulananRaw } from "../lib/analitikBulanan";
 import { buildLaporanPdf, type PdfExportData } from "../lib/pdfReportBuilder";
 import { AKSEN_TILE, Button, IconBadge, MOTION, Notice, Pill, Sheet, Spinner, notify, tile, cx } from "../ui";
 
@@ -19,6 +20,7 @@ type Props = {
   data: PdfExportData;
   stokData?: StokData;
   masterCategories?: MasterStokCategories;
+  isSuperAdminOrOwner?: boolean;
   onStartExport?: () => void;
   onEndExport?: () => void;
 };
@@ -44,9 +46,38 @@ type ReadyPdf = {
   grandTotal: number;
 };
 
-// Cache modul jsPDF di memori sehingga pemanggilan Web Share API kedua dst (atau setelah preload) berjalan 0ms tanpa await jaringan.
+// Cache modul jsPDF & snapshot analitik bulanan di memori agar tap "Ya" langsung sinkron 0ms ke Web Share API.
 let cachedJsPdfCtor: typeof JsPDF | null = null;
 let jsPdfLoading: Promise<typeof JsPDF> | null = null;
+
+const ANALITIK_CACHE_TTL_MS = 30_000;
+let cachedAnalitik: { key: string; ts: number; data: DataAnalitikBulananRaw } | null = null;
+let analitikLoading: { key: string; promise: Promise<DataAnalitikBulananRaw> } | null = null;
+
+function getCachedAnalitik(key: string): DataAnalitikBulananRaw | null {
+  if (!cachedAnalitik || cachedAnalitik.key !== key) return null;
+  if (Date.now() - cachedAnalitik.ts > ANALITIK_CACHE_TTL_MS) return null;
+  return cachedAnalitik.data;
+}
+
+function preloadAnalitikBulanan(tanggal: string, includeOwner: boolean): Promise<DataAnalitikBulananRaw> {
+  const key = `${tanggal}|${includeOwner ? 1 : 0}`;
+  const hit = getCachedAnalitik(key);
+  if (hit) return Promise.resolve(hit);
+  if (analitikLoading && analitikLoading.key === key) return analitikLoading.promise;
+  const promise = ambilDataAnalitikBulanan(tanggal, includeOwner)
+    .then((res) => {
+      cachedAnalitik = { key, ts: Date.now(), data: res };
+      if (analitikLoading?.key === key) analitikLoading = null;
+      return res;
+    })
+    .catch((e) => {
+      if (analitikLoading?.key === key) analitikLoading = null;
+      throw e;
+    });
+  analitikLoading = { key, promise };
+  return promise;
+}
 
 function preloadJsPdf(): Promise<typeof JsPDF> {
   if (cachedJsPdfCtor) return Promise.resolve(cachedJsPdfCtor);
@@ -98,7 +129,7 @@ function resolveSharePayload(file: File, tanggal: string): ShareData | null {
 }
 
 const PdfExporter = forwardRef<PdfExporterHandle, Props>(function PdfExporter(
-  { kualitasGambar, data, stokData, masterCategories },
+  { kualitasGambar, data, stokData, masterCategories, isSuperAdminOrOwner },
   ref
 ) {
   const tampil = useTampilRincian();
@@ -171,18 +202,28 @@ const PdfExporter = forwardRef<PdfExporterHandle, Props>(function PdfExporter(
   }, [data]);
 
   const shareOrOpenSheet = useCallback(async () => {
-    const perluLoad = !cachedJsPdfCtor;
+    const includeOwner = Boolean(isSuperAdminOrOwner);
+    const analitikKey = `${data.tanggal}|${includeOwner ? 1 : 0}`;
+    const hitAnalitik = getCachedAnalitik(analitikKey);
+    const perluLoad = !cachedJsPdfCtor || !hitAnalitik;
     if (perluLoad) setIsGenerating(true);
 
     try {
       // Bila sudah di-preload saat pop-up cek stok terbuka, ini langsung sinkron tanpa menunggu jaringan!
-      const JsPDFCtor = cachedJsPdfCtor || (await preloadJsPdf());
+      const [JsPDFCtor, analitikRaw] = perluLoad
+        ? await Promise.all([
+            cachedJsPdfCtor ? Promise.resolve(cachedJsPdfCtor) : preloadJsPdf(),
+            hitAnalitik ? Promise.resolve(hitAnalitik) : preloadAnalitikBulanan(data.tanggal, includeOwner),
+          ])
+        : [cachedJsPdfCtor!, hitAnalitik!];
+
       const built = buildLaporanPdf(JsPDFCtor, {
         data,
         stokData,
         masterCategories,
         kualitasGambar,
         tampil,
+        analitikRaw,
       });
 
       if (perluLoad) setIsGenerating(false);
@@ -254,7 +295,7 @@ const PdfExporter = forwardRef<PdfExporterHandle, Props>(function PdfExporter(
     } finally {
       setIsGenerating(false);
     }
-  }, [data, stokData, masterCategories, kualitasGambar, tampil]);
+  }, [data, stokData, masterCategories, kualitasGambar, tampil, isSuperAdminOrOwner]);
 
   useImperativeHandle(
     ref,
@@ -262,9 +303,10 @@ const PdfExporter = forwardRef<PdfExporterHandle, Props>(function PdfExporter(
       share: shareOrOpenSheet,
       preload: () => {
         preloadJsPdf().catch(() => {});
+        preloadAnalitikBulanan(data.tanggal, Boolean(isSuperAdminOrOwner)).catch(() => {});
       },
     }),
-    [shareOrOpenSheet]
+    [shareOrOpenSheet, data.tanggal, isSuperAdminOrOwner]
   );
 
   return (

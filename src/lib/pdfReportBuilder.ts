@@ -15,6 +15,7 @@ import { formatK, rpShort, rupiah, tanggalAngka, toInt } from "./format";
 import { totalPemasukanHarian } from "./keuangan";
 import { dariYmd } from "./dateLocal";
 import { rentangMinggu, rincianHariLaporan, TARGET_HARIAN } from "./laporan";
+import { hitungRekapBulananKeseluruhan, rentangBulanSampai, type DataAnalitikBulananRaw } from "./analitikBulanan";
 import { isKategoriDihapus, isKategoriJajanan } from "./stokRental";
 import { toAscii } from "./posReceipt";
 
@@ -55,6 +56,8 @@ export type PdfBuildOptions = {
   tampil: (kunci: KunciRincian, nilai?: number) => boolean;
   /** Password buka PDF (kosong "" = tanpa password; bawaan DEFAULT_PDF_PASSWORD). */
   password?: string;
+  /** Snapshot data bulanan dari Firestore (pos_transaksi + owner_expenses + owner_incomes) agar Laporan Bulanan selaras Analitik. */
+  analitikRaw?: DataAnalitikBulananRaw | null;
 };
 
 export type PdfBuildResult = {
@@ -217,7 +220,7 @@ function drawPill(
  */
 export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions): PdfBuildResult {
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
-  const { data, stokData, masterCategories, kualitasGambar = "Tinggi", tampil } = opts;
+  const { data, stokData, masterCategories, kualitasGambar = "Tinggi", tampil, analitikRaw } = opts;
   const pdfPassword = opts.password === undefined ? DEFAULT_PDF_PASSWORD : String(opts.password);
   const isProtected = pdfPassword.length > 0;
   const isHemat = kualitasGambar === "Hemat";
@@ -1073,22 +1076,40 @@ export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions):
   }
 
   // =========================================================================
-  // HALAMAN BARU: LAPORAN BULANAN (TARGET, MINGGUAN, SETORAN & PENGELUARAN)
+  // HALAMAN BARU: LAPORAN BULANAN (TOTAL RENTAL + USAHA, SELARAS ANALITIK)
   // =========================================================================
+  const anchorDay = anchor.getDate();
+  const monthUpToDate = monthRowsAll.filter((h) => h.tanggal <= data.tanggal);
+  const rentangBulan = analitikRaw
+    ? { awalBulan: analitikRaw.awalBulan, akhirTanggal: analitikRaw.akhirTanggal, fromTs: analitikRaw.fromTs, toTs: analitikRaw.toTs }
+    : rentangBulanSampai(data.tanggal);
+  const analitik = hitungRekapBulananKeseluruhan({
+    monthHistory: monthUpToDate,
+    awalBulan: rentangBulan.awalBulan,
+    akhirTanggal: rentangBulan.akhirTanggal,
+    fromTs: rentangBulan.fromTs,
+    toTs: rentangBulan.toTs,
+    posSales: analitikRaw?.posSales,
+    posSalesLunas: analitikRaw?.posSalesLunas,
+    ownerExpenses: analitikRaw?.ownerExpenses,
+    ownerIncomes: analitikRaw?.ownerIncomes,
+    termasukTransaksiOwner: Boolean(analitikRaw?.termasukTransaksiOwner),
+  });
+
   newPage(`Laporan Bulanan - ${BULAN_PANJANG[anchor.getMonth()]} ${anchor.getFullYear()}`);
   drawSectionBanner(
     `Laporan Bulanan - ${BULAN_PANJANG[anchor.getMonth()]} ${anchor.getFullYear()}`,
-    `Target ${rp(TARGET_HARIAN)}/hari · ${rp(TARGET_HARIAN * 7)}/minggu (Rental + Jasa, s.d. ${fmtTanggalIndo(data.tanggal)})`
+    analitik.termasukTransaksiOwner
+      ? `Total Rental + Usaha (1-${anchorDay} ${BULAN_PANJANG[anchor.getMonth()]}) | Selaras Analitik Keseluruhan`
+      : `Total Rental + Usaha (1-${anchorDay} ${BULAN_PANJANG[anchor.getMonth()]}) | Tanpa transaksi owner (hanya akun Owner/Super Admin)`
   );
 
-  // Hitung rekap bulanan persis sama dengan src/lib/laporan.ts
-  const anchorDay = anchor.getDate();
-  const monthUpToDate = monthRowsAll.filter((h) => h.tanggal <= data.tanggal);
+  // Hitung rekap operasional harian per minggu (Rental + Jasa, target 350k/hari) + rincian setoran & pengeluaran admin
   const dataMap: Record<number, number> = {};
   const rekap = { sewa: 0, harian: 0, jajanan: 0, isiGame: 0, hen: 0, servis: 0, rental: 0, jasa: 0, total: 0 };
   let hariTerisi = 0;
   let kasBulan = 0;
-  let pengeluaranBulan = 0;
+  let pengeluaranAdminBulan = 0;
   const listSetorBulan: { tgl: string; ket: string; nom: number }[] = [];
   const listKeluarBulan: { tgl: string; ket: string; nom: number }[] = [];
 
@@ -1102,109 +1123,203 @@ export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions):
     if (r.total > 0) hariTerisi++;
     kasBulan += toInt(h.totalCash) + toInt(h.totalTransfer);
     (Array.isArray(h.rowsSetoran) ? h.rowsSetoran : []).forEach((s: any) => {
-      const nom = toInt(s?.harga);
+      const nom = toInt(s?.harga || s?.nominal);
       if (nom > 0) listSetorBulan.push({ tgl: tanggalAngka(s.tanggal || h.tanggal), ket: clean(s.ket || "Setoran"), nom });
     });
     (Array.isArray(h.rowsPengeluaran) ? h.rowsPengeluaran : []).forEach((p: any) => {
-      const nom = toInt(p?.harga);
+      const nom = toInt(p?.harga || p?.nominal);
       if (nom <= 0) return;
-      pengeluaranBulan += nom;
+      pengeluaranAdminBulan += nom;
       listKeluarBulan.push({ tgl: tanggalAngka(p.tanggal || h.tanggal), ket: clean(p.ket || "Pengeluaran"), nom });
     });
   });
 
   const rataRata = hariTerisi ? Math.round(rekap.total / hariTerisi / 1000) * 1000 : 0;
-  const labaBersihBulan = rekap.total - pengeluaranBulan;
-  const saldoBulan = kasBulan - pengeluaranBulan;
+  const saldoBulan = kasBulan - pengeluaranAdminBulan;
+  const totalSetorBulan = listSetorBulan.reduce((s, x) => s + x.nom, 0);
+  const blnUpper = BULAN_PENDEK[anchor.getMonth()].toUpperCase();
 
-  // Baris 1: 2 Kartu Hero Bulanan — Laba Kotor vs Laba Bersih (Kotor − Pengeluaran)
+  // Baris 1: 2 Kartu Hero Bulanan — Total Laba Kotor & Total Laba Bersih (Rental + Usaha, 100% selaras Analitik Keseluruhan)
   const heroW = (CW - 10) / 2;
   const heroCards = [
     {
-      label: `LABA KOTOR BULAN INI (1-${anchorDay} ${BULAN_PENDEK[anchor.getMonth()].toUpperCase()})`,
-      val: rp(rekap.total),
-      sub: `Rental ${fmtK0(rekap.rental)} + Jasa ${fmtK0(rekap.jasa)}`,
+      label: `LABA KOTOR BULAN INI (1-${anchorDay} ${blnUpper})`,
+      val: rp(analitik.total.masuk),
+      sub: `Rental ${rp(analitik.rental.masuk)} + Usaha ${rp(analitik.usaha.masuk)}`,
       fg: C.label,
       bg: C.canvas,
       bd: C.border,
     },
     {
-      label: `LABA BERSIH BULAN INI (1-${anchorDay} ${BULAN_PENDEK[anchor.getMonth()].toUpperCase()})`,
-      val: rp(labaBersihBulan),
-      sub: `Kotor ${rp(rekap.total)} - Pengeluaran ${rp(pengeluaranBulan)}`,
-      fg: labaBersihBulan >= 0 ? C.positive : C.negative,
-      bg: labaBersihBulan >= 0 ? C.positiveBg : C.negativeBg,
-      bd: labaBersihBulan >= 0 ? C.positiveBd : C.negativeBd,
+      label: `LABA BERSIH BULAN INI (1-${anchorDay} ${blnUpper})`,
+      val: rp(analitik.total.bersih),
+      sub: `Kotor ${rp(analitik.total.masuk)} - Pengeluaran ${rp(analitik.total.keluar)}`,
+      fg: analitik.total.bersih >= 0 ? C.positive : C.negative,
+      bg: analitik.total.bersih >= 0 ? C.positiveBg : C.negativeBg,
+      bd: analitik.total.bersih >= 0 ? C.positiveBd : C.negativeBd,
     },
   ];
   ensure(66);
   heroCards.forEach((k, idx) => {
     const x = M + idx * (heroW + 10);
     fillStrokeRect(doc, x, y, heroW, 56, 10, k.bg, k.bd, 0.7);
-    setText(doc, 6.6, "bold", C.label2);
+    setText(doc, 6.5, "bold", C.label2);
     doc.text(k.label, x + 11, y + 14);
     setText(doc, 15.5, "bold", k.fg);
     doc.text(fitText(doc, k.val, heroW - 22), x + 11, y + 34);
-    setText(doc, 7.2, "normal", C.label2);
+    setText(doc, 7.1, "normal", C.label2);
     doc.text(fitText(doc, k.sub, heroW - 22), x + 11, y + 47);
   });
   y += 64;
 
-  // Baris 2: 4 Kartu Rincian Bulanan (Rental, Jasa, Pengeluaran Bulan Ini, Rata-rata/Hari)
+  // Baris 2: 2 Kartu Rincian Per Usaha (RENTAL vs USAHA — persis KartuBisnis Analitik Keseluruhan)
+  const usahaMasukParts = [
+    analitik.usaha.pos > 0 ? `POS ${fmtK0(analitik.usaha.pos)}` : "",
+    analitik.usaha.buku > 0 ? `Buku ${fmtK0(analitik.usaha.buku)}` : "",
+    analitik.usaha.dp > 0 ? `DP ${fmtK0(analitik.usaha.dp)}` : "",
+    analitik.usaha.lain > 0 ? `Lain ${fmtK0(analitik.usaha.lain)}` : "",
+  ].filter(Boolean);
+  const usahaKeluarParts = [
+    analitik.usaha.ops > 0 ? `Ops ${fmtK0(analitik.usaha.ops)}` : "",
+    analitik.usaha.stok > 0 ? `Stok ${fmtK0(analitik.usaha.stok)}` : "",
+  ].filter(Boolean);
+  const bizCards = [
+    {
+      title: "RENTAL",
+      dot: C.indigo,
+      bg: C.indigoBg,
+      masuk: analitik.rental.masuk,
+      masukSub: `Harian ${rp(analitik.rental.buku)}${analitik.rental.lain > 0 ? ` + Lain ${rp(analitik.rental.lain)}` : ""}`,
+      keluar: analitik.rental.keluar,
+      keluarSub: analitik.termasukTransaksiOwner
+        ? `Admin ${rp(analitik.rental.admin)} + Owner ${rp(analitik.rental.owner)}`
+        : `Admin ${rp(analitik.rental.admin)} (tanpa owner)`,
+      bersih: analitik.rental.bersih,
+    },
+    {
+      title: "USAHA (POS, JASA & STOK)",
+      dot: C.purple,
+      bg: C.purpleBg,
+      masuk: analitik.usaha.masuk,
+      masukSub: usahaMasukParts.length > 0 ? usahaMasukParts.join(" + ") : "Belum ada pemasukan",
+      keluar: analitik.usaha.keluar,
+      keluarSub: usahaKeluarParts.length > 0 ? usahaKeluarParts.join(" + ") : "Belum ada pengeluaran",
+      bersih: analitik.usaha.bersih,
+    },
+  ];
+  ensure(86);
+  bizCards.forEach((b, idx) => {
+    const x = M + idx * (heroW + 10);
+    const cardH = 78;
+    fillStrokeRect(doc, x, y, heroW, cardH, 10, b.bg, C.border, 0.6);
+    doc.setFillColor(b.dot[0], b.dot[1], b.dot[2]);
+    doc.circle(x + 13.5, y + 13.5, 3, "F");
+    setText(doc, 7.6, "bold", C.label);
+    doc.text(b.title, x + 21, y + 16);
+    const pFg = b.bersih >= 0 ? C.positive : C.negative;
+    const pBg = b.bersih >= 0 ? C.positiveBg : C.negativeBg;
+    drawPill(doc, x + heroW - 10, y + 6.5, `Bersih ${rp(b.bersih)}`, pFg, pBg, "right", 6.4);
+    hLine(doc, x + 10, y + 23.5, x + heroW - 10, C.border, 0.5);
+
+    // Pemasukan
+    setText(doc, 7.2, "normal", C.label2);
+    doc.text("Pemasukan", x + 10, y + 35);
+    setText(doc, 8.6, "bold", C.label);
+    doc.text(rp(b.masuk), x + heroW - 10, y + 35, { align: "right" });
+    setText(doc, 6.5, "normal", C.label3);
+    doc.text(fitText(doc, b.masukSub, heroW - 20), x + 10, y + 44.5);
+
+    // Pengeluaran
+    setText(doc, 7.2, "normal", C.label2);
+    doc.text("Pengeluaran", x + 10, y + 59);
+    setText(doc, 8.6, "bold", b.keluar > 0 ? C.negative : C.label2);
+    doc.text(b.keluar > 0 ? `-${rp(b.keluar)}` : rp(0), x + heroW - 10, y + 59, { align: "right" });
+    setText(doc, 6.5, "normal", C.label3);
+    doc.text(fitText(doc, b.keluarSub, heroW - 20), x + 10, y + 68.5);
+  });
+  y += 86;
+
+  // Baris 3: 4 Kartu Metrik Ringkas (Total Pengeluaran, Hasil Tanpa Belanja Stok / Owner, Rata-rata/Hari, Kas Pembukuan)
+  const totalOwnerExpense = analitik.listOwnerExpenses.reduce((s, x) => s + x.harga, 0);
   const mKpiW = (CW - 24) / 4;
   const mKpis = [
-    { label: "RENTAL", val: fmtK0(rekap.rental), sub: `Sewa ${fmtK0(rekap.sewa)}${rekap.harian ? ` + Har ${fmtK0(rekap.harian)}` : ""}${rekap.jajanan ? ` + Jaj ${fmtK0(rekap.jajanan)}` : ""}`, fg: C.indigo, bg: C.indigoBg, bd: C.border },
-    { label: "JASA USAHA", val: fmtK0(rekap.jasa), sub: `Game ${fmtK0(rekap.isiGame)} + HEN ${fmtK0(rekap.hen)}${rekap.servis ? ` + Srv ${fmtK0(rekap.servis)}` : ""}`, fg: C.purple, bg: C.purpleBg, bd: C.border },
     {
-      label: "PENGELUARAN BULAN",
-      val: pengeluaranBulan > 0 ? `-${rp(pengeluaranBulan)}` : rp(0),
-      sub: listKeluarBulan.length > 0 ? `${listKeluarBulan.length} transaksi keluar` : "Belum ada pengeluaran",
-      fg: pengeluaranBulan > 0 ? C.negative : C.label2,
-      bg: pengeluaranBulan > 0 ? C.negativeBg : C.canvas,
-      bd: pengeluaranBulan > 0 ? C.negativeBd : C.border,
+      label: "TOTAL PENGELUARAN",
+      val: analitik.total.keluar > 0 ? `-${rp(analitik.total.keluar)}` : rp(0),
+      sub: `Rental ${fmtK0(analitik.rental.keluar)} + Usaha ${fmtK0(analitik.usaha.keluar)}`,
+      fg: analitik.total.keluar > 0 ? C.negative : C.label2,
+      bg: analitik.total.keluar > 0 ? C.negativeBg : C.canvas,
+      bd: analitik.total.keluar > 0 ? C.negativeBd : C.border,
     },
+    analitik.usaha.stok > 0
+      ? {
+          label: "TANPA BELANJA STOK",
+          val: rp(analitik.total.tanpaStok),
+          sub: `Stok ${fmtK0(analitik.usaha.stok)} (aset toko)`,
+          fg: analitik.total.tanpaStok >= 0 ? C.positive : C.negative,
+          bg: analitik.total.tanpaStok >= 0 ? C.positiveBg : C.negativeBg,
+          bd: analitik.total.tanpaStok >= 0 ? C.positiveBd : C.negativeBd,
+        }
+      : {
+          label: "PENGELUARAN OWNER",
+          val: totalOwnerExpense > 0 ? `-${rp(totalOwnerExpense)}` : rp(0),
+          sub: analitik.termasukTransaksiOwner
+            ? `${analitik.listOwnerExpenses.length} transaksi owner`
+            : "Khusus akun Owner",
+          fg: totalOwnerExpense > 0 ? C.negative : C.label2,
+          bg: totalOwnerExpense > 0 ? C.negativeBg : C.canvas,
+          bd: totalOwnerExpense > 0 ? C.negativeBd : C.border,
+        },
     {
       label: "RATA-RATA / HARI",
       val: fmtK0(rataRata),
-      sub: hariTerisi ? (rataRata >= TARGET_HARIAN ? "Target tercapai [OK]" : "Di bawah target") : "-",
+      sub: hariTerisi ? (rataRata >= TARGET_HARIAN ? "Target 350k [OK]" : "Di bawah 350k") : "-",
       fg: rataRata >= TARGET_HARIAN ? C.positive : C.warning,
       bg: rataRata >= TARGET_HARIAN ? C.positiveBg : C.warningBg,
       bd: rataRata >= TARGET_HARIAN ? C.positiveBd : C.warningBd,
     },
+    {
+      label: "KAS HARIAN BULAN",
+      val: rp(saldoBulan),
+      sub: `Setor ${fmtK0(totalSetorBulan)} (${listSetorBulan.length}x)`,
+      fg: saldoBulan >= 0 ? C.tint : C.negative,
+      bg: saldoBulan >= 0 ? C.tintBg : C.negativeBg,
+      bd: saldoBulan >= 0 ? C.tintBd : C.negativeBd,
+    },
   ];
-  ensure(58);
+  ensure(56);
   mKpis.forEach((k, idx) => {
     const x = M + idx * (mKpiW + 8);
     fillStrokeRect(doc, x, y, mKpiW, 48, 9, k.bg, k.bd, 0.6);
-    setText(doc, 6.2, "bold", C.label2);
+    setText(doc, 6.0, "bold", C.label2);
     doc.text(k.label, x + 9, y + 12.5);
-    setText(doc, 11.5, "bold", k.fg);
+    setText(doc, 10.5, "bold", k.fg);
     doc.text(fitText(doc, k.val, mKpiW - 18), x + 9, y + 29);
-    setText(doc, 6.6, "normal", C.label2);
+    setText(doc, 6.4, "normal", C.label2);
     doc.text(fitText(doc, k.sub, mKpiW - 18), x + 9, y + 41);
   });
   y += 56;
 
-  // Kartu Ringkasan Saldo Hari Ini & Bulan Ini
-  ensure(48);
+  // Baris 4: Kartu Ringkasan Hari Ini & Pengeluaran Admin
+  ensure(46);
   fillStrokeRect(doc, M, y, CW, 40, 9, C.tile, C.border, 0.6);
   const bersihHariIniLap = hariIniLap.total - totalPengeluaran;
   const salCols = [
     { l: "KOTOR HARI INI", v: rp(hariIniLap.total), c: C.label },
-    { l: "PENGELUARAN HARI INI", v: totalPengeluaran > 0 ? `-${rp(totalPengeluaran)}` : rp(0), c: totalPengeluaran > 0 ? C.negative : C.label2 },
+    { l: "KELUAR HARI INI", v: totalPengeluaran > 0 ? `-${rp(totalPengeluaran)}` : rp(0), c: totalPengeluaran > 0 ? C.negative : C.label2 },
     { l: "BERSIH HARI INI", v: rp(bersihHariIniLap), c: bersihHariIniLap >= 0 ? C.positive : C.negative },
     { l: "HARUS DISETOR", v: rp(Math.max(0, totalCash)), c: C.tint },
-    { l: "TOTAL SALDO BULAN", v: rp(saldoBulan), c: saldoBulan >= 0 ? C.label : C.negative },
+    { l: "KELUAR ADMIN BULAN", v: pengeluaranAdminBulan > 0 ? `-${rp(pengeluaranAdminBulan)}` : rp(0), c: pengeluaranAdminBulan > 0 ? C.negative : C.label2 },
   ];
   const scW = (CW - 20) / 5;
   salCols.forEach((sc, idx) => {
     const sx = M + 10 + idx * scW;
-    setText(doc, 6, "bold", C.label3);
+    setText(doc, 5.9, "bold", C.label3);
     doc.text(sc.l, sx, y + 14);
-    setText(doc, 8.4, "bold", sc.c);
+    setText(doc, 8.3, "bold", sc.c);
     doc.text(fitText(doc, sc.v, scW - 6), sx, y + 29);
   });
-  y += 52;
+  y += 50;
 
   // Pemasukan Mingguan (Kartu Grid 2 Kolom: Minggu 1 – Minggu 5)
   drawSubheading("Pemasukan Harian per Minggu (Rental + Jasa)", undefined, C.tint);
@@ -1259,7 +1374,6 @@ export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions):
 
   // Daftar Setoran Bulan Ini
   if (listSetorBulan.length > 0) {
-    const totalSetorBulan = listSetorBulan.reduce((s, x) => s + x.nom, 0);
     drawSubheading("Riwayat Setoran Bulan Ini", `${listSetorBulan.length}x | ${rp(totalSetorBulan)}`, C.positive);
     drawTable(
       [
@@ -1274,9 +1388,9 @@ export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions):
     );
   }
 
-  // Daftar Pengeluaran Bulan Ini
+  // Daftar Pengeluaran Admin (Pembukuan Harian) Bulan Ini
   if (listKeluarBulan.length > 0) {
-    drawSubheading("Riwayat Pengeluaran Bulan Ini", `${listKeluarBulan.length}x | -${rp(pengeluaranBulan)}`, C.negative);
+    drawSubheading("Riwayat Pengeluaran Admin (Harian)", `${listKeluarBulan.length}x | -${rp(pengeluaranAdminBulan)}`, C.negative);
     drawTable(
       [
         { label: "TANGGAL", width: 72 },
@@ -1286,7 +1400,73 @@ export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions):
       listKeluarBulan.map((p) => ({
         cells: [p.tgl, p.ket, { text: rp(p.nom), bold: true, color: C.negative }],
       })),
-      { label: "Total Pengeluaran Bulan Ini", value: `-${rp(pengeluaranBulan)}`, tone: C.negative }
+      { label: "Total Pengeluaran Admin Bulan Ini", value: `-${rp(pengeluaranAdminBulan)}`, tone: C.negative }
+    );
+  }
+
+  // Daftar Pengeluaran Owner (Rental + Usaha) Bulan Ini — agar 100% bisa diaudit cocok dengan Analitik
+  if (analitik.listOwnerExpenses.length > 0) {
+    const ownerUsahaExp = analitik.usaha.ops + Math.max(0, analitik.usaha.stok - analitik.usaha.tukarKeluar);
+    drawSubheading(
+      "Riwayat Pengeluaran Owner (Rental + Usaha)",
+      `${analitik.listOwnerExpenses.length}x | -${rp(totalOwnerExpense)}`,
+      C.negative
+    );
+    drawTable(
+      [
+        { label: "TANGGAL", width: 62 },
+        { label: "USAHA", width: 46 },
+        { label: "KATEGORI", width: 108 },
+        { label: "KETERANGAN", width: 205 },
+        { label: "NOMINAL", width: 90, align: "right" },
+      ],
+      analitik.listOwnerExpenses.map((o) => ({
+        cells: [
+          tanggalAngka(o.tanggal),
+          { text: o.bisnis === "RENTAL" ? "Rental" : "Usaha", bold: true, color: o.bisnis === "RENTAL" ? C.indigo : C.purple },
+          clean(o.kategori),
+          clean(o.nama),
+          { text: rp(o.harga), bold: true, color: C.negative },
+        ],
+      })),
+      {
+        label: `Total Pengeluaran Owner (Rental ${rp(analitik.rental.owner)} + Usaha ${rp(ownerUsahaExp)})`,
+        value: `-${rp(totalOwnerExpense)}`,
+        tone: C.negative,
+      }
+    );
+  }
+
+  // Daftar Pemasukan Owner (Rental + Usaha) Bulan Ini bila ada
+  if (analitik.listOwnerIncomes.length > 0) {
+    const totalOwnerIncome = analitik.listOwnerIncomes.reduce((s, x) => s + x.harga, 0);
+    drawSubheading(
+      "Riwayat Pemasukan Owner (Rental + Usaha)",
+      `${analitik.listOwnerIncomes.length}x | ${rp(totalOwnerIncome)}`,
+      C.positive
+    );
+    drawTable(
+      [
+        { label: "TANGGAL", width: 62 },
+        { label: "USAHA", width: 46 },
+        { label: "KATEGORI", width: 108 },
+        { label: "KETERANGAN", width: 205 },
+        { label: "NOMINAL", width: 90, align: "right" },
+      ],
+      analitik.listOwnerIncomes.map((o) => ({
+        cells: [
+          tanggalAngka(o.tanggal),
+          { text: o.bisnis === "RENTAL" ? "Rental" : "Usaha", bold: true, color: o.bisnis === "RENTAL" ? C.indigo : C.purple },
+          clean(o.kategori),
+          clean(o.nama),
+          { text: rp(o.harga), bold: true, color: C.positive },
+        ],
+      })),
+      {
+        label: `Total Pemasukan Owner (Rental ${rp(analitik.rental.lain)} + Usaha ${rp(analitik.usaha.lain)})`,
+        value: rp(totalOwnerIncome),
+        tone: C.positive,
+      }
     );
   }
 

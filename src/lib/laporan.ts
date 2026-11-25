@@ -82,11 +82,11 @@ export function buatLaporanHarian(history: HistoryItem[], tanggal: string, dataF
     if (r.total > 0) hariTerisi++;
     kasBulan += toInt(h.totalCash) + toInt(h.totalTransfer);
     (Array.isArray(h.rowsSetoran) ? h.rowsSetoran : []).forEach((s: any) => {
-      const nom = toInt(s.harga);
+      const nom = toInt(s.harga || s.nominal);
       if (nom > 0) strSetor += `${tanggalAngka(s.tanggal || h.tanggal)} - ${s.ket || "Setoran"} - ${rupiah(nom)}\n`;
     });
     (Array.isArray(h.rowsPengeluaran) ? h.rowsPengeluaran : []).forEach((p: any) => {
-      const nom = toInt(p.harga);
+      const nom = toInt(p.harga || p.nominal);
       if (nom <= 0) return;
       pengeluaranBulan += nom;
       strPengeluaran += `${tanggalAngka(p.tanggal || h.tanggal)} - ${p.ket || "Pengeluaran"} - ${rupiah(nom)}\n`;
