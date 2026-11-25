@@ -37,6 +37,7 @@ import {
 } from "../../lib/bookingSewa";
 import BookingFormSheet from "./BookingFormSheet";
 import BookingDetailSheet, { NADA_STATUS } from "./BookingDetailSheet";
+import EstimasiBookingCard from "./EstimasiBookingCard";
 import SlotKosongPanel, { type PrefillBookingSlot } from "./SlotKosongPanel";
 
 const JUDUL_KELOMPOK: Record<KelompokBooking, string> = {
@@ -381,7 +382,18 @@ const HalamanBooking: React.FC<{
   );
 
   return (
-    <>
+    <div className="space-y-4 sm:space-y-5">
+      {/* ESTIMASI PENDAPATAN BOOKING — khusus Super Admin / Owner (admin biasa tidak dapat melihat) */}
+      {bolehHapus && (
+        <EstimasiBookingCard
+          bookings={bookings}
+          sewaTable={sewaTable}
+          now={now}
+          loading={loading}
+          onPilihBooking={(id) => setLihatId(id)}
+        />
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start">
         {/* LAYER-1 CONTAINER UTAMA: BOOKING SEWA (Mobile juga memuat switcher Daftar / Slot Kosong) */}
         <Card
@@ -500,7 +512,7 @@ const HalamanBooking: React.FC<{
           setLihatId(id);
         }}
       />
-    </>
+    </div>
   );
 };
 

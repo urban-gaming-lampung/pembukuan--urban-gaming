@@ -167,6 +167,124 @@ export function estimasiHarga(b: Pick<BookingSewa, "jenisPS" | "lamaSewa" | "ant
   return { dasar, ongkir, total: dasar + ongkir };
 }
 
+export type RentangEstimasiBooking = "SEMUA" | "HARI_INI" | "MINGGU" | "BULAN";
+
+export type ItemEstimasiBooking = {
+  booking: BookingSewa;
+  dasar: number;
+  ongkir: number;
+  total: number;
+  dp: number;
+  sisa: number;
+  pasti: boolean;
+  tanpaHarga: boolean;
+};
+
+export type RingkasanEstimasiBooking = {
+  jumlahBooking: number;
+  totalEstimasi: number;
+  totalSewa: number;
+  totalOngkir: number;
+  dpMasuk: number;
+  dpCount: number;
+  sisaPelunasan: number;
+  pastiTotal: number;
+  pastiCount: number;
+  belumPastiTotal: number;
+  belumPastiCount: number;
+  tanpaHargaCount: number;
+  items: ItemEstimasiBooking[];
+};
+
+/**
+ * Hitung estimasi pendapatan dari booking aktif (khusus tampilan Super Admin).
+ * Menggunakan SSOT `estimasiHarga(b, sewaTable)` untuk harga sewa + ongkir.
+ */
+export function hitungEstimasiBooking(
+  bookings: BookingSewa[],
+  sewaTable: SewaTable,
+  rentang: RentangEstimasiBooking,
+  now = Date.now()
+): RingkasanEstimasiBooking {
+  const todayStart = awalHari(now);
+  const nowDate = new Date(now);
+  const prefixBulan = `${nowDate.getFullYear()}-${pad(nowDate.getMonth() + 1)}-`;
+
+  const cocokRentang = (b: BookingSewa): boolean => {
+    if (rentang === "SEMUA") return true;
+    const m = mulaiBooking(b);
+    if (rentang === "BULAN") {
+      return String(b.tanggal || "").startsWith(prefixBulan);
+    }
+    if (m === null) return false;
+    const selisihHari = Math.round((awalHari(m) - todayStart) / 86400000);
+    if (rentang === "HARI_INI") return selisihHari === 0;
+    // MINGGU: hari ini s.d. 7 hari ke depan
+    return selisihHari >= 0 && selisihHari <= 7;
+  };
+
+  const list = bookings
+    .filter((b) => aktif(b) && cocokRentang(b))
+    .sort((a, c) => (mulaiBooking(a) ?? Infinity) - (mulaiBooking(c) ?? Infinity));
+
+  let totalEstimasi = 0;
+  let totalSewa = 0;
+  let totalOngkir = 0;
+  let dpMasuk = 0;
+  let dpCount = 0;
+  let sisaPelunasan = 0;
+  let pastiTotal = 0;
+  let pastiCount = 0;
+  let belumPastiTotal = 0;
+  let belumPastiCount = 0;
+  let tanpaHargaCount = 0;
+  const items: ItemEstimasiBooking[] = [];
+
+  list.forEach((b) => {
+    const h = estimasiHarga(b, sewaTable);
+    const dp = b.dp && toInt(b.dp.nominal) > 0 ? toInt(b.dp.nominal) : 0;
+    const tanpaHarga = h.dasar <= 0;
+    const total = tanpaHarga ? Math.max(h.total, dp) : h.total;
+    const sisa = Math.max(0, total - dp);
+    const pasti = b.status === "KONFIRMASI" || dp > 0;
+
+    totalEstimasi += total;
+    totalSewa += h.dasar;
+    totalOngkir += h.ongkir;
+    if (dp > 0) {
+      dpMasuk += dp;
+      dpCount++;
+    }
+    sisaPelunasan += sisa;
+    if (pasti) {
+      pastiTotal += total;
+      pastiCount++;
+    } else {
+      belumPastiTotal += total;
+      belumPastiCount++;
+    }
+    if (tanpaHarga) tanpaHargaCount++;
+
+    items.push({ booking: b, dasar: h.dasar, ongkir: h.ongkir, total, dp, sisa, pasti, tanpaHarga });
+  });
+
+  return {
+    jumlahBooking: list.length,
+    totalEstimasi,
+    totalSewa,
+    totalOngkir,
+    dpMasuk,
+    dpCount,
+    sisaPelunasan,
+    pastiTotal,
+    pastiCount,
+    belumPastiTotal,
+    belumPastiCount,
+    tanpaHargaCount,
+    items,
+  };
+}
+
 // ---------------------------------------------------------------- cek bentrok
 
 export type SumberUnit = "PS3" | "PS4" | "PS5" | "TV" | "PORTABEL";
