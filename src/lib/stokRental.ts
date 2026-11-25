@@ -12,6 +12,7 @@ import type { StokItemValue, StokKategori } from "../hooks/useStokData";
 export const KATEGORI_MONITORING = [
   "UPDATE KONSOL - PLAYSTATION 3",
   "UPDATE KONSOL - PLAYSTATION 4",
+  "UPDATE KONSOL - PLAYSTATION 5",
   "UPDATE STIK - STIK PS3",
   "UPDATE STIK - STIK PS3 ORI MESIN",
   "UPDATE STIK - STIK PS4",

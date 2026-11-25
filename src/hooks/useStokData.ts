@@ -45,6 +45,10 @@ export const INITIAL_STOK_RENTAL: StokKategori[] = [
     items: ["Bagus", "Rusak"],
   },
   {
+    kategori: "UPDATE KONSOL - PLAYSTATION 5",
+    items: ["Bagus", "Rusak"],
+  },
+  {
     kategori: "UPDATE DEVICE - TV MONITOR",
     items: ["Bagus", "Rusak"],
   },
@@ -145,7 +149,7 @@ import { db, auth } from "../lib/firebase";
 
 type Listener = () => void;
 
-export type DeviceType = "ps3" | "ps4" | "stik_ps3" | "stik_ps4" | "tv" | "playbox";
+export type DeviceType = "ps3" | "ps4" | "ps5" | "stik_ps3" | "stik_ps4" | "tv" | "playbox";
 
 export interface RegisteredDevice {
   id: string; // type_number e.g. ps4_03
@@ -183,6 +187,7 @@ let _devicesState: RegisteredDevice[] = [];
 let _capacitiesState: Record<string, number> = {
   ps3: 0,
   ps4: 0,
+  ps5: 0,
   stik_ps3: 0,
   stik_ps4: 0,
   tv: 0,
@@ -238,6 +243,7 @@ function calculateIntegratedCounts(devices: RegisteredDevice[], capacities: Reco
     "UPDATE STIK - STIK PS4 ORI MESIN": { bagus: 0, rusak: 0 },
     "UPDATE KONSOL - PLAYSTATION 3": { bagus: 0, rusak: 0 },
     "UPDATE KONSOL - PLAYSTATION 4": { bagus: 0, rusak: 0 },
+    "UPDATE KONSOL - PLAYSTATION 5": { bagus: 0, rusak: 0 },
     "UPDATE DEVICE - TV MONITOR": { bagus: 0, rusak: 0 },
     "UPDATE DEVICE - PLAYBOX / PORTABEL": { bagus: 0, rusak: 0 }
   };
@@ -274,7 +280,7 @@ function calculateIntegratedCounts(devices: RegisteredDevice[], capacities: Reco
   counts["UPDATE STIK - STIK PS4 ORI MESIN"] = { bagus: omPs4Bagus, rusak: omPs4Rusak };
   counts["UPDATE STIK - STIK PS4"] = { bagus: opPs4Bagus, rusak: opPs4Rusak };
 
-  // Helper for direct devices (ps3, ps4, tv, playbox)
+  // Helper for direct devices (ps3, ps4, ps5, tv, playbox)
   const computeDirectStats = (type: string, categoryKey: string) => {
     const capacity = capacities[type] || 0;
     const typeDevices = devices.filter(d => d.type === type && d.number <= capacity);
@@ -285,6 +291,7 @@ function calculateIntegratedCounts(devices: RegisteredDevice[], capacities: Reco
 
   computeDirectStats("ps3", "UPDATE KONSOL - PLAYSTATION 3");
   computeDirectStats("ps4", "UPDATE KONSOL - PLAYSTATION 4");
+  computeDirectStats("ps5", "UPDATE KONSOL - PLAYSTATION 5");
   computeDirectStats("tv", "UPDATE DEVICE - TV MONITOR");
   computeDirectStats("playbox", "UPDATE DEVICE - PLAYBOX / PORTABEL");
 
@@ -389,6 +396,7 @@ function resetStokStoreState() {
   _capacitiesState = {
     ps3: 0,
     ps4: 0,
+    ps5: 0,
     stik_ps3: 0,
     stik_ps4: 0,
     tv: 0,
@@ -470,6 +478,7 @@ function initStokListeners() {
       const newRentalCategories = [
         { kategori: "UPDATE KONSOL - PLAYSTATION 3", items: ["Bagus", "Rusak"] },
         { kategori: "UPDATE KONSOL - PLAYSTATION 4", items: ["Bagus", "Rusak"] },
+        { kategori: "UPDATE KONSOL - PLAYSTATION 5", items: ["Bagus", "Rusak"] },
         { kategori: "UPDATE DEVICE - TV MONITOR", items: ["Bagus", "Rusak"] },
         { kategori: "UPDATE DEVICE - PLAYBOX / PORTABEL", items: ["Bagus", "Rusak"] }
       ];

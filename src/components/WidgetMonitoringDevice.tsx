@@ -22,6 +22,7 @@ interface WidgetMonitoringDeviceProps {
 const DEVICE_LABELS: Record<DeviceType, string> = {
   ps3: "PLAYSTATION 3",
   ps4: "PLAYSTATION 4",
+  ps5: "PLAYSTATION 5",
   stik_ps3: "STIK PS3",
   stik_ps4: "STIK PS4",
   tv: "TV MONITOR",
@@ -32,6 +33,7 @@ const DEVICE_LABELS: Record<DeviceType, string> = {
 const JENIS_ALAT: { type: DeviceType; label: string; color: WarnaIkon }[] = [
   { type: "ps3", label: "PS3", color: "gray" },
   { type: "ps4", label: "PS4", color: "blue" },
+  { type: "ps5", label: "PS5", color: "indigo" },
   { type: "stik_ps3", label: "Stik PS3", color: "gray" },
   { type: "stik_ps4", label: "Stik PS4", color: "blue" },
   { type: "tv", label: "TV", color: "orange" },
@@ -95,6 +97,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
   const [masterCapacities, setMasterCapacities] = useState<Record<DeviceType, number>>({
     ps3: 0,
     ps4: 0,
+    ps5: 0,
     stik_ps3: 0,
     stik_ps4: 0,
     tv: 0,
@@ -103,6 +106,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
   const [tempCapacities, setTempCapacities] = useState<Record<DeviceType, string>>({
     ps3: "0",
     ps4: "0",
+    ps5: "0",
     stik_ps3: "0",
     stik_ps4: "0",
     tv: "0",
@@ -221,6 +225,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
         const sanitized: Record<DeviceType, number> = {
           ps3: data.ps3 || 0,
           ps4: data.ps4 || 0,
+          ps5: data.ps5 || 0,
           stik_ps3: data.stik_ps3 || 0,
           stik_ps4: data.stik_ps4 || 0,
           tv: data.tv || 0,
@@ -230,6 +235,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
         setTempCapacities({
           ps3: String(sanitized.ps3),
           ps4: String(sanitized.ps4),
+          ps5: String(sanitized.ps5),
           stik_ps3: String(sanitized.stik_ps3),
           stik_ps4: String(sanitized.stik_ps4),
           tv: String(sanitized.tv),
@@ -248,6 +254,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
     const updatePayload: Record<DeviceType, number> = {
       ps3: Math.max(0, parseInt(tempCapacities.ps3) || 0),
       ps4: Math.max(0, parseInt(tempCapacities.ps4) || 0),
+      ps5: Math.max(0, parseInt(tempCapacities.ps5) || 0),
       stik_ps3: Math.max(0, parseInt(tempCapacities.stik_ps3) || 0),
       stik_ps4: Math.max(0, parseInt(tempCapacities.stik_ps4) || 0),
       tv: Math.max(0, parseInt(tempCapacities.tv) || 0),
@@ -806,6 +813,7 @@ const WidgetMonitoringDevice: React.FC<WidgetMonitoringDeviceProps> = ({ isOwner
     setTempCapacities({
       ps3: String(masterCapacities.ps3),
       ps4: String(masterCapacities.ps4),
+      ps5: String(masterCapacities.ps5),
       stik_ps3: String(masterCapacities.stik_ps3),
       stik_ps4: String(masterCapacities.stik_ps4),
       tv: String(masterCapacities.tv),
