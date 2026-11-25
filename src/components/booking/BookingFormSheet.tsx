@@ -16,7 +16,7 @@ import {
   fmtHariTanggalLengkap,
   fmtJam,
   fmtRentangSingkat,
-  LABEL_UNIT,
+  kirimRequestEditBooking,
   mulaiBooking,
   rentangBooking,
   simpanBooking,
@@ -85,6 +85,8 @@ const BookingFormSheet: React.FC<{
   onClose: () => void;
   /** Booking yang diubah (kosong = booking baru) */
   booking?: BookingSewa | null;
+  /** Owner / Super Admin boleh ubah booking langsung; admin biasa mengirim ke Request Edit. */
+  bolehLangsungUbah?: boolean;
   /** Nilai awal saat membuka dari panel Slot Kosong */
   prefill?: Partial<Pick<BookingSewa, "tanggal" | "jam" | "jenisPS" | "lamaSewa">> | null;
   bookings: BookingSewa[];
@@ -92,11 +94,13 @@ const BookingFormSheet: React.FC<{
   kapasitas: Kapasitas;
   sewaTable: SewaTable;
   onSaved: (id: string) => void;
-}> = ({ open, onClose, booking, prefill, bookings, berjalan, kapasitas, sewaTable, onSaved }) => {
+}> = ({ open, onClose, booking, bolehLangsungUbah = true, prefill, bookings, berjalan, kapasitas, sewaTable, onSaved }) => {
   const [d, setD] = useState<Draf>(DRAF_KOSONG);
+  const [alasanEdit, setAlasanEdit] = useState("");
   const [hasil, setHasil] = useState<HasilBaca | null>(null);
   const [cobaSimpan, setCobaSimpan] = useState(false);
   const [menyimpan, setMenyimpan] = useState(false);
+  const perluAccEdit = Boolean(booking) && !bolehLangsungUbah;
 
   useEffect(() => {
     if (!open) return;
@@ -113,6 +117,7 @@ const BookingFormSheet: React.FC<{
     } else {
       setD(DRAF_KOSONG);
     }
+    setAlasanEdit("");
     setHasil(null);
     setCobaSimpan(false);
   }, [open, booking, prefill]);
@@ -216,38 +221,63 @@ const BookingFormSheet: React.FC<{
     setMenyimpan(true);
     try {
       const sebelumnya = booking?.dp;
-      const id = await simpanBooking(
-        {
-          nama: d.nama,
-          wa,
-          jenisPS: d.jenisPS,
-          lamaSewa: d.lamaSewa,
-          tanggal: d.tanggal,
-          jam: d.jam,
-          antar: !!d.antar,
-          alamat: d.alamat,
-          ongkir: toInt(d.ongkir),
-          dp: dpNominal > 0
-            ? {
-                nominal: dpNominal,
-                metode: d.dpMetode as "TRANSFER" | "CASH",
-                ...(d.dpMetode === "TRANSFER" && d.dpBukti ? { bukti: d.dpBukti } : {}),
-                ts: sebelumnya?.ts || Date.now(),
-                oleh: sebelumnya?.oleh || "",
-              }
-            : null,
-          catatan: d.catatan,
-          sumber: d.sumber,
-          teksAsli: d.teksAsli,
-          // DP baru masuk: booking otomatis "Pasti jadi"
-          ...(booking && booking.status === "BARU" && dpNominal > 0 ? { status: "KONFIRMASI" as const } : {}),
-        },
-        booking?.id
-      );
+      const payload = {
+        nama: d.nama,
+        wa,
+        jenisPS: d.jenisPS,
+        lamaSewa: d.lamaSewa,
+        tanggal: d.tanggal,
+        jam: d.jam,
+        antar: !!d.antar,
+        alamat: d.alamat,
+        ongkir: toInt(d.ongkir),
+        dp: dpNominal > 0
+          ? {
+              nominal: dpNominal,
+              metode: d.dpMetode as "TRANSFER" | "CASH",
+              ...(d.dpMetode === "TRANSFER" && d.dpBukti ? { bukti: d.dpBukti } : {}),
+              ts: sebelumnya?.ts || Date.now(),
+              oleh: sebelumnya?.oleh || "",
+            }
+          : null,
+        catatan: d.catatan,
+        sumber: d.sumber,
+        teksAsli: d.teksAsli,
+        // DP baru masuk: booking otomatis "Pasti jadi"
+        ...(booking && booking.status === "BARU" && dpNominal > 0 ? { status: "KONFIRMASI" as const } : {}),
+      };
+
+      if (booking && perluAccEdit) {
+        const adaPerubahan =
+          String(booking.nama || "").trim() !== String(payload.nama || "").trim() ||
+          rapikanWa(booking.wa) !== wa ||
+          booking.jenisPS !== payload.jenisPS ||
+          booking.lamaSewa !== payload.lamaSewa ||
+          booking.tanggal !== payload.tanggal ||
+          booking.jam !== payload.jam ||
+          Boolean(booking.antar) !== Boolean(payload.antar) ||
+          String(booking.alamat || "").trim() !== (payload.antar ? String(payload.alamat || "").trim() : "") ||
+          toInt(booking.ongkir) !== (payload.antar ? toInt(payload.ongkir) : 0) ||
+          toInt(booking.dp?.nominal) !== toInt(payload.dp?.nominal) ||
+          (booking.dp?.metode || "") !== (payload.dp?.metode || "") ||
+          (booking.dp?.bukti || "") !== (payload.dp?.bukti || "") ||
+          String(booking.catatan || "").trim() !== String(payload.catatan || "").trim();
+
+        if (!adaPerubahan) {
+          notify("Belum ada perubahan pada data booking.", "info");
+          return;
+        }
+        await kirimRequestEditBooking(booking, payload, alasanEdit);
+        notify("Request ubah booking dikirim, menunggu ACC Super Admin.", "positive");
+        onClose();
+        return;
+      }
+
+      const id = await simpanBooking(payload, booking?.id);
       notify(booking ? "Booking diperbarui." : "Booking tersimpan.", "positive");
       onSaved(id);
     } catch (e: any) {
-      notify(`Gagal menyimpan booking: ${e?.message || e}`, "negative");
+      notify(`Gagal ${perluAccEdit ? "mengirim request" : "menyimpan booking"}: ${e?.message || e}`, "negative");
     } finally {
       setMenyimpan(false);
     }
@@ -259,7 +289,7 @@ const BookingFormSheet: React.FC<{
     <Sheet
       open={open}
       onClose={() => !menyimpan && onClose()}
-      title={booking ? "Ubah booking" : "Booking baru"}
+      title={booking ? (perluAccEdit ? "Ajukan ubah booking" : "Ubah booking") : "Booking baru"}
       size="md"
       zClassName="z-[270]"
       footer={
@@ -268,12 +298,25 @@ const BookingFormSheet: React.FC<{
             Batal
           </Button>
           <Button variant="filled" size="lg" block onClick={simpan} loading={menyimpan}>
-            Simpan
+            {perluAccEdit ? "Kirim request" : "Simpan"}
           </Button>
         </div>
       }
     >
       <div className="space-y-4">
+        {perluAccEdit && (
+          <div className="space-y-3">
+            <Notice tone="info">
+              Perubahan booking akan dikirim ke menu Request Edit dan baru diterapkan setelah disetujui (ACC) Super Admin.
+            </Notice>
+            <TextField
+              label="Alasan perubahan"
+              placeholder="Opsional (mis. penyewa ganti jam ambil / tambah TV)"
+              value={alasanEdit}
+              onChange={(e) => setAlasanEdit(e.target.value)}
+            />
+          </div>
+        )}
         {/* ---- Tempel dari WhatsApp */}
         <section className="rounded-tile apple-tile ring-1 ring-edge p-3.5 space-y-2.5">
           <div className="flex items-center justify-between gap-3">

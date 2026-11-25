@@ -487,6 +487,7 @@ const HalamanBooking: React.FC<{
       <BookingFormSheet
         open={!!form}
         booking={form?.booking || null}
+        bolehLangsungUbah={bolehHapus}
         prefill={form?.prefill || null}
         onClose={() => setForm(null)}
         bookings={bookings}

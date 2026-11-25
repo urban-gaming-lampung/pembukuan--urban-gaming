@@ -18,7 +18,7 @@
  */
 import { useEffect, useState } from "react";
 import { addDoc, arrayUnion, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, setDoc, updateDoc, where } from "firebase/firestore";
-import { tanggalHariKerja } from "./dateLocal";
+import { dariYmd, namaHari, tanggalHariKerja } from "./dateLocal";
 import { auth, db } from "./firebase";
 import { pad, toInt } from "./format";
 import { rapikanWa, waValid } from "./wa";
@@ -793,8 +793,8 @@ export function useKapasitasUnit(): Kapasitas {
   return k;
 }
 
-export async function simpanBooking(isi: IsiBooking, id?: string): Promise<string> {
-  const data = bersihkan({
+const rapikanIsiBooking = (isi: IsiBooking) =>
+  bersihkan({
     ...isi,
     nama: String(isi.nama || "").trim(),
     wa: rapikanWa(isi.wa),
@@ -803,6 +803,9 @@ export async function simpanBooking(isi: IsiBooking, id?: string): Promise<strin
     catatan: String(isi.catatan || "").trim(),
     dp: isi.dp && toInt(isi.dp.nominal) > 0 ? { ...isi.dp, nominal: toInt(isi.dp.nominal) } : null,
   });
+
+export async function simpanBooking(isi: IsiBooking, id?: string): Promise<string> {
+  const data = rapikanIsiBooking(isi);
   if (id) {
     await updateDoc(doc(db, KOLEKSI_BOOKING, id), { ...data, diubahOleh: email(), diubahTs: Date.now() });
     return id;
@@ -815,6 +818,109 @@ export async function simpanBooking(isi: IsiBooking, id?: string): Promise<strin
     dibuatTs: Date.now(),
   });
   return ref.id;
+}
+
+export type JenisRequestBooking = "BOOKING_EDIT" | "BOOKING_CANCEL";
+
+const hariDariTanggal = (tgl?: string) => {
+  const d = tgl ? dariYmd(tgl) : null;
+  return d ? namaHari(d) : "-";
+};
+
+const bersihkanJson = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
+
+/** Kirim permintaan ubah booking dari admin ke koleksi `edit_requests` (menunggu ACC Super Admin / Owner). */
+export async function kirimRequestEditBooking(
+  original: BookingSewa,
+  proposed: IsiBooking,
+  alasan = ""
+): Promise<string> {
+  const cleanProposed = rapikanIsiBooking(proposed);
+  const reqEmail = email();
+  const ref = await addDoc(collection(db, "edit_requests"), {
+    requestType: "BOOKING_EDIT" as JenisRequestBooking,
+    bookingId: original.id,
+    tanggal: cleanProposed.tanggal || original.tanggal || "",
+    hari: hariDariTanggal(cleanProposed.tanggal || original.tanggal),
+    requestedBy: reqEmail,
+    requestedAt: new Date().toISOString(),
+    status: "pending",
+    alasan: alasan.trim(),
+    originalBooking: bersihkanJson(original),
+    proposedBooking: bersihkanJson(cleanProposed),
+  });
+  return ref.id;
+}
+
+/** Kirim permintaan pembatalan booking dari admin ke koleksi `edit_requests` (menunggu ACC Super Admin / Owner). */
+export async function kirimRequestBatalBooking(
+  original: BookingSewa,
+  o: { alasan: string; dp: "HANGUS" | "KEMBALI" | null }
+): Promise<string> {
+  const reqEmail = email();
+  const ref = await addDoc(collection(db, "edit_requests"), {
+    requestType: "BOOKING_CANCEL" as JenisRequestBooking,
+    bookingId: original.id,
+    tanggal: original.tanggal || "",
+    hari: hariDariTanggal(original.tanggal),
+    requestedBy: reqEmail,
+    requestedAt: new Date().toISOString(),
+    status: "pending",
+    alasan: o.alasan.trim(),
+    originalBooking: bersihkanJson(original),
+    proposedBooking: bersihkanJson({
+      status: "BATAL",
+      batal: {
+        alasan: o.alasan.trim(),
+        oleh: reqEmail,
+        ts: Date.now(),
+        dp: o.dp,
+      },
+    }),
+  });
+  return ref.id;
+}
+
+/**
+ * Format salinan pesan booking untuk diteruskan ke driver / WhatsApp.
+ * Seluruh data otomatis diisi dari rincian booking.
+ */
+export function formatSalinBooking(
+  b: Pick<BookingSewa, "nama" | "wa" | "jenisPS" | "lamaSewa" | "tanggal" | "jam" | "antar" | "alamat">
+): string {
+  const u = jenisUnit(b.jenisPS);
+  const jenisPsTeks = u.hanyaTv ? "Hanya TV" : u.konsol || b.jenisPS || "-";
+  const tvPortabelTeks =
+    u.portabel && u.tv
+      ? "Pakai TV + Portabel"
+      : u.portabel
+        ? "Portabel"
+        : u.tv
+          ? u.hanyaTv
+            ? "Hanya TV"
+            : "Pakai TV"
+          : "Tidak";
+  const lamaTeks = b.lamaSewa ? String(b.lamaSewa).trim().toLowerCase() : "-";
+  const m = mulaiBooking(b);
+  const waktuTeks =
+    m !== null
+      ? `${fmtTanggalPendek(m)}, jam ${fmtJam(m)}`
+      : [b.tanggal || "", b.jam ? `jam ${b.jam.replace(":", ".")}` : ""].filter(Boolean).join(", ") || "-";
+  const alamatBersih = String(b.alamat || "").trim();
+  const antarTeks = b.antar ? (alamatBersih ? `Ya - ${alamatBersih}` : "Ya") : "Tidak";
+
+  return [
+    "Sewa PS URBAN PlayStation",
+    `Nama Penyewa : ${String(b.nama || "").trim() || "-"}`,
+    `No. WA : ${rapikanWa(b.wa) || String(b.wa || "").trim() || "-"}`,
+    `Jenis PS : ${jenisPsTeks}`,
+    `Pakai TV / Portabel : ${tvPortabelTeks}`,
+    `Lama Sewa : ${lamaTeks}`,
+    `Tanggal & Jam Ambil : ${waktuTeks}`,
+    `Antar Jemput : ${antarTeks}`,
+    "",
+    "Siapkan KTP + SIM/STNK untuk syarat jaminan, terima kasih 🎮",
+  ].join("\n");
 }
 
 export const ubahBooking = (id: string, patch: Partial<BookingSewa>) =>

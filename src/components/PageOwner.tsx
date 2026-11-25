@@ -5,13 +5,15 @@ import { doc, setDoc, onSnapshot, query, collection, updateDoc, orderBy } from "
 import { db } from "../lib/firebase";
 import { HistoryItem, RowSewa } from "../lib/types";
 import { rupiah, formatDateShort, toInt } from "../lib/format";
-import { Amount, Button, Card, ChartTip, EmptyState, Eyebrow, konfirmasi, MOTION, notify, Pill, Sheet, SubTabs } from "../ui";
+import { Amount, Button, Card, ChartTip, EmptyState, Eyebrow, konfirmasi, MOTION, Notice, notify, Pill, Sheet, SubTabs } from "../ui";
 import TabPegawai from "./TabPegawai";
 import AnalitikUsaha from "./AnalitikUsaha";
 import InputTransaksi from "./InputTransaksi";
 import AnalitikKeseluruhan from "./AnalitikKeseluruhan";
 import AnalitikRental, { type RekomendasiRental } from "./AnalitikRental";
 import { bisnisOf, catatLogPembukuan, JenisTransaksi, pemasukanRental, pengeluaranAdminRental, periodRange, ringkasPembukuan, saringPeriode, useTransaksiOwner } from "../lib/keuangan";
+import { fmtWaktu, mulaiBooking, simpanBooking, ubahBooking } from "../lib/bookingSewa";
+import { formatWa } from "../lib/wa";
 import { kasUsahaHarian } from "../lib/pemasukanUsaha";
 import { dpBookingBaris, isDpBooking, isPelunasanSewa, jenisUnit, ongkirBaris, tanpaUnitKeluar } from "../lib/sewa";
 import { sinkronNotaKePembukuan } from "../lib/posPembukuan";
@@ -116,7 +118,83 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   };
 
 
+  const isBookingRequest = (req: any) =>
+    req?.requestType === "BOOKING_EDIT" || req?.requestType === "BOOKING_CANCEL";
+
   const handleApproveRequest = async (req: any) => {
+    if (req?.requestType === "BOOKING_EDIT") {
+      const nama = req.originalBooking?.nama || req.proposedBooking?.nama || "booking";
+      if (
+        !(await konfirmasi(`Data booking ${nama} akan diperbarui sesuai usulan admin.`, {
+          judul: `Setujui ubah booking?`,
+          ya: "Setujui (ACC)",
+          bahaya: false,
+        }))
+      ) {
+        return;
+      }
+      try {
+        await simpanBooking(req.proposedBooking, req.bookingId);
+        await updateDoc(doc(db, "edit_requests", req.id), {
+          status: "approved",
+          reviewedAt: new Date().toISOString(),
+        });
+        notify("Request ubah booking disetujui.", "positive");
+        setSelectedRequest(null);
+      } catch (error: any) {
+        console.error("Error approving booking edit request:", error);
+        notify(
+          error?.code === "not-found" ? "Booking tidak ditemukan (mungkin sudah dihapus)." : "Gagal menyetujui ubah booking.",
+          "negative"
+        );
+      }
+      return;
+    }
+
+    if (req?.requestType === "BOOKING_CANCEL") {
+      const nama = req.originalBooking?.nama || "booking";
+      const nasibDp = req.proposedBooking?.batal?.dp;
+      const dpKet =
+        nasibDp === "HANGUS"
+          ? " DP hangus tetap tercatat sebagai pemasukan."
+          : nasibDp === "KEMBALI"
+            ? " Catatan DP akan dihapus karena dikembalikan."
+            : "";
+      if (
+        !(await konfirmasi(`Booking ${nama} (${req.originalBooking?.jenisPS || "-"}) akan dibatalkan.${dpKet}`, {
+          judul: "Setujui pembatalan booking?",
+          ya: "Setujui batal",
+          bahaya: true,
+        }))
+      ) {
+        return;
+      }
+      try {
+        await ubahBooking(req.bookingId, {
+          status: "BATAL",
+          batal: {
+            alasan: req.alasan || req.proposedBooking?.batal?.alasan || "",
+            oleh: req.requestedBy || "admin",
+            ts: Date.now(),
+            dp: nasibDp === "HANGUS" || nasibDp === "KEMBALI" ? nasibDp : null,
+          },
+        });
+        await updateDoc(doc(db, "edit_requests", req.id), {
+          status: "approved",
+          reviewedAt: new Date().toISOString(),
+        });
+        notify("Request pembatalan booking disetujui.", "positive");
+        setSelectedRequest(null);
+      } catch (error: any) {
+        console.error("Error approving booking cancel request:", error);
+        notify(
+          error?.code === "not-found" ? "Booking tidak ditemukan (mungkin sudah dihapus)." : "Gagal menyetujui pembatalan booking.",
+          "negative"
+        );
+      }
+      return;
+    }
+
     if (!(await konfirmasi("Data pembukuan akan diganti dengan usulan pegawai.", { judul: `Setujui edit ${req.tanggal}?`, ya: "Setujui", bahaya: false }))) return;
     try {
       // 1. Update history_pembukuan
@@ -139,9 +217,21 @@ const PageOwner: React.FC<PageOwnerProps> = ({
   };
 
   const handleRejectRequest = async (req: any) => {
-    if (!(await konfirmasi("Data pembukuan tetap seperti sekarang.", { judul: `Tolak edit ${req.tanggal}?`, ya: "Tolak", bahaya: true }))) return;
+    const deskripsi = isBookingRequest(req)
+      ? "Data booking tetap seperti sekarang tanpa perubahan."
+      : "Data pembukuan tetap seperti sekarang.";
+    const judul =
+      req?.requestType === "BOOKING_CANCEL"
+        ? `Tolak batal booking ${req.originalBooking?.nama || ""}?`
+        : req?.requestType === "BOOKING_EDIT"
+          ? `Tolak ubah booking ${req.originalBooking?.nama || ""}?`
+          : `Tolak edit ${req.tanggal}?`;
+    if (!(await konfirmasi(deskripsi, { judul, ya: "Tolak", bahaya: true }))) return;
     try {
-      await updateDoc(doc(db, "edit_requests", req.id), { status: "rejected" });
+      await updateDoc(doc(db, "edit_requests", req.id), {
+        status: "rejected",
+        reviewedAt: new Date().toISOString(),
+      });
       notify("Request edit ditolak", "info");
       setSelectedRequest(null);
     } catch (error) {
@@ -1186,28 +1276,63 @@ const PageOwner: React.FC<PageOwnerProps> = ({
             </div>
           ) : (
             <div className="space-y-6 animate-in fade-in duration-200">
-              <Card title="Permintaan edit pembukuan karyawan" icon={<ClipboardEdit />} iconColor="orange">
+              <Card title="Permintaan edit karyawan" subtitle="Pembukuan harian & perubahan / pembatalan booking" icon={<ClipboardEdit />} iconColor="orange">
                 {loadingRequests ? (
                   <div className="flex items-center justify-center py-10">
                     <div className="h-7 w-7 animate-spin rounded-full border-2 border-sep border-t-tint" />
                   </div>
                 ) : editRequests.length === 0 ? (
                   <EmptyState icon={<AlertCircle />} title="Tidak ada permintaan edit">
-                    Belum ada request edit pembukuan dari pegawai.
+                    Belum ada request edit pembukuan atau booking dari pegawai.
                   </EmptyState>
                 ) : (
                   <div className="grid gap-4">
                     {editRequests.map((req) => {
                       const isPending = req.status === "pending";
                       const isApproved = req.status === "approved";
-                      const orig = ringkasPembukuan(req.originalData);
-                      const prop = ringkasPembukuan(req.proposedData);
-                      const summaryMetrics = [
-                        { label: "Pendapatan kotor", o: orig.income, p: prop.income },
-                        { label: "Total cash", o: orig.cash, p: prop.cash },
-                        { label: "Total transfer", o: orig.transfer, p: prop.transfer },
-                        { label: "Pengeluaran", o: orig.expense, p: prop.expense },
-                      ];
+                      const isBookingEdit = req.requestType === "BOOKING_EDIT";
+                      const isBookingCancel = req.requestType === "BOOKING_CANCEL";
+                      const isBooking = isBookingEdit || isBookingCancel;
+
+                      const origB = req.originalBooking || {};
+                      const propB = req.proposedBooking || {};
+                      const jadwalOrigMs = isBooking ? mulaiBooking(origB) : null;
+                      const jadwalPropMs = isBookingEdit ? mulaiBooking(propB) : null;
+
+                      const orig = isBooking ? null : ringkasPembukuan(req.originalData);
+                      const prop = isBooking ? null : ringkasPembukuan(req.proposedData);
+                      const summaryMetrics =
+                        orig && prop
+                          ? [
+                              { label: "Pendapatan kotor", o: orig.income, p: prop.income },
+                              { label: "Total cash", o: orig.cash, p: prop.cash },
+                              { label: "Total transfer", o: orig.transfer, p: prop.transfer },
+                              { label: "Pengeluaran", o: orig.expense, p: prop.expense },
+                            ]
+                          : [];
+
+                      const bookingSummary = isBookingEdit
+                        ? [
+                            { label: "Penyewa", o: origB.nama || "-", p: propB.nama || "-" },
+                            {
+                              label: "Unit & durasi",
+                              o: `${origB.jenisPS || "-"} · ${String(origB.lamaSewa || "-").toLowerCase()}`,
+                              p: `${propB.jenisPS || "-"} · ${String(propB.lamaSewa || "-").toLowerCase()}`,
+                            },
+                            {
+                              label: "Jadwal ambil",
+                              o: jadwalOrigMs !== null ? fmtWaktu(jadwalOrigMs) : `${origB.tanggal || "-"} ${origB.jam || ""}`,
+                              p: jadwalPropMs !== null ? fmtWaktu(jadwalPropMs) : `${propB.tanggal || "-"} ${propB.jam || ""}`,
+                            },
+                            {
+                              label: "DP",
+                              o: origB.dp?.nominal ? rupiah(origB.dp.nominal) : "Belum DP",
+                              p: propB.dp?.nominal ? rupiah(propB.dp.nominal) : "Belum DP",
+                            },
+                          ]
+                        : [];
+
+                      const nasibDpCancel = propB?.batal?.dp;
 
                       return (
                         <div key={req.id} className="space-y-3 rounded-tile apple-tile p-4 ring-1 ring-edge">
@@ -1215,6 +1340,9 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                             <div>
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="text-subhead font-bold text-label">{req.requestedBy}</span>
+                                <Pill tone={isBookingCancel ? "negative" : isBookingEdit ? "warning" : "tint"}>
+                                  {isBookingCancel ? "Batal Booking" : isBookingEdit ? "Ubah Booking" : "Pembukuan"}
+                                </Pill>
                                 <Pill tone={isPending ? "warning" : isApproved ? "positive" : "negative"}>
                                   {isPending ? "Menunggu" : isApproved ? "Disetujui" : "Ditolak"}
                                 </Pill>
@@ -1224,23 +1352,89 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                               </p>
                             </div>
                             <div className="text-left sm:text-right">
-                              <Eyebrow>Target pembukuan</Eyebrow>
-                              <span className="mt-0.5 block text-subhead font-semibold text-label">{req.hari}, {req.tanggal}</span>
+                              <Eyebrow>{isBooking ? "Target booking" : "Target pembukuan"}</Eyebrow>
+                              <span className="mt-0.5 block text-subhead font-semibold text-label">
+                                {isBooking
+                                  ? `${origB.nama || "Booking"} · ${origB.jenisPS || "-"}`
+                                  : `${req.hari}, ${req.tanggal}`}
+                              </span>
                             </div>
                           </div>
 
                           {/* Quick Comparison Card */}
-                          <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
-                            {summaryMetrics.map((m) => (
-                              <div key={m.label} className="space-y-1 rounded-control bg-surface p-3 ring-1 ring-edge">
-                                <Eyebrow>{m.label}</Eyebrow>
-                                <span className="block text-caption tabular-nums text-label-3 line-through">{rupiah(m.o)}</span>
-                                <span className={`block text-subhead font-bold tabular-nums ${m.p !== m.o ? "text-tint" : "text-label"}`}>
-                                  {rupiah(m.p)}
-                                </span>
+                          {isBookingCancel ? (
+                            <div className="space-y-2.5">
+                              <Notice tone="negative">
+                                <div className="space-y-0.5">
+                                  <div className="font-semibold">Pengajuan pembatalan booking</div>
+                                  <div>Alasan: {req.alasan || propB?.batal?.alasan || "-"}</div>
+                                  {origB.dp?.nominal > 0 && (
+                                    <div>
+                                      DP {rupiah(origB.dp.nominal)} diajukan:{" "}
+                                      <strong>{nasibDpCancel === "HANGUS" ? "Hangus (masuk pemasukan)" : "Dikembalikan"}</strong>
+                                    </div>
+                                  )}
+                                </div>
+                              </Notice>
+                              <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+                                <div className="space-y-0.5 rounded-control bg-surface p-3 ring-1 ring-edge">
+                                  <Eyebrow>Penyewa</Eyebrow>
+                                  <span className="block truncate text-subhead font-semibold text-label">{origB.nama || "-"}</span>
+                                </div>
+                                <div className="space-y-0.5 rounded-control bg-surface p-3 ring-1 ring-edge">
+                                  <Eyebrow>Unit & durasi</Eyebrow>
+                                  <span className="block truncate text-subhead font-semibold text-label">
+                                    {origB.jenisPS || "-"} · {String(origB.lamaSewa || "-").toLowerCase()}
+                                  </span>
+                                </div>
+                                <div className="space-y-0.5 rounded-control bg-surface p-3 ring-1 ring-edge">
+                                  <Eyebrow>Jadwal ambil</Eyebrow>
+                                  <span className="block truncate text-subhead font-semibold text-label tabular-nums">
+                                    {jadwalOrigMs !== null ? fmtWaktu(jadwalOrigMs) : origB.tanggal || "-"}
+                                  </span>
+                                </div>
+                                <div className="space-y-0.5 rounded-control bg-surface p-3 ring-1 ring-edge">
+                                  <Eyebrow>DP</Eyebrow>
+                                  <span className="block truncate text-subhead font-semibold text-label tabular-nums">
+                                    {origB.dp?.nominal ? rupiah(origB.dp.nominal) : "Belum DP"}
+                                  </span>
+                                </div>
                               </div>
-                            ))}
-                          </div>
+                            </div>
+                          ) : isBookingEdit ? (
+                            <div className="space-y-2.5">
+                              {req.alasan && (
+                                <p className="text-footnote text-label-2">
+                                  Alasan: <span className="font-medium text-label">{req.alasan}</span>
+                                </p>
+                              )}
+                              <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+                                {bookingSummary.map((m) => (
+                                  <div key={m.label} className="space-y-1 rounded-control bg-surface p-3 ring-1 ring-edge">
+                                    <Eyebrow>{m.label}</Eyebrow>
+                                    {m.p !== m.o && (
+                                      <span className="block truncate text-caption text-label-3 line-through">{m.o}</span>
+                                    )}
+                                    <span className={`block truncate text-subhead font-bold ${m.p !== m.o ? "text-tint" : "text-label"}`}>
+                                      {m.p}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+                              {summaryMetrics.map((m) => (
+                                <div key={m.label} className="space-y-1 rounded-control bg-surface p-3 ring-1 ring-edge">
+                                  <Eyebrow>{m.label}</Eyebrow>
+                                  <span className="block text-caption tabular-nums text-label-3 line-through">{rupiah(m.o)}</span>
+                                  <span className={`block text-subhead font-bold tabular-nums ${m.p !== m.o ? "text-tint" : "text-label"}`}>
+                                    {rupiah(m.p)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
 
                           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-sep pt-3">
                             <Button
@@ -1251,7 +1445,7 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                               onClick={() => setSelectedRequest(req)}
                               className="min-h-[44px] sm:min-h-[36px]"
                             >
-                              Bandingkan detail
+                              {isBookingCancel ? "Lihat detail" : "Bandingkan detail"}
                             </Button>
 
                             {isPending && (
@@ -1326,6 +1520,139 @@ const PageOwner: React.FC<PageOwnerProps> = ({
       {selectedRequest && (() => {
         const req = selectedRequest;
         const isPending = req.status === "pending";
+        const isBookingEdit = req.requestType === "BOOKING_EDIT";
+        const isBookingCancel = req.requestType === "BOOKING_CANCEL";
+        const isBooking = isBookingEdit || isBookingCancel;
+
+        if (isBooking) {
+          const origB = req.originalBooking || {};
+          const propB = req.proposedBooking || {};
+          const fmtAntar = (x: any) => (x?.antar ? "Diantar" : "Ambil di toko");
+          const fmtDp = (x: any) =>
+            x?.dp?.nominal > 0 ? `${rupiah(x.dp.nominal)} (${x.dp.metode === "CASH" ? "Cash" : "Transfer"})` : "Belum DP";
+          const bookingFields = [
+            { label: "Nama penyewa", o: origB.nama || "-", p: propB.nama || "-" },
+            { label: "No. WA", o: origB.wa ? formatWa(origB.wa) : "-", p: propB.wa ? formatWa(propB.wa) : "-" },
+            { label: "Jenis PS", o: origB.jenisPS || "-", p: propB.jenisPS || "-" },
+            { label: "Lama sewa", o: origB.lamaSewa || "-", p: propB.lamaSewa || "-" },
+            { label: "Tanggal ambil", o: origB.tanggal || "-", p: propB.tanggal || "-" },
+            { label: "Jam ambil", o: origB.jam || "-", p: propB.jam || "-" },
+            { label: "Cara ambil", o: fmtAntar(origB), p: fmtAntar(propB) },
+            { label: "Alamat / sharelok", o: origB.alamat || "-", p: propB.alamat || "-" },
+            { label: "Ongkir", o: origB.ongkir ? rupiah(origB.ongkir) : "-", p: propB.ongkir ? rupiah(propB.ongkir) : "-" },
+            { label: "DP", o: fmtDp(origB), p: fmtDp(propB) },
+            { label: "Catatan", o: origB.catatan || "-", p: propB.catatan || "-" },
+          ];
+          const nasibDpCancel = propB?.batal?.dp;
+
+          return (
+            <Sheet
+              open={Boolean(selectedRequest)}
+              onClose={() => setSelectedRequest(null)}
+              size="lg"
+              variant="surface"
+              zClassName="z-[600]"
+              title={isBookingCancel ? "Detail pengajuan batal booking" : "Detail perbandingan ubah booking"}
+              subtitle={
+                <>
+                  Pengirim: <span className="font-semibold text-label">{req.requestedBy}</span> · Booking:{" "}
+                  <span className="font-semibold text-tint">{origB.nama || "-"}</span>
+                </>
+              }
+              footer={
+                isPending ? (
+                  <div className="flex justify-end gap-2.5">
+                    <Button type="button" variant="destructive" size="md" onClick={() => handleRejectRequest(req)}>
+                      Tolak request
+                    </Button>
+                    <Button type="button" variant="filled" size="md" onClick={() => handleApproveRequest(req)}>
+                      {isBookingCancel ? "Setujui batal (ACC)" : "Setujui ubah (ACC)"}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-footnote text-label-2">
+                      <span>Status:</span>
+                      <Pill tone={req.status === "approved" ? "positive" : "negative"}>
+                        {req.status === "approved" ? "Disetujui" : "Ditolak"}
+                      </Pill>
+                    </div>
+                    <Button type="button" variant="gray" size="md" onClick={() => setSelectedRequest(null)}>
+                      Tutup
+                    </Button>
+                  </div>
+                )
+              }
+            >
+              <div className="space-y-4">
+                {isBookingCancel ? (
+                  <>
+                    <Notice tone="negative">
+                      <div className="space-y-1">
+                        <div className="font-semibold">Admin mengajukan pembatalan booking ini</div>
+                        <div>Alasan: {req.alasan || propB?.batal?.alasan || "-"}</div>
+                        {origB.dp?.nominal > 0 && (
+                          <div>
+                            Status DP ({rupiah(origB.dp.nominal)}):{" "}
+                            <strong>
+                              {nasibDpCancel === "HANGUS"
+                                ? "DP hangus (tetap tercatat sebagai pemasukan)"
+                                : "DP dikembalikan (catatan DP dihapus)"}
+                            </strong>
+                          </div>
+                        )}
+                      </div>
+                    </Notice>
+                    <div className="rounded-tile apple-tile p-4 ring-1 ring-edge divide-y divide-sep">
+                      {bookingFields.map((f) => (
+                        <div key={f.label} className="flex items-start justify-between gap-3 py-2 first:pt-0 last:pb-0 text-footnote">
+                          <span className="text-label-2 shrink-0">{f.label}</span>
+                          <span className="text-right font-medium text-label break-words min-w-0">{f.o}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {req.alasan && (
+                      <Notice tone="info">
+                        Alasan perubahan: <strong>{req.alasan}</strong>
+                      </Notice>
+                    )}
+                    <div className="rounded-tile apple-tile p-4 ring-1 ring-edge divide-y divide-sep">
+                      {bookingFields.map((f) => {
+                        const berubah = f.o !== f.p;
+                        return (
+                          <div key={f.label} className="flex items-start justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                            <div className="min-w-0">
+                              <span className="text-caption font-medium text-label-2">{f.label}</span>
+                              {berubah && (
+                                <div className="mt-0.5">
+                                  <Pill tone="warning">Berubah</Pill>
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-right min-w-0 max-w-[65%]">
+                              {berubah ? (
+                                <>
+                                  <div className="text-caption text-negative line-through break-words">{f.o}</div>
+                                  <div className="text-footnote font-semibold text-positive break-words">{f.p}</div>
+                                </>
+                              ) : (
+                                <div className="text-footnote text-label break-words">{f.o}</div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            </Sheet>
+          );
+        }
+
         const infoFields = [
           { label: "Absen pagi", o: req.originalData?.absenPagi, p: req.proposedData?.absenPagi },
           { label: "Absen siang", o: req.originalData?.absenSiang, p: req.proposedData?.absenSiang },

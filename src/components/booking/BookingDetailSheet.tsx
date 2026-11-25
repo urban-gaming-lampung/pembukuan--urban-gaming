@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { BellRing, CheckCircle2, MessageCircle, Pencil, Play, RotateCcw, Trash2 } from "lucide-react";
+import { BellRing, Check, CheckCircle2, Copy, MessageCircle, Pencil, Play, RotateCcw, Trash2 } from "lucide-react";
 import { Button, Footnote, LineItem, LineList, ListGroup, Notice, Pill, Sheet, SubTabs, TextField, konfirmasi, notify, type Nada } from "../../ui";
 import { UploadTransferProof } from "../TableEditor";
 import { rupiah } from "../../lib/format";
@@ -18,9 +18,10 @@ import {
   fmtJam,
   fmtRentangSingkat,
   fmtWaktu,
+  formatSalinBooking,
   hapusBooking,
+  kirimRequestBatalBooking,
   LABEL_STATUS,
-  LABEL_UNIT,
   mulaiBooking,
   namaStaf,
   pesanBooking,
@@ -65,12 +66,14 @@ const BookingDetailSheet: React.FC<{
   const [alasan, setAlasan] = useState("");
   const [nasibDp, setNasibDp] = useState<"" | "HANGUS" | "KEMBALI">("");
   const [sibuk, setSibuk] = useState(false);
+  const [tersalin, setTersalin] = useState(false);
   const now = Date.now();
 
   useEffect(() => {
     setModeBatal(false);
     setAlasan("");
     setNasibDp("");
+    setTersalin(false);
   }, [b?.id]);
 
   const bentrok = useMemo(() => (b && aktif(b) ? cekBentrok(b, { bookings, berjalan, kapasitas, now: Date.now() }) : []), [b, bookings, berjalan, kapasitas]);
@@ -111,10 +114,54 @@ const BookingDetailSheet: React.FC<{
       if (await onMulaiSewa(b)) onClose();
     });
 
+  const salinFormat = async () => {
+    const teks = formatSalinBooking(b);
+    let berhasil = false;
+    try {
+      await navigator.clipboard.writeText(teks);
+      berhasil = true;
+    } catch {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = teks;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        berhasil = document.execCommand("copy");
+        document.body.removeChild(ta);
+      } catch {
+        berhasil = false;
+      }
+    }
+    if (berhasil) {
+      setTersalin(true);
+      notify("Format booking disalin.", "positive");
+      setTimeout(() => setTersalin(false), 2000);
+    } else {
+      notify("Gagal menyalin format booking.", "warning");
+    }
+  };
+
   const batalkan = () =>
     jalankan(async () => {
       if (dp && !nasibDp) {
         notify("Pilih DP hangus atau dikembalikan.", "warning");
+        return;
+      }
+      // Admin biasa: ajukan pembatalan lewat menu Request Edit (menunggu ACC Super Admin)
+      if (!bolehHapus) {
+        if (!alasan.trim()) {
+          notify("Isi alasan pembatalan untuk pengajuan ke Super Admin.", "warning");
+          return;
+        }
+        await kirimRequestBatalBooking(b, {
+          alasan: alasan.trim(),
+          dp: dp ? (nasibDp as "HANGUS" | "KEMBALI") : null,
+        });
+        notify("Request pembatalan booking dikirim, menunggu ACC Super Admin.", "positive");
+        onClose();
         return;
       }
       if (dp && nasibDp === "HANGUS") {
@@ -274,6 +321,9 @@ const BookingDetailSheet: React.FC<{
             <Button variant="filled" size="lg" block icon={<Play />} onClick={mulai} loading={sibuk}>
               Mulai sewa
             </Button>
+            <Button variant="tinted" block icon={tersalin ? <Check /> : <Copy />} onClick={salinFormat} disabled={sibuk}>
+              {tersalin ? "Format tersalin" : "Salin format"}
+            </Button>
             <div className={b.status === "BARU" ? "grid grid-cols-2 gap-2.5" : "grid grid-cols-1"}>
               <Button variant="gray" icon={<Pencil />} onClick={() => onUbah(b)} disabled={sibuk}>
                 Ubah
@@ -292,8 +342,21 @@ const BookingDetailSheet: React.FC<{
 
         {bisaAksi && modeBatal && (
           <div className="rounded-tile apple-tile ring-1 ring-edge p-3.5 space-y-3">
-            <div className="text-subhead font-semibold text-label">Batalkan booking</div>
-            <TextField label="Alasan" placeholder="Opsional (mis. penyewa tidak jadi)" value={alasan} onChange={(e) => setAlasan(e.target.value)} />
+            <div className="text-subhead font-semibold text-label">
+              {bolehHapus ? "Batalkan booking" : "Ajukan pembatalan booking"}
+            </div>
+            {!bolehHapus && (
+              <Notice tone="warning">
+                Pembatalan booking memerlukan persetujuan (ACC) Super Admin melalui menu Request Edit.
+              </Notice>
+            )}
+            <TextField
+              label="Alasan"
+              required={!bolehHapus}
+              placeholder={bolehHapus ? "Opsional (mis. penyewa tidak jadi)" : "Wajib diisi (mis. penyewa tidak jadi)"}
+              value={alasan}
+              onChange={(e) => setAlasan(e.target.value)}
+            />
             {dp && (
               <div className="space-y-2">
                 <SubTabs<"" | "HANGUS" | "KEMBALI">
@@ -320,16 +383,21 @@ const BookingDetailSheet: React.FC<{
                 Kembali
               </Button>
               <Button variant="destructive" onClick={batalkan} loading={sibuk}>
-                Batalkan
+                {bolehHapus ? "Batalkan" : "Ajukan batal"}
               </Button>
             </div>
           </div>
         )}
 
         {!bisaAksi && (
-          <Button variant="gray" block icon={<RotateCcw />} onClick={() => jalankan(async () => { if (await onUrungkan(b)) onClose(); })} disabled={sibuk}>
-            {b.status === "DIAMBIL" ? "Urungkan mulai sewa" : "Aktifkan lagi"}
-          </Button>
+          <div className="space-y-2.5">
+            <Button variant="tinted" block icon={tersalin ? <Check /> : <Copy />} onClick={salinFormat} disabled={sibuk}>
+              {tersalin ? "Format tersalin" : "Salin format"}
+            </Button>
+            <Button variant="gray" block icon={<RotateCcw />} onClick={() => jalankan(async () => { if (await onUrungkan(b)) onClose(); })} disabled={sibuk}>
+              {b.status === "DIAMBIL" ? "Urungkan mulai sewa" : "Aktifkan lagi"}
+            </Button>
+          </div>
         )}
 
         <Footnote>
