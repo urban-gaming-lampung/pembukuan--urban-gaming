@@ -156,9 +156,9 @@ const PageOwner: React.FC<PageOwnerProps> = ({
       const nasibDp = req.proposedBooking?.batal?.dp;
       const dpKet =
         nasibDp === "HANGUS"
-          ? " DP hangus tetap tercatat sebagai pemasukan."
+          ? " DP hangus akan dicatat sebagai pemasukan di Transaksi."
           : nasibDp === "KEMBALI"
-            ? " Catatan DP akan dihapus karena dikembalikan."
+            ? " DP dikembalikan ke penyewa (tidak masuk pemasukan)."
             : "";
       if (
         !(await konfirmasi(`Booking ${nama} (${req.originalBooking?.jenisPS || "-"}) akan dibatalkan.${dpKet}`, {
@@ -1596,8 +1596,8 @@ const PageOwner: React.FC<PageOwnerProps> = ({
                             Status DP ({rupiah(origB.dp.nominal)}):{" "}
                             <strong>
                               {nasibDpCancel === "HANGUS"
-                                ? "DP hangus (tetap tercatat sebagai pemasukan)"
-                                : "DP dikembalikan (catatan DP dihapus)"}
+                                ? "DP hangus (dicatat sebagai pemasukan di Transaksi)"
+                                : "DP dikembalikan (tidak masuk pemasukan)"}
                             </strong>
                           </div>
                         )}

@@ -601,6 +601,7 @@ const RincianSewa: React.FC<{
 
           // Kunci Readonly Permanen
           const dpBooking = dpBookingBaris(row);
+          const dpInfo = dpBooking === 0 ? toInt((row as any)._dpBookingInfo) : 0;
           return (
             <div className="relative px-2 py-1.5 whitespace-nowrap">
               <span className="font-bold tabular-nums text-label">
@@ -608,6 +609,9 @@ const RincianSewa: React.FC<{
               </span>
               {dpBooking > 0 && (
                 <div className="text-caption2 text-label-2 font-medium tabular-nums">sesudah DP {rupiah(dpBooking)}</div>
+              )}
+              {dpInfo > 0 && (
+                <div className="text-caption2 text-label-2 font-medium tabular-nums">full (termasuk DP {rupiah(dpInfo)})</div>
               )}
             </div>
           );

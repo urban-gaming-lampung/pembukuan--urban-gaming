@@ -247,7 +247,7 @@ const BookingDetailSheet: React.FC<{
           <Notice tone="negative">
             Dibatalkan {jamTitik(b.batal.ts)}
             {b.batal.alasan ? ` · ${b.batal.alasan}` : ""}
-            {b.batal.dp === "HANGUS" ? " · DP hangus (tetap tercatat sebagai pemasukan)" : b.batal.dp === "KEMBALI" ? " · DP dikembalikan (catatan DP dihapus)" : ""}
+            {b.batal.dp === "HANGUS" ? " · DP hangus (dicatat sebagai pemasukan di Transaksi)" : b.batal.dp === "KEMBALI" ? " · DP dikembalikan" : ""}
           </Notice>
         )}
 
@@ -371,9 +371,9 @@ const BookingDetailSheet: React.FC<{
                 />
                 <Footnote>
                   {nasibDp === "HANGUS"
-                    ? `DP ${rupiah(dp.nominal)} tetap tercatat sebagai pemasukan (sudah masuk sejak diterima).`
+                    ? `DP ${rupiah(dp.nominal)} akan dicatat sebagai pemasukan DP Hangus di menu Transaksi.`
                     : nasibDp === "KEMBALI"
-                      ? "DP dikembalikan ke penyewa; catatan DP di Transaksi & Analitik dihapus."
+                      ? "DP dikembalikan ke penyewa (tidak dicatat sebagai pemasukan)."
                       : `Penyewa sudah DP ${rupiah(dp.nominal)}. Pilih hangus atau dikembalikan.`}
                 </Footnote>
               </div>

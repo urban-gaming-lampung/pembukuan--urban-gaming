@@ -4,25 +4,28 @@
  * Alur: BARU (dicatat) → KONFIRMASI (sudah DP / sudah dikonfirmasi lewat WA)
  *       → DIAMBIL (tombol "Mulai sewa": baris masuk Pembukuan › Rincian Sewa) | BATAL.
  *
- * Aturan DP (diubah owner 23 Nov 2026):
- * - DP LANGSUNG tercatat saat diterima: dokumen `owner_incomes/dpbooking_<id>` (Rental, tanggal hari
- *   kerja DP diterima, metode sesuai DP) → ikut Analitik, posisi dana & Transaksi (terkunci).
- *   Ditulis oleh `sinkronDpBooking` dari sesi owner / super admin (staf tidak boleh menulis owner_incomes).
- * - Saat "Mulai sewa": hanya baris sewa = sisa bayar (`_dpBooking` memotong kolom harga);
- *   DP tidak dicatat ulang di Rincian Sewa.
- * - Booking batal + DP dikembalikan (atau booking dihapus) → catatan DP dihapus.
- *   Batal + DP hangus → catatan DP tetap (uangnya memang diterima).
+ * Aturan DP (diubah owner 26 Nov 2026):
+ * - DP booking aktif TIDAK masuk ke `owner_incomes` (Transaksi › Pemasukan Rental).
+ *   DP disimpan di dokumen booking sebagai info & perhitungan Estimasi Pendapatan Booking.
+ * - Saat "Mulai sewa": seluruh nilai sewa (FULL, bukan sisa) langsung masuk ke Pembukuan ›
+ *   Rincian Sewa (tanpa potongan `_dpBooking`, hanya `_dpBookingInfo` sebagai keterangan).
+ * - Hanya booking BATAL + DP HANGUS yang dicatat di `owner_incomes` (kategori "DP Hangus"),
+ *   karena sewa batal dan tidak masuk ke Pembukuan.
+ * - `sinkronDpBooking` (sesi owner / super admin) otomatis memindahkan DP lama yang terlanjur
+ *   masuk ke `owner_incomes`: memulihkan baris Rincian Sewa di `history_pembukuan` & `data/draft`
+ *   dari sisa → full, lalu menghapus catatan DP booking lama di `owner_incomes` (idempoten).
  *
  * Hak akses (firestore.rules): semua staf boleh baca / tambah / ubah / batalkan;
  * HAPUS hanya owner & super admin.
  */
 import { useEffect, useState } from "react";
-import { addDoc, arrayUnion, collection, deleteDoc, doc, getDocs, limit, onSnapshot, orderBy, query, setDoc, updateDoc, where } from "firebase/firestore";
+import { addDoc, arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, setDoc, updateDoc, where } from "firebase/firestore";
 import { dariYmd, namaHari, tanggalHariKerja } from "./dateLocal";
 import { auth, db } from "./firebase";
 import { pad, toInt } from "./format";
+import { totalBaris } from "./keuangan";
 import { rapikanWa, waValid } from "./wa";
-import { jamDurasi, jenisUnit, LAMA_DP_BOOKING, type SewaBerjalan } from "./sewa";
+import { isDpBooking, jamDurasi, jenisUnit, LAMA_DP_BOOKING, type SewaBerjalan } from "./sewa";
 
 export { LAMA_DP_BOOKING };
 import { getSewaPrice, type SewaTable } from "./priceLists";
@@ -1054,25 +1057,28 @@ export const hapusBooking = async (id: string) => {
   await deleteDoc(doc(db, KOLEKSI_DP, idDpBooking(id))).catch((e) => console.warn("Hapus catatan DP booking:", e));
 };
 
-// ---------------------------------------------------------------- DP → transaksi owner (Analitik)
+// ---------------------------------------------------------------- DP → transaksi owner (hanya DP Hangus) & migrasi penuh ke Pembukuan
 
 const KOLEKSI_DP = "owner_incomes";
 export const SUMBER_DP_BOOKING = "booking";
-export const KATEGORI_DP_BOOKING = "DP Booking Sewa";
+export const KATEGORI_DP_BOOKING = "DP Hangus";
 export const idDpBooking = (bookingId: string) => `dpbooking_${bookingId}`;
 
-/** DP booking ini harus tercatat sebagai pemasukan? (ada DP, dan tidak batal dengan DP dikembalikan) */
+/**
+ * DP booking yang dicatat di `owner_incomes` (Transaksi › Pemasukan Rental):
+ * HANYA booking BATAL dengan DP HANGUS (karena sewa tidak pernah mulai di Pembukuan).
+ * Booking aktif & booking DIAMBIL tidak masuk Transaksi — seluruh nilai sewa masuk FULL di Pembukuan saat Mulai sewa.
+ */
 export const dpTercatat = (b: BookingSewa) =>
-  !!b.dp && toInt(b.dp.nominal) > 0 && !(b.status === "BATAL" && b.batal?.dp !== "HANGUS");
+  !!b.dp && toInt(b.dp.nominal) > 0 && b.status === "BATAL" && b.batal?.dp === "HANGUS";
 
 const dataDp = (b: BookingSewa) => {
   const dp = b.dp!;
-  const hangus = b.status === "BATAL" && b.batal?.dp === "HANGUS";
   return {
-    nama: `DP booking ${String(b.nama || "").trim() || "tanpa nama"} · ${b.jenisPS || "-"} · ambil ${b.tanggal || "-"}${hangus ? " (hangus)" : ""}`,
+    nama: `DP hangus ${String(b.nama || "").trim() || "tanpa nama"} · ${b.jenisPS || "-"} · ambil ${b.tanggal || "-"}`,
     harga: toInt(dp.nominal),
     kategori: KATEGORI_DP_BOOKING,
-    tanggal: tanggalHariKerja(Number(dp.ts) || Date.now()),
+    tanggal: tanggalHariKerja(Number(b.batal?.ts) || Number(dp.ts) || Date.now()),
     bisnis: "RENTAL",
     metode: dp.metode === "CASH" ? "CASH" : "TRANSFER",
     sumber: SUMBER_DP_BOOKING,
@@ -1082,33 +1088,200 @@ const dataDp = (b: BookingSewa) => {
 };
 
 /**
- * Samakan catatan DP di `owner_incomes` dengan daftar booking (idempoten, ID dokumen tetap).
- * Hanya menyentuh booking yang ada di `list`, jadi booking lama di luar jendela daftar tidak terhapus.
+ * Fungsi murni (idempoten): pulihkan baris `rowsSewa` lama yang masih memiliki `_dpBooking > 0`
+ * (sistem lama yang hanya mencatat sisa bayar) agar nominal menjadi FULL dan tidak lagi dipotong DP.
+ * `_dpBooking` dipindah ke `_dpBookingInfo` (hanya info) sehingga eksekusi berulang tidak pernah menggandakan angka.
  */
-export async function sinkronDpBooking(list: BookingSewa[]): Promise<void> {
-  const lama = await getDocs(query(collection(db, KOLEKSI_DP), where("sumber", "==", SUMBER_DP_BOOKING)));
-  const lamaMap = new Map(lama.docs.map((d) => [d.id, d.data() as any]));
-  const tugas: Promise<unknown>[] = [];
+export function pulihkanBarisSewaFull(
+  rowsSewa: any[] | undefined
+): { rows: any[]; changed: boolean; migratedRows: number } {
+  if (!Array.isArray(rowsSewa) || rowsSewa.length === 0) {
+    return { rows: Array.isArray(rowsSewa) ? rowsSewa : [], changed: false, migratedRows: 0 };
+  }
+  // Lindungi data sangat lama (pra-23 Nov) yang sudah punya baris "DP BOOKING" terpisah di rowsSewa yang sama agar tidak terhitung ganda
+  const bookingSudahAdaBarisDp = new Set<string>();
+  rowsSewa.forEach((x) => {
+    if (isDpBooking(x) && x?._bookingId) bookingSudahAdaBarisDp.add(String(x._bookingId));
+  });
+  let changed = false;
+  let migratedRows = 0;
+  const rows = rowsSewa.map((r) => {
+    if (!r || typeof r !== "object") return r;
+    if (r._bookingId && bookingSudahAdaBarisDp.has(String(r._bookingId))) return r;
+    const dpPotong = toInt(r._dpBooking);
+    if (dpPotong <= 0 && r._dpBooking === undefined) return r;
+    changed = true;
+    const next: Record<string, any> = { ...r };
+    delete next._dpBooking;
+    if (dpPotong > 0) {
+      migratedRows++;
+      next._dpBookingInfo = Math.max(dpPotong, toInt(next._dpBookingInfo));
+      // Bila sudah dibayar (bukan TIDAK), tambahkan kembali DP yang dulu dipotong agar nominal menjadi FULL.
+      // Bila masih belum bayar (isPaid === "TIDAK"), harga tetap 0 dan saat nanti dilunasi otomatis menjadi FULL.
+      if (next.isPaid !== "TIDAK") {
+        next.harga = toInt(next.harga) + dpPotong;
+      }
+    }
+    return next;
+  });
+  return { rows, changed, migratedRows };
+}
+
+/** Hitung ulang totalSewa, totalCash, totalTransfer satu dokumen pembukuan setelah rowsSewa diperbarui. */
+export function rehitungTotalPembukuan(docData: any, nextRowsSewa: any[]) {
+  const rowsHarian = Array.isArray(docData?.rowsHarian) ? docData.rowsHarian : [];
+  const rowsJajanan = Array.isArray(docData?.rowsJajanan) ? docData.rowsJajanan : [];
+  const rowsJasaAks = Array.isArray(docData?.rowsJasaAks) ? docData.rowsJasaAks : [];
+  const totalSewa = nextRowsSewa.reduce((s, r) => s + toInt(r?.harga), 0);
+  const kas = totalBaris([...rowsHarian, ...rowsJajanan, ...rowsJasaAks, ...nextRowsSewa]);
+  return { totalSewa, totalCash: kas.cash, totalTransfer: kas.transfer };
+}
+
+export type HasilSinkronDpBooking = {
+  migratedHistoryDocs: number;
+  migratedRows: number;
+  removedIncomes: number;
+};
+
+let _sinkronDpAntri: Promise<unknown> = Promise.resolve();
+
+/**
+ * Sinkronisasi & migrasi DP booking (idempoten, dijalankan berurutan pada sesi Owner / Super Admin):
+ * 1. Memulihkan baris Rincian Sewa lama yang masih terpotong `_dpBooking` di `history_pembukuan` & `data/draft` menjadi FULL.
+ * 2. Menghapus catatan DP booking lama di `owner_incomes` (aktif / sudah diambil / batal kembali).
+ * 3. Hanya menyimpan/menjaga catatan di `owner_incomes` untuk booking BATAL dengan DP HANGUS.
+ */
+export function sinkronDpBooking(list: BookingSewa[]): Promise<HasilSinkronDpBooking> {
+  const run = _sinkronDpAntri.catch(() => undefined).then(() => _jalankanSinkronDpBooking(list));
+  _sinkronDpAntri = run;
+  return run;
+}
+
+async function _jalankanSinkronDpBooking(list: BookingSewa[]): Promise<HasilSinkronDpBooking> {
+  const lamaSnap = await getDocs(query(collection(db, KOLEKSI_DP), where("sumber", "==", SUMBER_DP_BOOKING)));
+  const lamaMap = new Map(lamaSnap.docs.map((d) => [d.id, { id: d.id, ...(d.data() as any) }]));
+  const byId = new Map(list.filter((b) => !!b?.id).map((b) => [b.id, b]));
+
+  // Kumpulkan tanggal pembukuan kandidat yang mungkin memiliki baris `_dpBooking` lama untuk dipulihkan ke FULL
+  const targetTanggal = new Set<string>();
+  const staleIncomeIds: string[] = [];
+
+  // Cek booking di daftar aktif + riwayat 45 hari
   list.forEach((b) => {
     if (!b?.id) return;
+    if (b.status === "DIAMBIL" && b.dp && toInt(b.dp.nominal) > 0) {
+      if (b.diambil?.tanggal) targetTanggal.add(b.diambil.tanggal);
+      if (b.tanggal) targetTanggal.add(b.tanggal);
+    }
+  });
+
+  // Cek seluruh dokumen `owner_incomes` lama bersumber booking (termasuk booking lama di luar 45 hari)
+  for (const [docId, inc] of lamaMap.entries()) {
+    const bid = String(inc.bookingId || docId.replace(/^dpbooking_/, ""));
+    let b = byId.get(bid);
+    if (!b && bid) {
+      const bSnap = await getDoc(doc(db, KOLEKSI_BOOKING, bid)).catch(() => null);
+      if (bSnap?.exists()) {
+        b = { id: bSnap.id, ...(bSnap.data() as any) } as BookingSewa;
+      }
+    }
+    if (!b || !dpTercatat(b)) {
+      staleIncomeIds.push(docId);
+      if (b?.diambil?.tanggal) targetTanggal.add(b.diambil.tanggal);
+      if (b?.tanggal) targetTanggal.add(b.tanggal);
+      if (inc.tanggal) targetTanggal.add(String(inc.tanggal).slice(0, 10));
+    }
+  }
+
+  let migratedHistoryDocs = 0;
+  let migratedRows = 0;
+
+  // Langkah 1 (WAJIB DULU sebelum hapus `owner_incomes`): pulihkan baris `_dpBooking` di history_pembukuan & draft menjadi FULL
+  if (targetTanggal.size > 0) {
+    const validDates = Array.from(targetTanggal).filter((tgl) => /^\d{4}-\d{2}-\d{2}$/.test(tgl));
+    const dateChunks: string[][] = [];
+    for (let i = 0; i < validDates.length; i += 30) dateChunks.push(validDates.slice(i, i + 30));
+
+    const seenHist = new Set<string>();
+    const historyUpdates: Promise<unknown>[] = [];
+
+    await Promise.all(
+      dateChunks.map(async (chunk) => {
+        const hSnap = await getDocs(query(collection(db, "history_pembukuan"), where("tanggal", "in", chunk)));
+        hSnap.forEach((hDoc) => {
+          if (seenHist.has(hDoc.id)) return;
+          seenHist.add(hDoc.id);
+          const d = hDoc.data() as any;
+          const res = pulihkanBarisSewaFull(d?.rowsSewa);
+          if (!res.changed) return;
+          const totals = rehitungTotalPembukuan(d, res.rows);
+          migratedHistoryDocs++;
+          migratedRows += res.migratedRows;
+          historyUpdates.push(
+            updateDoc(doc(db, "history_pembukuan", hDoc.id), {
+              rowsSewa: res.rows,
+              totalSewa: totals.totalSewa,
+              totalCash: totals.totalCash,
+              totalTransfer: totals.totalTransfer,
+            })
+          );
+        });
+      })
+    );
+
+    // Cek juga draft form aktif (bila hari ini sudah klik Mulai sewa tapi belum disimpan ke history)
+    const draftSnap = await getDoc(doc(db, "data", "draft")).catch(() => null);
+    if (draftSnap?.exists()) {
+      const draftData = draftSnap.data() as any;
+      const resDraft = pulihkanBarisSewaFull(draftData?.rowsSewa);
+      if (resDraft.changed) {
+        const draftTotals = rehitungTotalPembukuan(draftData, resDraft.rows);
+        migratedRows += resDraft.migratedRows;
+        historyUpdates.push(
+          updateDoc(doc(db, "data", "draft"), {
+            rowsSewa: resDraft.rows,
+            totalSewa: draftTotals.totalSewa,
+            totalCash: draftTotals.totalCash,
+            totalTransfer: draftTotals.totalTransfer,
+          })
+        );
+      }
+    }
+
+    await Promise.all(historyUpdates);
+  }
+
+  // Langkah 2: bersihkan `owner_incomes` dari DP booking non-hangus & sinkronkan hanya DP Hangus
+  const incomeTasks: Promise<unknown>[] = [];
+  let removedIncomes = 0;
+
+  staleIncomeIds.forEach((docId) => {
+    removedIncomes++;
+    incomeTasks.push(deleteDoc(doc(db, KOLEKSI_DP, docId)));
+  });
+
+  list.forEach((b) => {
+    if (!b?.id || !dpTercatat(b)) return;
     const id = idDpBooking(b.id);
     const cur = lamaMap.get(id);
-    if (!dpTercatat(b)) {
-      if (cur) tugas.push(deleteDoc(doc(db, KOLEKSI_DP, id)));
-      return;
-    }
     const v = dataDp(b);
     const sama = cur && (Object.keys(v) as (keyof typeof v)[]).every((k) => cur[k] === v[k]);
-    if (!sama) tugas.push(setDoc(doc(db, KOLEKSI_DP, id), { ...v, timestamp: cur?.timestamp || Number(b.dp!.ts) || Date.now() }));
+    if (!sama) {
+      incomeTasks.push(
+        setDoc(doc(db, KOLEKSI_DP, id), { ...v, timestamp: cur?.timestamp || Number(b.batal?.ts) || Number(b.dp!.ts) || Date.now() })
+      );
+    }
   });
-  await Promise.all(tugas);
+
+  await Promise.all(incomeTasks);
+  return { migratedHistoryDocs, migratedRows, removedIncomes };
 }
 
 // ---------------------------------------------------------------- ke Rincian Sewa
 
 /**
- * Baris Rincian Sewa dari booking: baris sewa (sisa bayar; `_dpBooking` memotong harga).
- * DP sudah tercatat sebagai pemasukan sejak diterima (lihat `sinkronDpBooking`).
+ * Baris Rincian Sewa dari booking: seluruh nilai sewa (FULL, termasuk DP) masuk ke Pembukuan.
+ * `_dpBookingInfo` disimpan hanya sebagai catatan informasi DP tanpa memotong kolom harga.
  */
 export function barisSewaDariBooking(
   b: BookingSewa,
@@ -1130,7 +1303,7 @@ export function barisSewaDariBooking(
     _bayarOngkir: "",
     bayar: "",
     _bookingId: b.id,
-    ...(dpNominal > 0 ? { _dpBooking: dpNominal } : {}),
+    ...(dpNominal > 0 ? { _dpBookingInfo: dpNominal } : {}),
   };
   return { sewa };
 }

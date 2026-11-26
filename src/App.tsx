@@ -50,7 +50,7 @@ import {
 } from "lucide-react";
 import { GAME_NAMES_ID } from "./games/constants";
 import useAppController from "./hooks/useAppController";
-import { AlertDialog, AppShell, Button, IconBadge, type NavItem, type NavSection, warnaPengguna } from "./ui";
+import { AlertDialog, AppShell, Button, IconBadge, notify, type NavItem, type NavSection, warnaPengguna } from "./ui";
 import { petaWaPenyewa } from "./lib/pengingatSewa";
 import PeringatanSewaHabis from "./components/PeringatanSewaHabis";
 import { totalPemasukanHarian } from "./lib/keuangan";
@@ -245,16 +245,42 @@ export default function App() {
   // Booking sewa (Monitoring › Booking): satu listener untuk daftar & titik di tab Monitoring
   const bookingSewa = useBookingSewa(!!user);
   const perhatianBooking = jumlahPerhatianBooking(bookingSewa.list, Date.now());
-  // DP booking langsung tercatat sebagai pemasukan Rental (owner_incomes). Staf tidak boleh menulis
-  // transaksi owner, jadi sinkron berjalan dari sesi owner / super admin setiap data DP berubah.
+  // DP booking aktif/diambil tidak masuk Transaksi (full masuk Pembukuan saat Mulai sewa).
+  // Hanya DP hangus (booking batal) yang tercatat di owner_incomes; sinkron juga otomatis
+  // memindahkan DP lama yang terlanjur masuk Transaksi ke Pembukuan (idempoten, sesi owner / super admin).
   const tandaDpBooking = useMemo(
-    () => JSON.stringify(bookingSewa.list.map((b) => [b.id, b.status, b.batal?.dp ?? null, b.dp?.nominal ?? 0, b.dp?.metode ?? "", b.dp?.ts ?? 0, b.dp?.bukti ?? "", b.nama, b.jenisPS, b.tanggal])),
+    () =>
+      JSON.stringify(
+        bookingSewa.list.map((b) => [
+          b.id,
+          b.status,
+          b.batal?.dp ?? null,
+          b.batal?.ts ?? 0,
+          b.diambil?.tanggal ?? "",
+          b.dp?.nominal ?? 0,
+          b.dp?.metode ?? "",
+          b.dp?.ts ?? 0,
+          b.dp?.bukti ?? "",
+          b.nama,
+          b.jenisPS,
+          b.tanggal,
+        ])
+      ),
     [bookingSewa.list]
   );
   useEffect(() => {
     if (!isSuperAdminOrOwner || bookingSewa.loading || bookingSewa.error) return;
     const t = setTimeout(() => {
-      sinkronDpBooking(bookingSewa.list).catch((e) => console.warn("Sinkron DP booking:", e));
+      sinkronDpBooking(bookingSewa.list)
+        .then((res) => {
+          if (res.migratedRows > 0 || res.removedIncomes > 0) {
+            const bagian: string[] = [];
+            if (res.removedIncomes > 0) bagian.push(`${res.removedIncomes} catatan DP dihapus dari Transaksi`);
+            if (res.migratedRows > 0) bagian.push(`${res.migratedRows} baris sewa di Pembukuan dipulihkan ke nominal full`);
+            notify(`Migrasi DP booking selesai: ${bagian.join(" · ")}.`, "positive");
+          }
+        })
+        .catch((e) => console.warn("Sinkron DP booking:", e));
     }, 800);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps

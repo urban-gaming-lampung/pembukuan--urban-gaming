@@ -493,7 +493,7 @@ const BookingFormSheet: React.FC<{
           )}
           {d.dpMetode && (
             <Footnote>
-              DP langsung tercatat sebagai pemasukan Rental (Transaksi & Analitik) di tanggal diterima. Saat Mulai sewa, Rincian Sewa hanya berisi sisa bayar. Batal dengan DP dikembalikan menghapus catatan DP.
+              DP disimpan sebagai tanda jadi booking (tidak masuk Transaksi). Saat Mulai sewa, seluruh nilai sewa (full) otomatis masuk ke Pembukuan › Rincian Sewa. Jika batal dengan DP hangus, DP dicatat di Transaksi.
               {d.dpMetode === "TRANSFER" && !d.dpBukti ? " Bukti TF boleh menyusul." : ""}
               {d.dpMetode === "CASH" ? " Simpan uang DP cash sampai sewa dimulai, lalu ikut setoran hari itu." : ""}
             </Footnote>

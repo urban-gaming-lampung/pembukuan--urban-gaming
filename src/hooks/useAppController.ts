@@ -2151,7 +2151,7 @@ export default function useAppController() {
     );
   };
 
-  /** "Mulai sewa": baris sewa (sisa bayar) masuk Rincian Sewa, booking jadi DIAMBIL. DP sudah tercatat sejak diterima. */
+  /** "Mulai sewa": baris sewa (nominal FULL termasuk DP) masuk Rincian Sewa, booking jadi DIAMBIL. */
   const mulaiSewaBooking = async (b: BookingSewa): Promise<boolean> => {
     if (rowsSewa.some((r: any) => r._bookingId === b.id)) {
       notify("Booking ini sudah ada di Rincian Sewa.", "info");
@@ -2164,19 +2164,24 @@ export default function useAppController() {
     tambahBarisSewa([sewa]);
     try {
       await ubahBooking(b.id, { status: "DIAMBIL", diambil: { ts: Date.now(), oleh: user?.email || "admin", tanggal }, batal: null });
-      notify(b.dp && b.dp.nominal > 0 ? "Sewa masuk Rincian Sewa (sisa bayar sesudah DP). Pilih status bayar lalu simpan." : "Sewa masuk Rincian Sewa. Pilih status bayar lalu simpan.", "positive");
+      notify(
+        b.dp && b.dp.nominal > 0
+          ? "Sewa masuk Rincian Sewa (nominal full termasuk DP). Pilih status bayar lalu simpan."
+          : "Sewa masuk Rincian Sewa. Pilih status bayar lalu simpan.",
+        "positive"
+      );
     } catch (e: any) {
       notify(`Baris sewa sudah masuk, tapi status booking gagal diubah: ${e?.message || e}`, "negative");
     }
     return true;
   };
 
-  /** Booking batal, DP hangus → catatan DP (sudah tercatat sejak diterima) tetap sebagai pemasukan. */
+  /** Booking batal, DP hangus → dicatat sebagai pemasukan DP Hangus di Transaksi (owner_incomes). */
   const dpHangusBooking = async (b: BookingSewa, alasan: string): Promise<boolean> => {
     if (!(b.dp && b.dp.nominal > 0)) return false;
     try {
       await ubahBooking(b.id, { status: "BATAL", batal: { alasan, oleh: user?.email || "admin", ts: Date.now(), dp: "HANGUS" } });
-      notify("Booking dibatalkan. DP hangus tetap tercatat sebagai pemasukan.", "positive");
+      notify("Booking dibatalkan. DP hangus dicatat sebagai pemasukan di Transaksi.", "positive");
       return true;
     } catch (e: any) {
       notify(`Gagal membatalkan booking: ${e?.message || e}`, "negative");
