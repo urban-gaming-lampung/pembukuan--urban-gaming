@@ -32,6 +32,7 @@ export function SubTabs<T extends string>({
 }) {
   const kecil = size === "sm";
   const padat = !kecil && options.length >= 4;
+  const padatKecil = kecil && options.length >= 5;
   return (
     <div
       role="tablist"
@@ -55,7 +56,12 @@ export function SubTabs<T extends string>({
             className={cx(
               "leading-tight whitespace-nowrap transition-[color,background-color,box-shadow] duration-150 flex items-center justify-center gap-1.5 text-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tint",
               kecil
-                ? "hit-44 min-h-[34px] px-3 py-1.5 text-caption font-bold uppercase tracking-wide"
+                ? cx(
+                    "hit-44 min-h-[34px] py-1.5 font-bold uppercase",
+                    padatKecil
+                      ? "px-1.5 text-caption2 tracking-normal sm:px-3 sm:text-caption sm:tracking-wide"
+                      : "px-3 text-caption tracking-wide"
+                  )
                 : cx(
                     "min-h-[44px] py-1.5 text-caption2 sm:text-footnote font-bold uppercase sm:tracking-wide",
                     padat ? "px-1 tracking-normal sm:px-3.5" : "px-2.5 tracking-normal sm:px-3.5"

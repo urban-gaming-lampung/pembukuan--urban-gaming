@@ -149,7 +149,7 @@ export default function Header({
         <IconButton
           onClick={onOpenGallery}
           icon={<Image className="w-[18px] h-[18px] sm:w-[19px] sm:h-[19px]" />}
-          title="Galeri Media (Story & Promo)"
+          title="Galeri Media Sosial URBAN"
           compact={compact}
         />
       )}
