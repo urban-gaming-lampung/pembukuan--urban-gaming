@@ -7,12 +7,8 @@ import {
   ChevronRight,
   Copy,
   Download,
-  Film,
-  Image as ImageIcon,
-  Maximize2,
   Pencil,
   Share,
-  Smartphone,
   Trash2,
   X,
 } from "lucide-react";
@@ -41,10 +37,10 @@ interface MediaPreviewModalProps {
 }
 
 /**
- * Pop-up Pratinjau Media bergaya Apple iOS 27 Photos + Inspector Sheet.
- * - Mode bawaan "Penuh": poster/video tampil jernih sesuai rasio asli tanpa tertutup overlay.
- * - Mode opsional "Simulasi Story" (untuk rasio potret 9:16): cek area aman Story iPhone.
- * - Panel inspektor di kanan/bawah adaptif Light & Dark Mode (.apple-sheet) dengan aksi cepat & Edit SSOT.
+ * Pop-up Pratinjau Story bergaya iPhone (Apple iOS 27 Liquid Glass + Product Bezel).
+ * - Stage kiri/atas menampilkan frame HP iPhone Story lengkap (Dynamic Island, bar progress Story,
+ *   header URBAN Gaming, caption Story, & Home Indicator).
+ * - Panel inspektor kanan/bawah memakai material kaca Apple iOS 27 (.apple-sheet) adaptif Light & Dark Mode.
  */
 export default function MediaPreviewModal({
   item,
@@ -60,21 +56,15 @@ export default function MediaPreviewModal({
   onEdit,
   onDelete,
 }: MediaPreviewModalProps) {
-  const [viewMode, setViewMode] = useState<"full" | "story">("full");
   const [justCopied, setJustCopied] = useState(false);
 
   const currentIdx = item ? items.findIndex((x) => x.id === item.id) : -1;
   const canPrev = currentIdx > 0;
   const canNext = currentIdx >= 0 && currentIdx < items.length - 1;
-  const supportsStorySim = item?.aspectRatio === "9:16";
 
   useEffect(() => {
-    // Setiap ganti media non-9:16, pastikan kembali ke tampilan penuh
-    if (item && item.aspectRatio !== "9:16") {
-      setViewMode("full");
-    }
     setJustCopied(false);
-  }, [item?.id, item?.aspectRatio]);
+  }, [item?.id]);
 
   useEffect(() => {
     if (!item || hasOverlayAbove) return;
@@ -98,6 +88,9 @@ export default function MediaPreviewModal({
 
   if (!item || typeof document === "undefined") return null;
 
+  const isPortraitStory = item.aspectRatio === "9:16";
+  const isVideo = item.mediaType === "video";
+
   const handleQuickCopy = () => {
     onCopyCaption(item.caption || "");
     setJustCopied(true);
@@ -109,7 +102,7 @@ export default function MediaPreviewModal({
       className="fixed inset-0 z-[140] flex items-end sm:items-center justify-center sm:p-5 md:p-6 font-sans"
       role="dialog"
       aria-modal="true"
-      aria-label={`Pratinjau ${item.title}`}
+      aria-label={`Pratinjau Story ${item.title}`}
     >
       {/* Backdrop Apple iOS 27 */}
       <div
@@ -121,7 +114,7 @@ export default function MediaPreviewModal({
       {/* Container Split Sheet (Mobile: Bottom Sheet, Desktop: Floating iOS 27 Split Window) */}
       <div
         className={cx(
-          "relative z-10 w-full max-w-5xl max-h-[94vh] md:h-[min(86vh,760px)] flex flex-col md:flex-row overflow-hidden rounded-t-sheet sm:rounded-[34px] shadow-float ring-1 ring-white/25 dark:ring-white/[0.14] border border-white/20 dark:border-white/[0.10] bg-[#0B0B0D]",
+          "relative z-10 w-full max-w-5xl max-h-[94vh] md:h-[min(88vh,740px)] flex flex-col md:flex-row overflow-hidden rounded-t-sheet sm:rounded-[34px] shadow-float ring-1 ring-white/25 dark:ring-white/[0.14] border border-white/20 dark:border-white/[0.10] bg-[#0B0B0D]",
           MOTION.sheet
         )}
       >
@@ -131,183 +124,132 @@ export default function MediaPreviewModal({
         </div>
 
         {/* ============================================================
-            LEFT / TOP: APPLE PHOTOS DARK LIQUID GLASS STAGE
+            LEFT / TOP: STAGE PREVIEW STORY IPHONE (APPLE PRODUCT BEZEL)
             ============================================================ */}
-        <div className="relative flex-1 min-h-[240px] max-h-[46vh] sm:min-h-[300px] sm:max-h-[50vh] md:max-h-none bg-[#09090B] flex flex-col overflow-hidden select-none">
-          {/* Ambient soft glow di latar stage */}
+        <div className="relative md:flex-1 bg-[#09090B] flex items-center justify-center px-4 py-3.5 sm:py-5 md:p-6 overflow-hidden shrink-0 md:shrink select-none">
+          {/* Ambient soft glow di belakang HP iPhone */}
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0"
             style={{
               background:
-                "radial-gradient(65% 55% at 50% 42%, rgba(97, 85, 245, 0.14), transparent 70%), radial-gradient(50% 45% at 85% 88%, rgba(255, 45, 85, 0.10), transparent 70%)",
+                "radial-gradient(62% 58% at 50% 48%, rgba(97, 85, 245, 0.16), transparent 72%), radial-gradient(46% 42% at 84% 85%, rgba(255, 45, 85, 0.11), transparent 70%)",
             }}
           />
 
-          {/* Floating Liquid Glass Stage Top Bar */}
-          <div className="relative z-20 flex items-center justify-between gap-2 px-3.5 sm:px-4 pt-2.5 sm:pt-3.5 pb-1 shrink-0">
-            <div className="flex items-center gap-2 min-w-0">
-              {supportsStorySim ? (
-                <div
-                  role="tablist"
-                  aria-label="Mode tampilan pratinjau"
-                  className="inline-flex items-center p-1 rounded-full bg-white/[0.12] backdrop-blur-xl border border-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]"
-                >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={viewMode === "full"}
-                    onClick={() => setViewMode("full")}
-                    className={cx(
-                      "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-caption2 font-semibold transition",
-                      viewMode === "full"
-                        ? "bg-white text-[#111113] shadow-sm"
-                        : "text-white/75 hover:text-white"
-                    )}
-                  >
-                    <Maximize2 className="w-3 h-3" />
-                    <span>Penuh</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={viewMode === "story"}
-                    onClick={() => setViewMode("story")}
-                    className={cx(
-                      "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-caption2 font-semibold transition",
-                      viewMode === "story"
-                        ? "bg-white text-[#111113] shadow-sm"
-                        : "text-white/75 hover:text-white"
-                    )}
-                  >
-                    <Smartphone className="w-3 h-3" />
-                    <span>Simulasi Story</span>
-                  </button>
-                </div>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.12] backdrop-blur-xl border border-white/15 text-caption2 font-semibold text-white/85">
-                  {item.mediaType === "video" ? <Film className="w-3 h-3" /> : <ImageIcon className="w-3 h-3" />}
-                  <span>
-                    {labelFormatRasio(item.aspectRatio)} · {item.aspectRatio}
-                  </span>
-                </span>
-              )}
+          {/* Counter posisi media (top-left stage) */}
+          {items.length > 1 && currentIdx >= 0 && (
+            <span className="absolute top-3 left-3.5 sm:top-4 sm:left-4 z-20 inline-flex items-center px-2.5 py-1 rounded-full bg-white/[0.12] backdrop-blur-xl border border-white/15 text-caption2 font-semibold text-white/85 tabular-nums">
+              {currentIdx + 1} / {items.length}
+            </span>
+          )}
 
-              {items.length > 1 && currentIdx >= 0 && (
-                <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full bg-white/[0.10] backdrop-blur-xl border border-white/15 text-caption2 font-semibold text-white/75 tabular-nums">
-                  {currentIdx + 1} / {items.length}
-                </span>
-              )}
-            </div>
+          {/* Tombol tutup mobile mengambang (top-right stage) */}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Tutup Pratinjau"
+            className="md:hidden hit-44 absolute top-3 right-3.5 z-20 w-9 h-9 rounded-full bg-white/[0.14] hover:bg-white/[0.22] backdrop-blur-xl border border-white/20 flex items-center justify-center text-white active:scale-95 transition"
+          >
+            <X className="w-4 h-4" />
+          </button>
 
-            {/* Tombol tutup mobile mengambang di stage */}
+          {/* Tombol Navigasi Prev / Next (Liquid Glass) */}
+          {canPrev && (
             <button
               type="button"
-              onClick={onClose}
-              aria-label="Tutup Pratinjau"
-              className="md:hidden hit-44 w-9 h-9 rounded-full bg-white/[0.14] hover:bg-white/[0.22] backdrop-blur-xl border border-white/20 flex items-center justify-center text-white active:scale-95 transition"
+              onClick={() => onSelect(items[currentIdx - 1])}
+              aria-label="Media sebelumnya"
+              className="hit-44 absolute left-2.5 sm:left-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/[0.14] hover:bg-white/[0.24] backdrop-blur-xl border border-white/20 text-white flex items-center justify-center shadow-float active:scale-95 transition"
             >
-              <X className="w-4 h-4" />
+              <ChevronLeft className="w-5 h-5" />
             </button>
-          </div>
+          )}
 
-          {/* Stage Media Area */}
-          <div className="relative z-10 flex-1 min-h-0 flex items-center justify-center px-4 sm:px-8 py-3 sm:py-5">
-            {/* Tombol Navigasi Prev / Next (Liquid Glass) */}
-            {canPrev && (
-              <button
-                type="button"
-                onClick={() => onSelect(items[currentIdx - 1])}
-                aria-label="Media sebelumnya"
-                className="hit-44 absolute left-2.5 sm:left-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/[0.14] hover:bg-white/[0.24] backdrop-blur-xl border border-white/20 text-white flex items-center justify-center shadow-float active:scale-95 transition"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-            )}
+          {canNext && (
+            <button
+              type="button"
+              onClick={() => onSelect(items[currentIdx + 1])}
+              aria-label="Media berikutnya"
+              className="hit-44 absolute right-2.5 sm:right-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/[0.14] hover:bg-white/[0.24] backdrop-blur-xl border border-white/20 text-white flex items-center justify-center shadow-float active:scale-95 transition"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          )}
 
-            {canNext && (
-              <button
-                type="button"
-                onClick={() => onSelect(items[currentIdx + 1])}
-                aria-label="Media berikutnya"
-                className="hit-44 absolute right-2.5 sm:right-4 top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/[0.14] hover:bg-white/[0.24] backdrop-blur-xl border border-white/20 text-white flex items-center justify-center shadow-float active:scale-95 transition"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            )}
-
-            {viewMode === "story" && supportsStorySim ? (
-              /* Opt-in iPhone Story Safe-Zone Simulator */
-              <div className="relative h-full max-h-[580px] aspect-[9/16] rounded-[38px] overflow-hidden ring-[5px] ring-white/15 shadow-[0_24px_60px_rgba(0,0,0,0.75)] bg-[#121214] flex flex-col justify-between">
-                {item.mediaType === "video" ? (
-                  <video
-                    key={item.id}
-                    src={item.mediaUrl}
-                    poster={item.thumbnailUrl}
-                    controls
-                    autoPlay
-                    loop
-                    playsInline
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
-                ) : (
-                  <img
-                    src={item.mediaUrl}
-                    alt={item.title}
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
+          {/* Frame HP iPhone Story Preview (proporsional penuh tanpa terpotong di HP maupun Desktop) */}
+          <div className="relative z-10 w-[196px] sm:w-[236px] md:w-auto md:h-full md:max-h-[620px] aspect-[9/16] rounded-[34px] sm:rounded-[38px] overflow-hidden ring-[4px] ring-white/15 border border-white/15 shadow-[0_24px_60px_rgba(0,0,0,0.78)] bg-[#121214] flex flex-col justify-between">
+            {/* Media di dalam layar iPhone */}
+            {isVideo ? (
+              <video
+                key={item.id}
+                src={item.mediaUrl}
+                poster={item.thumbnailUrl}
+                controls
+                autoPlay
+                loop
+                playsInline
+                className={cx(
+                  "absolute inset-0 w-full h-full",
+                  isPortraitStory ? "object-cover" : "object-contain bg-black"
                 )}
-
-                <div className="relative z-10 p-3 bg-gradient-to-b from-black/75 via-black/35 to-transparent pointer-events-none">
-                  <div className="w-20 h-4 bg-black rounded-full mx-auto mb-2.5 shadow-inner border border-white/10" />
-                  <div className="flex items-center gap-1 mb-2">
-                    <div className="flex-1 h-[3px] rounded-full bg-white/40 overflow-hidden">
-                      <div className="h-full bg-white rounded-full w-3/4" />
-                    </div>
-                    <div className="flex-1 h-[3px] rounded-full bg-white/25" />
-                  </div>
-                  <div className="flex items-center gap-2 text-white">
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#FF2D55] to-[#6155F5] flex items-center justify-center text-[10px] font-bold border border-white/40">
-                      UG
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-semibold tracking-tight leading-none truncate">URBAN Gaming</p>
-                      <p className="text-[9px] text-white/75 leading-none mt-0.5 truncate">{item.category}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {item.caption && (
-                  <div className="relative z-10 p-3.5 bg-gradient-to-t from-black/80 via-black/40 to-transparent pointer-events-none">
-                    <p className="text-white text-caption font-medium line-clamp-2 drop-shadow">
-                      {item.caption}
-                    </p>
-                  </div>
-                )}
-              </div>
+              />
             ) : (
-              /* Default Clean True-Aspect Apple Photos Canvas (Zero Obstructive Overlay) */
-              <div className="relative w-full h-full flex items-center justify-center">
-                {item.mediaType === "video" ? (
-                  <video
-                    key={item.id}
-                    src={item.mediaUrl}
-                    poster={item.thumbnailUrl}
-                    controls
-                    autoPlay
-                    loop
-                    playsInline
-                    className="max-w-full max-h-full rounded-[20px] object-contain ring-1 ring-white/15 shadow-[0_24px_60px_rgba(0,0,0,0.65)] bg-black"
-                  />
-                ) : (
-                  <img
-                    src={item.mediaUrl}
-                    alt={item.title}
-                    className="max-w-full max-h-full rounded-[20px] object-contain ring-1 ring-white/15 shadow-[0_24px_60px_rgba(0,0,0,0.65)] bg-black/40"
-                  />
+              <img
+                src={item.mediaUrl}
+                alt={item.title}
+                className={cx(
+                  "absolute inset-0 w-full h-full",
+                  isPortraitStory ? "object-cover" : "object-contain bg-[#121214]"
                 )}
-              </div>
+              />
             )}
+
+            {/* Top Chrome iPhone Story (Dynamic Island + Progress Bar + Header URBAN Gaming) */}
+            <div className="relative z-10 px-2.5 sm:px-3 pt-2 sm:pt-2.5 pb-4 bg-gradient-to-b from-black/75 via-black/35 to-transparent pointer-events-none">
+              {/* Dynamic Island */}
+              <div className="w-16 sm:w-20 h-4 sm:h-[18px] bg-black rounded-full mx-auto mb-2 shadow-inner border border-white/10" />
+
+              {/* Story Progress Bars */}
+              <div className="flex items-center gap-1 mb-2">
+                <div className="flex-1 h-[2.5px] rounded-full bg-white/35 overflow-hidden">
+                  <div className="h-full bg-white rounded-full w-3/4 animate-pulse" />
+                </div>
+                <div className="flex-1 h-[2.5px] rounded-full bg-white/25" />
+              </div>
+
+              {/* Story Profile Header */}
+              <div className="flex items-center gap-1.5 sm:gap-2 text-white">
+                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-tr from-[#FF2D55] to-[#6155F5] flex items-center justify-center text-[9px] sm:text-[10px] font-bold border border-white/40 shrink-0 shadow-sm">
+                  UG
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] sm:text-[11px] font-bold tracking-tight leading-none truncate">
+                    URBAN Gaming
+                  </p>
+                  <p className="text-[8.5px] sm:text-[9.5px] text-white/75 leading-none mt-0.5 truncate">
+                    {item.category}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Story Caption & Home Indicator */}
+            <div
+              className={cx(
+                "relative z-10 px-2.5 sm:px-3 pt-5 bg-gradient-to-t from-black/85 via-black/45 to-transparent pointer-events-none",
+                isVideo ? "pb-10 sm:pb-11" : "pb-2 sm:pb-2.5"
+              )}
+            >
+              {item.caption?.trim() && (
+                <p className="text-white text-[10.5px] sm:text-[11.5px] font-medium line-clamp-2 leading-snug drop-shadow">
+                  {item.caption}
+                </p>
+              )}
+              {!isVideo && (
+                <div className="w-20 sm:w-24 h-[3.5px] rounded-full bg-white/55 mx-auto mt-2" />
+              )}
+            </div>
           </div>
         </div>
 
@@ -316,14 +258,12 @@ export default function MediaPreviewModal({
             ============================================================ */}
         <aside className="apple-sheet w-full md:w-[370px] lg:w-[396px] flex flex-col border-t md:border-t-0 md:border-l border-sep min-h-0 flex-1 md:flex-none">
           {/* Inspector Scrollable Body */}
-          <div className="flex-1 overflow-y-auto px-4 sm:px-5 pt-4 pb-3 space-y-4">
+          <div className="flex-1 overflow-y-auto px-4 sm:px-5 pt-4 pb-3 space-y-3.5">
             {/* Badges & Desktop Close */}
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <Pill color={CATEGORY_COLOR[item.category] || "pink"}>{item.category}</Pill>
-                <Pill color={item.mediaType === "video" ? "purple" : "blue"}>
-                  {item.mediaType === "video" ? "Video" : "Foto"}
-                </Pill>
+                <Pill color={isVideo ? "purple" : "blue"}>{isVideo ? "Video" : "Foto"}</Pill>
                 <Pill tone="neutral">{item.aspectRatio}</Pill>
                 {item.pinned && (
                   <Pill color="orange" icon={<Bookmark className="w-3 h-3 fill-current" />}>
@@ -346,7 +286,7 @@ export default function MediaPreviewModal({
             {/* Title & Metadata */}
             <div>
               <h3 className="text-title3 font-bold tracking-tight text-label leading-snug">{item.title}</h3>
-              <p className="text-caption text-label-2 mt-1">
+              <p className="text-caption text-label-2 mt-0.5">
                 {labelFormatRasio(item.aspectRatio)} · {formatTimeAgo(item.createdAt)}
                 {item.uploadedBy ? ` · oleh ${item.uploadedBy}` : ""}
               </p>
@@ -354,7 +294,7 @@ export default function MediaPreviewModal({
 
             {/* Caption Box (Nested Concentric Liquid Tile) */}
             <div className="apple-tile rounded-tile border border-sep overflow-hidden">
-              <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 border-b border-sep">
+              <div className="flex items-center justify-between gap-2 px-3.5 py-2 border-b border-sep">
                 <Eyebrow>Caption Promosi</Eyebrow>
                 <button
                   type="button"
@@ -367,7 +307,7 @@ export default function MediaPreviewModal({
                   </span>
                 </button>
               </div>
-              <div className="px-3.5 py-3 max-h-40 sm:max-h-52 overflow-y-auto">
+              <div className="px-3.5 py-2.5 max-h-32 sm:max-h-48 overflow-y-auto">
                 <p className="text-footnote text-label whitespace-pre-wrap leading-relaxed">
                   {item.caption?.trim() || "Belum ada caption promosi."}
                 </p>
@@ -376,11 +316,11 @@ export default function MediaPreviewModal({
           </div>
 
           {/* Sticky Inspector Footer Actions */}
-          <div className="apple-bar shrink-0 border-t border-sep px-4 sm:px-5 pt-3.5 pb-[max(16px,env(safe-area-inset-bottom))] space-y-2.5">
+          <div className="apple-bar shrink-0 border-t border-sep px-4 sm:px-5 pt-3 pb-[max(14px,env(safe-area-inset-bottom))] space-y-2">
             <button
               type="button"
               onClick={() => onShare(item)}
-              className="w-full h-12 flex items-center justify-center gap-2 rounded-full bg-[#34C759] dark:bg-[#30D158] hover:brightness-[0.96] active:scale-[0.985] text-white font-semibold text-subhead shadow-[0_2px_10px_rgba(52,199,89,0.28),inset_0_1px_0_rgba(255,255,255,0.35)] transition"
+              className="w-full h-11 sm:h-12 flex items-center justify-center gap-2 rounded-full bg-[#34C759] dark:bg-[#30D158] hover:brightness-[0.96] active:scale-[0.985] text-white font-semibold text-subhead shadow-[0_2px_10px_rgba(52,199,89,0.28),inset_0_1px_0_rgba(255,255,255,0.35)] transition"
             >
               <Share className="w-4 h-4 stroke-[2.2]" />
               <span>Bagikan ke Story &amp; Chat</span>
