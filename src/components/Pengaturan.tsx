@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import { getAplikasiWa, isAndroid, setAplikasiWa, type AplikasiWa } from "../lib/wa";
 import { gajiBersih } from "../lib/gajiBuku";
+import { KartuIkuKaryawan } from "./KesejahteraanGaji";
 import { createPortal } from "react-dom";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { collection, addDoc, deleteDoc, onSnapshot, query, doc, updateDoc, where } from "firebase/firestore";
@@ -1097,6 +1098,7 @@ const Pengaturan: React.FC<Props> = ({
 
       {tab === "gaji" && !isOwner && (
         <div className="space-y-5">
+          <KartuIkuKaryawan iku={(gajiKu as any)?.iku} record={gajiKu?.records?.find((r: any) => normalizeBulanTahun(r.bulanTahun) === (gajiKu as any)?.iku?.bulan)} />
           <IOSGroup title="Gaji Saya">
             <div className="p-5">
               {(!gajiKu || !gajiKu.records || gajiKu.records.length === 0) ? (

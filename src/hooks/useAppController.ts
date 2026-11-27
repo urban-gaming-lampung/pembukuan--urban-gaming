@@ -29,6 +29,7 @@ import { pad, rupiah, toInt } from "../lib/format";
 import { PdfExporterHandle } from "../components/PdfExporter";
 import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr, isLogForDate } from "../lib/absenPeriod";
 import { jamDiniHari, menitHariKerja, namaHari, tanggalHariKerja, toLocalYmd } from "../lib/dateLocal";
+import { sinkronIku } from "../lib/kesejahteraan";
 import { buildSewaTable, effectiveSewaPrices, effectiveJasaPrices, cleanPriceList } from "../lib/priceLists";
 
 type ImageQuality = "Tinggi" | "Hemat";
@@ -97,6 +98,13 @@ export default function useAppController() {
   const [authLoading, setAuthLoading] = useState(true);
   const [userRole, setUserRole] = useState<string>("admin");
   const isSuperAdminOrOwner = user?.email?.toLowerCase().trim() === "owner@gmail.com" || userRole === "super admin";
+  // Indeks kesejahteraan: owner memperbarui skor karyawan sekali tiap buka aplikasi (tanpa membuka menu Pegawai).
+  const isPemilik = user?.email?.toLowerCase().trim() === "owner@gmail.com";
+  useEffect(() => {
+    if (!isPemilik) return;
+    const t = setTimeout(() => { sinkronIku().catch((e) => console.warn("[iku]", e)); }, 8000);
+    return () => clearTimeout(t);
+  }, [isPemilik]);
 
   // ===== PROFILE & BG STATE =====
   const [userProfilePic, setUserProfilePic] = useState<string | null>(null);

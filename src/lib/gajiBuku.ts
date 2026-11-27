@@ -22,7 +22,7 @@ export const KATEGORI_GAJI_PEGAWAI = "Gaji Pegawai";
 export const SUMBER_GAJI = "gaji";
 export const HARI_TENGGANG_TUTUP = 7;
 
-const urutBulan = (bt: string) => {
+export const urutBulan = (bt: string) => {
   const [m, y] = normalizeBulanTahun(String(bt || "")).split("/").map((x) => parseInt(x, 10));
   return (y || 0) * 100 + (m || 0);
 };
@@ -141,4 +141,22 @@ export async function sinkronGajiKeTransaksi(email: string, records: any[]): Pro
     if (!sama) tugas.push(setDoc(doc(col, id), { ...v, timestamp: cur?.timestamp || Date.now() }));
   });
   await Promise.all(tugas);
+}
+
+// ======================= GAJI POKOK SEKALI ATUR =======================
+export const GAJI_POKOK_AWAL = 1500000;
+export type RiwayatGajiPokok = { dari: string; nominal: number; ts: number; oleh: string };
+
+/** Riwayat kenaikan gaji pokok, urut dari bulan paling lama. */
+export const riwayatGajiPokok = (d: any): RiwayatGajiPokok[] =>
+  (Array.isArray(d?.riwayatGajiPokok) ? d.riwayatGajiPokok : [])
+    .filter((x: any) => x && n(x.nominal) > 0 && x.dari)
+    .map((x: any) => ({ ...x, dari: normalizeBulanTahun(x.dari), nominal: n(x.nominal) }))
+    .sort((a: RiwayatGajiPokok, b: RiwayatGajiPokok) => urutBulan(a.dari) - urutBulan(b.dari));
+
+/** Gaji pokok yang berlaku untuk bulan gaji `bt` (riwayat → gaji pokok dokumen → bawaan). */
+export function gajiPokokBerlaku(d: any, bt: string): number {
+  const u = urutBulan(bt);
+  const cocok = riwayatGajiPokok(d).filter((x) => urutBulan(x.dari) <= u).pop();
+  return cocok?.nominal || n(d?.gajiPokok) || GAJI_POKOK_AWAL;
 }
