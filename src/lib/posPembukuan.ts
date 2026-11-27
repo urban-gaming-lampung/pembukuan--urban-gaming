@@ -101,12 +101,33 @@ export type NotaBarang = {
   total: number;
   jumlah: number;
   buktiTransfer?: string;
-  label?: "DP" | "Pelunasan" | "Tukar tambah";
+  label?: "DP" | "Pelunasan" | "Tukar tambah" | "Retur";
   /** Tunai nota sudah disetor ke rekening owner (dicentang di Analitik › Tunai di luar rekening). */
   sudahSetor?: boolean;
 };
+/** Uang retur keluar pada tanggal retur (baris minus; nota asal tetap utuh di tanggalnya). */
+function barisRetur(s: PosSale, from: number, to: number): NotaBarang[] {
+  if (s.batal) return [];
+  const saleId = s.id || s.noNota;
+  return (s.retur || []).filter((r) => r.ts >= from && r.ts <= to).map((r) => ({
+    noNota: s.noNota,
+    id: `${saleId}#${r.id}`,
+    saleId,
+    ts: r.ts,
+    pembeli: String(s.pembeli || ""),
+    metode: r.kembali === "TUNAI_TOKO" ? ("CASH" as const) : ("TRANSFER" as const),
+    total: -(Number(r.nilai) || 0),
+    jumlah: -(Number(r.qty) || 0),
+    label: "Retur" as const,
+  }));
+}
+
 export function notaBarang(s: PosSale, from = 0, to = Infinity): NotaBarang[] {
   if (!s) return [];
+  return [...notaBarangAsli(s, from, to), ...barisRetur(s, from, to)];
+}
+
+function notaBarangAsli(s: PosSale, from = 0, to = Infinity): NotaBarang[] {
   const saleId = s.id || s.noNota;
   if (pernahDp(s)) {
     // Dibatalkan URBAN (DP dikembalikan) atau dibatalkan sesudah lunas (uang dikembalikan): tidak ada setoran.
@@ -130,7 +151,8 @@ export function notaBarang(s: PosSale, from = 0, to = Infinity): NotaBarang[] {
       }));
   }
   if (s.batal || s.ts < from || s.ts > to) return [];
-  const items = (s.items || []).filter((it) => !tipeJasaPos(it));
+  // Barang yang diretur tetap dihitung di tanggal nota (uang masuk saat itu); keluarnya di baris Retur.
+  const items = [...(s.items || []).filter((it) => !tipeJasaPos(it)), ...(s.retur || []).map((r) => ({ qty: r.qty, subtotal: r.nilai }))];
   const tukar = nilaiTukarNota(s);
   const dpLama = dpSudahDiSaldoNota(s);
   // Hanya barang berbayar (barang bonus Rp 0 tidak perlu disetor) — kecuali ada tukar tambah

@@ -108,11 +108,15 @@ const DaftarNotaOwner: React.FC<{
                   {n.noNota} · {jam(n.ts)}
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
+                  {n.label === "Retur" ? (
+                    <Pill tone="negative">{isCash ? "Tunai kas toko" : "Transfer owner"}</Pill>
+                  ) : (
                   <Pill tone={isCash ? (n.sudahSetor ? "positive" : "warning") : "tint"}>
                     {isCash ? (n.sudahSetor ? "Sudah disetor" : "Belum disetor") : "TF / QRIS"}
                   </Pill>
+                  )}
                   {n.label && (
-                    <Pill tone={n.label === "DP" ? "warning" : n.label === "Tukar tambah" ? "tint" : "positive"}>
+                    <Pill tone={n.label === "DP" ? "warning" : n.label === "Tukar tambah" ? "tint" : n.label === "Retur" ? "negative" : "positive"}>
                       {n.label}
                     </Pill>
                   )}

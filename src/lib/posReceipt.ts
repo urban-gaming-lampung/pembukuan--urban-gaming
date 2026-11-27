@@ -5,8 +5,8 @@
  */
 import type JsPDF from "jspdf";
 import logoBlackUrl from "../assets/urban-logo-black.png";
-import { adaTukarTambah, bayarNota, dpSudahDiSaldoNota, infoNego, isBonus, negoSatuan, nilaiTukarNota, pernahDp, sisaBayar, totalDibayar } from "./posSales";
-import type { PosSale } from "./posSales";
+import { adaTukarTambah, bayarNota, dpSudahDiSaldoNota, infoNego, isBonus, negoSatuan, nilaiReturNota, nilaiTukarNota, pernahDp, sisaBayar, totalDibayar } from "./posSales";
+import type { PosSale, ReturNota } from "./posSales";
 import { rupiah } from "./format";
 
 export const STORE = {
@@ -58,11 +58,21 @@ export const fmtJatuhTempo = (ymd?: string) => {
   return y && m && d ? new Date(y, m - 1, d).toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : "-";
 };
 /** Rincian pembayaran nota DP (di bawah TOTAL): DP, pelunasan, sisa, jatuh tempo. */
+/** Label baris barang yang diretur di nota: "RETUR 27 Nov". */
+export const teksRetur = (r: Pick<ReturNota, "ts">) => `RETUR ${tglPendek(r.ts)}`;
+/** Baris uang retur di bawah pembayaran: "Retur 27 Nov (Transfer)  -Rp 1.650.000". */
+const barisUangRetur = (s: PosSale) =>
+  (s.retur || []).map((r) => ({ l: `Retur ${tglPendek(r.ts)} (${r.kembali === "TUNAI_TOKO" ? "Tunai" : "Transfer"})`, r: `-${rupiah(r.nilai)}` }));
+
 export function barisPembayaran(s: PosSale): { l: string; r: string; bold?: boolean }[] {
+  return [...barisPembayaranAsli(s), ...barisUangRetur(s)];
+}
+
+function barisPembayaranAsli(s: PosSale): { l: string; r: string; bold?: boolean }[] {
   if (!pernahDp(s)) {
-    const b = bayarNota(s);
+    const b = bayarNota(s) + nilaiReturNota(s);
     const dpLama = dpSudahDiSaldoNota(s);
-    if (!adaTukarTambah(s) && dpLama <= 0) return [];
+    if (!adaTukarTambah(s) && dpLama <= 0) return s.retur?.length ? [{ l: "Dibayar pembeli", r: rupiah(b) }] : [];
     const out: { l: string; r: string; bold?: boolean }[] = [];
     if (adaTukarTambah(s)) out.push({ l: "Potongan tukar tambah", r: `-${rupiah(nilaiTukarNota(s))}` });
     if (dpLama > 0) {
@@ -220,6 +230,23 @@ function drawNota(pdf: JsPDF, s: PosSale, logo: { url: string; ratio: number } |
       pdf.text(toAscii(`Harga normal ${rupiah(it.hargaNormal!)} - nego kasir ${n > 0 ? "-" : "+"}${rupiah(Math.abs(n))}/pcs`), M, y);
       y += 3;
     }
+    y += 1.4;
+  });
+  // Barang retur: dicoret (tetap tampil sebagai jejak)
+  (s.retur || []).forEach((r) => {
+    pdf.setTextColor(140);
+    pdf.setDrawColor(140);
+    pdf.setLineWidth(0.25);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(8);
+    (pdf.splitTextToSize(toAscii(r.nama), CW) as string[]).forEach((line) => {
+      pdf.text(line, M, y);
+      pdf.line(M, y - 1.1, M + pdf.getTextWidth(line), y - 1.1);
+      y += 3.4;
+    });
+    row(`${r.qty} x ${rupiah(r.harga)}`, teksRetur(r), 7.5);
+    pdf.setTextColor(0);
+    pdf.setDrawColor(0);
     y += 1.4;
   });
   dashed(4);
@@ -439,6 +466,10 @@ export async function buildNotaEscPos(s: PosSale): Promise<Uint8Array> {
     line(lr(`  ${it.qty} x ${rupiah(it.harga)}${isBonus(it) ? " (BONUS)" : ""}`, rupiah(it.subtotal)));
     const n = negoSatuan(it);
     if (n) wrap(`  Normal ${rupiah(it.hargaNormal!)}, nego ${n > 0 ? "-" : "+"}${rupiah(Math.abs(n))}/pcs`).forEach(line);
+  });
+  (s.retur || []).forEach((r) => {
+    wrap(`[DICORET] ${r.nama}`).forEach(line);
+    line(lr(`  ${r.qty} x ${rupiah(r.harga)}`, teksRetur(r)));
   });
   rule();
   const tt = barangTukarTambah(s);

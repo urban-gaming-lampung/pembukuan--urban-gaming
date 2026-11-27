@@ -124,7 +124,32 @@ export type PosSale = {
   tunaiSudahSetor?: boolean;
   /** Batch `ps_bonus_fifo` yang dikonsumsi saat nota lunas (untuk pengembalian saat batal/hapus). */
   psBatchUsed?: PsBonusBatchUsed[];
+  /** Barang yang diretur (dicoret dari nota, stok dikembalikan, uang dikembalikan ke pembeli). */
+  retur?: ReturNota[];
 };
+
+/** Cara uang retur dikembalikan ke pembeli. */
+export type CaraKembaliRetur = "TRANSFER_OWNER" | "TUNAI_TOKO";
+export const LABEL_KEMBALI_RETUR: Record<CaraKembaliRetur, string> = { TRANSFER_OWNER: "Transfer owner", TUNAI_TOKO: "Tunai kas toko" };
+/** Satu barang yang diretur dari nota (barisnya dicoret, bukan dihapus). */
+export type ReturNota = {
+  id: string;
+  itemId: string;
+  nama: string;
+  kategori: string;
+  harga: number;
+  qty: number;
+  /** Uang yang dikembalikan ke pembeli (= harga × qty) */
+  nilai: number;
+  kembali: CaraKembaliRetur;
+  alasan: string;
+  ts: number;
+  oleh: string;
+};
+/** Σ uang retur nota (0 bila tidak ada). */
+export const nilaiReturNota = (s: Pick<PosSale, "retur">) => (s.retur || []).reduce((a, r) => a + (Number(r.nilai) || 0), 0);
+/** Barang di nota yang boleh diretur: barang jualan berbayar yang bukan stik bonus. */
+export const bisaDiretur = (it: PosItem) => it.kategori === "JUALAN" && !it.bonusUntukProdukId && (Number(it.qty) || 0) > 0 && (Number(it.harga) || 0) > 0;
 
 /** Satu barang tukar tambah di nota (detail lengkap + foto ada di koleksi tukar_tambah/{id}). */
 export type TukarTambahNota = { id: string; nama: string; qty: number; nilai: number; sn: string };
@@ -811,6 +836,64 @@ export async function cancelPosSale(sale: PosSale, alasan = ""): Promise<void> {
     tx.update(saleRef, { batal: true, batalOleh: oleh, batalTs: now, batalAlasan: alasan.trim() || null });
   });
   sinkronNotaDiam(sale.ts);
+}
+
+/**
+ * RETUR satu barang (khusus owner / super admin): baris barang dicoret dari nota (disimpan di `retur`),
+ * stok yang terpotong dikembalikan, total nota berkurang. Uang retur dicatat pada tanggal retur.
+ */
+export async function returBarangNota(sale: PosSale, itemIndex: number, qty: number, kembali: CaraKembaliRetur, alasan = ""): Promise<PosSale> {
+  if (!sale.id) throw new Error("ID nota tidak ditemukan.");
+  const oleh = auth.currentUser?.email || "admin";
+  const now = Date.now();
+  const saleRef = doc(db, "pos_transaksi", sale.id);
+  const stokDoc = doc(db, "data", "stok");
+  let hasil: PosSale = sale;
+  await runTransaction(db, async (tx) => {
+    const [sSnap, stSnap] = await Promise.all([tx.get(saleRef), tx.get(stokDoc)]);
+    if (!sSnap.exists()) throw new Error("Nota tidak ditemukan.");
+    const cur = { id: sale.id, ...(sSnap.data() as PosSale) };
+    if (cur.batal) throw new Error("Nota ini sudah dibatalkan.");
+    if (cur.status === "DP") throw new Error("Nota DP belum lunas: batalkan lewat pilihan nota DP.");
+    const items = [...(cur.items || [])];
+    const it = items[itemIndex];
+    if (!it || it.id !== sale.items[itemIndex]?.id) throw new Error("Barang di nota sudah berubah. Buka ulang nota.");
+    if (!bisaDiretur(it)) throw new Error("Barang ini tidak bisa diretur.");
+    if (items.some((x) => x.bonusUntukProdukId && x.bonusUntukProdukId === it.id)) throw new Error("Unit ini punya stik bonus. Batalkan nota bila seluruh paket dikembalikan.");
+    const q = Math.max(1, Math.min(Math.round(qty) || 0, Number(it.qty) || 0));
+    const nilai = q * (Number(it.harga) || 0);
+    // Stok: hanya yang benar-benar terpotong saat nota lunas
+    const changes: StokChange[] = [];
+    kebutuhanStok([{ ...it, qty: q }]).forEach((n) => {
+      const kurang = (cur.stokKurang || []).find((k) => k.kategori === n.kategori && k.item === n.item);
+      const terpotong = kurang ? Math.max(0, Math.min(n.qty, kurang.tersedia)) : n.qty;
+      if (terpotong > 0) changes.push({ kategori: n.kategori, item: n.item, delta: terpotong });
+    });
+    const sisa = (Number(it.qty) || 0) - q;
+    if (sisa > 0) items[itemIndex] = { ...it, qty: sisa, subtotal: sisa * (Number(it.harga) || 0) };
+    else items.splice(itemIndex, 1);
+    const negoTurun = it.hargaNormal ? (it.hargaNormal - it.harga) * q : 0;
+    const r: ReturNota = { id: `rt-${now}`, itemId: it.id, nama: it.nama, kategori: it.kategori, harga: Number(it.harga) || 0, qty: q, nilai, kembali, alasan: alasan.trim(), ts: now, oleh };
+    const patch: Partial<PosSale> = {
+      items,
+      subtotal: Math.max(0, (Number(cur.subtotal) || 0) - nilai),
+      total: Math.max(0, (Number(cur.total) || 0) - nilai),
+      ...(negoTurun ? { nego: (Number(cur.nego) || 0) - negoTurun } : {}),
+      retur: [...(cur.retur || []), r],
+      // PDF lama masih memuat barang yang diretur: buat ulang saat dikirim lagi
+      notaUrl: null as any,
+    };
+    if (changes.length) {
+      const jualan = (stSnap.data()?.jualan || {}) as Record<string, Record<string, StokItemValue>>;
+      const w = prepareStokWrites(jualan, changes, "koreksi", `Retur nota ${cur.noNota} · ${it.nama}${r.alasan ? ` · ${r.alasan}` : ""}`, oleh, now);
+      writeStokInTx(tx, w, { noNota: cur.noNota });
+    }
+    tx.update(saleRef, patch as any);
+    hasil = { ...cur, ...patch } as PosSale;
+  });
+  sinkronNotaDiam(sale.ts);
+  sinkronNotaDiam(now);
+  return hasil;
 }
 
 /**

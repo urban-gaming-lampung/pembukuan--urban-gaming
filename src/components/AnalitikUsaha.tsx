@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from "recharts";
 import {
-  Receipt, TrendingUp, TrendingDown, AlertTriangle, Users, Clock, Ban, Loader2, BadgePercent, Store, Trash2, Coins, Image as ImageIcon, Handshake, ChevronRight,
+  Receipt, TrendingUp, TrendingDown, AlertTriangle, Users, Clock, Ban, Loader2, BadgePercent, Store, Trash2, Coins, Image as ImageIcon, Handshake, ChevronRight, Undo2,
 } from "lucide-react";
 import FilterComp from "./Filter";
 import useStokData from "../hooks/useStokData";
@@ -9,6 +9,9 @@ import type { StokItemValue } from "../hooks/useStokData";
 import { getMinStok, kunciStok, statusOf, useMinStok } from "../lib/stokJualan";
 import { adaTukarTambah, bayarNota, cancelPosSale, deletePosSale, gabungNota, infoNego, isDpTerbuka, PosItem, PosSale, ringkasanDp, StokRef, tanggalPenjualan, terjualDalam, usePosSales, usePosSalesLunas, waktuPenjualan } from "../lib/posSales";
 import { BatalDp } from "./NotaDpSheet";
+import ReturNotaSheet from "./ReturNotaSheet";
+import { bisaDiretur } from "../lib/posSales";
+import { isNotaSewa } from "../lib/posReceipt";
 import { fmtTanggalNota } from "../lib/posReceipt";
 import { NotaActionButtons, NotaPreview, useNotaActions, DpLamaEditor } from "./PosCheckoutSheet";
 import { useModalProduk, useProdukJualan, useSemuaStokMasuk } from "../lib/barangJualan";
@@ -707,7 +710,8 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
   const [busy, setBusy] = useState<"" | "batal" | "hapus">("");
   const [batalDp, setBatalDp] = useState(false);
   const [zoomBukti, setZoomBukti] = useState(false);
-  useEffect(() => { setBatalDp(false); setZoomBukti(false); }, [sale?.id]);
+  const [bukaRetur, setBukaRetur] = useState(false);
+  useEffect(() => { setBatalDp(false); setZoomBukti(false); setBukaRetur(false); }, [sale?.id]);
   if (!sale || !live) return null;
   const notaDp = isDpTerbuka(live);
   const batalPakaiDp = live.status === "BATAL_PEMBELI" || live.status === "BATAL_URBAN";
@@ -815,6 +819,17 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
               Saat transaksi, stok tercatat kurang: {live.stokKurang!.map((k) => `${k.item} (terjual ${k.diminta}, tercatat ${k.tersedia})`).join(", ")}
             </Notice>
           )}
+          {!live.batal && live.status !== "DP" && !isNotaSewa(live) && (live.items || []).some((x) => bisaDiretur(x) && !(live.items || []).some((y) => y.bonusUntukProdukId === x.id)) && (
+            <button type="button" onClick={() => setBukaRetur(true)}
+              className="flex w-full items-center gap-3 rounded-card apple-card ring-1 ring-edge shadow-card px-3.5 py-3 text-left transition active:opacity-80">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-warning/15 text-warning"><Undo2 className="h-4 w-4" /></span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-subhead font-semibold text-label">Retur barang</span>
+                <span className="block text-caption text-label-2">{live.retur?.length ? `${live.retur.length} barang sudah diretur · ` : ""}Coret dari nota & kembalikan ke stok</span>
+              </span>
+              <ChevronRight className="h-4 w-4 text-label-3 shrink-0" />
+            </button>
+          )}
           <DpLamaEditor sale={live} onSaved={(m) => actions.setMsg(m)} />
           <div className={`rounded-card bg-fill p-3 ${live.batal && !batalPakaiDp ? "opacity-60" : ""}`}>
             <NotaPreview sale={live} />
@@ -822,6 +837,7 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
         </div>
       </Sheet>
 
+      <ReturNotaSheet sale={live} open={bukaRetur} onClose={() => setBukaRetur(false)} />
       <ImagePreviewModal
         open={zoomBukti}
         onClose={() => setZoomBukti(false)}

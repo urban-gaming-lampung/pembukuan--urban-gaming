@@ -22,8 +22,11 @@ export const adaTukarPos = (s: Pick<PosSale, "nilaiTukar" | "tukarTambah">) => n
 export const bayarNotaPos = (s: Pick<PosSale, "total" | "nilaiTukar">) => (Number(s.total) || 0) - nilaiTukarPos(s);
 
 /** Pecahan arus kas nyata satu nota lunas: kas masuk baru, DP lama di saldo, kas keluar (bila URBAN nombok), dan split Tunai / Transfer. */
-export function arusKasNota(s: Pick<PosSale, "total" | "nilaiTukar" | "metode" | "pembayaran" | "tukarTambah" | "dpSudahDiSaldo">) {
-  const bayar = bayarNotaPos(s);
+export function arusKasNota(s: Pick<PosSale, "total" | "nilaiTukar" | "metode" | "pembayaran" | "tukarTambah" | "dpSudahDiSaldo" | "retur">) {
+  // Retur: uang yang diterima tetap utuh (total sebelum retur), lalu uang retur keluar sesuai caranya.
+  const rtTunai = (s.retur || []).filter((r) => r.kembali === "TUNAI_TOKO").reduce((a, r) => a + (Number(r.nilai) || 0), 0);
+  const rtTransfer = (s.retur || []).filter((r) => r.kembali !== "TUNAI_TOKO").reduce((a, r) => a + (Number(r.nilai) || 0), 0);
+  const bayar = bayarNotaPos({ ...s, total: (Number(s.total) || 0) + rtTunai + rtTransfer });
   const kasMasukTotal = Math.max(0, bayar);
   const dpSudahDiSaldo = s.pembayaran?.length
     ? 0
@@ -63,11 +66,13 @@ export function arusKasNota(s: Pick<PosSale, "total" | "nilaiTukar" | "metode" |
     }
   }
 
+  cash -= rtTunai;
+  transfer -= rtTransfer;
   return {
-    bayar,
-    kasMasukTotal,
+    bayar: bayar - rtTunai - rtTransfer,
+    kasMasukTotal: kasMasukTotal - rtTunai - rtTransfer,
     dpSudahDiSaldo,
-    kasMasuk,
+    kasMasuk: kasMasuk - rtTunai - rtTransfer,
     kasKeluar,
     cash,
     transfer,

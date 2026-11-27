@@ -12,7 +12,7 @@ import { toLocalYmd } from "../lib/dateLocal";
 import { kunciStok } from "../lib/stokJualan";
 import { bukaWa, getAplikasiWa, isAndroid, linkWa, rapikanWa } from "../lib/wa";
 import { DraftTukar, KartuTukarTambah, TukarTambahSheet } from "./TukarTambahSheet";
-import { labelBayarTukar } from "../lib/posReceipt";
+import { labelBayarTukar, teksRetur } from "../lib/posReceipt";
 
 export type CheckoutLine = {
   id: string;
@@ -71,6 +71,15 @@ export const NotaPreview: React.FC<{ sale: PosSale }> = ({ sale: s }) => {
                 Harga normal {rupiah(it.hargaNormal!)} · nego kasir {negoSatuan(it) > 0 ? "−" : "+"}{rupiah(Math.abs(negoSatuan(it)))}/pcs
               </div>
             )}
+          </div>
+        ))}
+        {(s.retur || []).map((r) => (
+          <div key={r.id} className="text-[11px] text-zinc-400">
+            <div className="font-bold leading-snug line-through">{r.nama}</div>
+            <div className="flex justify-between font-mono">
+              <span className="line-through">{r.qty} x {rupiah(r.harga)}</span>
+              <span className="font-sans font-bold tracking-[0.06em] text-zinc-600">{teksRetur(r)}</span>
+            </div>
           </div>
         ))}
       </div>
