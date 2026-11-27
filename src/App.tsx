@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect, Suspense, lazy } from "react";
+import DendaTelatSheet from "./components/DendaTelatSheet";
 import Header from "./components/Header";
 import Input from "./components/Input";
 import RincianHarian from "./components/RincianHarian";
@@ -184,6 +185,9 @@ export default function App() {
     currentFormSignature,
     unverifiedRentals,
     paymentVerifyPrompt,
+    dendaPrompt,
+    setDendaPrompt,
+    catatDendaTelat,
     handleVerifyReturn,
     handleCatatPengingat,
     validateTransactions,
@@ -783,6 +787,12 @@ export default function App() {
             jeda={!!paymentVerifyPrompt}
             onVerify={handleVerifyReturn}
             onPengingat={handleCatatPengingat}
+          />
+
+          <DendaTelatSheet
+            data={paymentVerifyPrompt ? null : dendaPrompt}
+            onCatat={catatDendaTelat}
+            onTutup={() => setDendaPrompt(null)}
           />
 
           <AlertDialog

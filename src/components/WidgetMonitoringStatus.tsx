@@ -8,7 +8,7 @@ import { buildSewaTable } from "../lib/priceLists";
 import { formatK } from "../lib/format";
 import { formatWa } from "../lib/wa";
 import { daftarSewaBerjalan, jenisUnit, perluKonfirmasiKembali, SewaBerjalan, tagihanBelumBayar } from "../lib/sewa";
-import { batasKembali, INGATKAN_SEBELUM_MENIT, labelPengingat, tarifTelatPerJam, waktuRelatif } from "../lib/pengingatSewa";
+import { batasKembali, hitungDendaTelat, INGATKAN_SEBELUM_MENIT, labelLamaTelat, labelPengingat, tarifTelatPerJam, waktuRelatif } from "../lib/pengingatSewa";
 import PeringatanSewaHabis, { bisaIngatkan, kirimPengingatSewa, sumberSewa } from "./PeringatanSewaHabis";
 
 /**
@@ -267,6 +267,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
             {daftarJalan.map((u) => {
               const isWarning = u.isDone && !u.isVerified;
               const ingatkan = waktunyaIngatkan(u);
+              const telat = isWarning && u.endMs ? hitungDendaTelat(u.jenis, u.endMs, now) : null;
               return (
                 <div
                   key={u.uid}
@@ -325,6 +326,12 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
                       <Pill tone="neutral">Ambil</Pill>
                     ) : null}
                   </div>
+
+                  {telat && telat.menit > 0 && (
+                    <p className="mt-1.5 truncate text-caption2 font-semibold text-negative tabular-nums">
+                      Telat {labelLamaTelat(telat.menit, true)}{telat.nominal > 0 ? ` · denda ${formatK(telat.nominal)}` : ""}
+                    </p>
+                  )}
 
                   {u.diingatkan?.length > 0 && (
                     <p className="mt-1.5 truncate text-caption2 font-medium text-positive">{labelPengingat(u.diingatkan)}</p>

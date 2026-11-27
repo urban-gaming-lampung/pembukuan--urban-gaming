@@ -6,7 +6,7 @@ import { RowSewa } from "../lib/types";
 import { rupiah, toInt, formatRibuanInput } from "../lib/format";
 import { Receipt } from "lucide-react";
 import { buildSewaTable } from "../lib/priceLists";
-import { dasarDariHarga, dpBookingBaris, hargaDasarSewa, hargaKolomSewa, LAMA_DP_BOOKING } from "../lib/sewa";
+import { dasarDariHarga, dpBookingBaris, hargaDasarSewa, hargaKolomSewa, JENIS_DENDA, LAMA_DP_BOOKING } from "../lib/sewa";
 import { formatWa, rapikanWa, waValid } from "../lib/wa";
 import { isUrbanUserDocId } from "../lib/urbanUsers";
 import NotaSewaSheet from "./NotaSewaSheet";
@@ -113,7 +113,8 @@ const RincianSewa: React.FC<{
         const isHanyaOngkir = String(jenisKey ? (row as any)[jenisKey] : "") === "Hanya Ongkir";
         // Item tambahan (harga tetap, tanpa durasi) dari Edit Rincian, mis. "Tambah Sewa Stik PS4"
         const isAddon = !!table["-"]?.[String(jenisKey ? (row as any)[jenisKey] : "")];
-        const isNoDuration = isHanyaOngkir || isAddon;
+        const isDenda = String(jenisKey ? (row as any)[jenisKey] : "") === JENIS_DENDA;
+        const isNoDuration = isHanyaOngkir || isAddon || isDenda;
 
         if (jenisKey && keyName === jenisKey) {
           return (
@@ -135,6 +136,16 @@ const RincianSewa: React.FC<{
                   patch._bayarOngkir = "";
                   if ((row as any).jenisPS === "Hanya Ongkir") { patch.ket = ""; patch.isPaid = ""; }
                   patch.harga = (row as any).isPaid === "TIDAK" ? 0 : nextAddonPrice;
+                } else if (nextJenis === JENIS_DENDA) {
+                  // Denda telat: tanpa unit & durasi, nominal diisi di kolom harga
+                  patch.lamaSewa = "-";
+                  patch.jamMasukSewa = "-";
+                  patch.isOngkir = "TIDAK";
+                  patch._ongkir = "";
+                  patch._bayarOngkir = "";
+                  if ((row as any).jenisPS === "Hanya Ongkir") patch.ket = "";
+                  patch.isPaid = (row as any).isPaid && (row as any).jenisPS !== "Hanya Ongkir" ? (row as any).isPaid : "YA";
+                  patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable);
                 } else if (nextJenis === "Hanya Ongkir") {
                   patch.lamaSewa = "-";
                   patch.jamMasukSewa = "-";
@@ -152,10 +163,11 @@ const RincianSewa: React.FC<{
                   patch._bayarOngkir = "";
                   patch.harga = 0;
                 } else {
-                  if (isAddon) {
-                    // keluar dari item tambahan: kosongkan lama & jam supaya wajib diisi lagi
+                  if (isAddon || isDenda) {
+                    // keluar dari item tambahan / denda: kosongkan lama & jam supaya wajib diisi lagi
                     patch.lamaSewa = "";
                     patch.jamMasukSewa = "";
+                    if (isDenda) patch._customBase = "";
                   }
                   patch.harga = hargaKolomSewa({ ...(row as any), ...patch }, sewaTable);
                 }
@@ -174,6 +186,7 @@ const RincianSewa: React.FC<{
               ) : (
                 <option disabled className="bg-surface text-label-3">List Kosong</option>
               )}
+              <option value={JENIS_DENDA} className="bg-surface text-label">{JENIS_DENDA}</option>
             </AutoFitSelect>
           );
         }
@@ -404,7 +417,7 @@ const RincianSewa: React.FC<{
         }
 
         if (keyName === "isOngkir") {
-          if (isAddon) {
+          if (isAddon || isDenda) {
             return (
               <AutoFitInput
                 isMobile={isMobile}
@@ -557,7 +570,7 @@ const RincianSewa: React.FC<{
 
         if (keyName === "harga") {
           const currentTotal = toInt(String((row as any).harga ?? ""));
-          const isCustom = row.lamaSewa === "Isi Sendiri";
+          const isCustom = row.lamaSewa === "Isi Sendiri" || isDenda;
 
           if (isHanyaOngkir) {
             return (
@@ -582,7 +595,7 @@ const RincianSewa: React.FC<{
                   inputMode="numeric"
                   className="pl-8 font-mono font-bold text-tint"
                   value={formatRibuanInput((row as any)._customBase)}
-                  placeholder="Hrg Dasar"
+                  placeholder={isDenda ? "Nominal" : "Hrg Dasar"}
                   onChange={(e) => {
                     const raw = e.target.value.replace(/\D/g, "");
                     const patch: any = { _customBase: raw === "" ? "" : toInt(raw) };

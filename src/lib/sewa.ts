@@ -21,6 +21,9 @@ export const isDpBooking = (r: Baris | null | undefined) => String(r?.lamaSewa ?
 /** DP booking yang sudah dicatat di baris DP terpisah — dipotong dari harga / tagihan baris sewanya. */
 export const dpBookingBaris = (r: Baris | null | undefined) => (isDpBooking(r) ? 0 : Math.max(0, toInt(r?._dpBooking)));
 export const isHanyaOngkir = (r: Baris | null | undefined) => String(r?.jenisPS ?? "").trim().toLowerCase() === "hanya ongkir";
+/** Jenis PS "Denda": baris uang denda telat kembali (tanpa unit, tanpa durasi, nominal diisi di `_customBase`). */
+export const JENIS_DENDA = "Denda";
+export const isDendaSewa = (r: Baris | null | undefined) => String(r?.jenisPS ?? "").trim().toLowerCase() === "denda";
 /** Item tambahan berharga tetap tanpa durasi (mis. "Tambah Sewa Stik PS4"): lama sewa "-". */
 export const isItemTambahan = (r: Baris | null | undefined) => String(r?.lamaSewa ?? "").trim() === "-" && !isHanyaOngkir(r);
 /** Baris tanpa unit yang keluar: hanya ongkir, item tambahan, pelunasan, atau DP booking. */
@@ -88,7 +91,7 @@ export const ongkirBaris = (r: Baris | null | undefined) => (r?.isOngkir === "YA
 /** Harga sewa dasar (tanpa ongkir) dari tabel harga Edit Rincian, atau harga "Isi Sendiri". */
 export function hargaDasarSewa(r: Baris | null | undefined, sewaTable: SewaTable): number {
   if (!r?.jenisPS || isHanyaOngkir(r)) return 0;
-  if (r.lamaSewa === "Isi Sendiri") return toInt(r._customBase);
+  if (r.lamaSewa === "Isi Sendiri" || isDendaSewa(r)) return toInt(r._customBase);
   return getSewaPrice(sewaTable, r.jenisPS, r.lamaSewa);
 }
 

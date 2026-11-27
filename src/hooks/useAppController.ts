@@ -21,7 +21,7 @@ import useStokData from "./useStokData";
 import { pulihkanStokJualanDariRiwayat } from "../lib/stokJualan";
 import { bukaHalamanStok } from "../lib/stokRental";
 import { isBarisNota, sinkronNotaKePembukuan, useNotaHariKerja } from "../lib/posPembukuan";
-import { CatatanPengingat, wajibWaPenyewa } from "../lib/pengingatSewa";
+import { CatatanPengingat, hitungDendaTelat, wajibWaPenyewa } from "../lib/pengingatSewa";
 import { waValid } from "../lib/wa";
 import { cariBarisSewa, daftarSewaBerjalan, dpBookingBaris, hargaDasarSewa, ONGKIR_BAGI_HASIL_SEJAK, ongkirBaris, ongkirPengantar, perluKonfirmasiKembali, siapkanOngkirSimpan, tagihanBelumBayar, waBaris } from "../lib/sewa";
 import { bayarCash, bayarTransfer, catatLogPembukuan, periodRange, saringPeriode, totalBaris } from "../lib/keuangan";
@@ -1295,6 +1295,8 @@ export default function useAppController() {
   }, [history, rowsSewa, tanggal, user?.email, activeTab, jamCek]);
 
   const [paymentVerifyPrompt, setPaymentVerifyPrompt] = useState<any>(null);
+  /** Unit kembali lewat batas: tawarkan catat denda telat (baris Jenis PS "Denda" di Rincian Sewa). */
+  const [dendaPrompt, setDendaPrompt] = useState<null | { nama: string; jenis: string; wa: string; menit: number; jam: number; tarif: number | null; nominal: number }>(null);
 
   // Lock body scroll on active modals/popups
   useBodyScrollLock(openPOS);
@@ -1335,12 +1337,24 @@ export default function useAppController() {
          return;
       }
 
+      // Lewat batas kembali: tawarkan catat denda, kecuali admin menyatakan unit kembali tepat waktu
+      // (pernyataan itu dicatat di baris sewa atas nama admin, supaya owner bisa menelusuri).
+      let tanda: Record<string, any> = { _verifiedReturn: true };
+      if (item && typeof item === "object" && Number(item.endMs) > 0) {
+          const d = hitungDendaTelat(item.jenis, Number(item.endMs), Date.now());
+          if (d.menit > 0 && item._tanpaDenda) {
+              tanda = { ...tanda, _kembaliTepatWaktu: { ts: Date.now(), oleh: user?.email || auth.currentUser?.email || "admin", lewatMenit: d.menit } };
+          } else if (d.menit > 0) {
+              setDendaPrompt({ nama: item.namaPenyewa || "", jenis: item.jenis || "", wa: item.waPenyewa || "", ...d });
+          }
+      }
+
       if (typeof item === "number") {
           const sourceIdx = item;
           setRowsSewa((prev) => {
              const newRows = [...prev];
              if (newRows[sourceIdx]) {
-                 newRows[sourceIdx] = { ...newRows[sourceIdx], _verifiedReturn: true } as any;
+                 newRows[sourceIdx] = { ...newRows[sourceIdx], ...tanda } as any;
              }
              return newRows;
           });
@@ -1351,14 +1365,14 @@ export default function useAppController() {
           setRowsSewa((prev) => {
              const newRows = [...prev];
              if (newRows[item.sourceIdx]) {
-                 newRows[item.sourceIdx] = { ...newRows[item.sourceIdx], _verifiedReturn: true } as any;
+                 newRows[item.sourceIdx] = { ...newRows[item.sourceIdx], ...tanda } as any;
              }
              return newRows;
           });
       }
 
       if (item.historyId) {
-          await ubahBarisSewaHistory(item.historyId, item._rawRow, (r) => ({ ...r, _verifiedReturn: true }))
+          await ubahBarisSewaHistory(item.historyId, item._rawRow, (r) => ({ ...r, ...tanda }))
             .catch((e) => console.error("Gagal verifikasi dari history:", e));
       }
   };
@@ -2123,6 +2137,29 @@ export default function useAppController() {
 
   // ===== BOOKING SEWA → RINCIAN SEWA (Monitoring › Booking) =====
   /** Masukkan baris ke form Rincian Sewa (isi baris kosong dulu), lalu buka Pembukuan. */
+  /** Catat denda telat sebagai baris Rincian Sewa hari ini (ikut setoran cash & Analitik). */
+  const catatDendaTelat = (nominal: number, metode: "Cash" | "Transfer") => {
+    const d = dendaPrompt;
+    setDendaPrompt(null);
+    if (!d || !(nominal > 0)) return;
+    tambahBarisSewa([{
+      jenisPS: "Denda",
+      lamaSewa: "-",
+      jamMasukSewa: "-",
+      ket: d.nama || "Tanpa nama",
+      waPenyewa: d.wa,
+      isPaid: "YA",
+      isOngkir: "TIDAK",
+      _ongkir: "",
+      _bayarOngkir: "",
+      _customBase: nominal,
+      harga: nominal,
+      bayar: metode,
+      _dendaTelat: { jenis: d.jenis, menit: d.menit, jam: d.jam, tarif: d.tarif },
+    }]);
+    notify(metode === "Transfer" ? "Denda masuk Rincian Sewa. Upload bukti TF lalu simpan." : "Denda masuk Rincian Sewa. Simpan pembukuan.", "positive");
+  };
+
   const tambahBarisSewa = useCallback((baris: Record<string, any>[]) => {
     const oleh = user?.email || auth.currentUser?.email || "";
     setRowsSewa((prev) => {
@@ -2456,6 +2493,9 @@ export default function useAppController() {
     currentFormSignature,
     unverifiedRentals,
     paymentVerifyPrompt,
+    dendaPrompt,
+    setDendaPrompt,
+    catatDendaTelat,
     setPaymentVerifyPrompt,
     handleVerifyReturn,
     handleCatatPengingat,

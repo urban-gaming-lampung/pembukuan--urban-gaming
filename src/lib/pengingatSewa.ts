@@ -83,6 +83,25 @@ export function waktuRelatif(ts: number, now: number): string {
 }
 export const batasKembali = (endMs: number) => endMs + TOLERANSI_KEMBALI_MENIT * 60000;
 
+/** "1 jam 35 menit" (panjang) atau "1j 35m" (ringkas, untuk kartu). */
+export function labelLamaTelat(menit: number, ringkas = false): string {
+  const j = Math.floor(menit / 60), m = menit % 60;
+  const out = ringkas ? [j ? `${j}j` : "", m ? `${m}m` : ""] : [j ? `${j} jam` : "", m ? `${m} menit` : ""];
+  return out.filter(Boolean).join(" ") || (ringkas ? "<1m" : "kurang dari 1 menit");
+}
+
+/**
+ * Denda telat kembali: dihitung dari batas kembali (sewa habis + toleransi 1 jam).
+ * Tiap jam penuh = 1 jam; sisa lebih dari TOLERANSI_TELAT_MENIT menit = tambah 1 jam.
+ */
+export function hitungDendaTelat(jenis: unknown, endMs: number, now: number) {
+  const menit = Math.floor((now - batasKembali(endMs)) / 60000);
+  const tarif = tarifTelatPerJam(jenis);
+  if (menit <= 0) return { menit: 0, jam: 0, tarif, nominal: 0 };
+  const jam = Math.floor(menit / 60) + (menit % 60 > TOLERANSI_TELAT_MENIT ? 1 : 0);
+  return { menit, jam, tarif, nominal: tarif ? jam * tarif : 0 };
+}
+
 const rpRapat = (n: number) => "Rp" + new Intl.NumberFormat("id-ID").format(n);
 
 /** Pesan WhatsApp pengingat pengembalian unit. */
