@@ -10,6 +10,8 @@ import { formatK, rupiah, tanggalAngka, toInt } from "./format";
 import { dariYmd } from "./dateLocal";
 import { kategoriBarisUsaha } from "./pemasukanUsaha";
 import { sebutHen } from "./posPembukuan";
+import { pemasukanRental } from "./keuangan";
+import { ongkirBaris } from "./sewa";
 
 /** Target pemasukan rental + jasa per hari. Target mingguan = target harian × jumlah hari. */
 export const TARGET_HARIAN = 350000;
@@ -26,10 +28,16 @@ export const rentangMinggu = (hariTerakhir: number): [number, number][] => {
   return out;
 };
 
-/** Pemasukan satu hari untuk laporan: rental (sewa + harian + jajanan) + jasa (isi game, HEN, servis). */
+/**
+ * Pemasukan satu hari untuk laporan: rental (sewa + ongkir + harian + jajanan) + jasa (isi game, HEN, servis).
+ * Rental = Analitik › Rental › Uang masuk (pemasukanRental); pembagian Sewa PS / Ongkir sama dengan Analitik.
+ */
 export function rincianHariLaporan(h: any) {
-  const sewa = toInt(h?.totalSewa);
-  const harian = toInt(h?.totalHarian);
+  const ongkirSewa = (Array.isArray(h?.rowsSewa) ? h.rowsSewa : []).reduce((a: number, r: any) => a + Math.min(ongkirBaris(r), Math.max(0, toInt(r?.harga))), 0);
+  const ongkirHarian = (Array.isArray(h?.rowsHarian) ? h.rowsHarian : []).reduce((a: number, r: any) => a + Math.min(Math.max(0, toInt(r?._ongkir)), Math.max(0, toInt(r?.harga))), 0);
+  const sewa = toInt(h?.totalSewa) - ongkirSewa;
+  const harian = toInt(h?.totalHarian) - ongkirHarian;
+  const ongkir = ongkirSewa + ongkirHarian;
   const jajanan = toInt(h?.totalJajanan);
   let isiGame = 0, hen = 0, servis = 0;
   (Array.isArray(h?.rowsJasaAks) ? h.rowsJasaAks : []).forEach((r: any) => {
@@ -41,9 +49,66 @@ export function rincianHariLaporan(h: any) {
     else if (sebutHen(r.tipe) || sebutHen(r.ket)) hen += v;
     else servis += v;
   });
-  const rental = sewa + harian + jajanan;
+  const rental = pemasukanRental(h || {});
   const jasa = isiGame + hen + servis;
-  return { sewa, harian, jajanan, isiGame, hen, servis, rental, jasa, total: rental + jasa };
+  return { sewa, ongkir, harian, jajanan, isiGame, hen, servis, rental, jasa, total: rental + jasa };
+}
+
+/**
+ * Rekap bulan berjalan s.d. tanggal terpilih — SATU sumber untuk laporan teks (WA) & PDF.
+ * Hari terpilih yang belum disimpan memakai data form (`dataForm`).
+ */
+export function rekapBulanLaporan(history: HistoryItem[], tanggal: string, dataForm?: any) {
+  const prefixBulan = String(tanggal).slice(0, 8);
+  const monthHistory: any[] = history
+    .filter((h) => String(h.tanggal).startsWith(prefixBulan) && h.tanggal <= tanggal)
+    .sort((a, b) => a.tanggal.localeCompare(b.tanggal));
+  const savedToday = history.find((h) => h.tanggal === tanggal);
+  if (!savedToday && dataForm) monthHistory.push({ ...dataForm, tanggal });
+  const todayItem: any = savedToday || dataForm || null;
+
+  const dataMap: Record<number, number> = {};
+  const rekap = { sewa: 0, ongkir: 0, harian: 0, jajanan: 0, isiGame: 0, hen: 0, servis: 0, rental: 0, jasa: 0, total: 0 };
+  const listSetor: { tanggal: string; ket: string; nom: number }[] = [];
+  const listKeluar: { tanggal: string; ket: string; nom: number }[] = [];
+  let hariTerisi = 0;
+  monthHistory.forEach((h) => {
+    const r = rincianHariLaporan(h);
+    const dateNum = Number(String(h.tanggal).slice(8, 10));
+    dataMap[dateNum] = (dataMap[dateNum] || 0) + r.total;
+    (Object.keys(rekap) as (keyof typeof rekap)[]).forEach((k) => { rekap[k] += r[k]; });
+    if (r.total > 0) hariTerisi++;
+    (Array.isArray(h.rowsSetoran) ? h.rowsSetoran : []).forEach((x: any) => {
+      const nom = toInt(x?.harga || x?.nominal);
+      if (nom > 0) listSetor.push({ tanggal: x.tanggal || h.tanggal, ket: x.ket || "Setoran", nom });
+    });
+    (Array.isArray(h.rowsPengeluaran) ? h.rowsPengeluaran : []).forEach((x: any) => {
+      const nom = toInt(x?.harga || x?.nominal);
+      if (nom > 0) listKeluar.push({ tanggal: x.tanggal || h.tanggal, ket: x.ket || "Pengeluaran", nom });
+    });
+  });
+  const pengeluaran = listKeluar.reduce((a, x) => a + x.nom, 0);
+  const totalSetor = listSetor.reduce((a, x) => a + x.nom, 0);
+
+  const hariIni = todayItem ? rincianHariLaporan(todayItem) : null;
+  const pengeluaranHariIni = (Array.isArray(todayItem?.rowsPengeluaran) ? todayItem.rowsPengeluaran : []).reduce((a: number, x: any) => a + toInt(x?.harga || x?.nominal), 0);
+  // Harus disetor = baris Setoran hari itu (dihitung form pembukuan: kas tunai − pengeluaran tunai manual)
+  const setoranHariIni = toInt(Array.isArray(todayItem?.rowsSetoran) ? (todayItem.rowsSetoran[0]?.harga ?? todayItem.rowsSetoran[0]?.nominal) : 0);
+
+  return {
+    monthHistory, todayItem, dataMap, rekap, hariTerisi, listSetor, listKeluar, totalSetor,
+    /** Pengeluaran admin bulan ini (dicatat di pembukuan harian) */
+    pengeluaran,
+    /** Rental + jasa − pengeluaran admin (bukan laba: pengeluaran owner & gaji ada di Analitik) */
+    bersih: rekap.total - pengeluaran,
+    rataRata: hariTerisi ? Math.round(rekap.total / hariTerisi / 1000) * 1000 : 0,
+    hariIni: {
+      kotor: hariIni?.total || 0,
+      pengeluaran: pengeluaranHariIni,
+      bersih: (hariIni?.total || 0) - pengeluaranHariIni,
+      harusSetor: Math.max(0, setoranHariIni || toInt(todayItem?.totalCash)),
+    },
+  };
 }
 
 /**
@@ -55,53 +120,10 @@ export function buatLaporanHarian(history: HistoryItem[], tanggal: string, dataF
   const currentMonth = anchorDate.getMonth();
   const currentYear = anchorDate.getFullYear();
   const anchorDay = anchorDate.getDate();
-  const prefixBulan = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-`;
-
-  // 1. Pembukuan bulan ini s/d tanggal terpilih
-  const monthHistory: any[] = history
-    .filter((h) => String(h.tanggal).startsWith(prefixBulan) && h.tanggal <= tanggal)
-    .sort((a, b) => a.tanggal.localeCompare(b.tanggal));
-  const savedToday = history.find((h) => h.tanggal === tanggal);
-  if (!savedToday && dataForm && String(tanggal).startsWith(prefixBulan)) monthHistory.push({ ...dataForm, tanggal });
-  const todayItem: any = savedToday || dataForm;
-
-  // 2. Per hari, rekap bulan, setor & pengeluaran
-  const dataMap: Record<number, number> = {};
-  const rekap = { sewa: 0, harian: 0, jajanan: 0, isiGame: 0, hen: 0, servis: 0, rental: 0, jasa: 0, total: 0 };
-  let hariTerisi = 0;
-  let strSetor = "";
-  let strPengeluaran = "";
-  let kasBulan = 0;
-  let pengeluaranBulan = 0;
-
-  monthHistory.forEach((h) => {
-    const dateNum = Number(String(h.tanggal).slice(8, 10));
-    const r = rincianHariLaporan(h);
-    dataMap[dateNum] = (dataMap[dateNum] || 0) + r.total;
-    (Object.keys(rekap) as (keyof typeof rekap)[]).forEach((k) => { rekap[k] += r[k]; });
-    if (r.total > 0) hariTerisi++;
-    kasBulan += toInt(h.totalCash) + toInt(h.totalTransfer);
-    (Array.isArray(h.rowsSetoran) ? h.rowsSetoran : []).forEach((s: any) => {
-      const nom = toInt(s.harga || s.nominal);
-      if (nom > 0) strSetor += `${tanggalAngka(s.tanggal || h.tanggal)} - ${s.ket || "Setoran"} - ${rupiah(nom)}\n`;
-    });
-    (Array.isArray(h.rowsPengeluaran) ? h.rowsPengeluaran : []).forEach((p: any) => {
-      const nom = toInt(p.harga || p.nominal);
-      if (nom <= 0) return;
-      pengeluaranBulan += nom;
-      strPengeluaran += `${tanggalAngka(p.tanggal || h.tanggal)} - ${p.ket || "Pengeluaran"} - ${rupiah(nom)}\n`;
-    });
-  });
-
-  // Total saldo bulan ini = kas cash + transfer − pengeluaran
-  const saldoBulan = kasBulan - pengeluaranBulan;
-
-  // 3. Hari ini
-  const hariIni = todayItem ? rincianHariLaporan(todayItem) : null;
-  const pengeluaranHariIni = (Array.isArray(todayItem?.rowsPengeluaran) ? todayItem.rowsPengeluaran : []).reduce((a: number, p: any) => a + toInt(p.harga), 0);
-  const kotorHariIni = hariIni?.total || 0;
-  // Saldo yang harus disetor = kas cash hari itu (rental + jasa)
-  const harusSetor = Math.max(0, toInt(todayItem?.totalCash));
+  const R = rekapBulanLaporan(history, tanggal, dataForm);
+  const { dataMap, rekap, hariTerisi, rataRata } = R;
+  const strSetor = R.listSetor.map((x) => `${tanggalAngka(x.tanggal)} - ${x.ket} - ${rupiah(x.nom)}\n`).join("");
+  const strPengeluaran = R.listKeluar.map((x) => `${tanggalAngka(x.tanggal)} - ${x.ket} - ${rupiah(x.nom)}\n`).join("");
 
   // 4. Teks
   const headerDateStr = new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(anchorDate);
@@ -129,22 +151,20 @@ export function buatLaporanHarian(history: HistoryItem[], tanggal: string, dataF
     text += `Total : ${angka}${status} (target ${formatK(target)})\n\n`;
   });
 
-  // Dibulatkan ke ribuan supaya mudah dibaca (mis. 397k)
-  const rataRata = hariTerisi ? Math.round(rekap.total / hariTerisi / 1000) * 1000 : 0;
-  const labaBersihBulan = rekap.total - pengeluaranBulan;
   text += GARIS;
   text += `REKAP BULAN INI (1–${anchorDay})\n`;
   text += `Rental : ${formatK0(rekap.rental)}\n`;
   text += `• Sewa PS : ${formatK0(rekap.sewa)}\n`;
+  if (rekap.ongkir > 0) text += `• Ongkir : ${formatK(rekap.ongkir)}\n`;
   if (rekap.harian > 0) text += `• Harian : ${formatK(rekap.harian)}\n`;
   if (rekap.jajanan > 0) text += `• Jajanan : ${formatK(rekap.jajanan)}\n`;
   text += `Jasa : ${formatK0(rekap.jasa)}\n`;
   text += `• Isi game : ${formatK0(rekap.isiGame)}\n`;
   text += `• Upgrade HEN : ${formatK0(rekap.hen)}\n`;
   if (rekap.servis > 0) text += `• Servis : ${formatK(rekap.servis)}\n`;
-  text += `Total kotor : ${formatK0(rekap.total)}\n`;
-  text += `Pengeluaran : -${rupiah(pengeluaranBulan)}\n`;
-  text += `Laba bersih : ${rupiah(labaBersihBulan)}\n`;
+  text += `Total pemasukan : ${formatK0(rekap.total)}\n`;
+  text += `Pengeluaran admin : -${rupiah(R.pengeluaran)}\n`;
+  text += `Pemasukan bersih : ${rupiah(R.bersih)}\n`;
   text += `Rata-rata/hari : ${formatK0(rataRata)}${hariTerisi ? (rataRata >= TARGET_HARIAN ? " ✅" : " ❌") : ""}\n`;
 
   text += GARIS;
@@ -153,11 +173,11 @@ export function buatLaporanHarian(history: HistoryItem[], tanggal: string, dataF
   text += `*PENGELUARAN*\n${strPengeluaran || "-\n"}`;
   text += GARIS;
   text += `HARI INI\n`;
-  text += `Pemasukan kotor : ${rupiah(kotorHariIni)}\n`;
-  text += `Pengeluaran : -${rupiah(pengeluaranHariIni)}\n`;
-  text += `Pemasukan bersih : ${rupiah(kotorHariIni - pengeluaranHariIni)}\n`;
-  text += `Saldo harus disetor : ${rupiah(harusSetor)}\n`;
-  text += `Total saldo bulan ini : ${rupiah(saldoBulan)}\n`;
+  text += `Pemasukan kotor : ${rupiah(R.hariIni.kotor)}\n`;
+  text += `Pengeluaran : -${rupiah(R.hariIni.pengeluaran)}\n`;
+  text += `Pemasukan bersih : ${rupiah(R.hariIni.bersih)}\n`;
+  text += `Saldo harus disetor : ${rupiah(R.hariIni.harusSetor)}\n`;
+  text += `Pemasukan bersih bulan ini : ${rupiah(R.bersih)}\n`;
   return text;
 }
 

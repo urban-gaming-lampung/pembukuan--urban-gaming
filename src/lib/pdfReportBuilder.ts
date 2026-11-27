@@ -14,10 +14,11 @@ import type { KunciRincian } from "./tampilRincian";
 import { formatK, rpShort, rupiah, tanggalAngka, toInt } from "./format";
 import { totalPemasukanHarian } from "./keuangan";
 import { dariYmd } from "./dateLocal";
-import { rentangMinggu, rincianHariLaporan, TARGET_HARIAN } from "./laporan";
+import { rekapBulanLaporan, rentangMinggu, rincianHariLaporan, TARGET_HARIAN } from "./laporan";
 import { hitungRekapBulananKeseluruhan, rentangBulanSampai, type DataAnalitikBulananRaw } from "./analitikBulanan";
 import { isKategoriDihapus, isKategoriJajanan } from "./stokRental";
 import { toAscii } from "./posReceipt";
+import { ONGKIR_BAGI_HASIL_SEJAK } from "./sewa";
 
 export type PdfExportData = {
   tanggal: string;
@@ -971,8 +972,10 @@ export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions):
       );
     }
     // Kartu rekonsiliasi kas
+    // Sama dengan form pembukuan: sejak bagi hasil ongkir, bagian ongkir pengantar TIDAK memotong setoran
+    const kebijakanBaru = String(data.tanggal) >= ONGKIR_BAGI_HASIL_SEJAK;
     const keluarCash = keluarRows
-      .filter((r: any) => String(r?.bayar || "Cash") !== "Transfer" && !(data.ongkirMasukGaji && r?._autoOngkir))
+      .filter((r: any) => String(r?.bayar || "Cash") !== "Transfer" && !((kebijakanBaru || data.ongkirMasukGaji) && (r?._autoOngkir || r?._autoOngkirKey)))
       .reduce((s, r) => s + toInt(r?.harga), 0);
     const estimasiSetor = Math.max(0, totalCash - keluarCash);
     ensure(42);
@@ -1104,46 +1107,21 @@ export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions):
       : `Total Rental + Usaha (1-${anchorDay} ${BULAN_PANJANG[anchor.getMonth()]}) | Tanpa transaksi owner (hanya akun Owner/Super Admin)`
   );
 
-  // Hitung rekap operasional harian per minggu (Rental + Jasa, target 350k/hari) + rincian setoran & pengeluaran admin
-  const dataMap: Record<number, number> = {};
-  const rekap = { sewa: 0, harian: 0, jajanan: 0, isiGame: 0, hen: 0, servis: 0, rental: 0, jasa: 0, total: 0 };
-  let hariTerisi = 0;
-  let kasBulan = 0;
-  let pengeluaranAdminBulan = 0;
-  const listSetorBulan: { tgl: string; ket: string; nom: number }[] = [];
-  const listKeluarBulan: { tgl: string; ket: string; nom: number }[] = [];
-
-  monthUpToDate.forEach((h: any) => {
-    const dateNum = Number(String(h.tanggal).slice(8, 10));
-    const r = rincianHariLaporan(h);
-    dataMap[dateNum] = (dataMap[dateNum] || 0) + r.total;
-    (Object.keys(rekap) as (keyof typeof rekap)[]).forEach((k) => {
-      rekap[k] += r[k];
-    });
-    if (r.total > 0) hariTerisi++;
-    kasBulan += toInt(h.totalCash) + toInt(h.totalTransfer);
-    (Array.isArray(h.rowsSetoran) ? h.rowsSetoran : []).forEach((s: any) => {
-      const nom = toInt(s?.harga || s?.nominal);
-      if (nom > 0) listSetorBulan.push({ tgl: tanggalAngka(s.tanggal || h.tanggal), ket: clean(s.ket || "Setoran"), nom });
-    });
-    (Array.isArray(h.rowsPengeluaran) ? h.rowsPengeluaran : []).forEach((p: any) => {
-      const nom = toInt(p?.harga || p?.nominal);
-      if (nom <= 0) return;
-      pengeluaranAdminBulan += nom;
-      listKeluarBulan.push({ tgl: tanggalAngka(p.tanggal || h.tanggal), ket: clean(p.ket || "Pengeluaran"), nom });
-    });
-  });
-
-  const rataRata = hariTerisi ? Math.round(rekap.total / hariTerisi / 1000) * 1000 : 0;
-  const saldoBulan = kasBulan - pengeluaranAdminBulan;
-  const totalSetorBulan = listSetorBulan.reduce((s, x) => s + x.nom, 0);
+  // Rekap operasional (Rental + Jasa) — SATU sumber dengan laporan teks WA (lib/laporan)
+  const RB = rekapBulanLaporan(data.history || [], data.tanggal, data);
+  const { dataMap, rekap, hariTerisi, rataRata } = RB;
+  const pengeluaranAdminBulan = RB.pengeluaran;
+  const listSetorBulan = RB.listSetor.map((x) => ({ tgl: tanggalAngka(x.tanggal), ket: clean(x.ket), nom: x.nom }));
+  const listKeluarBulan = RB.listKeluar.map((x) => ({ tgl: tanggalAngka(x.tanggal), ket: clean(x.ket), nom: x.nom }));
+  const saldoBulan = RB.bersih;
+  const totalSetorBulan = RB.totalSetor;
   const blnUpper = BULAN_PENDEK[anchor.getMonth()].toUpperCase();
 
   // Baris 1: 2 Kartu Hero Bulanan — Total Laba Kotor & Total Laba Bersih (Rental + Usaha, 100% selaras Analitik Keseluruhan)
   const heroW = (CW - 10) / 2;
   const heroCards = [
     {
-      label: `LABA KOTOR BULAN INI (1-${anchorDay} ${blnUpper})`,
+      label: `PEMASUKAN BULAN INI (1-${anchorDay} ${blnUpper})`,
       val: rp(analitik.total.masuk),
       sub: `Rental ${rp(analitik.rental.masuk)} + Usaha ${rp(analitik.usaha.masuk)}`,
       fg: C.label,
@@ -1279,7 +1257,7 @@ export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions):
       bd: rataRata >= TARGET_HARIAN ? C.positiveBd : C.warningBd,
     },
     {
-      label: "KAS HARIAN BULAN",
+      label: "BERSIH RENTAL + JASA",
       val: rp(saldoBulan),
       sub: `Setor ${fmtK0(totalSetorBulan)} (${listSetorBulan.length}x)`,
       fg: saldoBulan >= 0 ? C.tint : C.negative,
@@ -1308,7 +1286,7 @@ export function buildLaporanPdf(JsPDFCtor: typeof JsPDF, opts: PdfBuildOptions):
     { l: "KOTOR HARI INI", v: rp(hariIniLap.total), c: C.label },
     { l: "KELUAR HARI INI", v: totalPengeluaran > 0 ? `-${rp(totalPengeluaran)}` : rp(0), c: totalPengeluaran > 0 ? C.negative : C.label2 },
     { l: "BERSIH HARI INI", v: rp(bersihHariIniLap), c: bersihHariIniLap >= 0 ? C.positive : C.negative },
-    { l: "HARUS DISETOR", v: rp(Math.max(0, totalCash)), c: C.tint },
+    { l: "HARUS DISETOR", v: rp(RB.hariIni.harusSetor), c: C.tint },
     { l: "KELUAR ADMIN BULAN", v: pengeluaranAdminBulan > 0 ? `-${rp(pengeluaranAdminBulan)}` : rp(0), c: pengeluaranAdminBulan > 0 ? C.negative : C.label2 },
   ];
   const scW = (CW - 20) / 5;

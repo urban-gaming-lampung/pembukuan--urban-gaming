@@ -819,7 +819,7 @@ const NotaDetailSheet: React.FC<{ sale: PosSale | null; live: PosSale | null; on
               Saat transaksi, stok tercatat kurang: {live.stokKurang!.map((k) => `${k.item} (terjual ${k.diminta}, tercatat ${k.tersedia})`).join(", ")}
             </Notice>
           )}
-          {!live.batal && live.status !== "DP" && !isNotaSewa(live) && (live.items || []).some((x) => bisaDiretur(x) && !(live.items || []).some((y) => y.bonusUntukProdukId === x.id)) && (
+          {!live.batal && live.status !== "DP" && !isNotaSewa(live) && (live.items || []).some(bisaDiretur) && (
             <button type="button" onClick={() => setBukaRetur(true)}
               className="flex w-full items-center gap-3 rounded-card apple-card ring-1 ring-edge shadow-card px-3.5 py-3 text-left transition active:opacity-80">
               <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-warning/15 text-warning"><Undo2 className="h-4 w-4" /></span>
