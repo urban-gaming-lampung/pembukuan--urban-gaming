@@ -1704,7 +1704,7 @@ export default function TabPegawai({ history = [], isOwner = false }: { history?
   );
 }
 
-/** Status & aksi tutup buku satu bulan gaji (di luar fieldset agar tombol tetap aktif saat terkunci). */
+/** Tombol "Sudah dibayar" satu bulan gaji: catat uang keluar ke Transaksi & kunci bulan (di luar fieldset agar tetap aktif saat terkunci). */
 const PanelTutupBuku = ({ r, pegawai, isOwner, isChanged, onTutupBuku }: any) => {
     const [busy, setBusy] = useState(false);
     const st = statusGaji(r);
@@ -1714,31 +1714,48 @@ const PanelTutupBuku = ({ r, pegawai, isOwner, isChanged, onTutupBuku }: any) =>
         if (tutup) {
             const s = buatTutupBuku(r, auth.currentUser?.email || "owner");
             const ok = await konfirmasi(
-                `Transfer ke pegawai ${rupiah(s.bersih)}. Uang keluar dicatat ke Analitik ${rupiah(s.dicatat)}` +
-                (s.ongkir > 0 ? ` (ongkir ${rupiah(s.ongkir)} sudah tercatat di pengeluaran harian).` : ".") +
-                " Bulan ini jadi hanya baca.",
-                { judul: `Tutup buku gaji ${r.bulanTahun}?`, ya: "Tutup buku" });
+                `Transfer ke pegawai ${rupiah(s.bersih)}. Dicatat sebagai pengeluaran Gaji Pegawai di Transaksi ${rupiah(s.dicatat)}` +
+                (s.ongkir > 0 ? ` (ongkir ${rupiah(s.ongkir)} tidak ikut, sudah tercatat di pengeluaran harian).` : ".") +
+                " Gaji bulan ini jadi hanya baca.",
+                { judul: `Gaji ${r.bulanTahun} sudah dibayar?`, ya: "Sudah dibayar" });
             if (!ok) return;
             setBusy(true);
-            try { await onTutupBuku(pegawai.email, r.bulanTahun, s); } catch (e: any) { alert("Gagal tutup buku: " + (e?.message || e)); }
+            try { await onTutupBuku(pegawai.email, r.bulanTahun, s); } catch (e: any) { alert("Gagal mencatat pembayaran gaji: " + (e?.message || e)); }
             setBusy(false);
         } else {
-            const ok = await konfirmasi("Angka bulan ini bisa diubah lagi dan catatan gajinya ditarik dari Analitik sampai ditutup ulang.", { judul: `Buka kunci gaji ${r.bulanTahun}?`, ya: "Buka kunci", bahaya: true });
+            const ok = await konfirmasi("Catatan pengeluaran gaji bulan ini dihapus dari Transaksi & Analitik, dan angkanya bisa diubah lagi.", { judul: `Batalkan "Sudah dibayar" ${r.bulanTahun}?`, ya: "Batalkan", bahaya: true });
             if (!ok) return;
             setBusy(true);
-            try { await onTutupBuku(pegawai.email, r.bulanTahun, null); } catch (e: any) { alert("Gagal membuka kunci: " + (e?.message || e)); }
+            try { await onTutupBuku(pegawai.email, r.bulanTahun, null); } catch (e: any) { alert("Gagal membatalkan: " + (e?.message || e)); }
             setBusy(false);
         }
     };
-    return (
-        <div className="flex items-center justify-between gap-3 border-t border-sep px-3.5 py-2.5">
-            <div className="min-w-0 text-caption text-label-2">
-                {st === "arsip" && <>Arsip, sebelum {GAJI_SATU_JALUR_SEJAK}. Uang keluarnya tercatat di Transaksi.</>}
-                {st === "tutup" && <>Ditutup {r.tutupBuku.tanggal}{r.tutupBuku.otomatis ? " (otomatis)" : ""} · masuk Analitik <span className="font-semibold tabular-nums text-label">{rupiah(Number(r.tutupBuku.dicatat) || 0)}</span></>}
-                {st === "terbuka" && <>{isChanged ? "Simpan perubahan dulu sebelum tutup buku." : `Terkunci otomatis ${kunciOtomatis}.`}</>}
+    if (st === "arsip") {
+        return <div className="border-t border-sep px-3.5 py-2.5 text-caption text-label-2">Arsip, sebelum {GAJI_SATU_JALUR_SEJAK}. Uang keluarnya tercatat di Transaksi.</div>;
+    }
+    if (st === "tutup") {
+        return (
+            <div className="flex items-center justify-between gap-3 border-t border-sep px-3.5 py-3">
+                <div className="min-w-0">
+                    <div className="text-subhead font-semibold text-positive">Sudah dibayar</div>
+                    <div className="text-caption text-label-2">
+                        {r.tutupBuku.tanggal}{r.tutupBuku.otomatis ? " (otomatis)" : ""} · masuk Transaksi <span className="font-semibold tabular-nums text-label">{rupiah(Number(r.tutupBuku.dicatat) || 0)}</span>
+                    </div>
+                </div>
+                {isOwner && <Button variant="gray" size="sm" disabled={busy} onClick={() => jalankan(false)}>Batalkan</Button>}
             </div>
-            {isOwner && st === "tutup" && <Button variant="gray" size="sm" disabled={busy} onClick={() => jalankan(false)}>Buka kunci</Button>}
-            {isOwner && st === "terbuka" && <Button variant="filled" size="sm" disabled={busy || isChanged} onClick={() => jalankan(true)}>Tutup buku</Button>}
+        );
+    }
+    return (
+        <div className="space-y-1.5 border-t border-sep px-3.5 py-3">
+            {isOwner && (
+                <Button variant="filled" block disabled={busy || isChanged} onClick={() => jalankan(true)}>
+                    {busy ? "Mencatat…" : "Sudah dibayar"}
+                </Button>
+            )}
+            <div className="text-caption text-label-2 text-center">
+                {isChanged ? "Simpan gaji dulu sebelum menandai sudah dibayar." : `Belum dibayar · otomatis dianggap dibayar ${kunciOtomatis} bila tidak ditandai.`}
+            </div>
         </div>
     );
 };
@@ -1920,7 +1937,7 @@ const PegawaiCard = ({ pegawai, onSave, onTutupBuku, isOwner = false, onUpdateCu
                             >
                                 <span className="min-w-0">
                                     <span className="block text-subhead font-semibold text-label">Gaji bulan {r.bulanTahun}</span>
-                                    <span className={`block text-caption ${statusGaji(r) === "tutup" ? "text-positive" : "text-label-2"}`}>{statusGaji(r) === "arsip" ? "Arsip · hanya baca" : statusGaji(r) === "tutup" ? `Lunas · ditutup ${r.tutupBuku.tanggal}` : r.buktiTransfer ? "Belum tutup buku · ada bukti transfer" : "Belum tutup buku"}</span>
+                                    <span className={`block text-caption ${statusGaji(r) === "tutup" ? "text-positive" : "text-label-2"}`}>{statusGaji(r) === "arsip" ? "Arsip · hanya baca" : statusGaji(r) === "tutup" ? `Sudah dibayar · ${r.tutupBuku.tanggal}` : r.buktiTransfer ? "Belum dibayar · ada bukti transfer" : "Belum dibayar"}</span>
                                 </span>
                                 <div className="flex items-center gap-2 shrink-0">
                                     <span className="text-subhead font-semibold tabular-nums text-label">{rupiah(Math.max(0, totalBersih))}</span>
@@ -1929,7 +1946,6 @@ const PegawaiCard = ({ pegawai, onSave, onTutupBuku, isOwner = false, onUpdateCu
                             </div>
 
                             {isExpanded && (<>
-                                <PanelTutupBuku r={r} pegawai={pegawai} isOwner={isOwner} isChanged={isChanged} onTutupBuku={onTutupBuku} />
                                 <fieldset disabled={statusGaji(r) !== "terbuka"} className="min-w-0 p-3.5 border-t border-sep space-y-4 animate-in slide-in-from-top-2 duration-200 disabled:opacity-70">
 
                                    <div className="flex justify-between items-end gap-3 w-full">
@@ -2224,6 +2240,7 @@ const PegawaiCard = ({ pegawai, onSave, onTutupBuku, isOwner = false, onUpdateCu
                                       </div>
                                    </div>
                                 </fieldset>
+                                <PanelTutupBuku r={r} pegawai={pegawai} isOwner={isOwner} isChanged={isChanged} onTutupBuku={onTutupBuku} />
                             </>)}
                         </div>
                     );
