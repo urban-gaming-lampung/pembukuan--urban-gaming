@@ -185,6 +185,14 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
   const waktunyaIngatkan = (u: KartuUnit) => bisaIngatkan(u) && !u.isVerified && now >= (u.endMs || 0) - INGATKAN_SEBELUM_MENIT * 60000;
   const kirimPengingat = (u: KartuUnit) => kirimPengingatSewa(u, onPengingat);
   const verifikasi = (item: ReturnType<typeof sumberSewa>) => onVerifyActiveRental?.(item);
+  /** Tombol "Sudah kembali" di rincian biling → buka popup konfirmasi kembali untuk unit itu sekarang juga. */
+  const [paksaKembali, setPaksaKembali] = useState<KartuUnit | null>(null);
+  const itemKonfirmasi = useMemo(() => {
+    if (!paksaKembali) return perluKonfirmasi;
+    const terkini = activeRentals.find((r) => r.uid === paksaKembali.uid);
+    if (!terkini || terkini.isVerified) return perluKonfirmasi;
+    return [terkini, ...perluKonfirmasi.filter((r) => r.uid !== terkini.uid)];
+  }, [paksaKembali, perluKonfirmasi, activeRentals]);
 
   /** "Unit diperkirakan kembali besok pukul 10.00." */
   const teksPerkiraanKembali = (endMs: number | null) => {
@@ -419,13 +427,19 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
             subtitle={`Biling ${sel.id} · ${sel.namaPenyewa || "Tanpa nama"}`}
             footer={
               <div className="flex flex-col gap-2.5">
+                {isWarning && onVerifyActiveRental && (
+                  <Button variant="filled" size="lg" block onClick={() => { setSelectedUnit(null); setPaksaKembali(sel); }}>
+                    Sudah kembali
+                  </Button>
+                )}
                 {adaReminder && (
                   <Button
-                    variant="filled"
+                    variant={isWarning && onVerifyActiveRental ? "gray" : "filled"}
                     size="lg"
                     block
                     icon={<MessageCircle />}
                     onClick={() => kirimPengingat(sel)}
+                    className={isWarning && onVerifyActiveRental ? "!text-positive" : undefined}
                   >
                     Ingatkan via WA
                   </Button>
@@ -433,14 +447,16 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
                 {sel.diingatkan?.length > 0 && (
                   <p className="text-center text-footnote font-medium text-positive">{labelPengingat(sel.diingatkan)}</p>
                 )}
-                <Button
-                  variant={adaReminder ? "gray" : "filled"}
-                  size="lg"
-                  block
-                  onClick={() => setSelectedUnit(null)}
-                >
-                  Tutup
-                </Button>
+                {!(isWarning && onVerifyActiveRental) && (
+                  <Button
+                    variant={adaReminder ? "gray" : "filled"}
+                    size="lg"
+                    block
+                    onClick={() => setSelectedUnit(null)}
+                  >
+                    Tutup
+                  </Button>
+                )}
               </div>
             }
           >
@@ -503,7 +519,7 @@ const WidgetMonitoringStatus: React.FC<WidgetMonitoringStatusProps> = ({
         );
       })()}
 
-      <PeringatanSewaHabis items={perluKonfirmasi} userEmail={currentUserEmail} jeda={isVerifyingPayment} onVerify={verifikasi} onPengingat={onPengingat} />
+      <PeringatanSewaHabis items={itemKonfirmasi} userEmail={currentUserEmail} jeda={isVerifyingPayment} onVerify={verifikasi} onPengingat={onPengingat} paksaUid={paksaKembali?.uid} onSelesaiPaksa={() => setPaksaKembali(null)} />
     </>
   );
 };

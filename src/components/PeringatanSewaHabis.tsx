@@ -44,7 +44,10 @@ const PeringatanSewaHabis: React.FC<{
   jeda?: boolean;
   onVerify: (item: ReturnType<typeof sumberSewa>) => void;
   onPengingat?: (item: ReturnType<typeof sumberSewa>) => void;
-}> = ({ items, userEmail, jeda, onVerify, onPengingat }) => {
+  /** Unit yang dibuka manual lewat tombol "Sudah kembali" (abaikan penundaan). */
+  paksaUid?: string | null;
+  onSelesaiPaksa?: () => void;
+}> = ({ items, userEmail, jeda, onVerify, onPengingat, paksaUid, onSelesaiPaksa }) => {
   const [tunda, setTunda] = useState<Record<string, number>>(() => bacaTunda());
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -52,8 +55,8 @@ const PeringatanSewaHabis: React.FC<{
     return () => clearInterval(t);
   }, []);
 
-  const tampil = items.filter((u) => !((tunda[u.uid] || 0) > now));
-  const u = !jeda ? tampil[0] : undefined;
+  const tampil = items.filter((u) => u.uid === paksaUid || !((tunda[u.uid] || 0) > now));
+  const u = !jeda ? (tampil.find((x) => x.uid === paksaUid) || tampil[0]) : undefined;
   useBodyScrollLock(!!u);
   if (!u) return null;
 
@@ -71,6 +74,7 @@ const PeringatanSewaHabis: React.FC<{
   if (typeof document === "undefined") return null;
 
   const sumber = sumberSewa(u);
+  const jawab = (item: ReturnType<typeof sumberSewa>) => { onSelesaiPaksa?.(); onVerify(item); };
   const d = u.endMs ? hitungDendaTelat(u.jenis, u.endMs, now) : null;
   const telat = !!d && d.menit > 0;
   const unit = (
@@ -85,7 +89,7 @@ const PeringatanSewaHabis: React.FC<{
       size="lg"
       block
       icon={bisaIngatkan(u) ? <MessageCircle /> : undefined}
-      onClick={() => { if (bisaIngatkan(u)) kirimPengingatSewa(u, onPengingat); tundaPeringatan(u.uid); }}
+      onClick={() => { if (bisaIngatkan(u)) kirimPengingatSewa(u, onPengingat); tundaPeringatan(u.uid); onSelesaiPaksa?.(); }}
       className={bisaIngatkan(u) ? "!text-positive" : undefined}
     >
       {bisaIngatkan(u) ? "Belum · Ingatkan via WA" : "Belum kembali"}
@@ -132,10 +136,10 @@ const PeringatanSewaHabis: React.FC<{
         <div className="flex flex-col gap-2.5">
           {telat ? (
             <>
-              <Button variant="filled" size="lg" block onClick={() => onVerify(sumber)}>
+              <Button variant="filled" size="lg" block onClick={() => jawab(sumber)}>
                 Ya, kembali terlambat
               </Button>
-              <Button variant="gray" size="lg" block onClick={() => onVerify({ ...sumber, _tanpaDenda: true } as any)}>
+              <Button variant="gray" size="lg" block onClick={() => jawab({ ...sumber, _tanpaDenda: true } as any)}>
                 Tidak, kembali tepat waktu
               </Button>
               {tombolBelum}
@@ -145,7 +149,7 @@ const PeringatanSewaHabis: React.FC<{
             </>
           ) : (
             <>
-              <Button variant="filled" size="lg" block onClick={() => onVerify(sumber)}>
+              <Button variant="filled" size="lg" block onClick={() => jawab(sumber)}>
                 Sudah kembali
               </Button>
               {tombolBelum}
