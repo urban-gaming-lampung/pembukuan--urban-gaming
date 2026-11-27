@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from "recharts";
-import { Gamepad2, Store, BarChart3, Layers, Wallet } from "lucide-react";
+import { Gamepad2, Store, BarChart3, Layers, Wallet, Loader2, Sparkles } from "lucide-react";
 import FilterComp from "./Filter";
 import { dpHangus, gabungNota, isDpTerbuka, tanggalPenjualan, terjualDalam, totalDibayar, usePosSales, usePosSalesLunas } from "../lib/posSales";
 import { arusKasNota, ringkasPosisiDana } from "../lib/akuntansiUsaha";
@@ -9,7 +9,8 @@ import type { HistoryItem } from "../lib/types";
 import { barisUsahaManual } from "../lib/pemasukanUsaha";
 import { persen, rpShort, rupiah, rupiahTanda } from "../lib/format";
 import { dariYmd, tanggalHariKerja, toLocalYmd } from "../lib/dateLocal";
-import { Amount, BarRow, Card, ChartTip, EmptyState, Footnote, Legend, LineItem, LineList, MARK, Notice, Pill, SectionHeader, StatTile, sumbu, useTemaGrafik } from "../ui";
+import { Amount, BarRow, Card, ChartTip, EmptyState, Eyebrow, Footnote, Legend, LineItem, LineList, MARK, Notice, Pill, SectionHeader, StatTile, StatusPill, sumbu, useTemaGrafik } from "../ui";
+import { useLabaUsaha } from "../lib/labaUsaha";
 import { HeroArus, KartuBisnis } from "./analitik/HeroArus";
 import { TunaiDiLuarRekeningSheet } from "./analitik/TunaiDiLuarRekeningSheet";
 
@@ -62,6 +63,10 @@ export default function AnalitikKeseluruhan(props: Props) {
   // Nota DP yang dilunasi di periode ini (dibuat sebelumnya) — penjualan dihitung saat lunas
   const { sales: lunas, loading: loadingLunas } = usePosSalesLunas(period.from, period.to);
   const loading = loadingPos || loadingLunas;
+  // Laba usaha (modal barang terjual, bukan belanja stok) — sumber sama dengan Analitik › Usaha
+  const keluarUsaha = useMemo(() => pengeluaran.filter((o) => bisnisOf(o) === "USAHA"), [pengeluaran]);
+  const masukUsaha = useMemo(() => pemasukan.filter((o) => bisnisOf(o) === "USAHA"), [pemasukan]);
+  const labaUsaha = useLabaUsaha(period.from, period.to, keluarUsaha, masukUsaha);
 
   const d = useMemo(() => {
     const harian = new Map<string, Hari>();
@@ -220,8 +225,9 @@ export default function AnalitikKeseluruhan(props: Props) {
   const hariSurplus = grafik.data.filter((x) => x.net > 0).length;
   const hariMinus = grafik.data.filter((x) => x.net < 0).length;
   const kosong = !loading && d.masuk === 0 && d.keluar === 0;
-  // Belanja stok = uang keluar yang berubah jadi barang dagangan (bukan biaya habis pakai)
-  const tanpaStok = d.net + d.u.stok;
+  const labaRental = d.rental.masuk - d.rental.keluar;
+  const memuatLaba = loading || labaUsaha.loading;
+  const labaTotal = labaRental + labaUsaha.bersih;
 
   return (
     <div className="space-y-3">
@@ -232,18 +238,55 @@ export default function AnalitikKeseluruhan(props: Props) {
 
       {error && <Notice tone="negative">Gagal memuat transaksi POS: {error}</Notice>}
 
-      {/* HASIL KESELURUHAN */}
-      <HeroArus eyebrow={`Hasil · ${period.label}`} eyebrowIcon={<Layers />} net={d.net} masuk={d.masuk} keluar={d.keluar} loading={loading} rasio>
-        {!loading && d.u.stok > 0 && (
+      {/* LABA BERSIH = laba rental + laba usaha */}
+      <Card>
+        <div className="flex items-center justify-between gap-2">
+          <Eyebrow icon={<Sparkles />}>Laba bersih · {period.label}</Eyebrow>
+          {!memuatLaba && labaTotal !== 0 && <StatusPill net={labaTotal} />}
+        </div>
+        <div className="mt-2 min-h-[40px]">
+          {memuatLaba ? <Loader2 className="h-8 w-8 animate-spin text-label-3" aria-label="Memuat" /> : <Amount value={labaTotal} signed tone="auto" size="display" fitAt={15} />}
+        </div>
+        <p className="mt-1 text-footnote text-label-2">Laba rental + laba usaha. Belanja stok tidak dihitung biaya; yang dihitung modal barang yang sudah terjual.</p>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <StatTile
+            label="Laba rental"
+            dot={MARK.transfer}
+            value={<Amount value={labaRental} signed tone="auto" size="headline" fitAt={13} />}
+            sub={`Masuk ${rpShort(d.rental.masuk)} − keluar ${rpShort(d.rental.keluar)}`}
+          />
+          <StatTile
+            label="Laba usaha"
+            dot={MARK.tunai}
+            value={memuatLaba ? <span className="text-headline text-label-3">…</span> : <Amount value={labaUsaha.bersih} signed tone="auto" size="headline" fitAt={13} />}
+            sub={memuatLaba ? "Menghitung modal…" : `Kotor ${rpShort(labaUsaha.kotor)} − biaya ${rpShort(labaUsaha.operasional)}${labaUsaha.lain ? ` + lain ${rpShort(labaUsaha.lain)}` : ""}`}
+          />
+        </div>
+        {!memuatLaba && labaUsaha.terhitung > 0 && (
           <LineList className="mt-3 border-t border-sep">
-            <LineItem label="Belanja stok" note="jadi barang di toko" value={`−${rupiah(d.u.stok)}`} />
-            <LineItem label="Hasil tanpa belanja stok" total value={<Amount value={tanpaStok} signed tone="auto" size="subhead" className="font-bold" />} />
+            <LineItem label="Penjualan usaha" note="POS + rincian pembukuan" value={rupiah(labaUsaha.terhitung)} />
+            <LineItem label="Modal barang terjual" value={`−${rupiah(labaUsaha.hpp)}`} />
+            <LineItem label="Biaya operasional usaha" value={`−${rupiah(labaUsaha.operasional)}`} muted={!labaUsaha.operasional} />
+            {labaUsaha.lain > 0 && <LineItem label="Pemasukan lain usaha" value={`+${rupiah(labaUsaha.lain)}`} />}
           </LineList>
         )}
-      </HeroArus>
+      </Card>
+
+      {/* ARUS UANG (uang nyata masuk − keluar, termasuk belanja stok) */}
+      <SectionHeader title="Arus uang" />
+      <HeroArus
+        eyebrow={`Arus uang · ${period.label}`}
+        eyebrowIcon={<Layers />}
+        net={d.net}
+        masuk={d.masuk}
+        keluar={d.keluar}
+        loading={loading}
+        kalimat={loading ? undefined : d.u.stok > 0 ? `Uang masuk − uang keluar, termasuk belanja stok ${rpShort(d.u.stok)} yang jadi barang di toko.` : undefined}
+        rasio
+      />
 
       {/* PER MODEL USAHA */}
-      <SectionHeader title="Per usaha" />
+      <SectionHeader title="Arus per usaha" />
       <div className="grid gap-3 sm:grid-cols-2">
         <KartuBisnis
           judul="Rental"
@@ -365,7 +408,7 @@ export default function AnalitikKeseluruhan(props: Props) {
           </Card>
 
           {/* Grafik arus uang */}
-          <SectionHeader title="Arus uang" />
+          <SectionHeader title="Grafik arus uang" />
           <Card
             title={grafik.per === "hari" ? "Per hari" : "Per bulan"}
             accessory={<Legend items={[{ color: MARK.masuk, label: "Masuk" }, { color: MARK.keluar, label: "Keluar" }]} />}
