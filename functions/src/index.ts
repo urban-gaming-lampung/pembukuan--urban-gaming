@@ -308,3 +308,5 @@ export const rotateMonthlyGame = onSchedule(
 // ProsperoEden (Nintendo Switch Mod) Cloud Backend
 export * from './prosperoEden';
 
+// Pengingat sewa otomatis (push notification ke HP karyawan & owner)
+export { pengingatSewaOtomatis } from './pengingatSewa';

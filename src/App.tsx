@@ -1,3 +1,4 @@
+import { NotifikasiWajib } from "./components/common/NotifikasiHp";
 import { useMemo, useState, useEffect, Suspense, lazy } from "react";
 import DendaTelatSheet from "./components/DendaTelatSheet";
 import Header from "./components/Header";
@@ -62,6 +63,7 @@ const ChallengeModal = lazy(() => import("./games/components/ChallengeModal"));
 
 export default function App() {
   const {
+    pushDimatikanOwner,
     rootRef,
     appStokData,
     pdfRef,
@@ -479,6 +481,8 @@ export default function App() {
               <Suspense fallback={tabFallback}>
                 <HalamanMonitoring
                   isOwner={isSuperAdminOrOwner}
+                  wajibNotif={!isSuperAdminOrOwner}
+                  notifDimatikan={pushDimatikanOwner}
                   segmen={adminMonitoringTab}
                   onSegmen={setAdminMonitoringTab}
                   history={history || []}
@@ -789,6 +793,7 @@ export default function App() {
             onPengingat={handleCatatPengingat}
           />
 
+          <NotifikasiWajib wajib={!!user?.email && !isSuperAdminOrOwner && !pushDimatikanOwner} />
           <DendaTelatSheet
             data={paymentVerifyPrompt ? null : dendaPrompt}
             onCatat={catatDendaTelat}

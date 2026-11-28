@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect, useRef } from "react";
 import { getAplikasiWa, isAndroid, setAplikasiWa, type AplikasiWa } from "../lib/wa";
 import { gajiBersih } from "../lib/gajiBuku";
 import { KartuIkuKaryawan } from "./KesejahteraanGaji";
+import { KelolaNotifikasiPegawai, useNotifikasiHp } from "./common/NotifikasiHp";
 import { createPortal } from "react-dom";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { collection, addDoc, deleteDoc, onSnapshot, query, doc, updateDoc, where } from "firebase/firestore";
@@ -1381,6 +1382,8 @@ const Pengaturan: React.FC<Props> = ({
 
           <PilihanAplikasiWa />
 
+          <PengaturanNotifikasi superAdmin={isOwner} email={userEmail} />
+
           {isOwner && (
             <IOSGroup title="Atur Ongkir (Sistem Baru)">
               <SettingSliderRow
@@ -2306,6 +2309,45 @@ const Pengaturan: React.FC<Props> = ({
 };
 
 /** Aplikasi WhatsApp yang dibuka tombol WA (pengingat sewa, booking, nota) — disimpan per HP. */
+const PengaturanNotifikasi: React.FC<{ superAdmin: boolean; email?: string | null }> = ({ superAdmin, email }) => {
+  const n = useNotifikasiHp();
+  const [dimatikan, setDimatikan] = useState(false);
+  useEffect(() => {
+    if (!email) return;
+    return onSnapshot(doc(db, "users", email.toLowerCase().trim()), (s) => setDimatikan(s.data()?.pushDimatikanOwner === true));
+  }, [email]);
+  return (
+    <>
+      <IOSGroup
+        title="Notifikasi"
+        footer={superAdmin
+          ? "Pengingat 30 menit sebelum sewa habis, saat habis, dan saat lewat batas kembali. Tetap muncul walau aplikasi & Chrome ditutup. Di iPhone, pasang dulu ke Layar Utama."
+          : "Wajib untuk akun admin. Hanya super admin yang bisa mematikan notifikasi akun ini."}
+      >
+        <SettingRow>
+          <div className="space-y-0.5 min-w-0">
+            <div className="text-callout font-medium text-label">Notifikasi HP</div>
+            <div className={`text-caption ${dimatikan ? "text-label-2" : n.status === "aktif" ? "text-positive" : n.status === "ditolak" ? "text-negative" : "text-label-2"}`}>
+              {dimatikan && !superAdmin ? "Dimatikan super admin" : n.label}
+            </div>
+          </div>
+          {superAdmin && n.status === "aktif" ? (
+            <Button size="sm" variant="gray" disabled={n.sibuk} onClick={n.matikan}>Matikan</Button>
+          ) : n.status !== "aktif" && !(dimatikan && !superAdmin) ? (
+            <Button size="sm" variant="filled" disabled={n.sibuk || n.status === "tidak-didukung" || n.status === "ditolak"} onClick={n.aktifkan}>Aktifkan</Button>
+          ) : null}
+        </SettingRow>
+      </IOSGroup>
+      {superAdmin && (
+        <div className="mb-5">
+          <SectionHeader title="Notifikasi per akun admin" className="pt-0" />
+          <KelolaNotifikasiPegawai />
+        </div>
+      )}
+    </>
+  );
+};
+
 const PilihanAplikasiWa = () => {
   const [app, setApp] = useState<AplikasiWa>(() => getAplikasiWa());
   const android = isAndroid();

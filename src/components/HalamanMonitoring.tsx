@@ -21,6 +21,8 @@ export type PropsBookingMonitoring = {
  * HALAMAN MONITORING — satu UI untuk semua akun (tab bar › Monitoring).
  * Satu baris segmen saja: Status · Booking · Kondisi (+ Stiker khusus owner).
  */
+import { AjakanNotifikasi } from "./common/NotifikasiHp";
+
 const HalamanMonitoring: React.FC<{
   isOwner: boolean;
   segmen: SegmenMonitoring;
@@ -33,7 +35,9 @@ const HalamanMonitoring: React.FC<{
   hargaItems?: any[];
   isVerifyingPayment?: boolean;
   booking: PropsBookingMonitoring;
-}> = ({ isOwner, segmen, onSegmen, history, rowsSewa, activeDate, onVerifyActiveRental, onPengingat, hargaItems, isVerifyingPayment, booking }) => {
+  wajibNotif?: boolean;
+  notifDimatikan?: boolean;
+}> = ({ wajibNotif, notifDimatikan, isOwner, segmen, onSegmen, history, rowsSewa, activeDate, onVerifyActiveRental, onPengingat, hargaItems, isVerifyingPayment, booking }) => {
   const jumlahBooking = booking.list.filter((b) => b.status === "BARU" || b.status === "KONFIRMASI").length;
   const aktif: SegmenMonitoring = !isOwner && segmen === "stiker" ? "device" : segmen;
   const muat = (
@@ -44,6 +48,7 @@ const HalamanMonitoring: React.FC<{
 
   return (
     <div className="flex flex-col gap-4">
+      <AjakanNotifikasi wajib={wajibNotif} dimatikan={notifDimatikan} />
       <SubTabs<SegmenMonitoring>
         ariaLabel="Halaman monitoring"
         value={aktif}

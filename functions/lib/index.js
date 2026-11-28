@@ -36,7 +36,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.rotateMonthlyGame = exports.validateAndSubmitScore = exports.getServerTime = void 0;
+exports.pengingatSewaOtomatis = exports.rotateMonthlyGame = exports.validateAndSubmitScore = exports.getServerTime = void 0;
 exports.getJakartaMonthKey = getJakartaMonthKey;
 exports.getJakartaStartOfTodayMs = getJakartaStartOfTodayMs;
 const https_1 = require("firebase-functions/v2/https");
@@ -302,4 +302,7 @@ exports.rotateMonthlyGame = (0, scheduler_1.onSchedule)({
 });
 // ProsperoEden (Nintendo Switch Mod) Cloud Backend
 __exportStar(require("./prosperoEden"), exports);
+// Pengingat sewa otomatis (push notification ke HP karyawan & owner)
+var pengingatSewa_1 = require("./pengingatSewa");
+Object.defineProperty(exports, "pengingatSewaOtomatis", { enumerable: true, get: function () { return pengingatSewa_1.pengingatSewaOtomatis; } });
 //# sourceMappingURL=index.js.map

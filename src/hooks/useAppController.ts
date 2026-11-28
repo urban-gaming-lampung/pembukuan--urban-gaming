@@ -30,6 +30,7 @@ import { PdfExporterHandle } from "../components/PdfExporter";
 import { getAbsenCycleInfo, normalizeBulanTahun, normalizeDateStr, isLogForDate } from "../lib/absenPeriod";
 import { jamDiniHari, menitHariKerja, namaHari, tanggalHariKerja, toLocalYmd } from "../lib/dateLocal";
 import { sinkronIku } from "../lib/kesejahteraan";
+import { segarkanPush } from "../lib/pushNotif";
 import { buildSewaTable, effectiveSewaPrices, effectiveJasaPrices, cleanPriceList } from "../lib/priceLists";
 
 type ImageQuality = "Tinggi" | "Hemat";
@@ -97,7 +98,15 @@ export default function useAppController() {
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [userRole, setUserRole] = useState<string>("admin");
+  /** Super admin mematikan notifikasi HP untuk akun ini */
+  const [pushDimatikanOwner, setPushDimatikanOwner] = useState(false);
   const isSuperAdminOrOwner = user?.email?.toLowerCase().trim() === "owner@gmail.com" || userRole === "super admin";
+  // Notifikasi HP: perbarui token push tiap aplikasi dibuka (token FCM bisa berganti)
+  useEffect(() => {
+    if (!user?.email) return;
+    const t = setTimeout(() => { segarkanPush(user.email); }, 5000);
+    return () => clearTimeout(t);
+  }, [user?.email]);
   // Indeks kesejahteraan: owner memperbarui skor karyawan sekali tiap buka aplikasi (tanpa membuka menu Pegawai).
   const isPemilik = user?.email?.toLowerCase().trim() === "owner@gmail.com";
   useEffect(() => {
@@ -204,6 +213,7 @@ export default function useAppController() {
                 return;
              }
              setUserProfilePic(data.photoUrl || null);
+             setPushDimatikanOwner(data.pushDimatikanOwner === true);
              if (data.role) {
                 setUserRole(data.role);
              } else {
@@ -2380,6 +2390,7 @@ export default function useAppController() {
     user,
     authLoading,
     userRole,
+    pushDimatikanOwner,
     isSuperAdminOrOwner,
     userProfilePic,
     userProfileColor,
